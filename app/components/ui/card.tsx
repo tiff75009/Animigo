@@ -4,12 +4,14 @@ import { cn } from "@/app/lib/utils";
 import { motion } from "framer-motion";
 import { forwardRef } from "react";
 
-interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+interface CardProps {
   hover?: boolean;
+  className?: string;
+  children?: React.ReactNode;
 }
 
 const Card = forwardRef<HTMLDivElement, CardProps>(
-  ({ className, hover = true, children, ...props }, ref) => {
+  ({ className, hover = true, children }, ref) => {
     const baseStyles =
       "bg-card rounded-3xl p-6 shadow-lg transition-all duration-300";
 
@@ -24,7 +26,6 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
             boxShadow: "0 25px 50px -12px rgba(255, 107, 107, 0.25)"
           }}
           transition={{ type: "spring", stiffness: 300, damping: 20 }}
-          {...props}
         >
           {children}
         </motion.div>
@@ -35,7 +36,6 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
       <div
         ref={ref}
         className={cn(baseStyles, className)}
-        {...props}
       >
         {children}
       </div>

@@ -4,39 +4,7 @@ import { motion } from "framer-motion";
 import * as Accordion from "@radix-ui/react-accordion";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/app/lib/utils";
-
-const faqs = [
-  {
-    question: "Comment devenir garde sur Animigo ?",
-    answer: "C'est simple ! Créez votre profil en quelques minutes, ajoutez vos disponibilités et les types d'animaux que vous pouvez garder. Une fois votre profil vérifié, vous pourrez recevoir des demandes de propriétaires près de chez vous.",
-    emoji: "🙋",
-  },
-  {
-    question: "Comment sont vérifiés les gardes ?",
-    answer: "Tous nos gardes passent par un processus de vérification : pièce d'identité, avis des autres utilisateurs, et pour certains, un entretien vidéo. Nous prenons la sécurité de vos animaux très au sérieux !",
-    emoji: "🔐",
-  },
-  {
-    question: "Que se passe-t-il en cas de problème ?",
-    answer: "Chaque garde est couverte par notre assurance. En cas de problème de santé, le garde contacte immédiatement le propriétaire et peut emmener l'animal chez le vétérinaire. Notre équipe support est disponible 7j/7.",
-    emoji: "🏥",
-  },
-  {
-    question: "Quels animaux sont acceptés ?",
-    answer: "Tous ! Chiens, chats, lapins, oiseaux, reptiles, rongeurs... Chaque garde indique sur son profil les animaux qu'il peut accueillir. Vous trouverez forcément quelqu'un pour votre compagnon.",
-    emoji: "🐾",
-  },
-  {
-    question: "Comment fonctionne le paiement ?",
-    answer: "Le paiement est sécurisé via notre plateforme. Vous payez lors de la réservation, mais le garde ne reçoit l'argent qu'une fois la garde terminée et validée par vous. Pas de surprise !",
-    emoji: "💳",
-  },
-  {
-    question: "Puis-je rencontrer le garde avant ?",
-    answer: "Absolument, et on le recommande ! La plupart des gardes proposent une première rencontre gratuite pour faire connaissance avec vous et votre animal. C'est le meilleur moyen de partir serein.",
-    emoji: "🤝",
-  },
-];
+import { faqs } from "@/app/lib/constants";
 
 export function FAQ() {
   return (

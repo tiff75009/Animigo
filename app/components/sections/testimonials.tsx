@@ -4,54 +4,7 @@ import { motion } from "framer-motion";
 import { useState } from "react";
 import { Card } from "../ui/card";
 import { ChevronLeft, ChevronRight, Star, Quote } from "lucide-react";
-
-const testimonials = [
-  {
-    id: 1,
-    name: "Marie Dupont",
-    animal: "Luna (Labrador)",
-    avatar: "👩‍🦰",
-    animalEmoji: "🐕",
-    rating: 5,
-    text: "Sophie a gardé Luna pendant 2 semaines. Elle m'envoyait des photos tous les jours et Luna était tellement heureuse ! Je recommande à 100%.",
-  },
-  {
-    id: 2,
-    name: "Thomas Martin",
-    animal: "Mochi (Chat Persan)",
-    avatar: "👨",
-    animalEmoji: "🐈",
-    rating: 5,
-    text: "Première fois que je confie Mochi et j'étais stressé. Paul a été super patient et professionnel. Mon chat s'est senti comme à la maison.",
-  },
-  {
-    id: 3,
-    name: "Léa Bernard",
-    animal: "Caramel (Lapin)",
-    avatar: "👩",
-    animalEmoji: "🐰",
-    rating: 5,
-    text: "Pas facile de trouver quelqu'un pour un lapin ! Claire connaît bien les NAC et Caramel a adoré son séjour. Merci Animigo !",
-  },
-  {
-    id: 4,
-    name: "Lucas Petit",
-    animal: "Rocky & Max (Bergers)",
-    avatar: "👨‍🦱",
-    animalEmoji: "🐕",
-    rating: 5,
-    text: "Avoir 2 gros chiens à faire garder, ce n'est pas simple. Julie les a emmenés en randonnée tous les jours, ils étaient ravis !",
-  },
-  {
-    id: 5,
-    name: "Emma Rousseau",
-    animal: "Kiwi (Perruche)",
-    avatar: "👩‍🦳",
-    animalEmoji: "🦜",
-    rating: 5,
-    text: "Marc a l'habitude des oiseaux et ça se voit. Kiwi chantait quand je suis revenue le chercher. Service impeccable !",
-  },
-];
+import { testimonials } from "@/app/lib/constants";
 
 export function Testimonials() {
   const [currentIndex, setCurrentIndex] = useState(0);

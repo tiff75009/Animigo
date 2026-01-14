@@ -131,3 +131,68 @@ html {
 .animate-accordion-up {
   animation: accordion-up 0.3s ease-out;
 }
+
+/* Leaflet custom styles */
+.leaflet-container {
+  font-family: var(--font-body), system-ui, sans-serif;
+  z-index: 1;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 1rem;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  padding: 0;
+}
+
+.leaflet-popup-content {
+  margin: 1rem;
+  min-width: 220px;
+}
+
+.leaflet-popup-tip {
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+
+.custom-marker {
+  background: transparent;
+  border: none;
+}
+
+/* Custom thin scrollbar for modals and lists */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 8px 0;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 9999px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Firefox scrollbar */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+
+.scrollbar-thin:hover {
+  scrollbar-color: #9ca3af transparent;
+}
+
+/* Hide scrollbar but keep functionality */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

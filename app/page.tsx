@@ -1,5 +1,5 @@
 import { Navbar } from "./components/navbar";
-import { Hero } from "./components/sections/hero";
+import { SearchMapSection } from "./components/sections/search-map";
 import { Services } from "./components/sections/services";
 import { HowItWorks } from "./components/sections/how-it-works";
 import { Testimonials } from "./components/sections/testimonials";
@@ -13,7 +13,7 @@ export default function Home() {
     <>
       <Navbar />
       <main>
-        <Hero />
+        <SearchMapSection />
         <Services />
         <HowItWorks />
         <Testimonials />

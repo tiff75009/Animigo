@@ -1,34 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Search, MessageCircle, PawPrint } from "lucide-react";
-
-const steps = [
-  {
-    icon: Search,
-    number: "01",
-    title: "Recherchez",
-    description: "Trouvez un garde près de chez vous selon vos critères : disponibilité, expérience, avis.",
-    color: "bg-primary",
-    emoji: "🔍",
-  },
-  {
-    icon: MessageCircle,
-    number: "02",
-    title: "Échangez",
-    description: "Discutez avec le garde, posez vos questions et organisez une première rencontre.",
-    color: "bg-secondary",
-    emoji: "💬",
-  },
-  {
-    icon: PawPrint,
-    number: "03",
-    title: "Confiez",
-    description: "Partez l'esprit tranquille ! Recevez des nouvelles et photos de votre compagnon.",
-    color: "bg-purple",
-    emoji: "🐾",
-  },
-];
+import { steps } from "@/app/lib/constants";
 
 export function HowItWorks() {
   return (

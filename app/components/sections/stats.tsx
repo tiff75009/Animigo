@@ -2,38 +2,7 @@
 
 import { motion, useInView, useMotionValue, useSpring } from "framer-motion";
 import { useRef, useEffect } from "react";
-
-const stats = [
-  {
-    value: 10000,
-    suffix: "+",
-    label: "Animaux heureux",
-    emoji: "🐾",
-    color: "text-primary",
-  },
-  {
-    value: 2500,
-    suffix: "+",
-    label: "Gardes vérifiés",
-    emoji: "✅",
-    color: "text-secondary",
-  },
-  {
-    value: 50,
-    suffix: "+",
-    label: "Villes couvertes",
-    emoji: "📍",
-    color: "text-purple",
-  },
-  {
-    value: 4.9,
-    suffix: "/5",
-    label: "Note moyenne",
-    emoji: "⭐",
-    color: "text-accent",
-    isDecimal: true,
-  },
-];
+import { stats } from "@/app/lib/constants";
 
 function AnimatedNumber({ value, isDecimal = false }: { value: number; isDecimal?: boolean }) {
   const ref = useRef<HTMLSpanElement>(null);

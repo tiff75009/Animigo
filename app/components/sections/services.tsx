@@ -2,75 +2,8 @@
 
 import { motion } from "framer-motion";
 import { Card, CardTitle, CardDescription } from "../ui/card";
-import { Home, Footprints, Eye, Building, Car, Pill } from "lucide-react";
-
-const services = [
-  {
-    icon: Home,
-    title: "Garde à domicile",
-    description: "Votre animal reste dans son environnement familier pendant votre absence.",
-    color: "bg-primary/10 text-primary",
-    emoji: "🏠",
-  },
-  {
-    icon: Footprints,
-    title: "Promenades",
-    description: "Des balades quotidiennes adaptées aux besoins de votre compagnon.",
-    color: "bg-secondary/10 text-secondary",
-    emoji: "🚶",
-  },
-  {
-    icon: Eye,
-    title: "Visites quotidiennes",
-    description: "Passages réguliers pour nourrir, câliner et vérifier que tout va bien.",
-    color: "bg-accent/20 text-foreground",
-    emoji: "👀",
-  },
-  {
-    icon: Building,
-    title: "Pension",
-    description: "Hébergement chez un garde de confiance dans un environnement chaleureux.",
-    color: "bg-purple/10 text-purple",
-    emoji: "🏨",
-  },
-  {
-    icon: Car,
-    title: "Transport",
-    description: "Accompagnement chez le vétérinaire ou pour tout autre déplacement.",
-    color: "bg-primary/10 text-primary",
-    emoji: "🚗",
-  },
-  {
-    icon: Pill,
-    title: "Soins spéciaux",
-    description: "Prise en charge d'animaux nécessitant des soins ou une attention particulière.",
-    color: "bg-secondary/10 text-secondary",
-    emoji: "💊",
-  },
-];
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1,
-    },
-  },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 30 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: {
-      type: "spring",
-      stiffness: 100,
-      damping: 12,
-    },
-  },
-};
+import { services } from "@/app/lib/constants";
+import { containerVariants, itemVariants } from "@/app/lib/animations";
 
 export function Services() {
   return (

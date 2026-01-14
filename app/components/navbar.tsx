@@ -1,29 +1,24 @@
 "use client";
 
 import { cn } from "@/app/lib/utils";
+import { navLinks } from "@/app/lib/constants";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, Search, Heart, Sparkles } from "lucide-react";
-import { useState, useEffect } from "react";
-
-const navLinks = [
-  { href: "#services", label: "Services", emoji: "🎯" },
-  { href: "#how-it-works", label: "Comment ça marche", emoji: "✨" },
-  { href: "#testimonials", label: "Témoignages", emoji: "💬" },
-  { href: "#faq", label: "FAQ", emoji: "❓" },
-];
+import { useState, useEffect, useCallback } from "react";
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [hoveredLink, setHoveredLink] = useState<string | null>(null);
 
-  useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20);
-    };
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
+  const handleScroll = useCallback(() => {
+    setIsScrolled(window.scrollY > 20);
   }, []);
+
+  useEffect(() => {
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [handleScroll]);
 
   return (
     <>

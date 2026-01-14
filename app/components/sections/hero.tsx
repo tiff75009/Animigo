@@ -4,38 +4,8 @@ import { motion } from "framer-motion";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Search, Heart, Shield } from "lucide-react";
-
-const floatingAnimals = [
-  { emoji: "🐕", delay: 0, x: "10%", y: "20%" },
-  { emoji: "🐈", delay: 0.2, x: "85%", y: "15%" },
-  { emoji: "🐰", delay: 0.4, x: "75%", y: "70%" },
-  { emoji: "🦜", delay: 0.6, x: "15%", y: "75%" },
-  { emoji: "🐹", delay: 0.8, x: "90%", y: "45%" },
-];
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.15,
-      delayChildren: 0.3,
-    },
-  },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 30 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: {
-      type: "spring",
-      stiffness: 100,
-      damping: 12,
-    },
-  },
-};
+import { floatingAnimals } from "@/app/lib/constants";
+import { containerVariantsDelayed, itemVariants } from "@/app/lib/animations";
 
 export function Hero() {
   return (
@@ -125,7 +95,7 @@ export function Hero() {
       {/* Content */}
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
         <motion.div
-          variants={containerVariants}
+          variants={containerVariantsDelayed}
           initial="hidden"
           animate="visible"
           className="space-y-8"
