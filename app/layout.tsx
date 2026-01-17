@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Nunito, Inter } from "next/font/google";
 import "./globals.css";
+import { ConvexClientProvider } from "./providers/ConvexClientProvider";
 
 const nunito = Nunito({
   variable: "--font-nunito",
@@ -29,7 +30,7 @@ export default function RootLayout({
       <body
         className={`${nunito.variable} ${inter.variable} antialiased`}
       >
-        {children}
+        <ConvexClientProvider>{children}</ConvexClientProvider>
       </body>
     </html>
   );
