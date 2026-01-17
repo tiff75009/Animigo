@@ -32,6 +32,8 @@ function calculatePercentile(prices: number[], percentile: number): number {
 
 /**
  * Récupère les prix conseillés pour une catégorie de service
+ * Utilise les prix horaires des variantes des autres utilisateurs
+ * Fallback: prix par défaut défini par l'admin dans la catégorie
  */
 export const getPriceRecommendation = query({
   args: {
@@ -46,6 +48,12 @@ export const getPriceRecommendation = query({
     ),
   },
   handler: async (ctx, args): Promise<PriceRecommendation> => {
+    // Récupérer la catégorie pour le prix par défaut admin
+    const categoryData = await ctx.db
+      .query("serviceCategories")
+      .withIndex("by_slug", (q) => q.eq("slug", args.category))
+      .first();
+
     // Vérifier la session
     const session = await ctx.db
       .query("sessions")
@@ -54,17 +62,16 @@ export const getPriceRecommendation = query({
 
     if (!session || session.expiresAt < Date.now()) {
       // Retourner les prix par défaut si session invalide
-      return getDefaultRecommendation(args.category, args.priceUnit, "particulier");
+      return getDefaultRecommendation(args.category, args.priceUnit, "particulier", categoryData?.defaultHourlyPrice);
     }
 
     const user = await ctx.db.get(session.userId);
     if (!user) {
-      return getDefaultRecommendation(args.category, args.priceUnit, "particulier");
+      return getDefaultRecommendation(args.category, args.priceUnit, "particulier", categoryData?.defaultHourlyPrice);
     }
 
     // Déterminer le type de compte pour le filtrage
     const isPro = user.accountType === "annonceur_pro";
-    const accountTypeFilter = isPro ? "annonceur_pro" : "annonceur_particulier";
 
     // Récupérer le profil de l'utilisateur pour la localisation
     const profile = await ctx.db
@@ -72,74 +79,58 @@ export const getPriceRecommendation = query({
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .first();
 
-    // Normaliser le slug de catégorie
-    const categorySlug = args.category.toLowerCase().replace(/[^a-z]/g, "");
-
-    // Essayer de trouver des services avec fallback géographique
-    let services: Array<{ price: number }> = [];
+    // Récupérer les prix horaires des variantes des autres utilisateurs
+    let hourlyRates: number[] = [];
     let scopeUsed: ScopeUsed = "national";
 
-    // 1. Essayer par département
-    if (profile?.department) {
-      const departmentServices = await getServicesByDepartment(
-        ctx,
-        categorySlug,
-        args.priceUnit,
-        accountTypeFilter,
-        profile.department
-      );
-      if (departmentServices.length >= 5) {
-        services = departmentServices;
-        scopeUsed = "department";
+    // 1. Récupérer tous les services de cette catégorie (sauf ceux de l'utilisateur actuel)
+    const services = await ctx.db
+      .query("services")
+      .withIndex("by_category_active", (q) =>
+        q.eq("category", args.category).eq("isActive", true)
+      )
+      .collect();
+
+    // Filtrer pour exclure les services de l'utilisateur actuel
+    const otherServices = services.filter(s => s.userId !== user._id);
+
+    // 2. Pour chaque service, récupérer les variantes et leurs prix horaires
+    for (const service of otherServices) {
+      const variants = await ctx.db
+        .query("serviceVariants")
+        .withIndex("by_service_active", (q: any) =>
+          q.eq("serviceId", service._id).eq("isActive", true)
+        )
+        .collect();
+
+      // Collecter les prix horaires
+      for (const variant of variants) {
+        if (variant.price > 0) {
+          hourlyRates.push(variant.price);
+        }
       }
     }
 
-    // 2. Fallback: par région
-    if (services.length < 5 && profile?.region) {
-      const regionServices = await getServicesByRegion(
-        ctx,
-        categorySlug,
-        args.priceUnit,
-        accountTypeFilter,
-        profile.region
-      );
-      if (regionServices.length >= 5) {
-        services = regionServices;
-        scopeUsed = "region";
-      }
-    }
-
-    // 3. Fallback: national
-    if (services.length < 5) {
-      services = await getServicesNational(
-        ctx,
-        categorySlug,
-        args.priceUnit,
-        accountTypeFilter
-      );
-      scopeUsed = "national";
-    }
-
-    // 4. Si pas assez de données, utiliser les prix par défaut
-    if (services.length < 3) {
+    // 3. Si pas assez de données, utiliser le prix par défaut admin ou fallback
+    if (hourlyRates.length < 3) {
       return getDefaultRecommendation(
         args.category,
         args.priceUnit,
-        isPro ? "pro" : "particulier"
+        isPro ? "pro" : "particulier",
+        categoryData?.defaultHourlyPrice
       );
     }
 
     // Calculer les statistiques
-    const prices = services.map((s) => s.price);
-    const minPrice = Math.min(...prices);
-    const maxPrice = Math.max(...prices);
-    const avgPrice = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
-    const p25 = calculatePercentile(prices, 25);
-    const p75 = calculatePercentile(prices, 75);
+    const minPrice = Math.min(...hourlyRates);
+    const maxPrice = Math.max(...hourlyRates);
+    const avgPrice = Math.round(hourlyRates.reduce((a, b) => a + b, 0) / hourlyRates.length);
+    const p25 = calculatePercentile(hourlyRates, 25);
+    const p75 = calculatePercentile(hourlyRates, 75);
 
     return {
       hasData: true,
-      sampleSize: services.length,
+      sampleSize: hourlyRates.length,
       minPrice,
       maxPrice,
       avgPrice,
@@ -272,16 +263,41 @@ async function getServicesNational(
 
 /**
  * Retourne les prix par défaut quand pas assez de données
+ * Priorité: 1. Prix admin de la catégorie, 2. Prix par défaut codés en dur, 3. Fallback générique
  */
 function getDefaultRecommendation(
   category: string,
   priceUnit: PriceUnit,
-  accountType: "particulier" | "pro"
+  accountType: "particulier" | "pro",
+  adminDefaultPrice?: number // Prix horaire par défaut défini par l'admin (en centimes)
 ): PriceRecommendation {
+  // 1. Si l'admin a défini un prix par défaut pour cette catégorie, l'utiliser
+  if (adminDefaultPrice && adminDefaultPrice > 0) {
+    // Créer une fourchette autour du prix admin (-20% / +20%)
+    const lowPrice = Math.round(adminDefaultPrice * 0.8);
+    const highPrice = Math.round(adminDefaultPrice * 1.2);
+
+    return {
+      hasData: false,
+      sampleSize: 0,
+      minPrice: lowPrice,
+      maxPrice: highPrice,
+      avgPrice: adminDefaultPrice,
+      recommendedRange: {
+        low: lowPrice,
+        high: highPrice,
+      },
+      scopeUsed: "default",
+      message: "Prix conseillé par la plateforme",
+      isDefaultPricing: true,
+    };
+  }
+
+  // 2. Sinon, utiliser les prix par défaut codés en dur
   const defaultPricing = getDefaultPricing(category, priceUnit, accountType);
 
   if (!defaultPricing) {
-    // Fallback ultime: prix génériques
+    // 3. Fallback ultime: prix génériques
     return {
       hasData: false,
       sampleSize: 0,

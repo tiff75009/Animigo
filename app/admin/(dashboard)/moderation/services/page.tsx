@@ -90,16 +90,19 @@ export default function ServiceModerationPage() {
     }
   };
 
-  // Format price
-  const formatPrice = (cents: number, unit: string) => {
+  // Format price (handles optional price with basePrice fallback)
+  const formatPrice = (cents: number | undefined, unit?: string) => {
+    if (cents === undefined) return "Prix non défini";
     const price = (cents / 100).toFixed(2).replace(".", ",");
+    if (!unit) return `${price}€`;
     const unitLabels: Record<string, string> = {
       hour: "/h",
       day: "/jour",
       week: "/sem",
       month: "/mois",
+      flat: "",
     };
-    return `${price}${unitLabels[unit] || ""}`;
+    return `${price}€${unitLabels[unit] || ""}`;
   };
 
   // Format date
@@ -235,25 +238,14 @@ export default function ServiceModerationPage() {
                         Rejeté
                       </span>
                     )}
-                    <h3 className="text-lg font-semibold text-white">{service.name}</h3>
+                    <h3 className="text-lg font-semibold text-white">{service.name || service.category}</h3>
                     <span className="text-slate-400 text-sm">
-                      {formatPrice(service.price, service.priceUnit)}
+                      {service.basePrice ? `À partir de ${formatPrice(service.basePrice)}` : formatPrice(service.price, service.priceUnit)}
                     </span>
                   </div>
 
                   {service.description && (
                     <p className="text-slate-300 mb-3">{service.description}</p>
-                  )}
-
-                  {/* Moderation reason */}
-                  {service.moderationReason && (
-                    <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg mb-3">
-                      <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium text-amber-400">Raison de la modération</p>
-                        <p className="text-sm text-amber-300">{service.moderationReason}</p>
-                      </div>
-                    </div>
                   )}
 
                   {/* Moderation note */}
@@ -285,9 +277,6 @@ export default function ServiceModerationPage() {
 
                   <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
                     <span>Créé le {formatDate(service.createdAt)}</span>
-                    {service.moderatedAt && (
-                      <span>Modéré le {formatDate(service.moderatedAt)}</span>
-                    )}
                   </div>
                 </div>
 

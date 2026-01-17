@@ -32,6 +32,8 @@ export const listCategories = query({
           imageUrl,
           order: cat.order,
           isActive: cat.isActive,
+          billingType: cat.billingType,
+          defaultHourlyPrice: cat.defaultHourlyPrice,
           createdAt: cat.createdAt,
           updatedAt: cat.updatedAt,
         };
@@ -68,6 +70,7 @@ export const getActiveCategories = query({
           description: cat.description,
           icon: cat.icon,
           imageUrl,
+          billingType: cat.billingType,
         };
       })
     );
@@ -94,6 +97,12 @@ export const createCategory = mutation({
     description: v.optional(v.string()),
     icon: v.optional(v.string()),
     imageStorageId: v.optional(v.id("_storage")),
+    billingType: v.optional(v.union(
+      v.literal("hourly"),
+      v.literal("daily"),
+      v.literal("flexible")
+    )),
+    defaultHourlyPrice: v.optional(v.number()), // Prix horaire conseillé par défaut (en centimes)
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx, args.token);
@@ -120,6 +129,8 @@ export const createCategory = mutation({
       description: args.description,
       icon: args.icon,
       imageStorageId: args.imageStorageId,
+      billingType: args.billingType,
+      defaultHourlyPrice: args.defaultHourlyPrice,
       order: maxOrder + 1,
       isActive: true,
       createdAt: now,
@@ -140,6 +151,12 @@ export const updateCategory = mutation({
     icon: v.optional(v.string()),
     imageStorageId: v.optional(v.id("_storage")),
     isActive: v.optional(v.boolean()),
+    billingType: v.optional(v.union(
+      v.literal("hourly"),
+      v.literal("daily"),
+      v.literal("flexible")
+    )),
+    defaultHourlyPrice: v.optional(v.number()), // Prix horaire conseillé par défaut (en centimes)
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx, args.token);
@@ -155,6 +172,8 @@ export const updateCategory = mutation({
     if (args.icon !== undefined) updates.icon = args.icon;
     if (args.imageStorageId !== undefined) updates.imageStorageId = args.imageStorageId;
     if (args.isActive !== undefined) updates.isActive = args.isActive;
+    if (args.billingType !== undefined) updates.billingType = args.billingType;
+    if (args.defaultHourlyPrice !== undefined) updates.defaultHourlyPrice = args.defaultHourlyPrice;
 
     await ctx.db.patch(args.categoryId, updates);
 
@@ -220,16 +239,22 @@ export const seedDefaultCategories = mutation({
       throw new ConvexError("Des catégories existent déjà");
     }
 
-    const defaultCategories = [
-      { slug: "garde", name: "Garde", icon: "🏠", description: "Garde à domicile ou en famille" },
-      { slug: "promenade", name: "Promenade", icon: "🚶", description: "Balades et sorties" },
-      { slug: "toilettage", name: "Toilettage", icon: "🛁", description: "Soins et hygiène" },
-      { slug: "dressage", name: "Dressage", icon: "🎓", description: "Éducation et comportement" },
-      { slug: "agilite", name: "Agilité", icon: "🏃", description: "Sport et activités physiques" },
-      { slug: "transport", name: "Transport", icon: "🚗", description: "Accompagnement véhiculé" },
-      { slug: "pension", name: "Pension", icon: "🏨", description: "Hébergement longue durée" },
-      { slug: "visite", name: "Visite", icon: "👋", description: "Visite à domicile" },
-      { slug: "medical", name: "Soins médicaux", icon: "💊", description: "Accompagnement vétérinaire" },
+    const defaultCategories: Array<{
+      slug: string;
+      name: string;
+      icon: string;
+      description: string;
+      billingType: "hourly" | "daily" | "flexible";
+    }> = [
+      { slug: "garde", name: "Garde", icon: "🏠", description: "Garde à domicile ou en famille", billingType: "flexible" },
+      { slug: "promenade", name: "Promenade", icon: "🚶", description: "Balades et sorties", billingType: "hourly" },
+      { slug: "toilettage", name: "Toilettage", icon: "🛁", description: "Soins et hygiène", billingType: "hourly" },
+      { slug: "dressage", name: "Dressage", icon: "🎓", description: "Éducation et comportement", billingType: "hourly" },
+      { slug: "agilite", name: "Agilité", icon: "🏃", description: "Sport et activités physiques", billingType: "hourly" },
+      { slug: "transport", name: "Transport", icon: "🚗", description: "Accompagnement véhiculé", billingType: "hourly" },
+      { slug: "pension", name: "Pension", icon: "🏨", description: "Hébergement longue durée", billingType: "daily" },
+      { slug: "visite", name: "Visite", icon: "👋", description: "Visite à domicile", billingType: "hourly" },
+      { slug: "medical", name: "Soins médicaux", icon: "💊", description: "Accompagnement vétérinaire", billingType: "hourly" },
     ];
 
     const now = Date.now();

@@ -25,8 +25,8 @@ export const getPendingServices = query({
           description: service.description,
           price: service.price,
           priceUnit: service.priceUnit,
+          basePrice: service.basePrice,
           animalTypes: service.animalTypes,
-          moderationReason: service.moderationReason,
           createdAt: service.createdAt,
           user: user
             ? {
@@ -93,12 +93,11 @@ export const getAllServicesForModeration = query({
           description: service.description,
           price: service.price,
           priceUnit: service.priceUnit,
+          basePrice: service.basePrice,
           animalTypes: service.animalTypes,
           isActive: service.isActive,
           moderationStatus: service.moderationStatus || "approved",
-          moderationReason: service.moderationReason,
           moderationNote: service.moderationNote,
-          moderatedAt: service.moderatedAt,
           createdAt: service.createdAt,
           user: user
             ? {
@@ -155,7 +154,7 @@ export const approveService = mutation({
     note: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { user } = await requireAdmin(ctx, args.token);
+    await requireAdmin(ctx, args.token);
 
     const service = await ctx.db.get(args.serviceId);
     if (!service) {
@@ -165,8 +164,6 @@ export const approveService = mutation({
     await ctx.db.patch(args.serviceId, {
       moderationStatus: "approved",
       moderationNote: args.note,
-      moderatedAt: Date.now(),
-      moderatedBy: user._id,
       isActive: true,
       updatedAt: Date.now(),
     });
@@ -183,7 +180,7 @@ export const rejectService = mutation({
     note: v.string(),
   },
   handler: async (ctx, args) => {
-    const { user } = await requireAdmin(ctx, args.token);
+    await requireAdmin(ctx, args.token);
 
     const service = await ctx.db.get(args.serviceId);
     if (!service) {
@@ -197,8 +194,6 @@ export const rejectService = mutation({
     await ctx.db.patch(args.serviceId, {
       moderationStatus: "rejected",
       moderationNote: args.note,
-      moderatedAt: Date.now(),
-      moderatedBy: user._id,
       isActive: false,
       updatedAt: Date.now(),
     });
@@ -224,8 +219,6 @@ export const resetToModeration = mutation({
     await ctx.db.patch(args.serviceId, {
       moderationStatus: "pending",
       moderationNote: undefined,
-      moderatedAt: undefined,
-      moderatedBy: undefined,
       isActive: false,
       updatedAt: Date.now(),
     });

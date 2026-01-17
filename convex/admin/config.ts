@@ -113,6 +113,25 @@ export const isServiceModerationEnabled = query({
   },
 });
 
+// Query publique: Récupérer la configuration de tarification (durée journée/demi-journée)
+export const getWorkdayConfig = query({
+  args: {},
+  handler: async (ctx) => {
+    const workdayConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "workday_hours"))
+      .first();
+
+    const workdayHours = workdayConfig ? parseInt(workdayConfig.value, 10) : 8;
+    const halfDayHours = Math.round(workdayHours / 2);
+
+    return {
+      workdayHours,
+      halfDayHours,
+    };
+  },
+});
+
 // Mutation: Toggle la modération des services
 export const toggleServiceModeration = mutation({
   args: {

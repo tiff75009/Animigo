@@ -33,9 +33,14 @@ import {
   Info,
   Sparkles,
   Pencil,
+  ChevronDown,
+  ChevronUp,
+  Layers,
+  Zap,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
-import { PriceRecommendation } from "./components/PriceRecommendation";
+import VariantManager, { LocalVariant } from "./components/VariantManager";
+import OptionManager from "./components/OptionManager";
 
 // Types d'animaux disponibles
 const ANIMAL_TYPES = [
@@ -54,15 +59,6 @@ const DEFAULT_CATEGORIES = [
   { slug: "autre", name: "Autre", icon: "✨" },
 ];
 
-// Unités de prix
-const PRICE_UNITS = [
-  { id: "hour", label: "/ heure" },
-  { id: "day", label: "/ jour" },
-  { id: "week", label: "/ semaine" },
-  { id: "month", label: "/ mois" },
-  { id: "flat", label: "forfait" },
-];
-
 interface OwnedAnimal {
   type: string;
   name: string;
@@ -70,13 +66,9 @@ interface OwnedAnimal {
   age?: number;
 }
 
+// Interface simplifiée: plus de name/description/price au niveau service
 interface ServiceFormData {
   category: string;
-  name: string;
-  description: string;
-  price: number;
-  priceUnit: "hour" | "day" | "week" | "month" | "flat";
-  duration: number;
   animalTypes: string[];
 }
 
@@ -88,6 +80,7 @@ export default function ServicesPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [contentError, setContentError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [expandedServiceId, setExpandedServiceId] = useState<Id<"services"> | null>(null);
 
   // Queries
   const profileData = useQuery(
@@ -139,16 +132,14 @@ export default function ServicesPage() {
   });
   const [isAddingAnimal, setIsAddingAnimal] = useState(false);
 
-  // Service form state
+  // Service form state (simplifié: plus de name/description/price au niveau service)
   const [serviceForm, setServiceForm] = useState<ServiceFormData>({
     category: "garde",
-    name: "",
-    description: "",
-    price: 0,
-    priceUnit: "hour",
-    duration: 60,
     animalTypes: [],
   });
+
+  // Formules locales pour le mode création
+  const [localVariants, setLocalVariants] = useState<LocalVariant[]>([]);
 
   // Initialize profile form when data loads
   useState(() => {
@@ -203,38 +194,44 @@ export default function ServicesPage() {
     }
   };
 
-  // Add service
+  // Add service (simplifié: prestation + animaux + formules)
   const handleAddService = async () => {
     if (!token) return;
+
+    // Vérifier qu'au moins une formule est ajoutée
+    if (localVariants.length === 0) {
+      setContentError("Veuillez ajouter au moins une formule");
+      return;
+    }
+
     setIsSaving(true);
     setContentError(null);
     setSuccessMessage(null);
     try {
-      const result = await addService({
+      // Convertir les LocalVariants pour l'API
+      const initialVariants = localVariants.map(v => ({
+        name: v.name,
+        description: v.description,
+        price: v.price, // Déjà en centimes depuis VariantManager
+        priceUnit: v.priceUnit,
+        duration: v.duration,
+        includedFeatures: v.includedFeatures,
+      }));
+
+      await addService({
         token,
         category: serviceForm.category,
-        name: serviceForm.name,
-        description: serviceForm.description || undefined,
-        price: serviceForm.price * 100, // Convert to cents
-        priceUnit: serviceForm.priceUnit,
-        duration: serviceForm.duration || undefined,
         animalTypes: serviceForm.animalTypes,
+        initialVariants,
       });
 
-      if (result.requiresModeration) {
-        setSuccessMessage(result.message || "Service soumis à modération");
-      }
-
+      setSuccessMessage("Service créé avec succès");
       setIsAddingService(false);
       setServiceForm({
         category: "garde",
-        name: "",
-        description: "",
-        price: 0,
-        priceUnit: "hour",
-        duration: 60,
         animalTypes: [],
       });
+      setLocalVariants([]);
     } catch (error: unknown) {
       console.error("Erreur:", error);
       if (error && typeof error === "object" && "data" in error) {
@@ -268,31 +265,22 @@ export default function ServicesPage() {
     }
   };
 
-  // Edit service - populate form and open
+  // Edit service - populate form and open (simplifié)
   const handleEditService = (service: {
     id: Id<"services">;
     category: string;
-    name: string;
-    description?: string;
-    price: number;
-    priceUnit: "hour" | "day" | "week" | "month" | "flat";
     animalTypes: string[];
   }) => {
     setEditingServiceId(service.id);
     setServiceForm({
       category: service.category,
-      name: service.name,
-      description: service.description || "",
-      price: service.price / 100, // Convert from cents to euros
-      priceUnit: service.priceUnit,
-      duration: 60,
       animalTypes: service.animalTypes,
     });
     setIsAddingService(true);
     setContentError(null);
   };
 
-  // Save edited service
+  // Save edited service (simplifié: seulement category et animalTypes)
   const handleSaveEditedService = async () => {
     if (!token || !editingServiceId) return;
     setIsSaving(true);
@@ -303,10 +291,6 @@ export default function ServicesPage() {
         token,
         serviceId: editingServiceId,
         category: serviceForm.category,
-        name: serviceForm.name,
-        description: serviceForm.description || undefined,
-        price: serviceForm.price * 100, // Convert to cents
-        priceUnit: serviceForm.priceUnit,
         animalTypes: serviceForm.animalTypes,
       });
 
@@ -314,11 +298,6 @@ export default function ServicesPage() {
       setEditingServiceId(null);
       setServiceForm({
         category: "garde",
-        name: "",
-        description: "",
-        price: 0,
-        priceUnit: "hour",
-        duration: 60,
         animalTypes: [],
       });
       setSuccessMessage("Service modifié avec succès");
@@ -821,13 +800,9 @@ export default function ServicesPage() {
                         setContentError(null);
                         setServiceForm({
                           category: "garde",
-                          name: "",
-                          description: "",
-                          price: 0,
-                          priceUnit: "hour",
-                          duration: 60,
                           animalTypes: [],
                         });
+                        setLocalVariants([]);
                       }}
                       className="p-2 hover:bg-foreground/5 rounded-lg"
                     >
@@ -855,19 +830,11 @@ export default function ServicesPage() {
                     </motion.div>
                   )}
 
-                  {/* Info about moderation */}
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl mb-4">
-                    <div className="flex items-center gap-2 text-sm text-blue-700">
-                      <Info className="w-4 h-4" />
-                      <span>Les numéros de téléphone et emails sont interdits et peuvent entraîner une modération.</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    {/* Catégorie */}
+                  <div className="space-y-6">
+                    {/* 1. Choisir une prestation */}
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">
-                        Catégorie
+                      <label className="block text-sm font-semibold text-foreground mb-2">
+                        1. Choisir une prestation
                       </label>
                       <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                         {serviceCategories.map((cat) => (
@@ -890,91 +857,10 @@ export default function ServicesPage() {
                       </div>
                     </div>
 
+                    {/* 2. Animaux acceptés */}
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-1">
-                        Nom du service
-                      </label>
-                      <input
-                        type="text"
-                        value={serviceForm.name}
-                        onChange={(e) =>
-                          setServiceForm({ ...serviceForm, name: e.target.value })
-                        }
-                        placeholder="Ex: Garde à domicile"
-                        className="w-full px-4 py-3 rounded-xl border border-foreground/10 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-1">
-                        Description
-                      </label>
-                      <textarea
-                        value={serviceForm.description}
-                        onChange={(e) =>
-                          setServiceForm({ ...serviceForm, description: e.target.value })
-                        }
-                        placeholder="Décrivez ce service..."
-                        rows={3}
-                        className="w-full px-4 py-3 rounded-xl border border-foreground/10 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none resize-none"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-foreground mb-1">
-                          Prix (€)
-                        </label>
-                        <input
-                          type="number"
-                          value={serviceForm.price}
-                          onChange={(e) =>
-                            setServiceForm({ ...serviceForm, price: Number(e.target.value) })
-                          }
-                          min={0}
-                          step={0.5}
-                          className="w-full px-4 py-3 rounded-xl border border-foreground/10 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-foreground mb-1">
-                          Unité
-                        </label>
-                        <select
-                          value={serviceForm.priceUnit}
-                          onChange={(e) =>
-                            setServiceForm({
-                              ...serviceForm,
-                              priceUnit: e.target.value as ServiceFormData["priceUnit"],
-                            })
-                          }
-                          className="w-full px-4 py-3 rounded-xl border border-foreground/10 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
-                        >
-                          {PRICE_UNITS.map((unit) => (
-                            <option key={unit.id} value={unit.id}>
-                              {unit.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Prix conseillé */}
-                    {token && serviceForm.category && (
-                      <PriceRecommendation
-                        token={token}
-                        category={serviceForm.category}
-                        priceUnit={serviceForm.priceUnit}
-                        currentPrice={serviceForm.price * 100}
-                        onSelectPrice={(priceInCents) =>
-                          setServiceForm({ ...serviceForm, price: priceInCents / 100 })
-                        }
-                      />
-                    )}
-
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">
-                        Animaux acceptés pour ce service
+                      <label className="block text-sm font-semibold text-foreground mb-2">
+                        2. Animaux acceptés
                       </label>
                       <div className="flex flex-wrap gap-2">
                         {ANIMAL_TYPES.map((animal) => (
@@ -1000,9 +886,39 @@ export default function ServicesPage() {
                       </div>
                     </div>
 
+                    {/* 3. Formules (mode création uniquement) */}
+                    {!editingServiceId && (
+                      <div>
+                        <label className="block text-sm font-semibold text-foreground mb-2">
+                          3. Formules (au moins 1 obligatoire)
+                        </label>
+                        {(() => {
+                          const selectedCategoryData = serviceCategories.find(c => c.slug === serviceForm.category);
+                          const billingType = (selectedCategoryData as { billingType?: "hourly" | "daily" | "flexible" })?.billingType;
+
+                          return (
+                            <VariantManager
+                              mode="create"
+                              serviceName={selectedCategoryData?.name || serviceForm.category}
+                              localVariants={localVariants}
+                              onLocalChange={setLocalVariants}
+                              billingType={billingType}
+                              category={serviceForm.category}
+                            />
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {/* Bouton créer / modifier */}
                     <button
                       onClick={editingServiceId ? handleSaveEditedService : handleAddService}
-                      disabled={!serviceForm.category || !serviceForm.name || serviceForm.price <= 0 || isSaving}
+                      disabled={
+                        !serviceForm.category ||
+                        serviceForm.animalTypes.length === 0 ||
+                        (!editingServiceId && localVariants.length === 0) ||
+                        isSaving
+                      }
                       className="w-full py-3 bg-primary text-white font-semibold rounded-xl hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                       {isSaving ? (
@@ -1012,8 +928,57 @@ export default function ServicesPage() {
                       ) : (
                         <Plus className="w-5 h-5" />
                       )}
-                      {editingServiceId ? "Enregistrer les modifications" : "Ajouter le service"}
+                      {editingServiceId ? "Enregistrer les modifications" : "Créer le service"}
                     </button>
+
+                    {/* Section Formules & Options - uniquement en mode édition */}
+                    {editingServiceId && token && (() => {
+                      const editingService = services?.find(s => s.id === editingServiceId);
+                      const editingCategoryData = serviceCategories.find(c => c.slug === serviceForm.category);
+                      const editingBillingType = (editingCategoryData as { billingType?: "hourly" | "daily" | "flexible" })?.billingType;
+                      const editingServiceName = editingCategoryData?.name || serviceForm.category;
+
+                      if (!editingService) return null;
+
+                      return (
+                        <div className="pt-6 mt-6 border-t border-foreground/10 space-y-6">
+                          <div className="flex items-center gap-2">
+                            <Layers className="w-5 h-5 text-primary" />
+                            <h4 className="font-semibold text-foreground">Formules & Options</h4>
+                          </div>
+
+                          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <div className="flex items-start gap-2 text-sm text-blue-700">
+                              <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                              <p>
+                                Gérez vos formules (ex: Simple 25€, Complet 45€) et options payantes.
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Variant Manager */}
+                          <VariantManager
+                            mode="edit"
+                            serviceId={editingServiceId}
+                            serviceName={editingServiceName}
+                            variants={editingService.variants || []}
+                            billingType={editingBillingType}
+                            category={serviceForm.category}
+                            token={token}
+                            onUpdate={() => {}}
+                          />
+
+                          {/* Option Manager */}
+                          <OptionManager
+                            serviceId={editingServiceId}
+                            serviceName={editingServiceName}
+                            options={editingService.options || []}
+                            token={token}
+                            onUpdate={() => {}}
+                          />
+                        </div>
+                      );
+                    })()}
                   </div>
                 </motion.div>
               )}
@@ -1021,124 +986,219 @@ export default function ServicesPage() {
 
             {/* Services List */}
             <div className="space-y-4">
-              {services?.map((service) => (
+              {services?.map((service) => {
+                const isExpanded = expandedServiceId === service.id;
+                const categoryData = serviceCategories.find(c => c.slug === service.category);
+                const billingType = (categoryData as { billingType?: "hourly" | "daily" | "flexible" })?.billingType;
+
+                return (
                 <motion.div
                   key={service.id}
                   layout
-                  className={`bg-white rounded-2xl p-6 shadow-sm border ${
+                  className={`bg-white rounded-2xl shadow-sm border overflow-hidden ${
                     service.isActive ? "border-foreground/5" : "border-red-200 bg-red-50/50"
                   }`}
                 >
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {/* Category badge */}
-                        {service.category && (
-                          <span className="px-2 py-1 bg-primary/10 text-primary text-xs rounded-full flex items-center gap-1">
-                            <span>{serviceCategories.find(c => c.slug === service.category)?.icon}</span>
-                            {serviceCategories.find(c => c.slug === service.category)?.name || service.category}
-                          </span>
-                        )}
-                        <h3 className="text-lg font-semibold text-foreground">
-                          {service.name}
-                        </h3>
-                        {/* Moderation status badge */}
-                        {service.moderationStatus === "pending" && (
-                          <span className="px-2 py-0.5 bg-amber-100 text-amber-600 text-xs rounded-full flex items-center gap-1">
-                            <ShieldAlert className="w-3 h-3" />
-                            En modération
-                          </span>
-                        )}
-                        {service.moderationStatus === "rejected" && (
-                          <span className="px-2 py-0.5 bg-red-100 text-red-600 text-xs rounded-full flex items-center gap-1">
-                            <AlertCircle className="w-3 h-3" />
-                            Rejeté
-                          </span>
-                        )}
-                        {!service.isActive && service.moderationStatus !== "pending" && service.moderationStatus !== "rejected" && (
-                          <span className="px-2 py-0.5 bg-red-100 text-red-600 text-xs rounded-full">
-                            Désactivé
-                          </span>
-                        )}
-                      </div>
-                      {service.description && (
-                        <p className="text-text-light mt-1">{service.description}</p>
-                      )}
-                      <div className="flex flex-wrap gap-2 mt-3">
-                        {service.animalTypes.map((animal) => {
-                          const animalInfo = ANIMAL_TYPES.find((a) => a.id === animal);
-                          return (
-                            <span
-                              key={animal}
-                              className="px-2 py-1 bg-foreground/5 rounded-full text-xs text-foreground"
-                            >
-                              {animalInfo?.label || animal}
+                  <div className="p-6">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* Prestation (icône + nom catégorie) */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-2xl">{categoryData?.icon}</span>
+                            <h3 className="text-lg font-semibold text-foreground">
+                              {categoryData?.name || service.category}
+                            </h3>
+                          </div>
+                          {/* Moderation status badge */}
+                          {service.moderationStatus === "pending" && (
+                            <span className="px-2 py-0.5 bg-amber-100 text-amber-600 text-xs rounded-full flex items-center gap-1">
+                              <ShieldAlert className="w-3 h-3" />
+                              En modération
                             </span>
-                          );
-                        })}
+                          )}
+                          {service.moderationStatus === "rejected" && (
+                            <span className="px-2 py-0.5 bg-red-100 text-red-600 text-xs rounded-full flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" />
+                              Rejeté
+                            </span>
+                          )}
+                          {!service.isActive && service.moderationStatus !== "pending" && service.moderationStatus !== "rejected" && (
+                            <span className="px-2 py-0.5 bg-red-100 text-red-600 text-xs rounded-full">
+                              Désactivé
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Variants & Options info */}
+                        {(service.variantsCount > 0 || service.optionsCount > 0) && (
+                          <div className="flex items-center gap-3 mt-2 text-sm">
+                            {service.variantsCount > 0 && (
+                              <span className="flex items-center gap-1 text-primary">
+                                <Layers className="w-4 h-4" />
+                                {service.variantsCount} formule{service.variantsCount > 1 ? "s" : ""}
+                              </span>
+                            )}
+                            {service.optionsCount > 0 && (
+                              <span className="flex items-center gap-1 text-amber-600">
+                                <Zap className="w-4 h-4" />
+                                {service.optionsCount} option{service.optionsCount > 1 ? "s" : ""}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          {service.animalTypes.map((animal) => {
+                            const animalInfo = ANIMAL_TYPES.find((a) => a.id === animal);
+                            return (
+                              <span
+                                key={animal}
+                                className="px-2 py-1 bg-foreground/5 rounded-full text-xs text-foreground"
+                              >
+                                {animalInfo?.label || animal}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        {service.basePrice ? (
+                          <>
+                            <p className="text-sm text-text-light">À partir de</p>
+                            <p className="text-2xl font-bold text-primary">
+                              {formatPrice(service.basePrice)}€
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-sm text-text-light">Prix non défini</p>
+                        )}
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-primary">
-                        {formatPrice(service.price)}€
-                      </p>
-                      <p className="text-sm text-text-light">
-                        {PRICE_UNITS.find((u) => u.id === service.priceUnit)?.label}
-                      </p>
+                    <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-foreground/5">
+                      {/* Modifier */}
+                      <button
+                        onClick={() => handleEditService(service)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors"
+                      >
+                        <Pencil className="w-4 h-4" />
+                        Modifier
+                      </button>
+                      {/* Formules & Options */}
+                      <button
+                        onClick={() => setExpandedServiceId(isExpanded ? null : service.id)}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          isExpanded
+                            ? "bg-primary text-white"
+                            : "bg-purple-100 text-purple-600 hover:bg-purple-200"
+                        }`}
+                      >
+                        <Layers className="w-4 h-4" />
+                        Formules & Options
+                        {isExpanded ? (
+                          <ChevronUp className="w-4 h-4" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4" />
+                        )}
+                      </button>
+                      {/* Sponsoriser */}
+                      <button
+                        onClick={() => {
+                          // TODO: Implémenter la fonctionnalité de sponsorisation
+                          alert("Fonctionnalité à venir !");
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-amber-100 to-yellow-100 text-amber-700 hover:from-amber-200 hover:to-yellow-200 transition-colors"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        Sponsoriser
+                      </button>
+                      {/* Activer/Désactiver */}
+                      <button
+                        onClick={() => handleToggleService(service.id, service.isActive)}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          service.isActive
+                            ? "bg-orange-100 text-orange-600 hover:bg-orange-200"
+                            : "bg-green-100 text-green-600 hover:bg-green-200"
+                        }`}
+                      >
+                        {service.isActive ? (
+                          <>
+                            <AlertCircle className="w-4 h-4" />
+                            Désactiver
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle className="w-4 h-4" />
+                            Activer
+                          </>
+                        )}
+                      </button>
+                      {/* Supprimer */}
+                      <button
+                        onClick={() => handleDeleteService(service.id)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Supprimer
+                      </button>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-foreground/5">
-                    {/* Modifier */}
-                    <button
-                      onClick={() => handleEditService(service)}
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors"
-                    >
-                      <Pencil className="w-4 h-4" />
-                      Modifier
-                    </button>
-                    {/* Sponsoriser */}
-                    <button
-                      onClick={() => {
-                        // TODO: Implémenter la fonctionnalité de sponsorisation
-                        alert("Fonctionnalité à venir !");
-                      }}
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-amber-100 to-yellow-100 text-amber-700 hover:from-amber-200 hover:to-yellow-200 transition-colors"
-                    >
-                      <Sparkles className="w-4 h-4" />
-                      Sponsoriser
-                    </button>
-                    {/* Activer/Désactiver */}
-                    <button
-                      onClick={() => handleToggleService(service.id, service.isActive)}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        service.isActive
-                          ? "bg-orange-100 text-orange-600 hover:bg-orange-200"
-                          : "bg-green-100 text-green-600 hover:bg-green-200"
-                      }`}
-                    >
-                      {service.isActive ? (
-                        <>
-                          <AlertCircle className="w-4 h-4" />
-                          Désactiver
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle className="w-4 h-4" />
-                          Activer
-                        </>
-                      )}
-                    </button>
-                    {/* Supprimer */}
-                    <button
-                      onClick={() => handleDeleteService(service.id)}
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Supprimer
-                    </button>
-                  </div>
+
+                  {/* Expanded section: Variants & Options */}
+                  <AnimatePresence>
+                    {isExpanded && token && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="border-t border-foreground/10 bg-gray-50/50"
+                      >
+                        <div className="p-6 space-y-6">
+                          {/* Info message */}
+                          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <div className="flex items-start gap-2 text-sm text-blue-700">
+                              <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                              <div>
+                                <p className="font-medium">Tarification avancée</p>
+                                <p className="text-blue-600">
+                                  Créez des formules (ex: Simple, Complet, Premium) et ajoutez des options payantes pour personnaliser votre offre.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Variant Manager */}
+                          <VariantManager
+                            mode="edit"
+                            serviceId={service.id}
+                            serviceName={categoryData?.name || service.category}
+                            variants={service.variants || []}
+                            billingType={billingType}
+                            category={service.category}
+                            token={token}
+                            onUpdate={() => {
+                              // Le hook useQuery rafraîchit automatiquement
+                            }}
+                          />
+
+                          {/* Option Manager */}
+                          <OptionManager
+                            serviceId={service.id}
+                            serviceName={categoryData?.name || service.category}
+                            options={service.options || []}
+                            token={token}
+                            onUpdate={() => {
+                              // Le hook useQuery rafraîchit automatiquement
+                            }}
+                          />
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </motion.div>
-              ))}
+              );
+              })}
 
               {services?.length === 0 && !isAddingService && (
                 <div className="text-center py-12 text-text-light">

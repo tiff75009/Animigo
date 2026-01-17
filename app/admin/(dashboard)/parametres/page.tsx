@@ -15,6 +15,7 @@ import {
   Loader2,
   Check,
   Save,
+  Clock,
 } from "lucide-react";
 
 export default function ParametresPage() {
@@ -31,6 +32,7 @@ export default function ParametresPage() {
   const [admin2FA, setAdmin2FA] = useState(false);
   const [emailFrom, setEmailFrom] = useState("noreply@animigo.fr");
   const [emailFromName, setEmailFromName] = useState("Animigo");
+  const [workdayHours, setWorkdayHours] = useState(8);
 
   // Query pour récupérer toutes les configs
   const allConfigs = useQuery(
@@ -74,6 +76,9 @@ export default function ParametresPage() {
           case "email_from_name":
             setEmailFromName(config.value);
             break;
+          case "workday_hours":
+            setWorkdayHours(parseInt(config.value, 10) || 8);
+            break;
         }
       }
     }
@@ -110,6 +115,7 @@ export default function ParametresPage() {
         { key: "admin_2fa", value: admin2FA.toString() },
         { key: "email_from", value: emailFrom },
         { key: "email_from_name", value: emailFromName },
+        { key: "workday_hours", value: workdayHours.toString() },
       ];
 
       for (const config of configsToSave) {
@@ -193,6 +199,50 @@ export default function ParametresPage() {
                 </p>
               </div>
             )}
+          </div>
+        </motion.div>
+
+        {/* Tarification Settings */}
+        <motion.div
+          className="bg-slate-900 rounded-xl p-6 border border-slate-800"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-purple-500/20 rounded-lg">
+              <Clock className="w-5 h-5 text-purple-400" />
+            </div>
+            <h2 className="text-lg font-semibold text-white">Tarification</h2>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Durée d'une journée de travail
+              </label>
+              <div className="flex items-center gap-4">
+                <input
+                  type="range"
+                  min={4}
+                  max={10}
+                  value={workdayHours}
+                  onChange={(e) => setWorkdayHours(Number(e.target.value))}
+                  className="flex-1 accent-purple-500"
+                />
+                <div className="w-16 px-3 py-2 bg-slate-800 rounded-lg text-center font-semibold text-purple-400">
+                  {workdayHours}h
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                Demi-journée : {Math.round(workdayHours / 2)}h (calculée automatiquement)
+              </p>
+            </div>
+            <div className="flex items-start gap-2 p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+              <Clock className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-purple-300">
+                Ces valeurs sont utilisées pour le calcul des tarifs de tous les annonceurs.
+              </p>
+            </div>
           </div>
         </motion.div>
 

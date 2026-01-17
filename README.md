@@ -91,9 +91,11 @@ bun run build
   - Detection automatique des contenus suspects (emails, telephones)
 
 - **Categories de services** (`/admin/services/categories`)
-  - CRUD complet des categories
+  - CRUD complet des categories (prestations)
   - Personnalisation des icones et images
-  - Ordre d'affichage
+  - Type de facturation (horaire, journalier, flexible)
+  - Prix horaire conseille par defaut (utilise quand pas assez de donnees marche)
+  - Ordre d'affichage drag & drop
 
 - **Integrations API** (`/admin/integrations`)
   - Configuration API INSEE (SIRENE)
@@ -108,11 +110,22 @@ bun run build
 ### Dashboard Annonceur (`/dashboard`)
 
 - **Page Services** (`/dashboard/services`)
-  - Ajout de services avec categories dynamiques
-  - Edition des services existants
-  - Systeme de prix conseilles base sur le marche
-    - Analyse des prix par zone geographique (ville, departement, region, national)
-    - Fallback sur prix de reference si donnees insuffisantes
+  - **Nouveau modele simplifie** : Prestation + Formules + Options
+    - Selection d'une prestation (categorie geree par admin)
+    - Types d'animaux acceptes
+    - Formules obligatoires (au moins 1)
+    - Options additionnelles
+  - **Systeme de formules (variantes)**
+    - Prix horaire × duree = prix total
+    - Fonctionnalites incluses par formule
+    - Glisser-deposer pour reordonner
+  - **Options additionnelles**
+    - Prix forfaitaire, par jour ou par unite
+    - Quantite maximale configurable
+  - **Prix conseilles intelligents**
+    - Priorite 1 : Moyenne des prix des autres annonceurs
+    - Priorite 2 : Prix par defaut admin de la categorie
+    - Priorite 3 : Prix de reference codes en dur
   - Moderation automatique du contenu
   - Bouton "Sponsoriser" (a venir)
 
@@ -179,7 +192,7 @@ app/
         views/         # MonthView, WeekView, DayView, YearView
         availability/  # AvailabilityModal
     services/
-      components/      # PriceRecommendation
+      components/      # VariantManager, OptionManager, PriceRecommendation
   components/          # Composants partages
     ui/                # Composants UI (input, checkbox, etc.)
   hooks/               # Hooks React personnalises
@@ -190,6 +203,8 @@ app/
 
 convex/
   admin/               # Fonctions admin
+    serviceCategories.ts  # CRUD categories
+    moderation.ts         # Moderation des services
   api/                 # Integrations API externes
     insee.ts
     location.ts
@@ -201,8 +216,10 @@ convex/
     missions.ts
     availability.ts
   services/            # Gestion des services
-    services.ts
-    pricing.ts
+    services.ts           # CRUD services
+    variants.ts           # Gestion des formules
+    options.ts            # Gestion des options
+    pricing.ts            # Calcul prix conseilles
   utils/               # Utilitaires
     contentModeration.ts
     defaultPricing.ts
@@ -217,12 +234,15 @@ convex/
 
 - `users` - Utilisateurs (tous types)
 - `sessions` - Sessions d'authentification
-- `profiles` - Profils des annonceurs
-- `services` - Services proposes
-- `serviceCategories` - Categories de services
+- `profiles` - Profils des annonceurs (localisation, animaux acceptes, etc.)
+- `services` - Services/Prestations proposes (lie a une categorie)
+- `serviceVariants` - Formules de service (prix horaire, duree, fonctionnalites)
+- `serviceOptions` - Options additionnelles (supplements)
+- `serviceCategories` - Categories de services gerees par admin
 - `photos` - Photos des annonceurs
 - `missions` - Reservations de services
 - `availability` - Disponibilites des annonceurs
+- `userPreferences` - Preferences utilisateur (notifications, facturation)
 - `systemConfig` - Configuration systeme
 
 ---

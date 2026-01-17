@@ -103,32 +103,33 @@ export default defineSchema({
     .index("by_postal_code", ["postalCode"]),
 
   // Services proposés par les annonceurs
+  // Structure simplifiée: category (prestation) + animalTypes + formules (variants)
   services: defineTable({
     userId: v.id("users"),
-    category: v.string(), // Catégorie du service (garde, toilettage, dressage, etc.)
-    name: v.string(), // Nom personnalisé du service
-    description: v.optional(v.string()),
-    price: v.number(), // Prix en centimes
-    priceUnit: v.union(
-      v.literal("hour"), // par heure
-      v.literal("day"), // par jour
-      v.literal("week"), // par semaine
-      v.literal("month"), // par mois
-      v.literal("flat") // forfait
-    ),
-    duration: v.optional(v.number()), // Durée en minutes
+    category: v.string(), // Slug de la prestation (ex: "toilettage", "garde")
     animalTypes: v.array(v.string()), // Types d'animaux acceptés pour ce service
     isActive: v.boolean(),
-    // Modération
+    basePrice: v.optional(v.number()), // Prix "à partir de" (min des formules, en centimes)
+    // Champs legacy (optionnels pour rétrocompatibilité migration)
+    name: v.optional(v.string()), // Ancien: nom personnalisé
+    description: v.optional(v.string()), // Ancien: description
+    price: v.optional(v.number()), // Ancien: prix en centimes
+    priceUnit: v.optional(v.union(
+      v.literal("hour"),
+      v.literal("day"),
+      v.literal("week"),
+      v.literal("month"),
+      v.literal("flat")
+    )), // Ancien: unité de prix
+    duration: v.optional(v.number()), // Ancien: durée en minutes
+    hasVariants: v.optional(v.boolean()), // Legacy: toujours true maintenant
+    // Modération (simplifiée - catégories gérées par admin)
     moderationStatus: v.optional(v.union(
-      v.literal("approved"), // Approuvé (par défaut si pas de suspicion)
-      v.literal("pending"),  // En attente de modération
-      v.literal("rejected")  // Rejeté par un modérateur
+      v.literal("approved"),
+      v.literal("pending"),
+      v.literal("rejected")
     )),
-    moderationNote: v.optional(v.string()), // Note du modérateur
-    moderationReason: v.optional(v.string()), // Raison de la mise en modération (auto-détection)
-    moderatedAt: v.optional(v.number()),
-    moderatedBy: v.optional(v.id("users")),
+    moderationNote: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -137,6 +138,50 @@ export default defineSchema({
     .index("by_category", ["category"])
     .index("by_category_active", ["category", "isActive"])
     .index("by_moderation_status", ["moderationStatus"]),
+
+  // Variantes de service (formules/tarifs)
+  serviceVariants: defineTable({
+    serviceId: v.id("services"),
+    name: v.string(), // "Toilettage Simple", "Toilettage Premium"
+    description: v.optional(v.string()),
+    price: v.number(), // Prix en centimes
+    priceUnit: v.union(
+      v.literal("hour"),
+      v.literal("day"),
+      v.literal("week"),
+      v.literal("month"),
+      v.literal("flat")
+    ),
+    duration: v.optional(v.number()), // Durée en minutes
+    includedFeatures: v.optional(v.array(v.string())), // ["Brossage", "Lavage", "Séchage"]
+    order: v.number(), // Ordre d'affichage
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_service", ["serviceId"])
+    .index("by_service_active", ["serviceId", "isActive"]),
+
+  // Options additionnelles pour les services
+  serviceOptions: defineTable({
+    serviceId: v.id("services"),
+    name: v.string(), // "Shampoing anti-puces", "Parfum"
+    description: v.optional(v.string()),
+    price: v.number(), // Prix en centimes
+    priceType: v.union(
+      v.literal("flat"), // Forfait unique (+8€)
+      v.literal("per_day"), // Par jour (+5€/jour)
+      v.literal("per_unit") // Par unité (+8€/promenade)
+    ),
+    unitLabel: v.optional(v.string()), // "par jour", "par promenade" (si per_day ou per_unit)
+    maxQuantity: v.optional(v.number()), // Quantité max sélectionnable
+    order: v.number(), // Ordre d'affichage
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_service", ["serviceId"])
+    .index("by_service_active", ["serviceId", "isActive"]),
 
   // Catégories de services (gérées par l'admin)
   serviceCategories: defineTable({
@@ -147,6 +192,15 @@ export default defineSchema({
     imageStorageId: v.optional(v.id("_storage")), // Image de la catégorie
     order: v.number(), // Ordre d'affichage
     isActive: v.boolean(),
+    // Type de facturation pour cette catégorie
+    billingType: v.optional(v.union(
+      v.literal("hourly"),    // Facturation à l'heure (toilettage, promenade...)
+      v.literal("daily"),     // Facturation à la journée (pension...)
+      v.literal("flexible")   // L'annonceur choisit (garde - courte ou longue durée)
+    )),
+    // Prix horaire conseillé par défaut (en centimes)
+    // Utilisé quand pas assez de données pour calculer une moyenne
+    defaultHourlyPrice: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -255,4 +309,59 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_date", ["userId", "date"]),
+
+  // Préférences utilisateur
+  userPreferences: defineTable({
+    userId: v.id("users"),
+
+    // Horaires de disponibilité (pour accepter les réservations)
+    acceptReservationsFrom: v.optional(v.string()), // "08:00"
+    acceptReservationsTo: v.optional(v.string()),   // "20:00"
+
+    // Mode de facturation pour les dépassements
+    // "round_up" = arrondir à la demi-journée/journée supérieure
+    // "exact" = facturer les heures exactes en supplément
+    billingMode: v.optional(
+      v.union(v.literal("round_up"), v.literal("exact"))
+    ),
+
+    // Seuil pour arrondir (en heures)
+    // Ex: si seuil = 2 et dépassement = 1h, on facture les heures
+    // Si dépassement >= 2h, on arrondit à la demi-journée
+    roundUpThreshold: v.optional(v.number()),
+
+    // Préférences de notification (stockées ici pour persistance)
+    notifications: v.optional(
+      v.object({
+        email: v.optional(
+          v.object({
+            newMission: v.optional(v.boolean()),
+            messages: v.optional(v.boolean()),
+            reviews: v.optional(v.boolean()),
+            payments: v.optional(v.boolean()),
+            newsletter: v.optional(v.boolean()),
+          })
+        ),
+        push: v.optional(
+          v.object({
+            newMission: v.optional(v.boolean()),
+            messages: v.optional(v.boolean()),
+            reviews: v.optional(v.boolean()),
+            payments: v.optional(v.boolean()),
+            reminders: v.optional(v.boolean()),
+          })
+        ),
+        sms: v.optional(
+          v.object({
+            newMission: v.optional(v.boolean()),
+            urgentMessages: v.optional(v.boolean()),
+            payments: v.optional(v.boolean()),
+          })
+        ),
+      })
+    ),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
 });

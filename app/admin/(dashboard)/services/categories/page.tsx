@@ -21,11 +21,15 @@ import {
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 
+type BillingType = "hourly" | "daily" | "flexible";
+
 interface CategoryFormData {
   slug: string;
   name: string;
   description: string;
   icon: string;
+  billingType: BillingType;
+  defaultHourlyPrice: number; // Prix horaire par défaut en euros
 }
 
 export default function ServiceCategoriesPage() {
@@ -41,6 +45,8 @@ export default function ServiceCategoriesPage() {
     name: "",
     description: "",
     icon: "",
+    billingType: "hourly",
+    defaultHourlyPrice: 0,
   });
 
   // Queries
@@ -58,7 +64,7 @@ export default function ServiceCategoriesPage() {
 
   // Reset form
   const resetForm = () => {
-    setFormData({ slug: "", name: "", description: "", icon: "" });
+    setFormData({ slug: "", name: "", description: "", icon: "", billingType: "hourly", defaultHourlyPrice: 0 });
     setIsAdding(false);
     setEditingId(null);
   };
@@ -93,6 +99,10 @@ export default function ServiceCategoriesPage() {
         name: formData.name,
         description: formData.description || undefined,
         icon: formData.icon || undefined,
+        billingType: formData.billingType,
+        defaultHourlyPrice: formData.defaultHourlyPrice > 0
+          ? Math.round(formData.defaultHourlyPrice * 100) // Convertir en centimes
+          : undefined,
       });
       resetForm();
     } catch (error) {
@@ -114,6 +124,10 @@ export default function ServiceCategoriesPage() {
         name: formData.name || undefined,
         description: formData.description || undefined,
         icon: formData.icon || undefined,
+        billingType: formData.billingType,
+        defaultHourlyPrice: formData.defaultHourlyPrice > 0
+          ? Math.round(formData.defaultHourlyPrice * 100) // Convertir en centimes
+          : undefined,
       });
       resetForm();
     } catch (error) {
@@ -150,6 +164,8 @@ export default function ServiceCategoriesPage() {
       name: category.name,
       description: category.description || "",
       icon: category.icon || "",
+      billingType: category.billingType || "hourly",
+      defaultHourlyPrice: category.defaultHourlyPrice ? category.defaultHourlyPrice / 100 : 0, // Convertir en euros
     });
     setEditingId(category.id);
     setIsAdding(false);
@@ -304,6 +320,105 @@ export default function ServiceCategoriesPage() {
               </div>
             </div>
 
+            {/* Prix horaire conseillé par défaut */}
+            <div className="mb-4 p-4 bg-slate-900/50 rounded-lg border border-slate-700">
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Prix horaire conseillé par défaut (€/h)
+              </label>
+              <div className="flex items-center gap-4">
+                <div className="relative w-48">
+                  <input
+                    type="number"
+                    value={formData.defaultHourlyPrice || ""}
+                    onChange={(e) => setFormData({ ...formData, defaultHourlyPrice: parseFloat(e.target.value) || 0 })}
+                    placeholder="25"
+                    step="0.5"
+                    min="0"
+                    className="w-full px-4 py-2 pr-12 bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">€/h</span>
+                </div>
+                <p className="text-xs text-slate-500 flex-1">
+                  Ce prix sera utilisé comme référence quand il n&apos;y a pas assez de données pour calculer une moyenne.
+                </p>
+              </div>
+            </div>
+
+            {/* Billing Type Selector */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-300 mb-3">
+                Type de facturation
+              </label>
+              <div className="grid grid-cols-3 gap-3">
+                <label
+                  className={`flex flex-col items-center gap-2 p-4 rounded-lg border cursor-pointer transition-all ${
+                    formData.billingType === "hourly"
+                      ? "border-blue-500 bg-blue-500/10"
+                      : "border-slate-700 bg-slate-900 hover:border-slate-600"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="billingType"
+                    value="hourly"
+                    checked={formData.billingType === "hourly"}
+                    onChange={(e) => setFormData({ ...formData, billingType: e.target.value as BillingType })}
+                    className="sr-only"
+                  />
+                  <span className="text-2xl">⏱️</span>
+                  <span className="font-medium text-white">Horaire</span>
+                  <span className="text-xs text-slate-400 text-center">
+                    Facturation à l&apos;heure
+                  </span>
+                </label>
+                <label
+                  className={`flex flex-col items-center gap-2 p-4 rounded-lg border cursor-pointer transition-all ${
+                    formData.billingType === "daily"
+                      ? "border-blue-500 bg-blue-500/10"
+                      : "border-slate-700 bg-slate-900 hover:border-slate-600"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="billingType"
+                    value="daily"
+                    checked={formData.billingType === "daily"}
+                    onChange={(e) => setFormData({ ...formData, billingType: e.target.value as BillingType })}
+                    className="sr-only"
+                  />
+                  <span className="text-2xl">📅</span>
+                  <span className="font-medium text-white">Journalier</span>
+                  <span className="text-xs text-slate-400 text-center">
+                    Facturation à la journée
+                  </span>
+                </label>
+                <label
+                  className={`flex flex-col items-center gap-2 p-4 rounded-lg border cursor-pointer transition-all ${
+                    formData.billingType === "flexible"
+                      ? "border-blue-500 bg-blue-500/10"
+                      : "border-slate-700 bg-slate-900 hover:border-slate-600"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="billingType"
+                    value="flexible"
+                    checked={formData.billingType === "flexible"}
+                    onChange={(e) => setFormData({ ...formData, billingType: e.target.value as BillingType })}
+                    className="sr-only"
+                  />
+                  <span className="text-2xl">🔄</span>
+                  <span className="font-medium text-white">Flexible</span>
+                  <span className="text-xs text-slate-400 text-center">
+                    L&apos;annonceur choisit
+                  </span>
+                </label>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                Pour les catégories &quot;Flexible&quot;, l&apos;annonceur définit s&apos;il facture à l&apos;heure ou à la journée.
+              </p>
+            </div>
+
             <div className="flex justify-end gap-3">
               <button
                 onClick={resetForm}
@@ -341,6 +456,12 @@ export default function ServiceCategoriesPage() {
               </th>
               <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
                 Image
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                Facturation
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                Prix conseillé
               </th>
               <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
                 Statut
@@ -407,6 +528,32 @@ export default function ServiceCategoriesPage() {
                   </div>
                 </td>
                 <td className="px-6 py-4">
+                  <span
+                    className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      category.billingType === "hourly"
+                        ? "bg-blue-500/20 text-blue-400"
+                        : category.billingType === "daily"
+                        ? "bg-purple-500/20 text-purple-400"
+                        : "bg-orange-500/20 text-orange-400"
+                    }`}
+                  >
+                    {category.billingType === "hourly"
+                      ? "⏱️ Horaire"
+                      : category.billingType === "daily"
+                      ? "📅 Journalier"
+                      : "🔄 Flexible"}
+                  </span>
+                </td>
+                <td className="px-6 py-4">
+                  {category.defaultHourlyPrice ? (
+                    <span className="text-green-400 font-medium">
+                      {(category.defaultHourlyPrice / 100).toFixed(2).replace(".", ",")} €/h
+                    </span>
+                  ) : (
+                    <span className="text-slate-500 text-sm">Non défini</span>
+                  )}
+                </td>
+                <td className="px-6 py-4">
                   <button
                     onClick={() => handleToggleActive(category.id, category.isActive)}
                     className={`px-3 py-1 rounded-full text-xs font-medium ${
@@ -439,7 +586,7 @@ export default function ServiceCategoriesPage() {
 
             {categories?.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-6 py-12 text-center">
+                <td colSpan={7} className="px-6 py-12 text-center">
                   <Tag className="w-12 h-12 text-slate-600 mx-auto mb-4" />
                   <p className="text-slate-400">Aucune catégorie</p>
                   <p className="text-sm text-slate-500">

@@ -54,7 +54,7 @@ export const checkContent = query({
   },
 });
 
-// Récupérer les services d'un utilisateur
+// Récupérer les services d'un utilisateur (avec variantes et options)
 export const getMyServices = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
@@ -72,41 +72,97 @@ export const getMyServices = query({
       .withIndex("by_user", (q) => q.eq("userId", session.userId))
       .collect();
 
-    return services.map((s) => ({
-      id: s._id,
-      category: s.category,
-      name: s.name,
-      description: s.description,
-      price: s.price,
-      priceUnit: s.priceUnit,
-      duration: s.duration,
-      animalTypes: s.animalTypes,
-      isActive: s.isActive,
-      moderationStatus: s.moderationStatus || "approved",
-      moderationNote: s.moderationNote,
-      createdAt: s.createdAt,
-      updatedAt: s.updatedAt,
-    }));
+    // Pour chaque service, récupérer les variantes et options
+    const servicesWithDetails = await Promise.all(
+      services.map(async (s) => {
+        // Récupérer les variantes
+        const variants = await ctx.db
+          .query("serviceVariants")
+          .withIndex("by_service", (q) => q.eq("serviceId", s._id))
+          .collect();
+
+        // Récupérer les options
+        const options = await ctx.db
+          .query("serviceOptions")
+          .withIndex("by_service", (q) => q.eq("serviceId", s._id))
+          .collect();
+
+        return {
+          id: s._id,
+          category: s.category,
+          name: s.name,
+          description: s.description,
+          price: s.price,
+          priceUnit: s.priceUnit,
+          duration: s.duration,
+          animalTypes: s.animalTypes,
+          isActive: s.isActive,
+          hasVariants: s.hasVariants || false,
+          basePrice: s.basePrice,
+          moderationStatus: s.moderationStatus || "approved",
+          moderationNote: s.moderationNote,
+          createdAt: s.createdAt,
+          updatedAt: s.updatedAt,
+          // Compteurs pour l'affichage
+          variantsCount: variants.length,
+          optionsCount: options.length,
+          // Variantes triées par ordre
+          variants: variants
+            .sort((a, b) => a.order - b.order)
+            .map((v) => ({
+              id: v._id,
+              name: v.name,
+              description: v.description,
+              price: v.price,
+              priceUnit: v.priceUnit,
+              duration: v.duration,
+              includedFeatures: v.includedFeatures,
+              order: v.order,
+              isActive: v.isActive,
+            })),
+          // Options triées par ordre
+          options: options
+            .sort((a, b) => a.order - b.order)
+            .map((o) => ({
+              id: o._id,
+              name: o.name,
+              description: o.description,
+              price: o.price,
+              priceType: o.priceType,
+              unitLabel: o.unitLabel,
+              maxQuantity: o.maxQuantity,
+              order: o.order,
+              isActive: o.isActive,
+            })),
+        };
+      })
+    );
+
+    return servicesWithDetails;
   },
 });
 
-// Ajouter un service
+// Ajouter un service (structure simplifiée: prestation + formules)
 export const addService = mutation({
   args: {
     token: v.string(),
-    category: v.string(),
-    name: v.string(),
-    description: v.optional(v.string()),
-    price: v.number(),
-    priceUnit: v.union(
-      v.literal("hour"),
-      v.literal("day"),
-      v.literal("week"),
-      v.literal("month"),
-      v.literal("flat")
-    ),
-    duration: v.optional(v.number()),
+    category: v.string(), // Slug de la prestation (ex: "toilettage")
     animalTypes: v.array(v.string()),
+    // Formule initiale obligatoire
+    initialVariants: v.array(v.object({
+      name: v.string(),
+      description: v.optional(v.string()),
+      price: v.number(), // En centimes
+      priceUnit: v.union(
+        v.literal("hour"),
+        v.literal("day"),
+        v.literal("week"),
+        v.literal("month"),
+        v.literal("flat")
+      ),
+      duration: v.optional(v.number()),
+      includedFeatures: v.optional(v.array(v.string())),
+    })),
   },
   handler: async (ctx, args) => {
     const session = await ctx.db
@@ -125,93 +181,84 @@ export const addService = mutation({
       throw new ConvexError("Seuls les annonceurs peuvent ajouter des services");
     }
 
-    // Vérifier si la modération globale est activée
-    const moderationConfig = await ctx.db
-      .query("systemConfig")
-      .withIndex("by_key", (q) => q.eq("key", "service_moderation_enabled"))
-      .first();
-    const globalModerationEnabled = moderationConfig?.value === "true";
-
-    // Analyse du contenu pour détecter les informations interdites
-    const nameAnalysis = analyzeContent(args.name);
-    const descriptionAnalysis = args.description
-      ? analyzeContent(args.description)
-      : { isClean: true, requiresModeration: false, message: null, phoneDetection: { found: false }, emailDetection: { found: false } };
-
-    // Bloquer si contenu interdit avec haute confiance
-    if (!nameAnalysis.isClean && !nameAnalysis.requiresModeration) {
-      throw new ConvexError(nameAnalysis.message || "Le nom du service contient des informations interdites (email ou téléphone)");
+    // Vérifier qu'au moins une formule est fournie
+    if (!args.initialVariants || args.initialVariants.length === 0) {
+      throw new ConvexError("Au moins une formule est requise");
     }
-    if (!descriptionAnalysis.isClean && !descriptionAnalysis.requiresModeration) {
-      throw new ConvexError(descriptionAnalysis.message || "La description contient des informations interdites (email ou téléphone)");
+
+    // Vérifier que la catégorie existe
+    const categoryExists = await ctx.db
+      .query("serviceCategories")
+      .withIndex("by_slug", (q) => q.eq("slug", args.category))
+      .first();
+
+    if (!categoryExists) {
+      throw new ConvexError("Catégorie de prestation invalide");
+    }
+
+    // Vérifier si un service existe déjà pour cette catégorie
+    const existingService = await ctx.db
+      .query("services")
+      .withIndex("by_user", (q) => q.eq("userId", session.userId))
+      .filter((q) => q.eq(q.field("category"), args.category))
+      .first();
+
+    if (existingService) {
+      throw new ConvexError("Vous avez déjà un service pour cette prestation");
     }
 
     const now = Date.now();
 
-    // Déterminer le statut de modération
-    // Si modération globale activée OU contenu suspect => modération requise
-    const contentRequiresModeration = nameAnalysis.requiresModeration || descriptionAnalysis.requiresModeration;
-    const requiresModeration = globalModerationEnabled || contentRequiresModeration;
+    // Calculer le prix de base (min des totaux: prix horaire × durée / 60)
+    const totalPrices = args.initialVariants.map(v => {
+      const duration = v.duration || 60; // Par défaut 60 minutes
+      return Math.round((v.price * duration) / 60);
+    });
+    const basePrice = Math.min(...totalPrices);
 
-    let moderationReason: string | undefined;
-
-    if (globalModerationEnabled && !contentRequiresModeration) {
-      moderationReason = "Modération systématique activée";
-    } else if (contentRequiresModeration) {
-      const reasons: string[] = [];
-      if (nameAnalysis.phoneDetection.found) reasons.push("Téléphone suspect dans le nom");
-      if (nameAnalysis.emailDetection.found) reasons.push("Email suspect dans le nom");
-      if (descriptionAnalysis.phoneDetection.found) reasons.push("Téléphone suspect dans la description");
-      if (descriptionAnalysis.emailDetection.found) reasons.push("Email suspect dans la description");
-      moderationReason = reasons.join(", ");
-    }
-
+    // Créer le service
     const serviceId = await ctx.db.insert("services", {
       userId: session.userId,
       category: args.category,
-      name: args.name,
-      description: args.description,
-      price: args.price,
-      priceUnit: args.priceUnit,
-      duration: args.duration,
       animalTypes: args.animalTypes,
-      isActive: !requiresModeration, // Désactivé si en attente de modération
-      moderationStatus: requiresModeration ? "pending" : "approved",
-      moderationReason: moderationReason,
+      isActive: true,
+      basePrice: basePrice,
+      moderationStatus: "approved", // Catégories gérées par admin = pas de modération
       createdAt: now,
       updatedAt: now,
     });
 
+    // Créer les formules
+    for (let i = 0; i < args.initialVariants.length; i++) {
+      const variant = args.initialVariants[i];
+      await ctx.db.insert("serviceVariants", {
+        serviceId: serviceId,
+        name: variant.name,
+        description: variant.description,
+        price: variant.price,
+        priceUnit: variant.priceUnit,
+        duration: variant.duration,
+        includedFeatures: variant.includedFeatures,
+        order: i,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
     return {
       success: true,
       serviceId,
-      requiresModeration,
-      message: requiresModeration
-        ? "Votre service a été soumis et sera visible après validation par un modérateur."
-        : undefined
     };
   },
 });
 
-// Modifier un service
+// Modifier un service (structure simplifiée)
 export const updateService = mutation({
   args: {
     token: v.string(),
     serviceId: v.id("services"),
     category: v.optional(v.string()),
-    name: v.optional(v.string()),
-    description: v.optional(v.string()),
-    price: v.optional(v.number()),
-    priceUnit: v.optional(
-      v.union(
-        v.literal("hour"),
-        v.literal("day"),
-        v.literal("week"),
-        v.literal("month"),
-        v.literal("flat")
-      )
-    ),
-    duration: v.optional(v.number()),
     animalTypes: v.optional(v.array(v.string())),
     isActive: v.optional(v.boolean()),
   },
@@ -232,78 +279,45 @@ export const updateService = mutation({
       throw new ConvexError("Vous ne pouvez pas modifier ce service");
     }
 
-    // Vérifier si la modération globale est activée
-    const moderationConfig = await ctx.db
-      .query("systemConfig")
-      .withIndex("by_key", (q) => q.eq("key", "service_moderation_enabled"))
-      .first();
-    const globalModerationEnabled = moderationConfig?.value === "true";
+    // Si changement de catégorie, vérifier qu'elle existe
+    if (args.category !== undefined) {
+      const newCategory = args.category;
+      const categoryExists = await ctx.db
+        .query("serviceCategories")
+        .withIndex("by_slug", (q) => q.eq("slug", newCategory))
+        .first();
 
-    // Analyse du contenu si nom ou description modifiés
-    let contentRequiresModeration = false;
-    let moderationReason: string | undefined;
-
-    if (args.name !== undefined) {
-      const nameAnalysis = analyzeContent(args.name);
-      if (!nameAnalysis.isClean && !nameAnalysis.requiresModeration) {
-        throw new ConvexError(nameAnalysis.message || "Le nom du service contient des informations interdites");
+      if (!categoryExists) {
+        throw new ConvexError("Catégorie de prestation invalide");
       }
-      if (nameAnalysis.requiresModeration) {
-        contentRequiresModeration = true;
-        moderationReason = "Modification du nom suspecte";
-      }
-    }
 
-    if (args.description !== undefined) {
-      const descriptionAnalysis = analyzeContent(args.description);
-      if (!descriptionAnalysis.isClean && !descriptionAnalysis.requiresModeration) {
-        throw new ConvexError(descriptionAnalysis.message || "La description contient des informations interdites");
-      }
-      if (descriptionAnalysis.requiresModeration) {
-        contentRequiresModeration = true;
-        moderationReason = moderationReason
-          ? moderationReason + ", description suspecte"
-          : "Modification de la description suspecte";
-      }
-    }
+      // Vérifier qu'un autre service n'existe pas déjà pour cette catégorie
+      const existingService = await ctx.db
+        .query("services")
+        .withIndex("by_user", (q) => q.eq("userId", session.userId))
+        .filter((q) => q.and(
+          q.eq(q.field("category"), newCategory),
+          q.neq(q.field("_id"), args.serviceId)
+        ))
+        .first();
 
-    // Si modération globale activée et modification du nom/description => re-modération
-    const requiresModeration = (globalModerationEnabled && (args.name !== undefined || args.description !== undefined)) || contentRequiresModeration;
-
-    if (globalModerationEnabled && !contentRequiresModeration && (args.name !== undefined || args.description !== undefined)) {
-      moderationReason = "Modération systématique activée";
+      if (existingService) {
+        throw new ConvexError("Vous avez déjà un service pour cette prestation");
+      }
     }
 
     const updates: Record<string, unknown> = { updatedAt: Date.now() };
     if (args.category !== undefined) updates.category = args.category;
-    if (args.name !== undefined) updates.name = args.name;
-    if (args.description !== undefined) updates.description = args.description;
-    if (args.price !== undefined) updates.price = args.price;
-    if (args.priceUnit !== undefined) updates.priceUnit = args.priceUnit;
-    if (args.duration !== undefined) updates.duration = args.duration;
     if (args.animalTypes !== undefined) updates.animalTypes = args.animalTypes;
-    if (args.isActive !== undefined && !requiresModeration) updates.isActive = args.isActive;
-
-    // Si modération requise, mettre en attente
-    if (requiresModeration) {
-      updates.moderationStatus = "pending";
-      updates.moderationReason = moderationReason;
-      updates.isActive = false;
-    }
+    if (args.isActive !== undefined) updates.isActive = args.isActive;
 
     await ctx.db.patch(args.serviceId, updates);
 
-    return {
-      success: true,
-      requiresModeration,
-      message: requiresModeration
-        ? "Votre modification sera visible après validation par un modérateur."
-        : undefined
-    };
+    return { success: true };
   },
 });
 
-// Supprimer un service
+// Supprimer un service (et ses variantes/options)
 export const deleteService = mutation({
   args: {
     token: v.string(),
@@ -326,8 +340,95 @@ export const deleteService = mutation({
       throw new ConvexError("Vous ne pouvez pas supprimer ce service");
     }
 
+    // Supprimer les variantes associées
+    const variants = await ctx.db
+      .query("serviceVariants")
+      .withIndex("by_service", (q) => q.eq("serviceId", args.serviceId))
+      .collect();
+    for (const variant of variants) {
+      await ctx.db.delete(variant._id);
+    }
+
+    // Supprimer les options associées
+    const options = await ctx.db
+      .query("serviceOptions")
+      .withIndex("by_service", (q) => q.eq("serviceId", args.serviceId))
+      .collect();
+    for (const option of options) {
+      await ctx.db.delete(option._id);
+    }
+
+    // Supprimer le service
     await ctx.db.delete(args.serviceId);
 
     return { success: true };
+  },
+});
+
+// Migration des services existants vers le nouveau modèle
+// Convertit les services avec prix direct en formule "Standard"
+export const migrateServicesToVariants = mutation({
+  args: {
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+
+    if (!session || session.expiresAt < Date.now()) {
+      throw new ConvexError("Session invalide");
+    }
+
+    const user = await ctx.db.get(session.userId);
+    if (!user || user.role !== "admin") {
+      throw new ConvexError("Accès réservé aux administrateurs");
+    }
+
+    // Récupérer tous les services qui ont un prix mais pas de formules
+    const allServices = await ctx.db.query("services").collect();
+
+    let migrated = 0;
+    const now = Date.now();
+
+    for (const service of allServices) {
+      // Vérifier si le service a des formules
+      const existingVariants = await ctx.db
+        .query("serviceVariants")
+        .withIndex("by_service", (q) => q.eq("serviceId", service._id))
+        .collect();
+
+      // Si pas de formules et que le service a un prix legacy
+      if (existingVariants.length === 0 && service.price && service.price > 0) {
+        // Créer une formule "Standard" avec les valeurs existantes
+        await ctx.db.insert("serviceVariants", {
+          serviceId: service._id,
+          name: service.name || "Standard",
+          description: service.description,
+          price: service.price,
+          priceUnit: service.priceUnit || "flat",
+          duration: service.duration,
+          order: 0,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        // Mettre à jour le basePrice du service
+        await ctx.db.patch(service._id, {
+          basePrice: service.price,
+          updatedAt: now,
+        });
+
+        migrated++;
+      }
+    }
+
+    return {
+      success: true,
+      migrated,
+      message: `${migrated} service(s) migré(s) vers le nouveau modèle`,
+    };
   },
 });

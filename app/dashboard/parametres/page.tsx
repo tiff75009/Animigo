@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Settings,
   Lock,
@@ -20,8 +20,30 @@ import {
   Star,
   AlertCircle,
   Shield,
+  User,
+  Clock,
+  Calculator,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+
+// Types
+type TabId = "information" | "paiement" | "notification" | "planning";
+
+interface Tab {
+  id: TabId;
+  label: string;
+  icon: React.ElementType;
+}
+
+const tabs: Tab[] = [
+  { id: "information", label: "Information", icon: User },
+  { id: "paiement", label: "Paiement", icon: CreditCard },
+  { id: "notification", label: "Notification", icon: Bell },
+  { id: "planning", label: "Planning", icon: Calendar },
+];
 
 // Toggle Switch Component
 function ToggleSwitch({
@@ -61,11 +83,7 @@ function SectionCard({
   className?: string;
 }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={cn("bg-white rounded-2xl shadow-lg p-6", className)}
-    >
+    <div className={cn("bg-white rounded-2xl shadow-lg p-6", className)}>
       <div className="flex items-center gap-3 mb-6">
         <div className="p-2 bg-primary/10 rounded-xl">
           <Icon className="w-5 h-5 text-primary" />
@@ -73,12 +91,12 @@ function SectionCard({
         <h2 className="text-lg font-bold text-foreground">{title}</h2>
       </div>
       {children}
-    </motion.div>
+    </div>
   );
 }
 
-// Password Section
-function PasswordSection() {
+// Information Tab (Password)
+function InformationTab() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -107,127 +125,153 @@ function PasswordSection() {
   const strength = passwordStrength();
 
   return (
-    <SectionCard title="Modifier le mot de passe" icon={Lock}>
-      <div className="space-y-4">
-        {/* Current Password */}
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-2">
-            Mot de passe actuel
-          </label>
-          <div className="relative">
-            <input
-              type={showCurrentPassword ? "text" : "password"}
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              className="w-full px-4 py-3 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground pr-12"
-              placeholder="••••••••"
-            />
-            <button
-              type="button"
-              onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light hover:text-foreground"
-            >
-              {showCurrentPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-            </button>
-          </div>
-        </div>
-
-        {/* New Password */}
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-2">
-            Nouveau mot de passe
-          </label>
-          <div className="relative">
-            <input
-              type={showNewPassword ? "text" : "password"}
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full px-4 py-3 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground pr-12"
-              placeholder="••••••••"
-            />
-            <button
-              type="button"
-              onClick={() => setShowNewPassword(!showNewPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light hover:text-foreground"
-            >
-              {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-            </button>
-          </div>
-          {/* Password Strength */}
-          {strength && (
-            <div className="mt-2">
-              <div className="h-1 bg-gray-200 rounded-full overflow-hidden">
-                <motion.div
-                  className={cn("h-full", strength.color)}
-                  initial={{ width: 0 }}
-                  animate={{ width: strength.width }}
-                />
-              </div>
-              <p className={cn("text-xs mt-1", strength.color.replace("bg-", "text-"))}>
-                Force : {strength.label}
-              </p>
+    <div className="space-y-6">
+      <SectionCard title="Modifier le mot de passe" icon={Lock}>
+        <div className="space-y-4">
+          {/* Current Password */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Mot de passe actuel
+            </label>
+            <div className="relative">
+              <input
+                type={showCurrentPassword ? "text" : "password"}
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="w-full px-4 py-3 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground pr-12"
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light hover:text-foreground"
+              >
+                {showCurrentPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
             </div>
-          )}
-        </div>
-
-        {/* Confirm Password */}
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-2">
-            Confirmer le nouveau mot de passe
-          </label>
-          <div className="relative">
-            <input
-              type={showConfirmPassword ? "text" : "password"}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className={cn(
-                "w-full px-4 py-3 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground pr-12",
-                confirmPassword && newPassword !== confirmPassword && "ring-2 ring-red-500"
-              )}
-              placeholder="••••••••"
-            />
-            <button
-              type="button"
-              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light hover:text-foreground"
-            >
-              {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-            </button>
           </div>
-          {confirmPassword && newPassword !== confirmPassword && (
-            <p className="text-xs text-red-500 mt-1">Les mots de passe ne correspondent pas</p>
-          )}
-        </div>
 
-        {/* Save Button */}
-        <motion.button
-          onClick={handleSave}
-          disabled={!currentPassword || !newPassword || newPassword !== confirmPassword}
-          className={cn(
-            "w-full py-3 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2",
-            saved
-              ? "bg-green-500 text-white"
-              : "bg-primary text-white hover:bg-primary/90 disabled:bg-gray-300 disabled:cursor-not-allowed"
-          )}
-          whileHover={{ scale: saved ? 1 : 1.01 }}
-          whileTap={{ scale: 0.99 }}
-        >
-          {saved ? (
-            <>
-              <Check className="w-5 h-5" />
-              Mot de passe modifié
-            </>
-          ) : (
-            "Modifier le mot de passe"
-          )}
-        </motion.button>
+          {/* New Password */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Nouveau mot de passe
+            </label>
+            <div className="relative">
+              <input
+                type={showNewPassword ? "text" : "password"}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full px-4 py-3 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground pr-12"
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword(!showNewPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light hover:text-foreground"
+              >
+                {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+            {/* Password Strength */}
+            {strength && (
+              <div className="mt-2">
+                <div className="h-1 bg-gray-200 rounded-full overflow-hidden">
+                  <motion.div
+                    className={cn("h-full", strength.color)}
+                    initial={{ width: 0 }}
+                    animate={{ width: strength.width }}
+                  />
+                </div>
+                <p className={cn("text-xs mt-1", strength.color.replace("bg-", "text-"))}>
+                  Force : {strength.label}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Confirm Password */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Confirmer le nouveau mot de passe
+            </label>
+            <div className="relative">
+              <input
+                type={showConfirmPassword ? "text" : "password"}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className={cn(
+                  "w-full px-4 py-3 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground pr-12",
+                  confirmPassword && newPassword !== confirmPassword && "ring-2 ring-red-500"
+                )}
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light hover:text-foreground"
+              >
+                {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+            {confirmPassword && newPassword !== confirmPassword && (
+              <p className="text-xs text-red-500 mt-1">Les mots de passe ne correspondent pas</p>
+            )}
+          </div>
+
+          {/* Save Button */}
+          <motion.button
+            onClick={handleSave}
+            disabled={!currentPassword || !newPassword || newPassword !== confirmPassword}
+            className={cn(
+              "w-full py-3 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2",
+              saved
+                ? "bg-green-500 text-white"
+                : "bg-primary text-white hover:bg-primary/90 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            )}
+            whileHover={{ scale: saved ? 1 : 1.01 }}
+            whileTap={{ scale: 0.99 }}
+          >
+            {saved ? (
+              <>
+                <Check className="w-5 h-5" />
+                Mot de passe modifié
+              </>
+            ) : (
+              "Modifier le mot de passe"
+            )}
+          </motion.button>
+        </div>
+      </SectionCard>
+
+      {/* Danger Zone */}
+      <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
+        <h3 className="text-lg font-bold text-red-700 mb-2">Zone de danger</h3>
+        <p className="text-sm text-red-600 mb-4">
+          Ces actions sont irréversibles. Procédez avec précaution.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <motion.button
+            className="px-4 py-2 border border-red-300 text-red-600 rounded-xl font-medium hover:bg-red-100 transition-colors"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            Désactiver mon compte
+          </motion.button>
+          <motion.button
+            className="px-4 py-2 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            Supprimer mon compte
+          </motion.button>
+        </div>
       </div>
-    </SectionCard>
+    </div>
   );
 }
 
-// Payment Section
-function PaymentSection() {
+// Payment Tab
+function PaymentTab() {
   const [cards, setCards] = useState([
     {
       id: "card1",
@@ -238,7 +282,7 @@ function PaymentSection() {
     },
   ]);
   const [showAddCard, setShowAddCard] = useState(false);
-  const [iban, setIban] = useState("FR76 •••• •••• •••• •••• •••• 847");
+  const iban = "FR76 •••• •••• •••• •••• •••• 847";
 
   const cardIcons: { [key: string]: string } = {
     visa: "💳",
@@ -416,8 +460,8 @@ function PaymentSection() {
   );
 }
 
-// Notifications Section
-function NotificationsSection() {
+// Notification Tab
+function NotificationTab() {
   const [notifications, setNotifications] = useState({
     email: {
       newMission: true,
@@ -564,84 +608,374 @@ function NotificationsSection() {
   );
 }
 
-export default function ParametresPage() {
+// Planning Tab - Simplified
+function PlanningTab() {
+  // Get token from localStorage
+  const [token, setToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    setToken(localStorage.getItem("session_token"));
+  }, []);
+
+  // Fetch user preferences from backend
+  const preferences = useQuery(
+    api.services.preferences.getPreferences,
+    token ? { token } : "skip"
+  );
+
+  // Fetch global workday config from admin
+  const workdayConfig = useQuery(api.admin.config.getWorkdayConfig);
+
+  const updatePreferences = useMutation(api.services.preferences.updatePlanningPreferences);
+
+  // Workday config from admin (read-only for users)
+  const workdayHours = workdayConfig?.workdayHours ?? 8;
+  const halfDayHours = workdayConfig?.halfDayHours ?? 4;
+
+  // Local state for user preferences
+  const [acceptReservationsFrom, setAcceptReservationsFrom] = useState("08:00");
+  const [acceptReservationsTo, setAcceptReservationsTo] = useState("20:00");
+  const [billingMode, setBillingMode] = useState<"round_up" | "exact">("round_up");
+  const [roundUpThreshold, setRoundUpThreshold] = useState(2);
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Sync local state with backend preferences
+  useEffect(() => {
+    if (preferences) {
+      setAcceptReservationsFrom(preferences.acceptReservationsFrom ?? "08:00");
+      setAcceptReservationsTo(preferences.acceptReservationsTo ?? "20:00");
+      setBillingMode(preferences.billingMode ?? "round_up");
+      setRoundUpThreshold(preferences.roundUpThreshold ?? 2);
+    }
+  }, [preferences]);
+
+  const handleSave = async () => {
+    if (!token) return;
+
+    setSaving(true);
+    try {
+      await updatePreferences({
+        token,
+        acceptReservationsFrom,
+        acceptReservationsTo,
+        billingMode,
+        roundUpThreshold,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (error) {
+      console.error("Failed to save preferences:", error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Example overflow hours (user can see how billing works)
+  const [exampleOverflow, setExampleOverflow] = useState(3);
+
+  // Calculate example billing
+  const calculateExample = () => {
+    const effectiveThreshold = Math.min(roundUpThreshold, halfDayHours);
+
+    if (billingMode === "exact") {
+      if (exampleOverflow === 0) {
+        return `1 journée (${workdayHours}h)`;
+      }
+      return `1 journée (${workdayHours}h) + ${exampleOverflow}h supplémentaires facturées au tarif horaire`;
+    } else {
+      if (exampleOverflow === 0) {
+        return `1 journée (${workdayHours}h)`;
+      }
+      if (exampleOverflow >= effectiveThreshold) {
+        const halfDaysNeeded = Math.ceil(exampleOverflow / halfDayHours);
+        if (halfDaysNeeded === 1) {
+          return `1 journée et demie (${workdayHours + halfDayHours}h facturées)`;
+        } else if (halfDaysNeeded === 2) {
+          return `2 journées (${workdayHours * 2}h facturées)`;
+        } else {
+          return `1 journée + ${halfDaysNeeded} demi-journées (${workdayHours + halfDayHours * halfDaysNeeded}h facturées)`;
+        }
+      }
+      return `1 journée (${workdayHours}h) + ${exampleOverflow}h supplémentaires`;
+    }
+  };
+
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        <div className="flex items-center gap-3 mb-2">
-          <div className="p-3 bg-primary/10 rounded-2xl">
-            <Settings className="w-6 h-6 text-primary" />
-          </div>
+    <div className="space-y-6">
+      {/* Availability Hours */}
+      <SectionCard title="Horaires de disponibilité" icon={Clock}>
+        <div className="space-y-4">
+          <p className="text-sm text-text-light">
+            Définissez les horaires pendant lesquels vous acceptez les réservations.
+            Les clients ne pourront pas réserver en dehors de ces créneaux.
+          </p>
+
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-              Paramètres
-            </h1>
-            <p className="text-text-light">
-              Gérez vos préférences et informations de compte
+            <label className="block text-sm font-medium text-foreground mb-2">
+              J&apos;accepte les réservations de
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="time"
+                value={acceptReservationsFrom}
+                onChange={(e) => setAcceptReservationsFrom(e.target.value)}
+                className="px-4 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+              <span className="text-text-light">à</span>
+              <input
+                type="time"
+                value={acceptReservationsTo}
+                onChange={(e) => setAcceptReservationsTo(e.target.value)}
+                className="px-4 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+          </div>
+
+          {/* Info about global workday config */}
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+            <p className="text-sm text-text-light flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-gray-400" />
+              Journée de travail : <span className="font-semibold text-foreground">{workdayHours}h</span>
+              {" / "}
+              Demi-journée : <span className="font-semibold text-foreground">{halfDayHours}h</span>
+            </p>
+            <p className="text-xs text-text-light mt-1">
+              Ces valeurs sont définies par la plateforme pour le calcul des tarifs.
             </p>
           </div>
         </div>
-      </motion.div>
+      </SectionCard>
 
-      {/* Sections */}
-      <div className="space-y-6">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <PasswordSection />
-        </motion.div>
+      {/* Billing Mode */}
+      <SectionCard title="Mode de facturation" icon={Calculator}>
+        <div className="space-y-6">
+          <p className="text-sm text-text-light">
+            Choisissez comment facturer les dépassements d&apos;horaires.
+          </p>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <PaymentSection />
-        </motion.div>
+          {/* Billing Mode Options */}
+          <div className="space-y-3">
+            <motion.button
+              onClick={() => setBillingMode("round_up")}
+              className={cn(
+                "w-full p-4 rounded-xl border-2 text-left transition-colors",
+                billingMode === "round_up"
+                  ? "border-primary bg-primary/5"
+                  : "border-gray-200 hover:border-gray-300"
+              )}
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
+            >
+              <div className="flex items-start gap-3">
+                <div className={cn(
+                  "w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5",
+                  billingMode === "round_up" ? "border-primary bg-primary" : "border-gray-300"
+                )}>
+                  {billingMode === "round_up" && <Check className="w-3 h-3 text-white" />}
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground">Arrondir à la demi-journée</p>
+                  <p className="text-sm text-text-light mt-1">
+                    Si le dépassement atteint le seuil, facturer une demi-journée ou journée complète.
+                  </p>
+                </div>
+              </div>
+            </motion.button>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <NotificationsSection />
-        </motion.div>
-      </div>
+            <motion.button
+              onClick={() => setBillingMode("exact")}
+              className={cn(
+                "w-full p-4 rounded-xl border-2 text-left transition-colors",
+                billingMode === "exact"
+                  ? "border-primary bg-primary/5"
+                  : "border-gray-200 hover:border-gray-300"
+              )}
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
+            >
+              <div className="flex items-start gap-3">
+                <div className={cn(
+                  "w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5",
+                  billingMode === "exact" ? "border-primary bg-primary" : "border-gray-300"
+                )}>
+                  {billingMode === "exact" && <Check className="w-3 h-3 text-white" />}
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground">Facturer les heures exactes</p>
+                  <p className="text-sm text-text-light mt-1">
+                    Facturer le tarif journée + les heures supplémentaires au tarif horaire.
+                  </p>
+                </div>
+              </div>
+            </motion.button>
+          </div>
 
-      {/* Danger Zone */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="bg-red-50 border border-red-200 rounded-2xl p-6"
-      >
-        <h3 className="text-lg font-bold text-red-700 mb-2">Zone de danger</h3>
-        <p className="text-sm text-red-600 mb-4">
-          Ces actions sont irréversibles. Procédez avec précaution.
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <motion.button
-            className="px-4 py-2 border border-red-300 text-red-600 rounded-xl font-medium hover:bg-red-100 transition-colors"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            Désactiver mon compte
-          </motion.button>
-          <motion.button
-            className="px-4 py-2 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            Supprimer mon compte
-          </motion.button>
+          {/* Round Up Threshold (only if round_up mode) */}
+          {billingMode === "round_up" && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+            >
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Seuil d&apos;arrondi (heures)
+              </label>
+              <p className="text-xs text-text-light mb-3">
+                Si le dépassement est supérieur ou égal à ce seuil, arrondir à la demi-journée supérieure.
+              </p>
+              <div className="flex items-center gap-4">
+                <input
+                  type="range"
+                  min={1}
+                  max={Math.max(halfDayHours, 2)}
+                  value={Math.min(roundUpThreshold, halfDayHours)}
+                  onChange={(e) => setRoundUpThreshold(Number(e.target.value))}
+                  className="flex-1 accent-primary"
+                />
+                <div className="w-20 px-3 py-2 bg-gray-100 rounded-lg text-center font-semibold text-primary">
+                  {Math.min(roundUpThreshold, halfDayHours)}h
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Example */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <h4 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4" />
+              Exemple de facturation
+            </h4>
+
+            {/* Interactive example */}
+            <div className="mb-3">
+              <label className="block text-xs text-blue-700 mb-2">
+                Simuler une réservation : 1 journée + heures supplémentaires
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={0}
+                  max={halfDayHours * 2}
+                  value={exampleOverflow}
+                  onChange={(e) => setExampleOverflow(Number(e.target.value))}
+                  className="flex-1 accent-blue-600"
+                />
+                <div className="w-16 px-2 py-1 bg-blue-100 rounded text-center text-sm font-semibold text-blue-800">
+                  +{exampleOverflow}h
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-blue-100/50 rounded-lg p-3">
+              <p className="text-sm text-blue-700">
+                Réservation de <span className="font-semibold">{workdayHours + exampleOverflow} heures</span> ({workdayHours}h + {exampleOverflow}h) :
+              </p>
+              <p className="text-sm text-blue-800 font-medium mt-1">
+                <ChevronRight className="w-4 h-4 inline" /> {calculateExample()}
+              </p>
+            </div>
+          </div>
         </div>
-      </motion.div>
+      </SectionCard>
+
+      {/* Save Button */}
+      <motion.button
+        onClick={handleSave}
+        disabled={saving}
+        className={cn(
+          "w-full py-4 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2",
+          saved
+            ? "bg-green-500 text-white"
+            : "bg-primary text-white hover:bg-primary/90 disabled:bg-gray-300"
+        )}
+        whileHover={{ scale: saved ? 1 : 1.01 }}
+        whileTap={{ scale: 0.99 }}
+      >
+        {saved ? (
+          <>
+            <Check className="w-5 h-5" />
+            Préférences enregistrées
+          </>
+        ) : saving ? (
+          "Enregistrement..."
+        ) : (
+          "Enregistrer les préférences"
+        )}
+      </motion.button>
+    </div>
+  );
+}
+
+// Main Page Component
+export default function ParametresPage() {
+  const [activeTab, setActiveTab] = useState<TabId>("information");
+
+  const renderTab = () => {
+    switch (activeTab) {
+      case "information":
+        return <InformationTab />;
+      case "paiement":
+        return <PaymentTab />;
+      case "notification":
+        return <NotificationTab />;
+      case "planning":
+        return <PlanningTab />;
+    }
+  };
+
+  return (
+    <div className="flex flex-col lg:flex-row gap-6 max-w-6xl mx-auto">
+      {/* Sidebar */}
+      <motion.aside
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="lg:w-64 flex-shrink-0"
+      >
+        <div className="bg-white rounded-2xl shadow-lg p-4 sticky top-4">
+          <div className="flex items-center gap-3 mb-6 px-2">
+            <div className="p-2 bg-primary/10 rounded-xl">
+              <Settings className="w-5 h-5 text-primary" />
+            </div>
+            <h1 className="text-lg font-bold text-foreground">Paramètres</h1>
+          </div>
+
+          <nav className="space-y-1">
+            {tabs.map((tab) => (
+              <motion.button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-colors",
+                  activeTab === tab.id
+                    ? "bg-primary text-white"
+                    : "text-foreground hover:bg-gray-100"
+                )}
+                whileHover={{ scale: activeTab === tab.id ? 1 : 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <tab.icon className="w-5 h-5" />
+                <span className="font-medium">{tab.label}</span>
+              </motion.button>
+            ))}
+          </nav>
+        </div>
+      </motion.aside>
+
+      {/* Main Content */}
+      <main className="flex-1 min-w-0">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.2 }}
+          >
+            {renderTab()}
+          </motion.div>
+        </AnimatePresence>
+      </main>
     </div>
   );
 }
