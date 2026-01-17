@@ -21,9 +21,11 @@ import {
   Star,
   Menu,
   X,
+  Briefcase,
 } from "lucide-react";
 import { useState } from "react";
 import { getUnreadMessagesCount, mockUserProfile } from "@/app/lib/dashboard-data";
+import { useAuth } from "@/app/hooks/useAuth";
 
 interface NavItem {
   href: string;
@@ -50,6 +52,7 @@ const missionNavItems: NavItem[] = [
 
 const accountNavItems: NavItem[] = [
   { href: "/dashboard/profil", label: "Ma fiche", icon: User },
+  { href: "/dashboard/services", label: "Mes services", icon: Briefcase },
   { href: "/dashboard/avis", label: "Mes avis", icon: Star },
   { href: "/dashboard/paiements", label: "Paiements", icon: CreditCard },
   { href: "/dashboard/parametres", label: "Paramètres", icon: Settings },
@@ -63,6 +66,17 @@ export function Sidebar({ className }: SidebarProps) {
   const pathname = usePathname();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const unreadCount = getUnreadMessagesCount();
+  const { user, logout } = useAuth();
+
+  // Utiliser les données utilisateur réelles si disponibles, sinon mock
+  const displayUser = user
+    ? {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        avatar: "👤",
+        verified: user.accountType === "annonceur_pro",
+      }
+    : mockUserProfile;
 
   const NavLink = ({ item }: { item: NavItem }) => {
     const isActive = pathname === item.href;
@@ -115,13 +129,13 @@ export function Sidebar({ className }: SidebarProps) {
       <div className="p-4 border-b border-foreground/10">
         <div className="flex items-center gap-3 p-3 bg-primary/5 rounded-xl">
           <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center text-2xl">
-            {mockUserProfile.avatar}
+            {displayUser.avatar}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-foreground truncate">{mockUserProfile.firstName} {mockUserProfile.lastName}</p>
+            <p className="font-semibold text-foreground truncate">{displayUser.firstName} {displayUser.lastName}</p>
             <p className="text-xs text-text-light flex items-center gap-1">
-              {mockUserProfile.verified && <CheckCircle className="w-3 h-3 text-secondary" />}
-              Garde vérifié
+              {displayUser.verified && <CheckCircle className="w-3 h-3 text-secondary" />}
+              {displayUser.verified ? "Garde vérifié" : "Garde"}
             </p>
           </div>
         </div>
@@ -169,6 +183,10 @@ export function Sidebar({ className }: SidebarProps) {
       {/* Logout */}
       <div className="p-4 border-t border-foreground/10">
         <motion.button
+          onClick={() => {
+            setIsMobileOpen(false);
+            logout();
+          }}
           className="flex items-center gap-3 w-full px-4 py-3 rounded-xl font-medium text-red-500 hover:bg-red-50 transition-colors"
           whileHover={{ x: 4 }}
           whileTap={{ scale: 0.98 }}

@@ -3,7 +3,7 @@
 import { cn } from "@/app/lib/utils";
 import { navLinks } from "@/app/lib/constants";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Search, Heart, Sparkles } from "lucide-react";
+import { Menu, X, Search, UserPlus, Sparkles } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 
 export function Navbar() {
@@ -119,13 +119,13 @@ export function Navbar() {
             {/* Desktop CTAs */}
             <div className="hidden lg:flex items-center gap-3">
               <motion.a
-                href="#"
+                href="/inscription"
                 className="flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-foreground/80 hover:text-primary transition-colors"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
-                <Heart className="w-4 h-4" />
-                <span>Devenir garde</span>
+                <UserPlus className="w-4 h-4" />
+                <span>S&apos;inscrire</span>
               </motion.a>
               <motion.a
                 href="#"
@@ -234,15 +234,15 @@ export function Navbar() {
               {/* CTAs */}
               <div className="space-y-3">
                 <motion.a
-                  href="#"
+                  href="/inscription"
                   className="flex items-center justify-center gap-2 w-full p-4 rounded-2xl font-semibold text-primary border-2 border-primary/20 hover:border-primary/40 hover:bg-primary/5 transition-all"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.4 }}
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
-                  <Heart className="w-5 h-5" />
-                  Devenir garde
+                  <UserPlus className="w-5 h-5" />
+                  S&apos;inscrire
                 </motion.a>
                 <motion.a
                   href="#"

@@ -1,0 +1,123 @@
+import { Id } from "@/convex/_generated/dataModel";
+
+export type MissionStatus =
+  | "pending_acceptance"
+  | "pending_confirmation"
+  | "upcoming"
+  | "in_progress"
+  | "completed"
+  | "refused"
+  | "cancelled";
+
+export type AvailabilityStatus = "available" | "partial" | "unavailable";
+
+export interface Mission {
+  id: Id<"missions">;
+  clientId: Id<"users">;
+  clientName: string;
+  clientPhone?: string;
+  animal: {
+    name: string;
+    type: string;
+    emoji: string;
+  };
+  serviceName: string;
+  serviceCategory: string;
+  startDate: string;
+  endDate: string;
+  startTime?: string;
+  endTime?: string;
+  status: MissionStatus;
+  amount: number;
+  paymentStatus: "not_due" | "pending" | "paid";
+  location: string;
+  clientNotes?: string;
+  announcerNotes?: string;
+  cancellationReason?: string;
+}
+
+export interface Availability {
+  id: Id<"availability">;
+  date: string;
+  status: AvailabilityStatus;
+  timeSlots?: Array<{
+    startTime: string;
+    endTime: string;
+  }>;
+  reason?: string;
+}
+
+// Status colors for calendar
+export const statusColors: Record<MissionStatus, string> = {
+  completed: "bg-green-500",
+  in_progress: "bg-blue-500",
+  upcoming: "bg-purple",
+  pending_acceptance: "bg-amber-500",
+  pending_confirmation: "bg-orange-500",
+  refused: "bg-red-400",
+  cancelled: "bg-gray-400",
+};
+
+export const statusLabels: Record<MissionStatus, string> = {
+  completed: "Terminee",
+  in_progress: "En cours",
+  upcoming: "A venir",
+  pending_acceptance: "A accepter",
+  pending_confirmation: "En attente",
+  refused: "Refusee",
+  cancelled: "Annulee",
+};
+
+// Availability colors
+export const availabilityColors: Record<AvailabilityStatus, string> = {
+  available: "bg-green-100 text-green-800 border-green-200",
+  partial: "bg-orange-100 text-orange-800 border-orange-200",
+  unavailable: "bg-red-100 text-red-800 border-red-200",
+};
+
+export const availabilityLabels: Record<AvailabilityStatus, string> = {
+  available: "Disponible",
+  partial: "Partiel",
+  unavailable: "Indisponible",
+};
+
+// Helpers
+export function getDaysInMonth(year: number, month: number): number {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+export function getFirstDayOfMonth(year: number, month: number): number {
+  const day = new Date(year, month, 1).getDay();
+  // Convert to Monday-first (0 = Monday, 6 = Sunday)
+  return day === 0 ? 6 : day - 1;
+}
+
+export function formatDateStr(year: number, month: number, day: number): string {
+  return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+export function formatPrice(cents: number): string {
+  return (cents / 100).toLocaleString("fr-FR", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
+
+export const dayNames = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+
+export const monthNames = [
+  "Janvier",
+  "Fevrier",
+  "Mars",
+  "Avril",
+  "Mai",
+  "Juin",
+  "Juillet",
+  "Aout",
+  "Septembre",
+  "Octobre",
+  "Novembre",
+  "Decembre",
+];

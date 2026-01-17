@@ -1,287 +1,152 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
 import {
   Calendar,
   ChevronLeft,
   ChevronRight,
-  Clock,
-  MapPin,
-  Euro,
+  CalendarDays,
+  CalendarRange,
+  LayoutGrid,
+  List,
+  Loader2,
+  CalendarOff,
   Eye,
-  X,
-  CheckCircle,
-  AlertCircle,
-  Pause,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
+import { usePlanning, ViewMode, Mission } from "@/app/hooks/usePlanning";
+import { useAuth } from "@/app/hooks/useAuth";
+
+// Components
+import { MonthView } from "./components/views/MonthView";
+import { WeekView } from "./components/views/WeekView";
+import { DayView } from "./components/views/DayView";
+import { YearView } from "./components/views/YearView";
+import { AvailabilityModal } from "./components/availability/AvailabilityModal";
+import { MissionDetailModal } from "./components/MissionDetailModal";
 import {
-  mockMissions,
-  mockUserProfile,
-  type Mission,
-  type MissionStatus,
-} from "@/app/lib/dashboard-data";
+  statusColors,
+  statusLabels,
+  formatPrice,
+} from "./components/types";
 
-// Status colors for calendar
-const statusColors: Record<MissionStatus, string> = {
-  completed: "bg-green-500",
-  in_progress: "bg-blue-500",
-  upcoming: "bg-purple",
-  pending_acceptance: "bg-amber-500",
-  pending_confirmation: "bg-orange-500",
-  refused: "bg-red-400",
-  cancelled: "bg-gray-400",
+const viewModeConfig: Record<
+  ViewMode,
+  { icon: typeof Calendar; label: string }
+> = {
+  day: { icon: CalendarDays, label: "Jour" },
+  week: { icon: CalendarRange, label: "Semaine" },
+  month: { icon: LayoutGrid, label: "Mois" },
+  year: { icon: Calendar, label: "Annee" },
 };
-
-const statusLabels: Record<MissionStatus, string> = {
-  completed: "Terminée",
-  in_progress: "En cours",
-  upcoming: "À venir",
-  pending_acceptance: "À accepter",
-  pending_confirmation: "En attente",
-  refused: "Refusée",
-  cancelled: "Annulée",
-};
-
-// Availability colors
-const availabilityColors = {
-  available: "bg-green-100 text-green-800 border-green-200",
-  partial: "bg-orange-100 text-orange-800 border-orange-200",
-  unavailable: "bg-red-100 text-red-800 border-red-200",
-};
-
-const availabilityLabels = {
-  available: "Disponible",
-  partial: "Partiel",
-  unavailable: "Indisponible",
-};
-
-// Helper to get days in month
-function getDaysInMonth(year: number, month: number) {
-  return new Date(year, month + 1, 0).getDate();
-}
-
-// Helper to get first day of month (0 = Sunday, 1 = Monday, etc.)
-function getFirstDayOfMonth(year: number, month: number) {
-  const day = new Date(year, month, 1).getDay();
-  // Convert to Monday-first (0 = Monday, 6 = Sunday)
-  return day === 0 ? 6 : day - 1;
-}
-
-// Mission Detail Modal
-function MissionDetailModal({
-  mission,
-  onClose,
-}: {
-  mission: Mission | null;
-  onClose: () => void;
-}) {
-  if (!mission) return null;
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("fr-FR", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
-  };
-
-  return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-        onClick={onClose}
-      >
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.9, opacity: 0 }}
-          className="bg-white rounded-2xl p-6 max-w-md w-full"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center text-2xl">
-                {mission.animal.emoji}
-              </div>
-              <div>
-                <h3 className="font-bold text-foreground">{mission.service}</h3>
-                <p className="text-sm text-text-light">{mission.animal.name}</p>
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-lg"
-            >
-              <X className="w-5 h-5 text-text-light" />
-            </button>
-          </div>
-
-          {/* Status */}
-          <div className="mb-4">
-            <span
-              className={cn(
-                "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium text-white",
-                statusColors[mission.status]
-              )}
-            >
-              {mission.status === "in_progress" && <Clock className="w-3.5 h-3.5" />}
-              {mission.status === "completed" && <CheckCircle className="w-3.5 h-3.5" />}
-              {mission.status === "pending_acceptance" && <AlertCircle className="w-3.5 h-3.5" />}
-              {statusLabels[mission.status]}
-            </span>
-          </div>
-
-          {/* Details */}
-          <div className="space-y-3 mb-6">
-            <div className="flex items-center gap-3 text-sm">
-              <Calendar className="w-4 h-4 text-text-light" />
-              <div>
-                <p className="text-foreground font-medium">
-                  {formatDate(mission.startDate)}
-                </p>
-                <p className="text-text-light">
-                  au {formatDate(mission.endDate)}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 text-sm">
-              <MapPin className="w-4 h-4 text-text-light" />
-              <span className="text-foreground">{mission.location}</span>
-            </div>
-
-            <div className="flex items-center gap-3 text-sm">
-              <Euro className="w-4 h-4 text-text-light" />
-              <span className="text-foreground font-semibold">
-                {mission.amount}€ TTC
-              </span>
-            </div>
-          </div>
-
-          {/* Client */}
-          <div className="bg-gray-50 rounded-xl p-4">
-            <p className="text-sm text-text-light mb-2">Client</p>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center text-xl">
-                {mission.clientAvatar}
-              </div>
-              <p className="font-medium text-foreground">{mission.clientName}</p>
-            </div>
-          </div>
-
-          {/* Action */}
-          <motion.button
-            onClick={onClose}
-            className="w-full mt-4 py-3 bg-primary text-white rounded-xl font-semibold"
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
-          >
-            Fermer
-          </motion.button>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
-  );
-}
 
 export default function PlanningPage() {
-  const [currentDate, setCurrentDate] = useState(new Date(2024, 0, 1)); // January 2024
+  const { token, isLoading: authLoading } = useAuth();
   const [selectedMission, setSelectedMission] = useState<Mission | null>(null);
-  const [viewMode, setViewMode] = useState<"month" | "list">("month");
+  const [selectedStartDate, setSelectedStartDate] = useState<string | null>(null);
+  const [selectedEndDate, setSelectedEndDate] = useState<string | null>(null);
+  const [showListView, setShowListView] = useState(false);
 
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth();
+  const {
+    currentDate,
+    viewMode,
+    setViewMode,
+    missions,
+    availability,
+    stats,
+    isLoading,
+    goToToday,
+    goToNext,
+    goToPrevious,
+    goToDate,
+    getViewTitle,
+    getMissionsForDay,
+    getAvailabilityForDay,
+    acceptMission,
+    refuseMission,
+    cancelMission,
+    completeMission,
+    setDayAvailability,
+    setRangeAvailability,
+    clearDayAvailability,
+    toggleDayAvailability,
+    markWeekendsUnavailable,
+  } = usePlanning({
+    token,
+    initialViewMode: "month",
+  });
 
-  const daysInMonth = getDaysInMonth(year, month);
-  const firstDayOfMonth = getFirstDayOfMonth(year, month);
-
-  const monthNames = [
-    "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
-    "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
-  ];
-
-  const dayNames = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
-
-  // Get missions for a specific date
-  const getMissionsForDate = (day: number) => {
-    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    return mockMissions.filter((mission) => {
-      const start = new Date(mission.startDate);
-      const end = new Date(mission.endDate);
-      const current = new Date(dateStr);
-      return current >= start && current <= end;
-    });
+  // Handle day click in calendar (single day)
+  const handleDayClick = (date: string) => {
+    setSelectedStartDate(date);
+    setSelectedEndDate(null);
   };
 
-  // Get availability for a specific date
-  const getAvailabilityForDate = (day: number) => {
-    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    return mockUserProfile.availability[dateStr] || null;
+  // Handle range selection in calendar
+  const handleRangeSelect = (startDate: string, endDate: string) => {
+    setSelectedStartDate(startDate);
+    setSelectedEndDate(endDate);
   };
 
-  // Navigate months
-  const prevMonth = () => {
-    setCurrentDate(new Date(year, month - 1, 1));
+  // Close modal
+  const handleCloseModal = () => {
+    setSelectedStartDate(null);
+    setSelectedEndDate(null);
   };
 
-  const nextMonth = () => {
-    setCurrentDate(new Date(year, month + 1, 1));
+  // Handle mission click
+  const handleMissionClick = (mission: Mission) => {
+    setSelectedMission(mission);
   };
 
-  const goToToday = () => {
-    setCurrentDate(new Date(2024, 0, 15)); // Simulated "today" in January 2024
+  // Handle month click in year view
+  const handleMonthClick = (month: number) => {
+    const newDate = new Date(currentDate);
+    newDate.setMonth(month);
+    goToDate(newDate);
+    setViewMode("month");
   };
 
-  // Get all missions for the current month (for list view)
-  const monthMissions = useMemo(() => {
-    return mockMissions
-      .filter((mission) => {
-        const start = new Date(mission.startDate);
-        const end = new Date(mission.endDate);
-        const monthStart = new Date(year, month, 1);
-        const monthEnd = new Date(year, month + 1, 0);
-        return start <= monthEnd && end >= monthStart;
-      })
-      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-  }, [year, month]);
-
-  // Stats for the month
-  const monthStats = useMemo(() => {
-    const missions = monthMissions;
-    return {
-      total: missions.length,
-      inProgress: missions.filter((m) => m.status === "in_progress").length,
-      upcoming: missions.filter((m) => m.status === "upcoming").length,
-      pending: missions.filter((m) => m.status === "pending_acceptance" || m.status === "pending_confirmation").length,
-      revenue: missions
-        .filter((m) => ["completed", "in_progress", "upcoming"].includes(m.status))
-        .reduce((sum, m) => sum + m.amount, 0),
-    };
-  }, [monthMissions]);
-
-  // Generate calendar days
-  const calendarDays = useMemo(() => {
-    const days = [];
-
-    // Empty cells for days before the first day of the month
-    for (let i = 0; i < firstDayOfMonth; i++) {
-      days.push({ day: 0, isCurrentMonth: false });
+  // Handle availability save (single day)
+  const handleAvailabilitySave = async (
+    status: "available" | "partial" | "unavailable",
+    options?: {
+      timeSlots?: Array<{ startTime: string; endTime: string }>;
+      reason?: string;
     }
+  ) => {
+    if (!selectedStartDate) return;
+    await setDayAvailability(selectedStartDate, status, options);
+  };
 
-    // Days of the month
-    for (let day = 1; day <= daysInMonth; day++) {
-      days.push({ day, isCurrentMonth: true });
+  // Handle availability save (range)
+  const handleAvailabilitySaveRange = async (
+    startDate: string,
+    endDate: string,
+    status: "available" | "partial" | "unavailable",
+    options?: {
+      timeSlots?: Array<{ startTime: string; endTime: string }>;
+      reason?: string;
     }
+  ) => {
+    await setRangeAvailability(startDate, endDate, status, options);
+  };
 
-    return days;
-  }, [firstDayOfMonth, daysInMonth]);
+  // Handle availability clear
+  const handleAvailabilityClear = async () => {
+    if (!selectedStartDate) return;
+    await clearDayAvailability(selectedStartDate);
+  };
+
+  // Loading state
+  if (authLoading || (token && isLoading)) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -300,35 +165,59 @@ export default function PlanningPage() {
                 Planning
               </h1>
               <p className="text-text-light">
-                Gérez votre calendrier et vos disponibilités
+                Gerez votre calendrier et vos disponibilites
               </p>
             </div>
           </div>
 
-          {/* View Toggle */}
-          <div className="flex bg-gray-100 rounded-xl p-1">
-            <button
-              onClick={() => setViewMode("month")}
-              className={cn(
-                "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-                viewMode === "month"
-                  ? "bg-white text-foreground shadow-sm"
-                  : "text-text-light hover:text-foreground"
-              )}
-            >
-              Mois
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              className={cn(
-                "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-                viewMode === "list"
-                  ? "bg-white text-foreground shadow-sm"
-                  : "text-text-light hover:text-foreground"
-              )}
-            >
-              Liste
-            </button>
+          {/* View Mode Toggle */}
+          <div className="flex items-center gap-2">
+            <div className="hidden md:flex bg-gray-100 rounded-xl p-1">
+              {(Object.keys(viewModeConfig) as ViewMode[]).map((mode) => {
+                const { icon: Icon, label } = viewModeConfig[mode];
+                return (
+                  <button
+                    key={mode}
+                    onClick={() => setViewMode(mode)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                      viewMode === mode
+                        ? "bg-white text-foreground shadow-sm"
+                        : "text-text-light hover:text-foreground"
+                    )}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Mobile view toggle */}
+            <div className="md:hidden flex bg-gray-100 rounded-xl p-1">
+              <button
+                onClick={() => setShowListView(false)}
+                className={cn(
+                  "px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                  !showListView
+                    ? "bg-white text-foreground shadow-sm"
+                    : "text-text-light"
+                )}
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setShowListView(true)}
+                className={cn(
+                  "px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                  showListView
+                    ? "bg-white text-foreground shadow-sm"
+                    : "text-text-light"
+                )}
+              >
+                <List className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       </motion.div>
@@ -342,19 +231,21 @@ export default function PlanningPage() {
       >
         <div className="bg-white rounded-2xl p-4 shadow-md">
           <p className="text-sm text-text-light">Missions</p>
-          <p className="text-2xl font-bold text-foreground">{monthStats.total}</p>
+          <p className="text-2xl font-bold text-foreground">{stats.total}</p>
         </div>
         <div className="bg-white rounded-2xl p-4 shadow-md">
           <p className="text-sm text-text-light">En cours</p>
-          <p className="text-2xl font-bold text-blue-500">{monthStats.inProgress}</p>
+          <p className="text-2xl font-bold text-blue-500">{stats.inProgress}</p>
         </div>
         <div className="bg-white rounded-2xl p-4 shadow-md">
-          <p className="text-sm text-text-light">À venir</p>
-          <p className="text-2xl font-bold text-purple">{monthStats.upcoming}</p>
+          <p className="text-sm text-text-light">A venir</p>
+          <p className="text-2xl font-bold text-purple">{stats.upcoming}</p>
         </div>
         <div className="bg-white rounded-2xl p-4 shadow-md">
-          <p className="text-sm text-text-light">Revenus prévus</p>
-          <p className="text-2xl font-bold text-primary">{monthStats.revenue}€</p>
+          <p className="text-sm text-text-light">Revenus</p>
+          <p className="text-2xl font-bold text-primary">
+            {formatPrice(stats.revenue)}
+          </p>
         </div>
       </motion.div>
 
@@ -368,18 +259,18 @@ export default function PlanningPage() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <motion.button
-              onClick={prevMonth}
+              onClick={goToPrevious}
               className="p-2 hover:bg-gray-100 rounded-lg"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
               <ChevronLeft className="w-5 h-5 text-foreground" />
             </motion.button>
-            <h2 className="text-xl font-bold text-foreground min-w-[200px] text-center">
-              {monthNames[month]} {year}
+            <h2 className="text-xl font-bold text-foreground min-w-[200px] text-center capitalize">
+              {getViewTitle()}
             </h2>
             <motion.button
-              onClick={nextMonth}
+              onClick={goToNext}
               className="p-2 hover:bg-gray-100 rounded-lg"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -388,14 +279,25 @@ export default function PlanningPage() {
             </motion.button>
           </div>
 
-          <motion.button
-            onClick={goToToday}
-            className="px-4 py-2 bg-primary/10 text-primary rounded-lg text-sm font-medium"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            Aujourd&apos;hui
-          </motion.button>
+          <div className="flex items-center gap-2">
+            <motion.button
+              onClick={goToToday}
+              className="px-4 py-2 bg-primary/10 text-primary rounded-lg text-sm font-medium"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              Aujourd&apos;hui
+            </motion.button>
+            <motion.button
+              onClick={markWeekendsUnavailable}
+              className="hidden md:flex items-center gap-1 px-4 py-2 border border-gray-200 text-text-light rounded-lg text-sm font-medium hover:border-gray-300"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <CalendarOff className="w-4 h-4" />
+              Weekends indispo
+            </motion.button>
+          </div>
         </div>
 
         {/* Legend */}
@@ -406,15 +308,15 @@ export default function PlanningPage() {
           </div>
           <div className="flex items-center gap-2 text-xs">
             <div className="w-3 h-3 rounded-full bg-purple" />
-            <span className="text-text-light">À venir</span>
+            <span className="text-text-light">A venir</span>
           </div>
           <div className="flex items-center gap-2 text-xs">
             <div className="w-3 h-3 rounded-full bg-amber-500" />
-            <span className="text-text-light">À accepter</span>
+            <span className="text-text-light">A accepter</span>
           </div>
           <div className="flex items-center gap-2 text-xs">
             <div className="w-3 h-3 rounded-full bg-green-500" />
-            <span className="text-text-light">Terminée</span>
+            <span className="text-text-light">Terminee</span>
           </div>
           <div className="flex items-center gap-2 text-xs">
             <div className="w-3 h-3 rounded bg-green-100 border border-green-200" />
@@ -430,172 +332,176 @@ export default function PlanningPage() {
           </div>
         </div>
 
-        {viewMode === "month" ? (
-          <>
-            {/* Day Headers */}
-            <div className="grid grid-cols-7 gap-1 mb-2">
-              {dayNames.map((day) => (
-                <div
-                  key={day}
-                  className="text-center text-sm font-medium text-text-light py-2"
-                >
-                  {day}
-                </div>
-              ))}
-            </div>
-
-            {/* Calendar Grid */}
-            <div className="grid grid-cols-7 gap-1">
-              {calendarDays.map((item, index) => {
-                if (!item.isCurrentMonth) {
-                  return <div key={index} className="h-24 md:h-28" />;
-                }
-
-                const missions = getMissionsForDate(item.day);
-                const availability = getAvailabilityForDate(item.day);
-                const isToday = item.day === 15 && month === 0 && year === 2024; // Simulated today
-
-                return (
-                  <motion.div
-                    key={index}
-                    className={cn(
-                      "h-24 md:h-28 p-1 rounded-lg border transition-colors cursor-pointer",
-                      isToday
-                        ? "border-primary bg-primary/5"
-                        : "border-gray-100 hover:border-gray-200 hover:bg-gray-50",
-                      availability && !missions.length && availabilityColors[availability]
-                    )}
-                    whileHover={{ scale: 1.02 }}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span
-                        className={cn(
-                          "text-sm font-medium",
-                          isToday ? "text-primary" : "text-foreground"
-                        )}
-                      >
-                        {item.day}
-                      </span>
-                      {availability && !missions.length && (
-                        <span className="text-[10px]">
-                          {availability === "available" && "✓"}
-                          {availability === "partial" && "~"}
-                          {availability === "unavailable" && "✗"}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Missions */}
-                    <div className="space-y-0.5 overflow-hidden">
-                      {missions.slice(0, 2).map((mission) => (
-                        <motion.div
-                          key={mission.id}
-                          onClick={() => setSelectedMission(mission)}
-                          className={cn(
-                            "text-[10px] md:text-xs text-white px-1.5 py-0.5 rounded truncate",
-                            statusColors[mission.status]
-                          )}
-                          whileHover={{ scale: 1.05 }}
-                        >
-                          {mission.animal.emoji} {mission.animal.name}
-                        </motion.div>
-                      ))}
-                      {missions.length > 2 && (
-                        <p className="text-[10px] text-text-light">
-                          +{missions.length - 2} autres
-                        </p>
-                      )}
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </>
+        {/* Calendar View or List View */}
+        {showListView && viewMode === "month" ? (
+          <ListView
+            missions={missions}
+            onMissionClick={handleMissionClick}
+          />
         ) : (
-          /* List View */
-          <div className="space-y-3">
-            {monthMissions.length === 0 ? (
-              <div className="text-center py-12">
-                <Calendar className="w-12 h-12 text-text-light mx-auto mb-3" />
-                <p className="text-text-light">Aucune mission ce mois-ci</p>
-              </div>
-            ) : (
-              monthMissions.map((mission) => (
-                <motion.div
-                  key={mission.id}
-                  onClick={() => setSelectedMission(mission)}
-                  className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100 transition-colors"
-                  whileHover={{ x: 4 }}
-                >
-                  <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-2xl shadow-sm">
-                    {mission.animal.emoji}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="font-semibold text-foreground truncate">
-                        {mission.service}
-                      </p>
-                      <span
-                        className={cn(
-                          "px-2 py-0.5 rounded-full text-xs text-white flex-shrink-0",
-                          statusColors[mission.status]
-                        )}
-                      >
-                        {statusLabels[mission.status]}
-                      </span>
-                    </div>
-                    <p className="text-sm text-text-light">
-                      {mission.animal.name} • {mission.clientName}
-                    </p>
-                    <p className="text-xs text-text-light mt-1">
-                      {new Date(mission.startDate).toLocaleDateString("fr-FR", {
-                        day: "numeric",
-                        month: "short",
-                      })}{" "}
-                      -{" "}
-                      {new Date(mission.endDate).toLocaleDateString("fr-FR", {
-                        day: "numeric",
-                        month: "short",
-                      })}
-                    </p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-lg font-bold text-primary">{mission.amount}€</p>
-                    <p className="text-xs text-text-light">TTC</p>
-                  </div>
-                  <Eye className="w-5 h-5 text-text-light" />
-                </motion.div>
-              ))
+          <>
+            {viewMode === "month" && (
+              <MonthView
+                currentDate={currentDate}
+                missions={missions}
+                availability={availability}
+                onDayClick={handleDayClick}
+                onRangeSelect={handleRangeSelect}
+                onMissionClick={handleMissionClick}
+              />
             )}
-          </div>
+            {viewMode === "week" && (
+              <WeekView
+                currentDate={currentDate}
+                missions={missions}
+                availability={availability}
+                onDayClick={handleDayClick}
+                onRangeSelect={handleRangeSelect}
+                onMissionClick={handleMissionClick}
+              />
+            )}
+            {viewMode === "day" && (
+              <DayView
+                currentDate={currentDate}
+                missions={missions}
+                availability={availability}
+                onMissionClick={handleMissionClick}
+                onToggleAvailability={handleDayClick}
+              />
+            )}
+            {viewMode === "year" && (
+              <YearView
+                currentDate={currentDate}
+                missions={missions}
+                availability={availability}
+                onMonthClick={handleMonthClick}
+              />
+            )}
+          </>
         )}
       </motion.div>
 
-      {/* Availability Quick Edit Info */}
+      {/* Quick info */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
         className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-start gap-3"
       >
-        <Pause className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+        <Calendar className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
         <div>
-          <p className="font-semibold text-blue-800">Gérer vos disponibilités</p>
+          <p className="font-semibold text-blue-800">Gerer vos disponibilites</p>
           <p className="text-sm text-blue-700">
-            Pour modifier vos disponibilités, rendez-vous dans votre{" "}
-            <a href="/dashboard/profil" className="underline font-medium">
-              profil
-            </a>{" "}
-            et mettez à jour votre calendrier de disponibilités.
+            Cliquez sur un jour du calendrier pour definir votre disponibilite.
+            Les clients ne pourront pas reserver pendant vos periodes
+            d&apos;indisponibilite.
           </p>
         </div>
       </motion.div>
+
+      {/* Availability Modal */}
+      <AvailabilityModal
+        isOpen={!!selectedStartDate}
+        onClose={handleCloseModal}
+        startDate={selectedStartDate || ""}
+        endDate={selectedEndDate || undefined}
+        currentAvailability={
+          selectedStartDate && !selectedEndDate
+            ? getAvailabilityForDay(selectedStartDate)
+            : null
+        }
+        onSave={handleAvailabilitySave}
+        onSaveRange={handleAvailabilitySaveRange}
+        onClear={handleAvailabilityClear}
+      />
 
       {/* Mission Detail Modal */}
       <MissionDetailModal
         mission={selectedMission}
         onClose={() => setSelectedMission(null)}
+        onAccept={async (id) => {
+          await acceptMission(id as any);
+        }}
+        onRefuse={async (id, reason) => {
+          await refuseMission(id as any, reason);
+        }}
+        onCancel={async (id, reason) => {
+          await cancelMission(id as any, reason);
+        }}
+        onComplete={async (id, notes) => {
+          await completeMission(id as any, notes);
+        }}
       />
+    </div>
+  );
+}
+
+// List View Component
+function ListView({
+  missions,
+  onMissionClick,
+}: {
+  missions: Mission[];
+  onMissionClick: (mission: Mission) => void;
+}) {
+  if (missions.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <Calendar className="w-12 h-12 text-text-light mx-auto mb-3" />
+        <p className="text-text-light">Aucune mission ce mois-ci</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {missions.map((mission) => (
+        <motion.div
+          key={mission.id}
+          onClick={() => onMissionClick(mission)}
+          className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100 transition-colors"
+          whileHover={{ x: 4 }}
+        >
+          <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-2xl shadow-sm">
+            {mission.animal.emoji}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <p className="font-semibold text-foreground truncate">
+                {mission.serviceName}
+              </p>
+              <span
+                className={cn(
+                  "px-2 py-0.5 rounded-full text-xs text-white flex-shrink-0",
+                  statusColors[mission.status]
+                )}
+              >
+                {statusLabels[mission.status]}
+              </span>
+            </div>
+            <p className="text-sm text-text-light">
+              {mission.animal.name} - {mission.clientName}
+            </p>
+            <p className="text-xs text-text-light mt-1">
+              {new Date(mission.startDate).toLocaleDateString("fr-FR", {
+                day: "numeric",
+                month: "short",
+              })}{" "}
+              -{" "}
+              {new Date(mission.endDate).toLocaleDateString("fr-FR", {
+                day: "numeric",
+                month: "short",
+              })}
+            </p>
+          </div>
+          <div className="text-right flex-shrink-0">
+            <p className="text-lg font-bold text-primary">
+              {formatPrice(mission.amount)}
+            </p>
+          </div>
+          <Eye className="w-5 h-5 text-text-light" />
+        </motion.div>
+      ))}
     </div>
   );
 }
