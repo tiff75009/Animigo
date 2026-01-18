@@ -17,6 +17,8 @@ import {
   Tag,
   ShieldAlert,
   FileCheck,
+  Code,
+  Circle,
 } from "lucide-react";
 
 interface NavItem {
@@ -38,6 +40,12 @@ export function AdminSidebar() {
   // Récupérer les stats de modération pour le badge
   const moderationStats = useQuery(
     api.admin.moderation.getModerationStats,
+    token ? { token } : "skip"
+  );
+
+  // Récupérer les développeurs en ligne
+  const onlineDevs = useQuery(
+    api.admin.devPresence.getOnlineDevs,
     token ? { token } : "skip"
   );
 
@@ -91,6 +99,11 @@ export function AdminSidebar() {
     {
       title: "Configuration",
       items: [
+        {
+          label: "Clés développeur",
+          href: "/admin/dev-keys",
+          icon: Code,
+        },
         {
           label: "Intégrations API",
           href: "/admin/integrations",
@@ -164,6 +177,20 @@ export function AdminSidebar() {
           </div>
         ))}
       </nav>
+
+      {/* Indicateur développeurs en ligne */}
+      {onlineDevs && onlineDevs.length > 0 && (
+        <div className="px-4 py-3 border-t border-slate-800">
+          <Link href="/admin/dev-keys">
+            <div className="flex items-center gap-2 text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
+              <Circle className="w-2 h-2 fill-emerald-400 animate-pulse" />
+              <span>
+                {onlineDevs.length} dev{onlineDevs.length > 1 ? "s" : ""} en ligne
+              </span>
+            </div>
+          </Link>
+        </div>
+      )}
 
       {/* User info + Logout */}
       <div className="p-4 border-t border-slate-800">

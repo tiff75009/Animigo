@@ -364,4 +364,25 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
+
+  // Clés développeur pour le système de présence
+  devKeys: defineTable({
+    name: v.string(), // Nom du développeur
+    key: v.string(), // Clé unique (64 chars hex)
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    createdBy: v.id("users"), // Admin qui a créé la clé
+    revokedAt: v.optional(v.number()),
+    revokedBy: v.optional(v.id("users")),
+  })
+    .index("by_key", ["key"])
+    .index("by_active", ["isActive"]),
+
+  // Présence des développeurs (heartbeats)
+  devPresence: defineTable({
+    devKeyId: v.id("devKeys"),
+    lastHeartbeat: v.number(), // Timestamp du dernier heartbeat
+    onlineSince: v.number(), // Début de la session
+    userAgent: v.optional(v.string()),
+  }).index("by_devKey", ["devKeyId"]),
 });

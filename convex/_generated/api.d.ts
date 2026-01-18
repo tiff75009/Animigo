@@ -9,6 +9,7 @@
  */
 
 import type * as admin_config from "../admin/config.js";
+import type * as admin_devPresence from "../admin/devPresence.js";
 import type * as admin_login from "../admin/login.js";
 import type * as admin_moderation from "../admin/moderation.js";
 import type * as admin_seed from "../admin/seed.js";
@@ -42,6 +43,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "admin/config": typeof admin_config;
+  "admin/devPresence": typeof admin_devPresence;
   "admin/login": typeof admin_login;
   "admin/moderation": typeof admin_moderation;
   "admin/seed": typeof admin_seed;
