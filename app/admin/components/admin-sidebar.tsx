@@ -19,6 +19,7 @@ import {
   FileCheck,
   Code,
   Circle,
+  UserPlus,
 } from "lucide-react";
 
 interface NavItem {
@@ -99,6 +100,11 @@ export function AdminSidebar() {
     {
       title: "Configuration",
       items: [
+        {
+          label: "Invitations Admin",
+          href: "/admin/invitations",
+          icon: UserPlus,
+        },
         {
           label: "Clés développeur",
           href: "/admin/dev-keys",

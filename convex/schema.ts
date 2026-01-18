@@ -391,4 +391,28 @@ export default defineSchema({
     onlineSince: v.number(), // Début de la session
     userAgent: v.optional(v.string()),
   }).index("by_devKey", ["devKeyId"]),
+
+  // Invitations administrateur (tokens à usage unique)
+  adminInvitations: defineTable({
+    token: v.string(), // Token unique 64 chars hex
+    status: v.union(
+      v.literal("pending"),
+      v.literal("used"),
+      v.literal("expired"),
+      v.literal("revoked")
+    ),
+    createdAt: v.number(),
+    expiresAt: v.number(), // createdAt + 24h
+    createdBy: v.id("users"),
+    note: v.optional(v.string()), // Note optionnelle pour identifier l'invitation
+    // Usage
+    usedAt: v.optional(v.number()),
+    usedBy: v.optional(v.id("users")),
+    // Revocation
+    revokedAt: v.optional(v.number()),
+    revokedBy: v.optional(v.id("users")),
+  })
+    .index("by_token", ["token"])
+    .index("by_status", ["status"])
+    .index("by_created_by", ["createdBy"]),
 });
