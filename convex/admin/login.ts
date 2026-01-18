@@ -1,7 +1,24 @@
 import { mutation } from "../_generated/server";
 import { v } from "convex/values";
-import { ConvexError } from "convex/values";
 import { verifyPassword, generateSessionToken } from "../auth/utils";
+
+// Types pour les réponses standardisées
+export type AdminLoginResult =
+  | {
+      success: true;
+      token: string;
+      user: {
+        id: string;
+        email: string;
+        firstName: string;
+        lastName: string;
+        role: string;
+      };
+    }
+  | {
+      success: false;
+      error: string;
+    };
 
 // Login admin spécifique avec expiration plus courte (2h)
 export const adminLogin = mutation({
@@ -9,23 +26,23 @@ export const adminLogin = mutation({
     email: v.string(),
     password: v.string(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<AdminLoginResult> => {
     const user = await ctx.db
       .query("users")
       .withIndex("by_email", (q) => q.eq("email", args.email.toLowerCase()))
       .first();
 
     if (!user || user.role !== "admin") {
-      throw new ConvexError("Identifiants invalides");
+      return { success: false, error: "Identifiants invalides" };
     }
 
     if (!user.isActive) {
-      throw new ConvexError("Ce compte a été désactivé");
+      return { success: false, error: "Ce compte a été désactivé" };
     }
 
     const isValid = await verifyPassword(args.password, user.passwordHash);
     if (!isValid) {
-      throw new ConvexError("Identifiants invalides");
+      return { success: false, error: "Identifiants invalides" };
     }
 
     const now = Date.now();

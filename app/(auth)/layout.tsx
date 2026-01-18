@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { AuthRedirect } from "@/app/components/auth-redirect";
 
 export default function AuthLayout({
   children,
@@ -9,6 +10,7 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
+    <AuthRedirect>
     <div className="min-h-screen bg-background flex">
       {/* Panneau gauche - Décoratif */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary via-secondary to-purple relative overflow-hidden">
@@ -95,5 +97,6 @@ export default function AuthLayout({
         <div className="w-full max-w-md">{children}</div>
       </div>
     </div>
+    </AuthRedirect>
   );
 }

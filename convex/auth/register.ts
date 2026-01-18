@@ -1,6 +1,5 @@
 import { mutation } from "../_generated/server";
 import { v } from "convex/values";
-import { ConvexError } from "convex/values";
 import {
   hashPassword,
   generateSessionToken,
@@ -9,6 +8,19 @@ import {
   validatePassword,
   validateSiret,
 } from "./utils";
+
+// Types pour les réponses standardisées
+export type RegisterResult =
+  | {
+      success: true;
+      token: string;
+      userId: string;
+      accountType: "annonceur_pro" | "annonceur_particulier" | "utilisateur";
+    }
+  | {
+      success: false;
+      error: string;
+    };
 
 // Arguments de base pour l'inscription
 const baseRegistrationArgs = {
@@ -35,27 +47,27 @@ export const registerPro = mutation({
     isVatSubject: v.optional(v.boolean()),
     legalForm: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<RegisterResult> => {
     // Validations
     if (!validateEmail(args.email)) {
-      throw new ConvexError("Adresse email invalide");
+      return { success: false, error: "Adresse email invalide" };
     }
 
     const passwordValidation = validatePassword(args.password);
     if (!passwordValidation.valid) {
-      throw new ConvexError(passwordValidation.errors.join(". "));
+      return { success: false, error: passwordValidation.errors.join(". ") };
     }
 
     if (!validatePhone(args.phone)) {
-      throw new ConvexError("Numéro de téléphone invalide");
+      return { success: false, error: "Numéro de téléphone invalide" };
     }
 
     if (!validateSiret(args.siret)) {
-      throw new ConvexError("Numéro SIRET invalide");
+      return { success: false, error: "Numéro SIRET invalide" };
     }
 
     if (!args.acceptCgu) {
-      throw new ConvexError("Vous devez accepter les CGU");
+      return { success: false, error: "Vous devez accepter les CGU" };
     }
 
     // Vérifier unicité email
@@ -65,7 +77,7 @@ export const registerPro = mutation({
       .first();
 
     if (existingUser) {
-      throw new ConvexError("Un compte existe déjà avec cet email");
+      return { success: false, error: "Un compte existe déjà avec cet email" };
     }
 
     // Vérifier unicité SIRET
@@ -75,7 +87,7 @@ export const registerPro = mutation({
       .first();
 
     if (existingSiret) {
-      throw new ConvexError("Ce numéro SIRET est déjà utilisé");
+      return { success: false, error: "Ce numéro SIRET est déjà utilisé" };
     }
 
     const now = Date.now();
@@ -117,7 +129,7 @@ export const registerPro = mutation({
       success: true,
       token,
       userId,
-      accountType: "annonceur_pro" as const,
+      accountType: "annonceur_pro",
     };
   },
 });
@@ -125,23 +137,23 @@ export const registerPro = mutation({
 // Inscription Annonceur Particulier
 export const registerParticulier = mutation({
   args: baseRegistrationArgs,
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<RegisterResult> => {
     // Validations
     if (!validateEmail(args.email)) {
-      throw new ConvexError("Adresse email invalide");
+      return { success: false, error: "Adresse email invalide" };
     }
 
     const passwordValidation = validatePassword(args.password);
     if (!passwordValidation.valid) {
-      throw new ConvexError(passwordValidation.errors.join(". "));
+      return { success: false, error: passwordValidation.errors.join(". ") };
     }
 
     if (!validatePhone(args.phone)) {
-      throw new ConvexError("Numéro de téléphone invalide");
+      return { success: false, error: "Numéro de téléphone invalide" };
     }
 
     if (!args.acceptCgu) {
-      throw new ConvexError("Vous devez accepter les CGU");
+      return { success: false, error: "Vous devez accepter les CGU" };
     }
 
     const existingUser = await ctx.db
@@ -150,7 +162,7 @@ export const registerParticulier = mutation({
       .first();
 
     if (existingUser) {
-      throw new ConvexError("Un compte existe déjà avec cet email");
+      return { success: false, error: "Un compte existe déjà avec cet email" };
     }
 
     const now = Date.now();
@@ -184,7 +196,7 @@ export const registerParticulier = mutation({
       success: true,
       token,
       userId,
-      accountType: "annonceur_particulier" as const,
+      accountType: "annonceur_particulier",
     };
   },
 });
@@ -192,22 +204,22 @@ export const registerParticulier = mutation({
 // Inscription Utilisateur (propriétaire d'animaux)
 export const registerUtilisateur = mutation({
   args: baseRegistrationArgs,
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<RegisterResult> => {
     if (!validateEmail(args.email)) {
-      throw new ConvexError("Adresse email invalide");
+      return { success: false, error: "Adresse email invalide" };
     }
 
     const passwordValidation = validatePassword(args.password);
     if (!passwordValidation.valid) {
-      throw new ConvexError(passwordValidation.errors.join(". "));
+      return { success: false, error: passwordValidation.errors.join(". ") };
     }
 
     if (!validatePhone(args.phone)) {
-      throw new ConvexError("Numéro de téléphone invalide");
+      return { success: false, error: "Numéro de téléphone invalide" };
     }
 
     if (!args.acceptCgu) {
-      throw new ConvexError("Vous devez accepter les CGU");
+      return { success: false, error: "Vous devez accepter les CGU" };
     }
 
     const existingUser = await ctx.db
@@ -216,7 +228,7 @@ export const registerUtilisateur = mutation({
       .first();
 
     if (existingUser) {
-      throw new ConvexError("Un compte existe déjà avec cet email");
+      return { success: false, error: "Un compte existe déjà avec cet email" };
     }
 
     const now = Date.now();
@@ -250,7 +262,7 @@ export const registerUtilisateur = mutation({
       success: true,
       token,
       userId,
-      accountType: "utilisateur" as const,
+      accountType: "utilisateur",
     };
   },
 });

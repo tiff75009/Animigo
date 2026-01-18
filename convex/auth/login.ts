@@ -1,14 +1,33 @@
 import { mutation } from "../_generated/server";
 import { v } from "convex/values";
-import { ConvexError } from "convex/values";
 import { verifyPassword, generateSessionToken } from "./utils";
+
+// Types pour les réponses standardisées
+export type LoginResult =
+  | {
+      success: true;
+      token: string;
+      user: {
+        id: string;
+        email: string;
+        firstName: string;
+        lastName: string;
+        accountType: string;
+        role: string;
+      };
+      redirectPath: string;
+    }
+  | {
+      success: false;
+      error: string;
+    };
 
 export const login = mutation({
   args: {
     email: v.string(),
     password: v.string(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<LoginResult> => {
     // Rechercher l'utilisateur
     const user = await ctx.db
       .query("users")
@@ -16,19 +35,18 @@ export const login = mutation({
       .first();
 
     if (!user) {
-      // Message générique pour sécurité
-      throw new ConvexError("Email ou mot de passe incorrect");
+      return { success: false, error: "Email ou mot de passe incorrect" };
     }
 
     if (!user.isActive) {
-      throw new ConvexError("Ce compte a été désactivé");
+      return { success: false, error: "Ce compte a été désactivé" };
     }
 
     // Vérifier le mot de passe
     const isValid = await verifyPassword(args.password, user.passwordHash);
 
     if (!isValid) {
-      throw new ConvexError("Email ou mot de passe incorrect");
+      return { success: false, error: "Email ou mot de passe incorrect" };
     }
 
     const now = Date.now();

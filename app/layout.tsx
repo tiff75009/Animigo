@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Nunito, Inter } from "next/font/google";
 import "./globals.css";
 import { ConvexClientProvider } from "./providers/ConvexClientProvider";
+import { ToastProvider } from "./components/ui/toast";
 import { DevPresenceBeacon } from "./components/dev-presence-beacon";
 
 const nunito = Nunito({
@@ -32,8 +33,10 @@ export default function RootLayout({
         className={`${nunito.variable} ${inter.variable} antialiased`}
       >
         <ConvexClientProvider>
-          {children}
-          <DevPresenceBeacon />
+          <ToastProvider>
+            {children}
+            <DevPresenceBeacon />
+          </ToastProvider>
         </ConvexClientProvider>
       </body>
     </html>

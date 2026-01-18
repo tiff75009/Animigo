@@ -6,6 +6,8 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useToast } from "@/app/components/ui/toast";
+import { parseError } from "@/app/lib/errors";
 
 import { StepIndicator } from "./components/step-indicator";
 import { AccountTypeStep } from "./components/account-type-step";
@@ -51,9 +53,9 @@ const initialData: RegistrationData = {
 
 export default function InscriptionPage() {
   const router = useRouter();
+  const toast = useToast();
   const [step, setStep] = useState(1);
   const [data, setData] = useState<RegistrationData>(initialData);
-  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const registerPro = useMutation(api.auth.register.registerPro);
@@ -65,7 +67,6 @@ export default function InscriptionPage() {
 
   const updateData = (updates: Partial<RegistrationData>) => {
     setData((prev) => ({ ...prev, ...updates }));
-    setError(null);
   };
 
   const nextStep = () => {
@@ -82,7 +83,6 @@ export default function InscriptionPage() {
 
   const handleSubmit = async () => {
     setIsLoading(true);
-    setError(null);
 
     try {
       let result;
@@ -122,7 +122,15 @@ export default function InscriptionPage() {
         });
       }
 
-      // Stocker le token
+      // Gérer le résultat
+      if (!result.success) {
+        const parsed = parseError(result.error);
+        toast.error(parsed.title, parsed.message);
+        return;
+      }
+
+      // Succès
+      toast.success("Compte créé", "Bienvenue sur Animigo !");
       localStorage.setItem("auth_token", result.token);
 
       // Rediriger selon le type
@@ -132,9 +140,9 @@ export default function InscriptionPage() {
         router.push("/dashboard");
       }
     } catch (err: unknown) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Une erreur est survenue";
-      setError(errorMessage);
+      // Erreur réseau ou autre
+      const parsed = parseError(err);
+      toast.error(parsed.title, parsed.message);
     } finally {
       setIsLoading(false);
     }
@@ -211,7 +219,6 @@ export default function InscriptionPage() {
             onSubmit={handleSubmit}
             onBack={prevStep}
             isLoading={isLoading}
-            error={error}
           />
         );
       case 5:
@@ -223,7 +230,6 @@ export default function InscriptionPage() {
             onSubmit={handleSubmit}
             onBack={prevStep}
             isLoading={isLoading}
-            error={error}
           />
         );
       default:

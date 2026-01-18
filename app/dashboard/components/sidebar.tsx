@@ -26,7 +26,7 @@ import {
   ClipboardList,
 } from "lucide-react";
 import { useState, memo } from "react";
-import { getUnreadMessagesCount, mockUserProfile } from "@/app/lib/dashboard-data";
+import { getUnreadMessagesCount } from "@/app/lib/dashboard-data";
 import { useAuth } from "@/app/hooks/useAuth";
 
 interface NavItem {
@@ -96,12 +96,34 @@ const NavLink = memo(function NavLink({
   );
 });
 
+// Skeleton pour le chargement
+const UserInfoSkeleton = memo(function UserInfoSkeleton() {
+  return (
+    <div className="p-4 border-b border-foreground/10">
+      <div className="flex items-center gap-3 p-3 bg-primary/5 rounded-xl animate-pulse">
+        <div className="w-12 h-12 bg-foreground/10 rounded-full" />
+        <div className="flex-1 min-w-0 space-y-2">
+          <div className="h-4 bg-foreground/10 rounded w-24" />
+          <div className="h-3 bg-foreground/10 rounded w-16" />
+        </div>
+      </div>
+    </div>
+  );
+});
+
 // Composant UserInfo séparé
 const UserInfo = memo(function UserInfo({
-  user
+  user,
+  isLoading
 }: {
-  user: { firstName: string; lastName: string; avatar: string; verified: boolean }
+  user: { firstName: string; lastName: string; avatar: string; verified: boolean } | null;
+  isLoading: boolean;
 }) {
+  // Afficher skeleton pendant le chargement
+  if (isLoading || !user) {
+    return <UserInfoSkeleton />;
+  }
+
   return (
     <div className="p-4 border-b border-foreground/10">
       <div className="flex items-center gap-3 p-3 bg-primary/5 rounded-xl">
@@ -260,11 +282,11 @@ export function Sidebar({ className }: SidebarProps) {
   const pathname = usePathname();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const unreadCount = getUnreadMessagesCount();
-  const { user, logout } = useAuth();
+  const { user, logout, isLoading } = useAuth();
 
   const closeMobile = () => setIsMobileOpen(false);
 
-  // Utiliser les données utilisateur réelles si disponibles, sinon mock
+  // Données utilisateur pour l'affichage (null si en chargement)
   const displayUser = user
     ? {
         firstName: user.firstName,
@@ -272,7 +294,7 @@ export function Sidebar({ className }: SidebarProps) {
         avatar: "👤",
         verified: user.accountType === "annonceur_pro",
       }
-    : mockUserProfile;
+    : null;
 
   const handleLogout = () => {
     closeMobile();
@@ -299,7 +321,7 @@ export function Sidebar({ className }: SidebarProps) {
       >
         <div className="flex flex-col h-full">
           <Logo />
-          <UserInfo user={displayUser} />
+          <UserInfo user={displayUser} isLoading={isLoading} />
 
           <nav className="flex-1 overflow-y-auto p-4 space-y-4">
             <NavSection
@@ -358,7 +380,7 @@ export function Sidebar({ className }: SidebarProps) {
             >
               <div className="flex flex-col h-full">
                 <Logo />
-                <UserInfo user={displayUser} />
+                <UserInfo user={displayUser} isLoading={isLoading} />
 
                 <nav className="flex-1 overflow-y-auto p-4 space-y-4">
                   <NavSection

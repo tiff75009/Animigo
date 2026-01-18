@@ -3,13 +3,17 @@
 import { cn } from "@/app/lib/utils";
 import { navLinks } from "@/app/lib/constants";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Search, UserPlus, Sparkles } from "lucide-react";
+import { Menu, X, Search, UserPlus, Sparkles, LayoutDashboard, LogOut } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
+import { useAuthState } from "@/app/hooks/useAuthState";
+import { UserMenu } from "@/app/components/user-menu";
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [hoveredLink, setHoveredLink] = useState<string | null>(null);
+
+  const { isLoading, isAuthenticated, isAdmin, user, logout } = useAuthState();
 
   const handleScroll = useCallback(() => {
     setIsScrolled(window.scrollY > 20);
@@ -118,17 +122,21 @@ export function Navbar() {
 
             {/* Desktop CTAs */}
             <div className="hidden lg:flex items-center gap-3">
+              {!isLoading && isAuthenticated && user ? (
+                <UserMenu user={user} isAdmin={isAdmin} onLogout={logout} />
+              ) : (
+                <motion.a
+                  href="/inscription"
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-foreground/80 hover:text-primary transition-colors"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>S&apos;inscrire</span>
+                </motion.a>
+              )}
               <motion.a
-                href="/inscription"
-                className="flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-foreground/80 hover:text-primary transition-colors"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <UserPlus className="w-4 h-4" />
-                <span>S&apos;inscrire</span>
-              </motion.a>
-              <motion.a
-                href="#"
+                href="/recherche"
                 className="group flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white bg-gradient-to-r from-primary to-primary/80 shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all"
                 whileHover={{ scale: 1.02, y: -1 }}
                 whileTap={{ scale: 0.98 }}
@@ -233,23 +241,69 @@ export function Navbar() {
 
               {/* CTAs */}
               <div className="space-y-3">
+                {!isLoading && isAuthenticated && user ? (
+                  <>
+                    {/* Info utilisateur mobile */}
+                    <motion.div
+                      className="flex items-center gap-3 p-3 rounded-2xl bg-primary/5 border border-primary/10"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.4 }}
+                    >
+                      <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center text-white font-bold">
+                        {user.firstName.charAt(0)}{user.lastName.charAt(0)}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-foreground">{user.firstName} {user.lastName}</p>
+                        <p className="text-sm text-foreground/60">{user.email}</p>
+                      </div>
+                    </motion.div>
+                    <motion.a
+                      href={isAdmin ? "/admin" : "/dashboard"}
+                      className="flex items-center justify-center gap-2 w-full p-4 rounded-2xl font-semibold text-primary border-2 border-primary/20 hover:border-primary/40 hover:bg-primary/5 transition-all"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.5 }}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <LayoutDashboard className="w-5 h-5" />
+                      {isAdmin ? "Administration" : "Mon Dashboard"}
+                    </motion.a>
+                    <motion.button
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        logout();
+                      }}
+                      className="flex items-center justify-center gap-2 w-full p-4 rounded-2xl font-semibold text-red-600 border-2 border-red-200 hover:border-red-300 hover:bg-red-50 transition-all"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.6 }}
+                    >
+                      <LogOut className="w-5 h-5" />
+                      Se déconnecter
+                    </motion.button>
+                  </>
+                ) : (
+                  <>
+                    <motion.a
+                      href="/inscription"
+                      className="flex items-center justify-center gap-2 w-full p-4 rounded-2xl font-semibold text-primary border-2 border-primary/20 hover:border-primary/40 hover:bg-primary/5 transition-all"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.4 }}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <UserPlus className="w-5 h-5" />
+                      S&apos;inscrire
+                    </motion.a>
+                  </>
+                )}
                 <motion.a
-                  href="/inscription"
-                  className="flex items-center justify-center gap-2 w-full p-4 rounded-2xl font-semibold text-primary border-2 border-primary/20 hover:border-primary/40 hover:bg-primary/5 transition-all"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.4 }}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  <UserPlus className="w-5 h-5" />
-                  S&apos;inscrire
-                </motion.a>
-                <motion.a
-                  href="#"
+                  href="/recherche"
                   className="flex items-center justify-center gap-2 w-full p-4 rounded-2xl font-semibold text-white bg-gradient-to-r from-primary to-secondary shadow-lg shadow-primary/30"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.5 }}
+                  transition={{ delay: isAuthenticated ? 0.7 : 0.5 }}
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   <Search className="w-5 h-5" />

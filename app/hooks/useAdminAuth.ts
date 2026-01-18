@@ -17,11 +17,21 @@ export function useAdminAuth() {
   const router = useRouter();
   const pathname = usePathname();
   const [token, setToken] = useState<string | null>(null);
+  const [tokenSource, setTokenSource] = useState<"admin" | "auth" | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    const storedToken = localStorage.getItem("admin_token");
-    setToken(storedToken);
+    // Vérifier d'abord admin_token, puis auth_token (pour les admins connectés via /connexion)
+    const adminToken = localStorage.getItem("admin_token");
+    const authToken = localStorage.getItem("auth_token");
+
+    if (adminToken) {
+      setToken(adminToken);
+      setTokenSource("admin");
+    } else if (authToken) {
+      setToken(authToken);
+      setTokenSource("auth");
+    }
     setIsInitialized(true);
   }, []);
 
@@ -39,8 +49,14 @@ export function useAdminAuth() {
 
   useEffect(() => {
     if (isInitialized && token && sessionData === null) {
-      localStorage.removeItem("admin_token");
+      // Session invalide - nettoyer le token approprié
+      if (tokenSource === "admin") {
+        localStorage.removeItem("admin_token");
+      } else if (tokenSource === "auth") {
+        localStorage.removeItem("auth_token");
+      }
       setToken(null);
+      setTokenSource(null);
       if (pathname.startsWith("/admin") && pathname !== "/admin/connexion") {
         router.push("/admin/connexion");
       }
@@ -52,11 +68,16 @@ export function useAdminAuth() {
       sessionData?.user &&
       sessionData.user.role !== "admin"
     ) {
-      localStorage.removeItem("admin_token");
+      // L'utilisateur n'est pas admin - ne pas supprimer auth_token
+      // car c'est peut-être un utilisateur normal connecté
+      if (tokenSource === "admin") {
+        localStorage.removeItem("admin_token");
+      }
       setToken(null);
+      setTokenSource(null);
       router.push("/admin/connexion");
     }
-  }, [isInitialized, token, sessionData, pathname, router]);
+  }, [isInitialized, token, tokenSource, sessionData, pathname, router]);
 
   const logout = useCallback(async () => {
     if (!token) return;
@@ -65,8 +86,11 @@ export function useAdminAuth() {
     } catch {
       // Ignorer les erreurs
     }
+    // Nettoyer les deux tokens pour une déconnexion complète de l'admin
     localStorage.removeItem("admin_token");
+    localStorage.removeItem("auth_token");
     setToken(null);
+    setTokenSource(null);
     router.push("/admin/connexion");
   }, [token, logoutMutation, router]);
 

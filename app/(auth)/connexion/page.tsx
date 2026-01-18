@@ -2,46 +2,44 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
-import { Mail, Lock, Eye, EyeOff, AlertCircle } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { useConvexAction } from "@/app/hooks/useConvexAction";
 
 export default function ConnexionPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
 
-  const login = useMutation(api.auth.login.login);
+  const { execute: login, isLoading } = useConvexAction(api.auth.login.login, {
+    successMessage: "Connexion réussie",
+    redirectOnSessionExpired: false,
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    setError(null);
 
-    try {
-      const result = await login({ email, password });
+    const result = await login({ email, password });
 
+    if (result?.success) {
       // Stocker le token
       localStorage.setItem("auth_token", result.token);
+
+      // Si c'est un admin, stocker aussi dans admin_token pour la compatibilité
+      if (result.user.role === "admin") {
+        localStorage.setItem("admin_token", result.token);
+      }
 
       // Stocker les infos utilisateur
       localStorage.setItem("user", JSON.stringify(result.user));
 
       // Rediriger selon le type de compte
       router.push(result.redirectPath);
-    } catch (err: unknown) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Email ou mot de passe incorrect";
-      setError(errorMessage);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -81,18 +79,6 @@ export default function ConnexionPage() {
         onSubmit={handleSubmit}
         className="space-y-6"
       >
-        {/* Erreur */}
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="p-4 rounded-xl bg-red-50 border border-red-200 flex items-start gap-3"
-          >
-            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-red-700">{error}</p>
-          </motion.div>
-        )}
-
         {/* Email */}
         <Input
           type="email"

@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { Button } from "@/app/components/ui/button";
 import { Checkbox } from "@/app/components/ui/checkbox";
-import { ArrowLeft, AlertCircle, Shield, FileText, Lock } from "lucide-react";
+import { ArrowLeft, Shield, FileText, Lock } from "lucide-react";
 
 interface CguStepProps {
   accepted: boolean;
@@ -11,7 +11,6 @@ interface CguStepProps {
   onSubmit: () => void;
   onBack: () => void;
   isLoading: boolean;
-  error: string | null;
 }
 
 export function CguStep({
@@ -20,7 +19,6 @@ export function CguStep({
   onSubmit,
   onBack,
   isLoading,
-  error,
 }: CguStepProps) {
   return (
     <div className="space-y-6">
@@ -29,18 +27,6 @@ export function CguStep({
           Dernière étape avant de rejoindre Animigo !
         </p>
       </div>
-
-      {/* Erreur */}
-      {error && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="p-4 rounded-xl bg-red-50 border border-red-200 flex items-start gap-3"
-        >
-          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-red-700">{error}</p>
-        </motion.div>
-      )}
 
       {/* Résumé des engagements */}
       <div className="space-y-3">

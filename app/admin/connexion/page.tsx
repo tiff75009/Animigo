@@ -1,45 +1,69 @@
 "use client";
 
-import { useState } from "react";
-import { useMutation } from "convex/react";
+import { useState, useEffect } from "react";
 import { api } from "@/convex/_generated/api";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Shield, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import { Shield, Eye, EyeOff, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useConvexAction } from "@/app/hooks/useConvexAction";
+import { useAdminAuth } from "@/app/hooks/useAdminAuth";
 
 export default function AdminConnexionPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
 
-  const adminLogin = useMutation(api.admin.login.adminLogin);
+  // Vérifier si déjà connecté en tant qu'admin
+  const { isAdmin, isLoading: isCheckingAuth } = useAdminAuth();
+
+  useEffect(() => {
+    if (!isCheckingAuth && isAdmin) {
+      router.replace("/admin");
+    }
+  }, [isCheckingAuth, isAdmin, router]);
+
+  const { execute: adminLogin, isLoading } = useConvexAction(
+    api.admin.login.adminLogin,
+    {
+      successMessage: "Connexion réussie",
+      redirectOnSessionExpired: false,
+    }
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
-    setIsLoading(true);
 
-    try {
-      const result = await adminLogin({ email, password });
+    const result = await adminLogin({ email, password });
 
-      if (result.success) {
-        localStorage.setItem("admin_token", result.token);
-        router.push("/admin");
-      }
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message.replace("Uncaught Error: ", "")
-          : "Une erreur est survenue"
-      );
-    } finally {
-      setIsLoading(false);
+    if (result?.success) {
+      localStorage.setItem("admin_token", result.token);
+      router.push("/admin");
     }
   };
+
+  // Afficher un loader pendant la vérification de l'auth
+  if (isCheckingAuth || isAdmin) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <motion.div
+          className="flex flex-col items-center gap-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          <motion.div
+            className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          />
+          <p className="text-slate-400">
+            {isAdmin ? "Redirection..." : "Vérification..."}
+          </p>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
@@ -71,17 +95,6 @@ export default function AdminConnexionPage() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3 }}
         >
-          {error && (
-            <motion.div
-              className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-3"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-            >
-              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-              <p className="text-red-400 text-sm">{error}</p>
-            </motion.div>
-          )}
-
           <div className="space-y-5">
             {/* Email */}
             <div>
