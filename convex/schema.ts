@@ -86,6 +86,12 @@ export default defineSchema({
     city: v.optional(v.string()),          // Ville (ex: "Paris")
     department: v.optional(v.string()),    // Département (ex: "75", "2A", "971")
     region: v.optional(v.string()),        // Région (ex: "Ile-de-France")
+    // Coordonnées GPS (pour recherche par distance)
+    coordinates: v.optional(v.object({
+      lat: v.number(),
+      lng: v.number(),
+    })),
+    googlePlaceId: v.optional(v.string()), // ID Google Maps pour référence
     acceptedAnimals: v.optional(v.array(v.string())), // ["chien", "chat", "rongeur", etc.]
     hasGarden: v.optional(v.boolean()),
     hasVehicle: v.optional(v.boolean()),

@@ -17,6 +17,7 @@ import type * as admin_serviceCategories from "../admin/serviceCategories.js";
 import type * as admin_stats from "../admin/stats.js";
 import type * as admin_users from "../admin/users.js";
 import type * as admin_utils from "../admin/utils.js";
+import type * as api_googleMaps from "../api/googleMaps.js";
 import type * as api_societe from "../api/societe.js";
 import type * as auth_login from "../auth/login.js";
 import type * as auth_register from "../auth/register.js";
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   "admin/stats": typeof admin_stats;
   "admin/users": typeof admin_users;
   "admin/utils": typeof admin_utils;
+  "api/googleMaps": typeof api_googleMaps;
   "api/societe": typeof api_societe;
   "auth/login": typeof auth_login;
   "auth/register": typeof auth_register;

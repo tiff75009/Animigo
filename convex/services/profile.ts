@@ -52,6 +52,16 @@ export const upsertProfile = mutation({
     availability: v.optional(v.string()),
     location: v.optional(v.string()),
     radius: v.optional(v.number()),
+    // Localisation structurée (Google Maps)
+    postalCode: v.optional(v.string()),
+    city: v.optional(v.string()),
+    department: v.optional(v.string()),
+    region: v.optional(v.string()),
+    coordinates: v.optional(v.object({
+      lat: v.number(),
+      lng: v.number(),
+    })),
+    googlePlaceId: v.optional(v.string()),
     acceptedAnimals: v.optional(v.array(v.string())),
     hasGarden: v.optional(v.boolean()),
     hasVehicle: v.optional(v.boolean()),
@@ -89,8 +99,38 @@ export const upsertProfile = mutation({
       .withIndex("by_user", (q) => q.eq("userId", session.userId))
       .first();
 
-    // Parser la localisation pour extraire les données structurées
-    const locationData = parseLocationString(args.location);
+    // Utiliser les données Google Maps si fournies, sinon parser la localisation
+    let locationFields: {
+      postalCode?: string;
+      city?: string;
+      department?: string;
+      region?: string;
+      coordinates?: { lat: number; lng: number };
+      googlePlaceId?: string;
+    };
+
+    if (args.googlePlaceId && args.coordinates) {
+      // Données Google Maps fournies
+      locationFields = {
+        postalCode: args.postalCode || undefined,
+        city: args.city || undefined,
+        department: args.department || undefined,
+        region: args.region || undefined,
+        coordinates: args.coordinates,
+        googlePlaceId: args.googlePlaceId,
+      };
+    } else {
+      // Fallback: parser la localisation texte
+      const locationData = parseLocationString(args.location);
+      locationFields = {
+        postalCode: locationData.postalCode || undefined,
+        city: locationData.city || undefined,
+        department: locationData.department || undefined,
+        region: locationData.region || undefined,
+        coordinates: undefined,
+        googlePlaceId: undefined,
+      };
+    }
 
     const profileData = {
       bio: args.bio,
@@ -99,11 +139,8 @@ export const upsertProfile = mutation({
       availability: args.availability,
       location: args.location,
       radius: args.radius,
-      // Localisation structurée (pour calcul prix conseillé)
-      postalCode: locationData.postalCode || undefined,
-      city: locationData.city || undefined,
-      department: locationData.department || undefined,
-      region: locationData.region || undefined,
+      // Localisation structurée
+      ...locationFields,
       acceptedAnimals: args.acceptedAnimals,
       hasGarden: args.hasGarden,
       hasVehicle: args.hasVehicle,

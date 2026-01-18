@@ -20,6 +20,13 @@ export interface ProfileFormData {
   availability: string;
   location: string;
   radius: number;
+  // Localisation structurée (Google Maps)
+  postalCode?: string;
+  city?: string;
+  department?: string;
+  region?: string;
+  coordinates?: { lat: number; lng: number };
+  googlePlaceId?: string;
   acceptedAnimals: string[];
   hasGarden: boolean;
   hasVehicle: boolean;

@@ -66,6 +66,13 @@ export default function ServicesPage() {
         availability: profileData.profile.availability || "",
         location: profileData.profile.location || "",
         radius: profileData.profile.radius || 10,
+        // Localisation structurée (Google Maps)
+        city: profileData.profile.city,
+        postalCode: profileData.profile.postalCode,
+        department: profileData.profile.department,
+        region: profileData.profile.region,
+        coordinates: profileData.profile.coordinates,
+        googlePlaceId: profileData.profile.googlePlaceId,
         acceptedAnimals: profileData.profile.acceptedAnimals || [],
         hasGarden: profileData.profile.hasGarden || false,
         hasVehicle: profileData.profile.hasVehicle || false,

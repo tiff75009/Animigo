@@ -15,6 +15,13 @@ export interface ProfileFormData {
   availability: string;
   location: string;
   radius: number;
+  // Localisation structurée (Google Maps)
+  postalCode?: string;
+  city?: string;
+  department?: string;
+  region?: string;
+  coordinates?: { lat: number; lng: number };
+  googlePlaceId?: string;
   acceptedAnimals: string[];
   hasGarden: boolean;
   hasVehicle: boolean;
@@ -85,7 +92,13 @@ export default function ProfileTab({
           location={profileForm.location}
           radius={profileForm.radius}
           availability={profileForm.availability}
+          city={profileForm.city}
+          postalCode={profileForm.postalCode}
+          department={profileForm.department}
+          region={profileForm.region}
+          coordinates={profileForm.coordinates}
           onLocationChange={(location) => onProfileChange({ location })}
+          onLocationDataChange={(data) => onProfileChange(data)}
           onRadiusChange={(radius) => onProfileChange({ radius })}
           onAvailabilityChange={(availability) => onProfileChange({ availability })}
         />
