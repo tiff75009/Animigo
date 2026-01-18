@@ -6,9 +6,9 @@ import { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/app/lib/utils";
 
 interface Photo {
-  _id: Id<"photos">;
+  id: Id<"photos">;
   url?: string | null;
-  filename?: string;
+  title?: string;
   isProfilePhoto?: boolean;
 }
 
@@ -45,7 +45,7 @@ export default function PhotoGallery({
       <AnimatePresence mode="popLayout">
         {photos.map((photo) => (
           <motion.div
-            key={photo._id}
+            key={photo.id}
             layout
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -57,7 +57,7 @@ export default function PhotoGallery({
               {photo.url ? (
                 <img
                   src={photo.url}
-                  alt={photo.filename || "Photo"}
+                  alt={photo.title || "Photo"}
                   className="w-full h-full object-cover"
                 />
               ) : (
@@ -83,7 +83,7 @@ export default function PhotoGallery({
             >
               {onSetAsProfile && !photo.isProfilePhoto && (
                 <motion.button
-                  onClick={() => onSetAsProfile(photo._id)}
+                  onClick={() => onSetAsProfile(photo.id)}
                   className="p-2 bg-white text-foreground rounded-lg"
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
@@ -95,7 +95,7 @@ export default function PhotoGallery({
               <motion.button
                 onClick={() => {
                   if (confirm("Supprimer cette photo ?")) {
-                    onDelete(photo._id);
+                    onDelete(photo.id);
                   }
                 }}
                 className="p-2 bg-red-500 text-white rounded-lg"

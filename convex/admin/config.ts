@@ -28,10 +28,8 @@ export const getAllConfigs = query({
 
     const configs = await ctx.db.query("systemConfig").collect();
 
-    return configs.map((c) => ({
-      ...c,
-      value: c.isSecret ? "********" : c.value, // Masquer les secrets
-    }));
+    // Les admins peuvent voir toutes les valeurs (y compris les secrets)
+    return configs;
   },
 });
 

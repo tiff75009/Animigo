@@ -39,7 +39,7 @@ interface IntegrationSection {
 const integrations: IntegrationSection[] = [
   {
     id: "google_maps",
-    name: "Google Maps",
+    name: "Service Google",
     description: "API pour la géolocalisation et l'affichage des cartes",
     icon: MapPin,
     color: "bg-green-500",

@@ -9,10 +9,10 @@ import { cn } from "@/app/lib/utils";
 
 interface AddressData {
   address: string;
-  city: string;
-  postalCode: string;
-  department: string;
-  region: string;
+  city: string | null;
+  postalCode: string | null;
+  department: string | null;
+  region: string | null;
   coordinates: { lat: number; lng: number };
   placeId: string;
 }
@@ -131,6 +131,14 @@ export default function AddressAutocomplete({
     setInputValue(newValue);
     onInputChange?.(newValue);
 
+    // Si l'input est vide, effacer les données structurées
+    if (newValue.trim() === "") {
+      onChange(null);
+      setPredictions([]);
+      setIsOpen(false);
+      return;
+    }
+
     // Debounce la recherche
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
@@ -172,9 +180,8 @@ export default function AddressAutocomplete({
           placeId: result.details.placeId,
         };
         onChange(data);
-        setInputValue(
-          `${result.details.address}, ${result.details.postalCode} ${result.details.city}`
-        );
+        // N'afficher que l'adresse (rue), pas la ville/CP
+        setInputValue(result.details.address);
       } else {
         setApiError(result.error || "Impossible de récupérer les détails");
       }

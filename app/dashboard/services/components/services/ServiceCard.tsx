@@ -36,6 +36,8 @@ interface ServiceCategory {
   billingType?: "hourly" | "daily" | "flexible";
 }
 
+type PriceUnit = "hour" | "day" | "week" | "month" | "flat";
+
 interface Service {
   id: Id<"services">;
   category: string;
@@ -48,7 +50,7 @@ interface Service {
     name: string;
     description?: string;
     price: number;
-    priceUnit: string;
+    priceUnit: PriceUnit;
     duration?: number;
     includedFeatures?: string[];
     order: number;

@@ -46,31 +46,31 @@ export const getProfile = query({
 export const upsertProfile = mutation({
   args: {
     token: v.string(),
-    bio: v.optional(v.string()),
-    description: v.optional(v.string()),
-    experience: v.optional(v.string()),
-    availability: v.optional(v.string()),
-    location: v.optional(v.string()),
-    radius: v.optional(v.number()),
+    bio: v.optional(v.union(v.string(), v.null())),
+    description: v.optional(v.union(v.string(), v.null())),
+    experience: v.optional(v.union(v.string(), v.null())),
+    availability: v.optional(v.union(v.string(), v.null())),
+    location: v.optional(v.union(v.string(), v.null())),
+    radius: v.optional(v.union(v.number(), v.null())),
     // Localisation structurée (Google Maps)
-    postalCode: v.optional(v.string()),
-    city: v.optional(v.string()),
-    department: v.optional(v.string()),
-    region: v.optional(v.string()),
-    coordinates: v.optional(v.object({
+    postalCode: v.optional(v.union(v.string(), v.null())),
+    city: v.optional(v.union(v.string(), v.null())),
+    department: v.optional(v.union(v.string(), v.null())),
+    region: v.optional(v.union(v.string(), v.null())),
+    coordinates: v.optional(v.union(v.object({
       lat: v.number(),
       lng: v.number(),
-    })),
-    googlePlaceId: v.optional(v.string()),
-    acceptedAnimals: v.optional(v.array(v.string())),
-    hasGarden: v.optional(v.boolean()),
-    hasVehicle: v.optional(v.boolean()),
-    ownedAnimals: v.optional(v.array(v.object({
+    }), v.null())),
+    googlePlaceId: v.optional(v.union(v.string(), v.null())),
+    acceptedAnimals: v.optional(v.union(v.array(v.string()), v.null())),
+    hasGarden: v.optional(v.union(v.boolean(), v.null())),
+    hasVehicle: v.optional(v.union(v.boolean(), v.null())),
+    ownedAnimals: v.optional(v.union(v.array(v.object({
       type: v.string(),
       name: v.string(),
       breed: v.optional(v.string()),
       age: v.optional(v.number()),
-    }))),
+    })), v.null())),
   },
   handler: async (ctx, args) => {
     // Vérifier la session
@@ -93,6 +93,10 @@ export const upsertProfile = mutation({
 
     const now = Date.now();
 
+    // Helper pour convertir null en undefined
+    const nullToUndefined = <T>(val: T | null | undefined): T | undefined =>
+      val === null ? undefined : val;
+
     // Chercher un profil existant
     const existingProfile = await ctx.db
       .query("profiles")
@@ -112,12 +116,12 @@ export const upsertProfile = mutation({
     if (args.googlePlaceId && args.coordinates) {
       // Données Google Maps fournies
       locationFields = {
-        postalCode: args.postalCode || undefined,
-        city: args.city || undefined,
-        department: args.department || undefined,
-        region: args.region || undefined,
-        coordinates: args.coordinates,
-        googlePlaceId: args.googlePlaceId,
+        postalCode: nullToUndefined(args.postalCode) || undefined,
+        city: nullToUndefined(args.city) || undefined,
+        department: nullToUndefined(args.department) || undefined,
+        region: nullToUndefined(args.region) || undefined,
+        coordinates: nullToUndefined(args.coordinates),
+        googlePlaceId: nullToUndefined(args.googlePlaceId),
       };
     } else {
       // Fallback: parser la localisation texte
@@ -133,18 +137,18 @@ export const upsertProfile = mutation({
     }
 
     const profileData = {
-      bio: args.bio,
-      description: args.description,
-      experience: args.experience,
-      availability: args.availability,
-      location: args.location,
-      radius: args.radius,
+      bio: nullToUndefined(args.bio),
+      description: nullToUndefined(args.description),
+      experience: nullToUndefined(args.experience),
+      availability: nullToUndefined(args.availability),
+      location: nullToUndefined(args.location),
+      radius: nullToUndefined(args.radius),
       // Localisation structurée
       ...locationFields,
-      acceptedAnimals: args.acceptedAnimals,
-      hasGarden: args.hasGarden,
-      hasVehicle: args.hasVehicle,
-      ownedAnimals: args.ownedAnimals,
+      acceptedAnimals: nullToUndefined(args.acceptedAnimals),
+      hasGarden: nullToUndefined(args.hasGarden),
+      hasVehicle: nullToUndefined(args.hasVehicle),
+      ownedAnimals: nullToUndefined(args.ownedAnimals),
       updatedAt: now,
     };
 

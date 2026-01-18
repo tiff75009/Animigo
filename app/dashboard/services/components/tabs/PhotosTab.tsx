@@ -9,10 +9,13 @@ import { Id } from "@/convex/_generated/dataModel";
 import { containerVariants, itemVariants } from "@/app/lib/animations";
 
 interface Photo {
-  _id: Id<"photos">;
+  id: Id<"photos">;
   url?: string | null;
-  filename?: string;
+  title?: string;
+  description?: string;
+  order?: number;
   isProfilePhoto?: boolean;
+  createdAt?: number;
 }
 
 interface PhotosTabProps {

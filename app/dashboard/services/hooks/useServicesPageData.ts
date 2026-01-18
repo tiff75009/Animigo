@@ -205,9 +205,7 @@ export function useServicesPageData(token: string | undefined) {
       await savePhotoMutation({
         token,
         storageId,
-        filename: file.name,
-        mimeType: file.type,
-        size: file.size,
+        title: file.name,
       });
     } catch (err) {
       console.error("Erreur:", err);

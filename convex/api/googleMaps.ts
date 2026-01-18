@@ -1,7 +1,7 @@
 import { action, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
-import { getRegionFromDepartment } from "../utils/location";
+import { getRegionFromDepartment, extractDepartmentFromPostalCode } from "../utils/location";
 
 // Query interne pour récupérer la clé API Google Maps
 export const getApiKeyInternal = internalQuery({
@@ -26,10 +26,10 @@ interface AutocompletePrediction {
 // Types pour les détails d'un lieu
 interface PlaceDetails {
   address: string;
-  city: string;
-  postalCode: string;
-  department: string;
-  region: string;
+  city: string | null;
+  postalCode: string | null;
+  department: string | null;
+  region: string | null;
   coordinates: {
     lat: number;
     lng: number;
@@ -205,7 +205,6 @@ export const getPlaceDetails = action({
       // Extraire les composants d'adresse
       let postalCode = "";
       let city = "";
-      let department = "";
       let streetNumber = "";
       let route = "";
 
@@ -218,10 +217,6 @@ export const getPlaceDetails = action({
         if (types.includes("locality")) {
           city = component.long_name;
         }
-        if (types.includes("administrative_area_level_2")) {
-          // Département en France
-          department = component.short_name;
-        }
         if (types.includes("street_number")) {
           streetNumber = component.long_name;
         }
@@ -230,19 +225,9 @@ export const getPlaceDetails = action({
         }
       }
 
-      // Si pas de département trouvé, l'extraire du code postal
-      if (!department && postalCode.length >= 2) {
-        department = postalCode.substring(0, 2);
-        // Cas spéciaux pour la Corse
-        if (postalCode.startsWith("20")) {
-          const postalNum = parseInt(postalCode, 10);
-          if (postalNum >= 20000 && postalNum <= 20199) {
-            department = "2A"; // Corse-du-Sud
-          } else if (postalNum >= 20200 && postalNum <= 20999) {
-            department = "2B"; // Haute-Corse
-          }
-        }
-      }
+      // Toujours extraire le département depuis le code postal (plus fiable)
+      // Google retourne le nom du département mais on a besoin du numéro
+      const department = extractDepartmentFromPostalCode(postalCode) || "";
 
       // Récupérer la région à partir du département
       const region = getRegionFromDepartment(department);
