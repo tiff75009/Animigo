@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 interface User {
   id: string;
@@ -20,7 +20,6 @@ interface User {
 
 export function useAuth() {
   const router = useRouter();
-  const pathname = usePathname();
   const [token, setToken] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
@@ -55,11 +54,11 @@ export function useAuth() {
       setToken(null);
 
       // Rediriger si sur une page protégée
-      if (pathname.startsWith("/dashboard")) {
+      if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
         router.push("/connexion");
       }
     }
-  }, [isInitialized, token, sessionData, pathname, router]);
+  }, [isInitialized, token, sessionData, router]);
 
   // Rafraîchir périodiquement la session
   useEffect(() => {

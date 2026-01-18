@@ -22,8 +22,10 @@ import {
   Menu,
   X,
   Briefcase,
+  ChevronDown,
+  ClipboardList,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, memo } from "react";
 import { getUnreadMessagesCount, mockUserProfile } from "@/app/lib/dashboard-data";
 import { useAuth } from "@/app/hooks/useAuth";
 
@@ -58,6 +60,198 @@ const accountNavItems: NavItem[] = [
   { href: "/dashboard/parametres", label: "Paramètres", icon: Settings },
 ];
 
+// Composant NavLink mémorisé et sorti du composant principal
+const NavLink = memo(function NavLink({
+  item,
+  isActive,
+  badge,
+  onClose
+}: {
+  item: NavItem;
+  isActive: boolean;
+  badge?: number;
+  onClose: () => void;
+}) {
+  return (
+    <Link href={item.href} scroll={false} onClick={onClose}>
+      <motion.div
+        className={cn(
+          "flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors relative",
+          isActive
+            ? "bg-primary text-white shadow-lg shadow-primary/30"
+            : "text-foreground/70 hover:bg-primary/10 hover:text-primary"
+        )}
+        whileHover={{ x: 4 }}
+        whileTap={{ scale: 0.98 }}
+      >
+        <item.icon className="w-5 h-5 flex-shrink-0" />
+        <span className="flex-1">{item.label}</span>
+        {badge && badge > 0 && (
+          <span className="px-2 py-0.5 text-xs font-bold bg-accent text-foreground rounded-full">
+            {badge}
+          </span>
+        )}
+      </motion.div>
+    </Link>
+  );
+});
+
+// Composant UserInfo séparé
+const UserInfo = memo(function UserInfo({
+  user
+}: {
+  user: { firstName: string; lastName: string; avatar: string; verified: boolean }
+}) {
+  return (
+    <div className="p-4 border-b border-foreground/10">
+      <div className="flex items-center gap-3 p-3 bg-primary/5 rounded-xl">
+        <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center text-2xl">
+          {user.avatar}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-foreground truncate">{user.firstName} {user.lastName}</p>
+          <p className="text-xs text-text-light flex items-center gap-1">
+            {user.verified && <CheckCircle className="w-3 h-3 text-secondary" />}
+            {user.verified ? "Garde vérifié" : "Garde"}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+// Composant NavSection séparé
+const NavSection = memo(function NavSection({
+  title,
+  items,
+  pathname,
+  unreadCount,
+  onClose,
+}: {
+  title: string;
+  items: NavItem[];
+  pathname: string;
+  unreadCount?: number;
+  onClose: () => void;
+}) {
+  return (
+    <div>
+      <p className="px-4 text-xs font-semibold text-text-light uppercase tracking-wider mb-2">
+        {title}
+      </p>
+      <div className="space-y-1">
+        {items.map((item) => (
+          <NavLink
+            key={item.href}
+            item={item}
+            isActive={pathname === item.href}
+            badge={item.label === "Messagerie" ? unreadCount : item.badge}
+            onClose={onClose}
+          />
+        ))}
+      </div>
+    </div>
+  );
+});
+
+// Composant CollapsibleNavSection pour menu déroulant
+const CollapsibleNavSection = memo(function CollapsibleNavSection({
+  title,
+  icon: Icon,
+  items,
+  pathname,
+  onClose,
+  defaultOpen = false,
+}: {
+  title: string;
+  icon: React.ElementType;
+  items: NavItem[];
+  pathname: string;
+  onClose: () => void;
+  defaultOpen?: boolean;
+}) {
+  // Ouvrir automatiquement si un des items est actif
+  const hasActiveItem = items.some(item => pathname === item.href || pathname.startsWith(item.href + "/"));
+  const [isOpen, setIsOpen] = useState(defaultOpen || hasActiveItem);
+
+  // Compter les items actifs pour le badge
+  const activeCount = items.filter(item => pathname === item.href).length;
+
+  return (
+    <div>
+      <motion.button
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          "flex items-center gap-3 w-full px-4 py-3 rounded-xl font-medium transition-colors",
+          hasActiveItem
+            ? "bg-primary/10 text-primary"
+            : "text-foreground/70 hover:bg-primary/10 hover:text-primary"
+        )}
+        whileHover={{ x: 4 }}
+        whileTap={{ scale: 0.98 }}
+      >
+        <Icon className="w-5 h-5 flex-shrink-0" />
+        <span className="flex-1 text-left">{title}</span>
+        {hasActiveItem && (
+          <span className="px-2 py-0.5 text-xs font-bold bg-primary text-white rounded-full">
+            {items.length}
+          </span>
+        )}
+        <motion.div
+          animate={{ rotate: isOpen ? 180 : 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          <ChevronDown className="w-4 h-4" />
+        </motion.div>
+      </motion.button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="pl-4 mt-1 space-y-1">
+              {items.map((item) => (
+                <NavLink
+                  key={item.href}
+                  item={item}
+                  isActive={pathname === item.href}
+                  onClose={onClose}
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+});
+
+// Logo séparé
+const Logo = memo(function Logo() {
+  return (
+    <div className="p-6 border-b border-foreground/10">
+      <Link href="/" className="flex items-center gap-3">
+        <div className="w-11 h-11 bg-gradient-to-br from-primary to-secondary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/30">
+          <span className="text-xl">🐾</span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-xl font-extrabold text-foreground leading-tight">
+            Anim<span className="text-primary">igo</span>
+          </span>
+          <span className="text-[10px] text-text-light font-medium -mt-1">
+            Espace garde
+          </span>
+        </div>
+      </Link>
+    </div>
+  );
+});
+
 interface SidebarProps {
   className?: string;
 }
@@ -67,6 +261,8 @@ export function Sidebar({ className }: SidebarProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const unreadCount = getUnreadMessagesCount();
   const { user, logout } = useAuth();
+
+  const closeMobile = () => setIsMobileOpen(false);
 
   // Utiliser les données utilisateur réelles si disponibles, sinon mock
   const displayUser = user
@@ -78,125 +274,10 @@ export function Sidebar({ className }: SidebarProps) {
       }
     : mockUserProfile;
 
-  const NavLink = ({ item }: { item: NavItem }) => {
-    const isActive = pathname === item.href;
-    const badge = item.label === "Messagerie" ? unreadCount : item.badge;
-
-    return (
-      <Link href={item.href} onClick={() => setIsMobileOpen(false)}>
-        <motion.div
-          className={cn(
-            "flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors relative",
-            isActive
-              ? "bg-primary text-white shadow-lg shadow-primary/30"
-              : "text-foreground/70 hover:bg-primary/10 hover:text-primary"
-          )}
-          whileHover={{ x: 4 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          <item.icon className="w-5 h-5 flex-shrink-0" />
-          <span className="flex-1">{item.label}</span>
-          {badge && badge > 0 && (
-            <span className="px-2 py-0.5 text-xs font-bold bg-accent text-foreground rounded-full">
-              {badge}
-            </span>
-          )}
-        </motion.div>
-      </Link>
-    );
+  const handleLogout = () => {
+    closeMobile();
+    logout();
   };
-
-  const SidebarContent = () => (
-    <div className="flex flex-col h-full">
-      {/* Logo */}
-      <div className="p-6 border-b border-foreground/10">
-        <Link href="/" className="flex items-center gap-3">
-          <div className="w-11 h-11 bg-gradient-to-br from-primary to-secondary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/30">
-            <span className="text-xl">🐾</span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-xl font-extrabold text-foreground leading-tight">
-              Anim<span className="text-primary">igo</span>
-            </span>
-            <span className="text-[10px] text-text-light font-medium -mt-1">
-              Espace garde
-            </span>
-          </div>
-        </Link>
-      </div>
-
-      {/* User info */}
-      <div className="p-4 border-b border-foreground/10">
-        <div className="flex items-center gap-3 p-3 bg-primary/5 rounded-xl">
-          <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center text-2xl">
-            {displayUser.avatar}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-foreground truncate">{displayUser.firstName} {displayUser.lastName}</p>
-            <p className="text-xs text-text-light flex items-center gap-1">
-              {displayUser.verified && <CheckCircle className="w-3 h-3 text-secondary" />}
-              {displayUser.verified ? "Garde vérifié" : "Garde"}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto p-4 space-y-6">
-        {/* Main */}
-        <div>
-          <p className="px-4 text-xs font-semibold text-text-light uppercase tracking-wider mb-2">
-            Principal
-          </p>
-          <div className="space-y-1">
-            {mainNavItems.map((item) => (
-              <NavLink key={item.href} item={item} />
-            ))}
-          </div>
-        </div>
-
-        {/* Missions */}
-        <div>
-          <p className="px-4 text-xs font-semibold text-text-light uppercase tracking-wider mb-2">
-            Missions
-          </p>
-          <div className="space-y-1">
-            {missionNavItems.map((item) => (
-              <NavLink key={item.href} item={item} />
-            ))}
-          </div>
-        </div>
-
-        {/* Account */}
-        <div>
-          <p className="px-4 text-xs font-semibold text-text-light uppercase tracking-wider mb-2">
-            Compte
-          </p>
-          <div className="space-y-1">
-            {accountNavItems.map((item) => (
-              <NavLink key={item.href} item={item} />
-            ))}
-          </div>
-        </div>
-      </nav>
-
-      {/* Logout */}
-      <div className="p-4 border-t border-foreground/10">
-        <motion.button
-          onClick={() => {
-            setIsMobileOpen(false);
-            logout();
-          }}
-          className="flex items-center gap-3 w-full px-4 py-3 rounded-xl font-medium text-red-500 hover:bg-red-50 transition-colors"
-          whileHover={{ x: 4 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          <LogOut className="w-5 h-5" />
-          <span>Déconnexion</span>
-        </motion.button>
-      </div>
-    </div>
-  );
 
   return (
     <>
@@ -212,26 +293,62 @@ export function Sidebar({ className }: SidebarProps) {
       {/* Desktop Sidebar */}
       <aside
         className={cn(
-          "hidden lg:flex flex-col w-72 bg-white border-r border-foreground/10 h-screen sticky top-0",
+          "hidden lg:flex flex-col w-72 bg-white border-r border-foreground/10 h-screen flex-shrink-0",
           className
         )}
       >
-        <SidebarContent />
+        <div className="flex flex-col h-full">
+          <Logo />
+          <UserInfo user={displayUser} />
+
+          <nav className="flex-1 overflow-y-auto p-4 space-y-4">
+            <NavSection
+              title="Principal"
+              items={mainNavItems}
+              pathname={pathname}
+              unreadCount={unreadCount}
+              onClose={closeMobile}
+            />
+            <CollapsibleNavSection
+              title="Missions"
+              icon={ClipboardList}
+              items={missionNavItems}
+              pathname={pathname}
+              onClose={closeMobile}
+            />
+            <NavSection
+              title="Compte"
+              items={accountNavItems}
+              pathname={pathname}
+              onClose={closeMobile}
+            />
+          </nav>
+
+          <div className="p-4 border-t border-foreground/10">
+            <motion.button
+              onClick={handleLogout}
+              className="flex items-center gap-3 w-full px-4 py-3 rounded-xl font-medium text-red-500 hover:bg-red-50 transition-colors"
+              whileHover={{ x: 4 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <LogOut className="w-5 h-5" />
+              <span>Déconnexion</span>
+            </motion.button>
+          </div>
+        </div>
       </aside>
 
       {/* Mobile Sidebar */}
       <AnimatePresence>
         {isMobileOpen && (
           <>
-            {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="lg:hidden fixed inset-0 bg-black/50 z-40"
-              onClick={() => setIsMobileOpen(false)}
+              onClick={closeMobile}
             />
-            {/* Sidebar */}
             <motion.aside
               initial={{ x: -300 }}
               animate={{ x: 0 }}
@@ -239,7 +356,45 @@ export function Sidebar({ className }: SidebarProps) {
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
               className="lg:hidden fixed left-0 top-0 bottom-0 w-72 bg-white z-50 shadow-2xl"
             >
-              <SidebarContent />
+              <div className="flex flex-col h-full">
+                <Logo />
+                <UserInfo user={displayUser} />
+
+                <nav className="flex-1 overflow-y-auto p-4 space-y-4">
+                  <NavSection
+                    title="Principal"
+                    items={mainNavItems}
+                    pathname={pathname}
+                    unreadCount={unreadCount}
+                    onClose={closeMobile}
+                  />
+                  <CollapsibleNavSection
+                    title="Missions"
+                    icon={ClipboardList}
+                    items={missionNavItems}
+                    pathname={pathname}
+                    onClose={closeMobile}
+                  />
+                  <NavSection
+                    title="Compte"
+                    items={accountNavItems}
+                    pathname={pathname}
+                    onClose={closeMobile}
+                  />
+                </nav>
+
+                <div className="p-4 border-t border-foreground/10">
+                  <motion.button
+                    onClick={handleLogout}
+                    className="flex items-center gap-3 w-full px-4 py-3 rounded-xl font-medium text-red-500 hover:bg-red-50 transition-colors"
+                    whileHover={{ x: 4 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <LogOut className="w-5 h-5" />
+                    <span>Déconnexion</span>
+                  </motion.button>
+                </div>
+              </div>
             </motion.aside>
           </>
         )}
