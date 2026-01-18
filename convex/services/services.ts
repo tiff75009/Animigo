@@ -142,7 +142,7 @@ export const getMyServices = query({
   },
 });
 
-// Ajouter un service (structure simplifiée: prestation + formules)
+// Ajouter un service (structure simplifiée: prestation + formules + options)
 export const addService = mutation({
   args: {
     token: v.string(),
@@ -163,6 +163,19 @@ export const addService = mutation({
       duration: v.optional(v.number()),
       includedFeatures: v.optional(v.array(v.string())),
     })),
+    // Options additionnelles (optionnelles)
+    initialOptions: v.optional(v.array(v.object({
+      name: v.string(),
+      description: v.optional(v.string()),
+      price: v.number(), // En centimes
+      priceType: v.union(
+        v.literal("flat"),
+        v.literal("per_day"),
+        v.literal("per_unit")
+      ),
+      unitLabel: v.optional(v.string()),
+      maxQuantity: v.optional(v.number()),
+    }))),
   },
   handler: async (ctx, args) => {
     const session = await ctx.db
@@ -244,6 +257,26 @@ export const addService = mutation({
         createdAt: now,
         updatedAt: now,
       });
+    }
+
+    // Créer les options si fournies
+    if (args.initialOptions && args.initialOptions.length > 0) {
+      for (let i = 0; i < args.initialOptions.length; i++) {
+        const option = args.initialOptions[i];
+        await ctx.db.insert("serviceOptions", {
+          serviceId: serviceId,
+          name: option.name,
+          description: option.description,
+          price: option.price,
+          priceType: option.priceType,
+          unitLabel: option.unitLabel,
+          maxQuantity: option.maxQuantity,
+          order: i,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
     }
 
     return {

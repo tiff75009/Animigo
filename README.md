@@ -110,22 +110,47 @@ bun run build
 ### Dashboard Annonceur (`/dashboard`)
 
 - **Page Services** (`/dashboard/services`)
-  - **Nouveau modele simplifie** : Prestation + Formules + Options
-    - Selection d'une prestation (categorie geree par admin)
+  - **Architecture modulaire** avec composants reutilisables
+  - **3 onglets** : Mon profil, Services & Tarifs, Photos
+  - **Onglet Profil**
+    - Bio, description, experience
+    - Localisation avec rayon d'intervention
     - Types d'animaux acceptes
-    - Formules obligatoires (au moins 1)
-    - Options additionnelles
+    - Equipements (jardin, vehicule)
+    - Mes animaux personnels
+  - **Onglet Services & Tarifs**
+    - **Wizard de creation en 4 etapes** :
+      1. Selection de la prestation (categorie)
+      2. Types d'animaux acceptes
+      3. Definition des formules (prix, duree, avantages)
+      4. Options additionnelles (facultatif)
+    - **Cartes de service enrichies** :
+      - Header cliquable avec gradient et prix affiche
+      - Clic sur le header pour ouvrir/fermer la modification
+      - Indicateur visuel (chevron) de l'etat ouvert/ferme
+      - Apercu des formules et options
+      - Badges de statistiques
+      - Actions : Modifier, Activer/Desactiver, Supprimer
+    - **Modales de confirmation** pour toutes les suppressions :
+      - Suppression de service
+      - Suppression de formule
+      - Suppression d'option
   - **Systeme de formules (variantes)**
     - Prix horaire × duree = prix total
     - Fonctionnalites incluses par formule
     - Glisser-deposer pour reordonner
+    - Modal de confirmation avant suppression
   - **Options additionnelles**
     - Prix forfaitaire, par jour ou par unite
     - Quantite maximale configurable
+    - Modal de confirmation avant suppression
   - **Prix conseilles intelligents**
     - Priorite 1 : Moyenne des prix des autres annonceurs
     - Priorite 2 : Prix par defaut admin de la categorie
     - Priorite 3 : Prix de reference codes en dur
+  - **Onglet Photos**
+    - Upload de photos avec drag & drop
+    - Galerie avec suppression
   - Moderation automatique du contenu
   - Bouton "Sponsoriser" (a venir)
 
@@ -192,7 +217,17 @@ app/
         views/         # MonthView, WeekView, DayView, YearView
         availability/  # AvailabilityModal
     services/
-      components/      # VariantManager, OptionManager, PriceRecommendation
+      page.tsx         # Page principale orchestratrice
+      hooks/
+        useServicesPageData.ts  # Hook centralise pour queries/mutations
+      components/
+        tabs/          # ProfileTab, ServicesTab, PhotosTab
+        profile/       # ProfileBioSection, LocationSection, etc.
+        services/      # ServiceCard, ServiceList, ServiceForm
+        photos/        # PhotoUploader, PhotoGallery
+        shared/        # SectionCard, FormField, AnimalTypeSelector, ConfirmModal
+        VariantManager.tsx   # Gestion des formules
+        OptionManager.tsx    # Gestion des options
   components/          # Composants partages
     ui/                # Composants UI (input, checkbox, etc.)
   hooks/               # Hooks React personnalises
@@ -255,3 +290,63 @@ convex/
 - Protection des routes admin
 - Moderation du contenu (detection emails/telephones)
 - Stockage securise des cles API (chiffrees en base)
+
+---
+
+## Design System
+
+### Couleurs
+
+| Variable | Couleur | Usage |
+|----------|---------|-------|
+| `--primary` | #FF6B6B | Actions principales, liens |
+| `--secondary` | #4ECDC4 | Succes, elements actifs |
+| `--accent` | #FFE66D | Mise en avant |
+| `--purple` | #9B5DE5 | Elements secondaires |
+| `--foreground` | #1A1A2E | Texte principal |
+| `--text-light` | #6B7280 | Texte secondaire |
+
+### Composants UI
+
+- **Cards** : `bg-white rounded-2xl p-6 shadow-sm border border-foreground/5`
+- **Boutons primaires** : `bg-primary text-white rounded-xl px-4 py-2.5`
+- **Boutons secondaires** : `bg-foreground/5 text-foreground rounded-xl`
+- **Badges** : `px-3 py-1.5 rounded-full text-xs font-medium`
+- **Inputs** : `border border-foreground/20 rounded-xl px-4 py-3`
+
+### Animations
+
+Utilisation de Framer Motion avec des variants predefinies :
+- `containerVariants` : Animation de conteneur avec stagger
+- `itemVariants` : Animation d'elements de liste
+- `fadeInUp` : Apparition du bas vers le haut
+- `scaleIn` : Apparition avec mise a l'echelle
+
+---
+
+## Changelog recent
+
+### v0.3.1 - Ameliorations UX Services
+- Header des cartes de service cliquable pour ouvrir/fermer la modification
+- Indicateur visuel (chevron) de l'etat ouvert/ferme
+- Modales de confirmation pour la suppression des formules
+- Modales de confirmation pour la suppression des options
+- Effet hover sur le header des cartes
+
+### v0.3.0 - Refonte Page Services
+- Refactorisation complete de `/dashboard/services` (1300+ lignes → composants modulaires)
+- Nouveau wizard de creation de service en 4 etapes
+- Cartes de service enrichies avec apercu des formules et options
+- Modal de confirmation pour les suppressions de services
+- Animations fluides avec Framer Motion
+- Hook `useServicesPageData` pour centraliser les queries/mutations
+
+### v0.2.0 - Systeme de Planning
+- Calendrier avec 4 vues (jour, semaine, mois, annee)
+- Gestion des disponibilites par drag & drop
+- Integration des missions
+
+### v0.1.0 - MVP
+- Authentification multi-roles
+- Panel administration complet
+- Gestion des services et categories

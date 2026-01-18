@@ -20,9 +20,11 @@ import {
   Hash,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
+import ConfirmModal from "./shared/ConfirmModal";
 
 type PriceType = "flat" | "per_day" | "per_unit";
 
+// Option pour le mode édition (avec ID backend)
 interface Option {
   id: Id<"serviceOptions">;
   name: string;
@@ -35,13 +37,35 @@ interface Option {
   isActive: boolean;
 }
 
-interface OptionManagerProps {
-  serviceId: Id<"services">;
-  serviceName: string;
-  options: Option[];
-  token: string;
-  onUpdate: () => void;
+// Option locale pour le mode création (sans ID)
+export interface LocalOption {
+  localId: string;
+  name: string;
+  description?: string;
+  price: number;
+  priceType: PriceType;
+  unitLabel?: string;
+  maxQuantity?: number;
 }
+
+interface OptionManagerProps {
+  // Mode édition (service existant)
+  serviceId?: Id<"services">;
+  options?: Option[];
+  token?: string;
+  onUpdate?: () => void;
+
+  // Mode création (nouveau service)
+  mode?: "edit" | "create";
+  localOptions?: LocalOption[];
+  onLocalChange?: (options: LocalOption[]) => void;
+
+  // Commun
+  serviceName: string;
+}
+
+// Générer un ID local unique
+const generateLocalId = () => `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
 // Helper pour formater le prix
 const formatPrice = (cents: number) => {
@@ -72,14 +96,44 @@ const PRICE_TYPE_OPTIONS = [
 export default function OptionManager({
   serviceId,
   serviceName,
-  options,
+  options = [],
   token,
   onUpdate,
+  mode = "edit",
+  localOptions = [],
+  onLocalChange,
 }: OptionManagerProps) {
   const [isAdding, setIsAdding] = useState(false);
-  const [editingId, setEditingId] = useState<Id<"serviceOptions"> | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string } | null>(null);
+
+  const isCreateMode = mode === "create";
+
+  // Déterminer les items à afficher selon le mode
+  const displayItems = isCreateMode
+    ? localOptions.map((o) => ({
+        id: o.localId,
+        name: o.name,
+        description: o.description,
+        price: o.price,
+        priceType: o.priceType,
+        unitLabel: o.unitLabel,
+        maxQuantity: o.maxQuantity,
+        isActive: true,
+      }))
+    : options.map((o) => ({
+        id: o.id as string,
+        name: o.name,
+        description: o.description,
+        price: o.price,
+        priceType: o.priceType,
+        unitLabel: o.unitLabel,
+        maxQuantity: o.maxQuantity,
+        isActive: o.isActive,
+      }));
 
   // Form state
   const [formData, setFormData] = useState({
@@ -109,75 +163,133 @@ export default function OptionManager({
     setEditingId(null);
   };
 
-  const startEdit = (option: Option) => {
+  const startEdit = (item: typeof displayItems[0]) => {
     setFormData({
-      name: option.name,
-      description: option.description || "",
-      price: option.price / 100, // Convertir en euros pour l'édition
-      priceType: option.priceType,
-      unitLabel: option.unitLabel || "",
-      maxQuantity: option.maxQuantity,
+      name: item.name,
+      description: item.description || "",
+      price: item.price / 100, // Convertir en euros pour l'édition
+      priceType: item.priceType,
+      unitLabel: item.unitLabel || "",
+      maxQuantity: item.maxQuantity,
     });
-    setEditingId(option.id);
+    setEditingId(item.id);
     setIsAdding(false);
   };
 
   const handleSave = async () => {
     if (!formData.name || formData.price <= 0) return;
 
-    setSaving(true);
-    try {
+    const priceInCents = Math.round(formData.price * 100);
+
+    if (isCreateMode) {
+      // Mode création: modifier les options locales
       if (editingId) {
-        await updateOption({
-          token,
-          optionId: editingId,
-          name: formData.name,
-          description: formData.description || undefined,
-          price: Math.round(formData.price * 100), // Convertir en centimes
-          priceType: formData.priceType,
-          unitLabel: formData.priceType !== "flat" ? formData.unitLabel || undefined : undefined,
-          maxQuantity: formData.maxQuantity || undefined,
-        });
+        // Modifier une option locale existante
+        const updated = localOptions.map((o) =>
+          o.localId === editingId
+            ? {
+                ...o,
+                name: formData.name,
+                description: formData.description || undefined,
+                price: priceInCents,
+                priceType: formData.priceType,
+                unitLabel: formData.priceType !== "flat" ? formData.unitLabel || undefined : undefined,
+                maxQuantity: formData.maxQuantity || undefined,
+              }
+            : o
+        );
+        onLocalChange?.(updated);
       } else {
-        await addOption({
-          token,
-          serviceId,
+        // Ajouter une nouvelle option locale
+        const newOption: LocalOption = {
+          localId: generateLocalId(),
           name: formData.name,
           description: formData.description || undefined,
-          price: Math.round(formData.price * 100), // Convertir en centimes
+          price: priceInCents,
           priceType: formData.priceType,
           unitLabel: formData.priceType !== "flat" ? formData.unitLabel || undefined : undefined,
           maxQuantity: formData.maxQuantity || undefined,
-        });
+        };
+        onLocalChange?.([...localOptions, newOption]);
       }
       resetForm();
-      onUpdate();
-    } catch (error) {
-      console.error("Erreur:", error);
-    } finally {
-      setSaving(false);
+    } else {
+      // Mode édition: utiliser les mutations backend
+      if (!token || !serviceId) return;
+
+      setSaving(true);
+      try {
+        if (editingId) {
+          await updateOption({
+            token,
+            optionId: editingId as Id<"serviceOptions">,
+            name: formData.name,
+            description: formData.description || undefined,
+            price: priceInCents,
+            priceType: formData.priceType,
+            unitLabel: formData.priceType !== "flat" ? formData.unitLabel || undefined : undefined,
+            maxQuantity: formData.maxQuantity || undefined,
+          });
+        } else {
+          await addOption({
+            token,
+            serviceId,
+            name: formData.name,
+            description: formData.description || undefined,
+            price: priceInCents,
+            priceType: formData.priceType,
+            unitLabel: formData.priceType !== "flat" ? formData.unitLabel || undefined : undefined,
+            maxQuantity: formData.maxQuantity || undefined,
+          });
+        }
+        resetForm();
+        onUpdate?.();
+      } catch (error) {
+        console.error("Erreur:", error);
+      } finally {
+        setSaving(false);
+      }
     }
   };
 
-  const handleDelete = async (optionId: Id<"serviceOptions">) => {
-    if (!confirm("Supprimer cette option ?")) return;
-
-    try {
-      await deleteOption({ token, optionId });
-      onUpdate();
-    } catch (error) {
-      console.error("Erreur:", error);
-    }
+  const openDeleteModal = (itemId: string, itemName: string) => {
+    setItemToDelete({ id: itemId, name: itemName });
+    setDeleteModalOpen(true);
   };
 
-  const handleToggleActive = async (option: Option) => {
+  const handleDelete = async () => {
+    if (!itemToDelete) return;
+
+    if (isCreateMode) {
+      // Mode création: filtrer les options locales
+      const updated = localOptions.filter((o) => o.localId !== itemToDelete.id);
+      onLocalChange?.(updated);
+    } else {
+      // Mode édition: utiliser la mutation backend
+      if (!token) return;
+      try {
+        await deleteOption({ token, optionId: itemToDelete.id as Id<"serviceOptions"> });
+        onUpdate?.();
+      } catch (error) {
+        console.error("Erreur:", error);
+      }
+    }
+
+    setDeleteModalOpen(false);
+    setItemToDelete(null);
+  };
+
+  const handleToggleActive = async (item: typeof displayItems[0]) => {
+    // Cette fonction n'est disponible qu'en mode édition
+    if (isCreateMode || !token) return;
+
     try {
       await updateOption({
         token,
-        optionId: option.id,
-        isActive: !option.isActive,
+        optionId: item.id as Id<"serviceOptions">,
+        isActive: !item.isActive,
       });
-      onUpdate();
+      onUpdate?.();
     } catch (error) {
       console.error("Erreur:", error);
     }
@@ -187,7 +299,10 @@ export default function OptionManager({
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       {/* Header */}
       <div
-        className="flex items-center justify-between p-4 bg-gray-50 cursor-pointer"
+        className={cn(
+          "flex items-center justify-between p-4 cursor-pointer",
+          isCreateMode ? "bg-amber-500/5" : "bg-gray-50"
+        )}
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center gap-3">
@@ -195,9 +310,11 @@ export default function OptionManager({
             <Zap className="w-5 h-5 text-amber-600" />
           </div>
           <div>
-            <h3 className="font-semibold text-foreground">Options additionnelles</h3>
+            <h3 className="font-semibold text-foreground">
+              Options additionnelles {isCreateMode && <span className="text-text-light font-normal">(optionnel)</span>}
+            </h3>
             <p className="text-sm text-text-light">
-              {options.length} option{options.length > 1 ? "s" : ""}
+              {displayItems.length} option{displayItems.length > 1 ? "s" : ""}
             </p>
           </div>
         </div>
@@ -399,21 +516,23 @@ export default function OptionManager({
 
             {/* List */}
             <div className="divide-y divide-gray-100">
-              {options.length === 0 ? (
+              {displayItems.length === 0 ? (
                 <div className="p-8 text-center">
                   <Zap className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                   <p className="text-text-light">Aucune option</p>
                   <p className="text-sm text-text-light">
-                    Ajoutez des options pour proposer des extras payants
+                    {isCreateMode
+                      ? "Ajoutez des options payantes pour enrichir votre offre (facultatif)"
+                      : "Ajoutez des options pour proposer des extras payants"}
                   </p>
                 </div>
               ) : (
-                options.map((option) => (
+                displayItems.map((item) => (
                   <div
-                    key={option.id}
+                    key={item.id}
                     className={cn(
                       "p-4 flex items-start gap-3 hover:bg-gray-50 transition-colors",
-                      !option.isActive && "opacity-50"
+                      !item.isActive && "opacity-50"
                     )}
                   >
                     <div className="text-text-light cursor-move">
@@ -422,8 +541,8 @@ export default function OptionManager({
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-medium text-foreground">{option.name}</h4>
-                        {!option.isActive && (
+                        <h4 className="font-medium text-foreground">{item.name}</h4>
+                        {!item.isActive && (
                           <span className="px-2 py-0.5 bg-red-100 text-red-600 rounded-full text-xs">
                             Inactif
                           </span>
@@ -432,44 +551,47 @@ export default function OptionManager({
 
                       <div className="flex items-center gap-3 text-sm text-text-light">
                         <span className="font-semibold text-amber-600">
-                          +{formatPrice(option.price)}{" "}
+                          +{formatPrice(item.price)}{" "}
                           <span className="font-normal text-text-light">
-                            ({getPriceTypeLabel(option.priceType, option.unitLabel)})
+                            ({getPriceTypeLabel(item.priceType, item.unitLabel)})
                           </span>
                         </span>
-                        {option.maxQuantity && (
+                        {item.maxQuantity && (
                           <span className="text-xs bg-gray-100 px-2 py-0.5 rounded">
-                            Max: {option.maxQuantity}
+                            Max: {item.maxQuantity}
                           </span>
                         )}
                       </div>
 
-                      {option.description && (
-                        <p className="text-sm text-text-light mt-1">{option.description}</p>
+                      {item.description && (
+                        <p className="text-sm text-text-light mt-1">{item.description}</p>
                       )}
                     </div>
 
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() => startEdit(option)}
+                        onClick={() => startEdit(item)}
                         className="p-2 text-text-light hover:text-amber-600 hover:bg-amber-50 rounded-lg"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
+                      {/* Toggle actif/inactif - seulement en mode édition */}
+                      {!isCreateMode && (
+                        <button
+                          onClick={() => handleToggleActive(item)}
+                          className={cn(
+                            "p-2 rounded-lg",
+                            item.isActive
+                              ? "text-green-600 hover:bg-green-50"
+                              : "text-text-light hover:bg-gray-100"
+                          )}
+                          title={item.isActive ? "Désactiver" : "Activer"}
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                      )}
                       <button
-                        onClick={() => handleToggleActive(option)}
-                        className={cn(
-                          "p-2 rounded-lg",
-                          option.isActive
-                            ? "text-green-600 hover:bg-green-50"
-                            : "text-text-light hover:bg-gray-100"
-                        )}
-                        title={option.isActive ? "Désactiver" : "Activer"}
-                      >
-                        <Check className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(option.id)}
+                        onClick={() => openDeleteModal(item.id, item.name)}
                         className="p-2 text-text-light hover:text-red-500 hover:bg-red-50 rounded-lg"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -482,6 +604,21 @@ export default function OptionManager({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={deleteModalOpen}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setItemToDelete(null);
+        }}
+        onConfirm={handleDelete}
+        title="Supprimer cette option"
+        message={`Êtes-vous sûr de vouloir supprimer l'option "${itemToDelete?.name || ""}" ? Cette action est irréversible.`}
+        confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        variant="danger"
+      />
     </div>
   );
 }

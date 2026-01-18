@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { PriceRecommendationCompact } from "./PriceRecommendationCompact";
+import ConfirmModal from "./shared/ConfirmModal";
 
 type PriceUnit = "hour" | "day" | "week" | "month" | "flat";
 type BillingType = "hourly" | "daily" | "flexible";
@@ -134,6 +135,8 @@ export default function VariantManager({
   const [isExpanded, setIsExpanded] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string } | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -307,22 +310,27 @@ export default function VariantManager({
     }
   };
 
-  const handleDelete = async (itemId: string) => {
+  const openDeleteModal = (itemId: string, itemName: string) => {
+    setItemToDelete({ id: itemId, name: itemName });
+    setDeleteModalOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!itemToDelete) return;
     setError(null);
 
     if (isCreateMode) {
       // Mode création: supprimer localement
-      const filtered = localVariants.filter((v) => v.localId !== itemId);
+      const filtered = localVariants.filter((v) => v.localId !== itemToDelete.id);
       onLocalChange?.(filtered);
     } else {
       // Mode édition: supprimer via backend
       if (!token) return;
-      if (!confirm("Supprimer cette formule ?")) return;
 
       try {
         await deleteVariantMutation({
           token,
-          variantId: itemId as Id<"serviceVariants">,
+          variantId: itemToDelete.id as Id<"serviceVariants">,
         });
         onUpdate?.();
       } catch (err) {
@@ -330,6 +338,9 @@ export default function VariantManager({
         setError(err instanceof Error ? err.message : "Une erreur est survenue");
       }
     }
+
+    setDeleteModalOpen(false);
+    setItemToDelete(null);
   };
 
   const handleToggleActive = async (itemId: string, currentActive: boolean) => {
@@ -692,7 +703,7 @@ export default function VariantManager({
                         </button>
                       )}
                       <button
-                        onClick={() => handleDelete(item.id)}
+                        onClick={() => openDeleteModal(item.id, item.name)}
                         className="p-2 text-text-light hover:text-red-500 hover:bg-red-50 rounded-lg"
                         title={
                           isCreateMode || displayItems.length > 1
@@ -710,6 +721,21 @@ export default function VariantManager({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={deleteModalOpen}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setItemToDelete(null);
+        }}
+        onConfirm={handleDelete}
+        title="Supprimer cette formule"
+        message={`Êtes-vous sûr de vouloir supprimer la formule "${itemToDelete?.name || ""}" ? Cette action est irréversible.`}
+        confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        variant="danger"
+      />
     </div>
   );
 }
