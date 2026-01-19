@@ -222,19 +222,37 @@ export const searchAnnouncers = query({
 
         // Vérifier chevauchement de créneaux avec missions existantes (détection temporelle)
         const hasConflictingMission = existingMissions.some((mission) => {
-          // Construire le créneau de recherche
-          const searchSlot = {
-            startDate: args.date || args.startDate!,
-            endDate: args.date || args.endDate!,
-            startTime: args.time,
-            // Estimer la durée si une heure est fournie (1h par défaut pour la recherche)
-            endTime: args.time ? addMinutesToTime(args.time, 60) : undefined,
-          };
+          // D'abord vérifier si la mission concerne les dates recherchées
+          const searchStartDate = args.date || args.startDate!;
+          const searchEndDate = args.date || args.endDate!;
 
-          return missionsOverlap(
-            { startDate: mission.startDate, endDate: mission.endDate, startTime: mission.startTime, endTime: mission.endTime },
-            searchSlot
-          );
+          if (!datesOverlap(mission.startDate, mission.endDate, searchStartDate, searchEndDate)) {
+            return false; // Pas de chevauchement de dates
+          }
+
+          // Si l'utilisateur a spécifié une heure, on vérifie le créneau exact
+          if (args.time) {
+            const searchSlot = {
+              startDate: searchStartDate,
+              endDate: searchEndDate,
+              startTime: args.time,
+              endTime: addMinutesToTime(args.time, 60), // 1h par défaut
+            };
+
+            return missionsOverlap(
+              { startDate: mission.startDate, endDate: mission.endDate, startTime: mission.startTime, endTime: mission.endTime },
+              searchSlot
+            );
+          }
+
+          // Si pas d'heure spécifiée, on ne bloque QUE si la mission prend TOUTE la journée
+          // (mission multi-jours OU mission sans créneau horaire défini)
+          const isMultiDay = mission.startDate !== mission.endDate;
+          const hasNoTimeSlot = !mission.startTime || !mission.endTime;
+
+          // Si la mission a des créneaux horaires définis, l'annonceur reste disponible
+          // (il y a d'autres créneaux libres dans la journée)
+          return isMultiDay || hasNoTimeSlot;
         });
 
         // Vérifier disponibilité partielle (créneaux horaires)

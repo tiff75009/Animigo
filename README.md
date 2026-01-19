@@ -338,6 +338,7 @@ Utilisation de Framer Motion avec des variants predefinies :
   - Blocage par creneau horaire au lieu du jour entier
   - Si une mission est reservee de 10h a 12h, seuls ces creneaux sont bloques
   - Les autres creneaux de la journee restent disponibles
+  - Correction du filtre de recherche : les annonceurs avec des creneaux partiellement reserves apparaissent dans les resultats
 - **Temps de preparation (buffers)**
   - Configuration du temps a bloquer avant chaque service
   - Configuration du temps a bloquer apres chaque service
