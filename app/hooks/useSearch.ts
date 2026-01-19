@@ -4,6 +4,10 @@ import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import {
+  AdvancedFilters,
+  defaultAdvancedFilters,
+} from "@/app/components/search/FilterSidebar";
 
 // Types
 export interface ServiceCategory {
@@ -78,6 +82,7 @@ const initialFilters: SearchFilters = {
 
 export function useSearch() {
   const [filters, setFilters] = useState<SearchFilters>(initialFilters);
+  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>(defaultAdvancedFilters);
 
   // Préparer les arguments pour la query
   const queryArgs = useMemo(() => {
@@ -91,6 +96,17 @@ export function useSearch() {
       startDate?: string;
       endDate?: string;
       includeUnavailable?: boolean;
+      // Filtres avancés
+      accountTypes?: string[];
+      verifiedOnly?: boolean;
+      withPhotoOnly?: boolean;
+      hasGarden?: boolean;
+      hasVehicle?: boolean;
+      ownsAnimals?: string[];
+      noAnimals?: boolean;
+      priceMin?: number;
+      priceMax?: number;
+      sortBy?: string;
     } = {};
 
     if (filters.category) {
@@ -122,8 +138,40 @@ export function useSearch() {
 
     args.includeUnavailable = filters.includeUnavailable;
 
+    // Filtres avancés
+    if (advancedFilters.accountTypes.length > 0) {
+      args.accountTypes = advancedFilters.accountTypes;
+    }
+    if (advancedFilters.verifiedOnly) {
+      args.verifiedOnly = true;
+    }
+    if (advancedFilters.withPhotoOnly) {
+      args.withPhotoOnly = true;
+    }
+    if (advancedFilters.hasGarden !== null) {
+      args.hasGarden = advancedFilters.hasGarden;
+    }
+    if (advancedFilters.hasVehicle !== null) {
+      args.hasVehicle = advancedFilters.hasVehicle;
+    }
+    if (advancedFilters.ownsAnimals.length > 0) {
+      args.ownsAnimals = advancedFilters.ownsAnimals;
+    }
+    if (advancedFilters.noAnimals) {
+      args.noAnimals = true;
+    }
+    if (advancedFilters.priceRange.min !== null) {
+      args.priceMin = advancedFilters.priceRange.min;
+    }
+    if (advancedFilters.priceRange.max !== null) {
+      args.priceMax = advancedFilters.priceRange.max;
+    }
+    if (advancedFilters.sortBy !== "relevance") {
+      args.sortBy = advancedFilters.sortBy;
+    }
+
     return args;
-  }, [filters]);
+  }, [filters, advancedFilters]);
 
   // Query Convex
   const results = useQuery(api.public.search.searchAnnouncers, queryArgs);
@@ -176,13 +224,28 @@ export function useSearch() {
     setFilters(initialFilters);
   }, []);
 
+  // Actions pour filtres avancés
+  const updateAdvancedFilters = useCallback((newFilters: AdvancedFilters) => {
+    setAdvancedFilters(newFilters);
+  }, []);
+
+  const resetAdvancedFilters = useCallback(() => {
+    setAdvancedFilters(defaultAdvancedFilters);
+  }, []);
+
+  const resetAllFilters = useCallback(() => {
+    setFilters(initialFilters);
+    setAdvancedFilters(defaultAdvancedFilters);
+  }, []);
+
   return {
     // State
     filters,
+    advancedFilters,
     results: results ?? [],
     isLoading: results === undefined,
 
-    // Actions
+    // Actions basiques
     setCategory,
     setAnimalType,
     setLocation,
@@ -192,5 +255,13 @@ export function useSearch() {
     setDateRange,
     setIncludeUnavailable,
     resetFilters,
+
+    // Actions filtres avancés
+    updateAdvancedFilters,
+    resetAdvancedFilters,
+    resetAllFilters,
   };
 }
+
+// Re-export des types pour faciliter l'utilisation
+export type { AdvancedFilters };

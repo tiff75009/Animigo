@@ -142,7 +142,7 @@ export function Navbar() {
                 whileTap={{ scale: 0.98 }}
               >
                 <Search className="w-4 h-4" />
-                <span>Trouver un garde</span>
+                <span>Trouver un service</span>
                 <motion.span
                   className="text-sm"
                   animate={{ x: [0, 3, 0] }}
@@ -307,7 +307,7 @@ export function Navbar() {
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   <Search className="w-5 h-5" />
-                  Trouver un garde
+                  Trouver un service
                   <Sparkles className="w-4 h-4" />
                 </motion.a>
               </div>

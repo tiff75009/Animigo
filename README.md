@@ -218,6 +218,8 @@ app/
     parametres/
     services/categories/
     utilisateurs/
+  recherche/           # Page de recherche avancée
+    page.tsx           # Page principale avec filtres et carte
   dashboard/           # Dashboard annonceur
     planning/
       components/
@@ -237,6 +239,8 @@ app/
         OptionManager.tsx    # Gestion des options
   components/          # Composants partages
     ui/                # Composants UI (input, checkbox, etc.)
+    search/            # Composants de recherche
+      FilterSidebar.tsx  # Sidebar filtres avancés dynamiques
   hooks/               # Hooks React personnalises
     useAuth.ts
     useAdminAuth.ts
@@ -332,6 +336,36 @@ Utilisation de Framer Motion avec des variants predefinies :
 ---
 
 ## Changelog recent
+
+### v0.6.0 - Page Recherche Avancée
+- **Nouvelle page `/recherche`**
+  - Bouton "Trouver un service" dans la navbar (remplace "Trouver un garde")
+  - Layout responsive avec carte pleine largeur en haut
+  - Liste des annonceurs avec sidebar de filtres avancés
+  - Fond cohérent avec la page d'accueil (gradient + emojis flottants)
+- **Filtres avancés dynamiques**
+  - Tri : pertinence, prix croissant/décroissant, avis, distance
+  - Type d'annonceur : particulier, micro-entrepreneur, professionnel
+  - Profil : vérifié, avec photo
+  - Équipements contextuels selon la catégorie :
+    - Garde/Pension : jardin, animaux du pet-sitter
+    - Promenade/Transport : véhicule
+  - Fourchette de prix (min/max)
+- **Cartes d'annonceurs améliorées**
+  - Design identique à la page d'accueil
+  - Badge de statut (Pro, Micro-ent., Particulier)
+  - Badge de disponibilité + nombre de formules
+  - Bouton "Voir les formules" avec modale de réservation
+- **Modale de réservation intégrée**
+  - Liste des formules et options de l'annonceur
+  - Calendrier avec disponibilités en temps réel
+  - Sélection d'heure avec créneaux bloqués visibles
+  - Calcul du total estimé
+  - Redirection vers la page de réservation
+- **Backend amélioré**
+  - Nouveaux arguments de filtrage dans `searchAnnouncers`
+  - Filtrage par type de compte, équipements, animaux possédés
+  - Tri dynamique des résultats
 
 ### v0.5.0 - Gestion des creneaux et temps de preparation
 - **Blocage intelligent des creneaux horaires**

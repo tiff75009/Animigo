@@ -276,98 +276,121 @@ const TILE_LAYERS = {
   },
 };
 
-export default function MapComponent({
+// Inner map component that renders the actual Leaflet map
+function MapInner({
   sitters,
+  selectedSitter,
+  onSitterSelect,
+  searchCenter,
+  searchRadius,
+  mapStyle,
+  initialCenter,
+  tileConfig,
+}: {
+  sitters: SitterLocation[];
+  selectedSitter: SitterLocation | null;
+  onSitterSelect: (sitter: SitterLocation) => void;
+  searchCenter?: { lat: number; lng: number } | null;
+  searchRadius?: number;
+  mapStyle: "default" | "plan";
+  initialCenter: { lat: number; lng: number };
+  tileConfig: { url: string; attribution: string };
+}) {
+  return (
+    <MapContainer
+      center={[initialCenter.lat, initialCenter.lng]}
+      zoom={12}
+      style={{ height: "100%", width: "100%" }}
+    >
+      <TileLayer
+        key={mapStyle}
+        attribution={tileConfig.attribution}
+        url={tileConfig.url}
+      />
+
+      <MapController selectedSitter={selectedSitter} searchCenter={searchCenter} searchRadius={searchRadius} />
+
+      {sitters
+        .filter((sitter) => sitter.coordinates)
+        .map((sitter) => {
+          // Obfuscate position for privacy (~500m random offset)
+          const obfuscatedCoords = obfuscateCoordinates(sitter.coordinates, sitter.id);
+          return (
+            <Marker
+              key={sitter.id}
+              position={[obfuscatedCoords.lat, obfuscatedCoords.lng]}
+              icon={createCustomIcon(
+                selectedSitter?.id === sitter.id,
+                sitter.verified
+              )}
+              eventHandlers={{
+                click: () => onSitterSelect(sitter),
+              }}
+            >
+              <Popup>
+                <SitterPopup sitter={sitter} />
+              </Popup>
+            </Marker>
+          );
+        })}
+    </MapContainer>
+  );
+}
+
+export default function MapComponent({
+  sitters = [],
   selectedSitter,
   onSitterSelect,
   searchCenter,
   searchRadius,
   mapStyle = "default",
 }: MapComponentProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const [isClient, setIsClient] = useState(false);
-  const [mapReady, setMapReady] = useState(false);
+  const [mapKey, setMapKey] = useState(0);
+  const [isReady, setIsReady] = useState(false);
   const tileConfig = TILE_LAYERS[mapStyle];
 
   // Utiliser le centre de recherche si disponible, sinon Paris par défaut
   const initialCenter = searchCenter ?? PARIS_CENTER;
 
-  // Vérifier que nous sommes côté client (évite les erreurs SSR)
+  // Attendre que le composant soit monté côté client
   useEffect(() => {
-    setIsClient(true);
+    // Petit délai pour s'assurer que le DOM est prêt
+    const timer = setTimeout(() => {
+      setIsReady(true);
+    }, 100);
+    return () => clearTimeout(timer);
   }, []);
 
-  // Attendre que le conteneur soit monté dans le DOM
+  // Regénérer la clé si le style change pour forcer un remontage propre
   useEffect(() => {
-    // Ne rien faire si pas côté client
-    if (!isClient) return;
+    if (isReady) {
+      setMapKey((k) => k + 1);
+    }
+  }, [mapStyle, isReady]);
 
-    // Utiliser un petit délai pour s'assurer que le DOM est complètement prêt
-    const timeoutId = setTimeout(() => {
-      if (containerRef.current) {
-        setMapReady(true);
-      }
-    }, 150);
-
-    return () => clearTimeout(timeoutId);
-  }, [isClient]);
-
-  // Loading state - attendre que le client soit prêt ET que le conteneur soit monté
-  if (!isClient || !mapReady) {
+  if (!isReady) {
     return (
-      <div
-        ref={containerRef}
-        className="w-full h-full bg-gray-100 rounded-2xl flex items-center justify-center"
-      >
+      <div className="w-full h-full bg-gray-100 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-2" />
-          <p className="text-text-light">Chargement de la carte...</p>
+          <p className="text-text-light text-sm">Chargement de la carte...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div ref={containerRef} className="w-full h-full">
-      <MapContainer
-        center={[initialCenter.lat, initialCenter.lng]}
-        zoom={12}
-        style={{ height: "100%", width: "100%" }}
-        ref={mapRef}
-      >
-        <TileLayer
-          key={mapStyle}
-          attribution={tileConfig.attribution}
-          url={tileConfig.url}
-        />
-
-        <MapController selectedSitter={selectedSitter} searchCenter={searchCenter} searchRadius={searchRadius} />
-
-        {sitters
-          .filter((sitter) => sitter.coordinates)
-          .map((sitter) => {
-            // Obfuscate position for privacy (~500m random offset)
-            const obfuscatedCoords = obfuscateCoordinates(sitter.coordinates, sitter.id);
-            return (
-              <Marker
-                key={sitter.id}
-                position={[obfuscatedCoords.lat, obfuscatedCoords.lng]}
-                icon={createCustomIcon(
-                  selectedSitter?.id === sitter.id,
-                  sitter.verified
-                )}
-                eventHandlers={{
-                  click: () => onSitterSelect(sitter),
-                }}
-              >
-                <Popup>
-                  <SitterPopup sitter={sitter} />
-                </Popup>
-              </Marker>
-            );
-          })}
-      </MapContainer>
+    <div className="w-full h-full" key={mapKey}>
+      <MapInner
+        sitters={sitters}
+        selectedSitter={selectedSitter}
+        onSitterSelect={onSitterSelect}
+        searchCenter={searchCenter}
+        searchRadius={searchRadius}
+        mapStyle={mapStyle}
+        initialCenter={initialCenter}
+        tileConfig={tileConfig}
+      />
     </div>
   );
 }

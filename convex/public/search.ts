@@ -112,6 +112,18 @@ export const searchAnnouncers = query({
     // Options
     includeUnavailable: v.optional(v.boolean()),
 
+    // Filtres avancés
+    accountTypes: v.optional(v.array(v.string())), // "particulier", "micro_entrepreneur", "pro"
+    verifiedOnly: v.optional(v.boolean()),
+    withPhotoOnly: v.optional(v.boolean()),
+    hasGarden: v.optional(v.boolean()),
+    hasVehicle: v.optional(v.boolean()),
+    ownsAnimals: v.optional(v.array(v.string())), // "chien", "chat", etc.
+    noAnimals: v.optional(v.boolean()),
+    priceMin: v.optional(v.number()), // En euros
+    priceMax: v.optional(v.number()), // En euros
+    sortBy: v.optional(v.string()), // "relevance", "price_asc", "price_desc", "rating", "distance"
+
     // Pagination
     limit: v.optional(v.number()),
   },
@@ -143,6 +155,44 @@ export const searchAnnouncers = query({
         .first();
 
       if (!profile) continue;
+
+      // 2.1 Filtrer par type de compte
+      if (args.accountTypes && args.accountTypes.length > 0) {
+        let statusType: string;
+        if (announcer.accountType === "annonceur_particulier") {
+          statusType = "particulier";
+        } else if (announcer.companyType === "micro_enterprise") {
+          statusType = "micro_entrepreneur";
+        } else {
+          statusType = "pro";
+        }
+        if (!args.accountTypes.includes(statusType)) continue;
+      }
+
+      // 2.2 Filtrer par profil vérifié (email vérifié)
+      if (args.verifiedOnly && !announcer.emailVerified) continue;
+
+      // 2.3 Filtrer par équipements
+      if (args.hasGarden === true && !profile.hasGarden) continue;
+      if (args.hasVehicle === true && !profile.hasVehicle) continue;
+
+      // 2.4 Filtrer par animaux du gardien
+      if (args.noAnimals) {
+        // L'annonceur ne doit pas avoir d'animaux
+        if (profile.ownedAnimals && profile.ownedAnimals.length > 0) continue;
+      }
+      if (args.ownsAnimals && args.ownsAnimals.length > 0) {
+        // L'annonceur doit avoir au moins un des animaux spécifiés
+        const ownedTypes = profile.ownedAnimals?.map((a) => a.type) ?? [];
+        const hasMatchingAnimal = args.ownsAnimals.some((animal) => {
+          if (animal === "autre") {
+            // "autre" = tout sauf chien et chat
+            return ownedTypes.some((t) => t !== "chien" && t !== "chat");
+          }
+          return ownedTypes.includes(animal);
+        });
+        if (!hasMatchingAnimal) continue;
+      }
 
       // 3. Filtrer par localisation si coordonnées fournies
       let distance: number | undefined;
@@ -331,6 +381,14 @@ export const searchAnnouncers = query({
         }
       }
 
+      // 8.1 Filtrer par fourchette de prix (prix en euros, basePrice en centimes)
+      if (args.priceMin !== undefined && basePrice !== undefined) {
+        if (basePrice < args.priceMin * 100) continue;
+      }
+      if (args.priceMax !== undefined && basePrice !== undefined) {
+        if (basePrice > args.priceMax * 100) continue;
+      }
+
       // 9. Récupérer la photo de profil
       const profilePhoto = await ctx.db
         .query("photos")
@@ -342,6 +400,9 @@ export const searchAnnouncers = query({
       if (profilePhoto?.storageId) {
         profileImageUrl = await ctx.storage.getUrl(profilePhoto.storageId);
       }
+
+      // 9.1 Filtrer par photo
+      if (args.withPhotoOnly && !profileImageUrl) continue;
 
       // 10. Déterminer le type de statut pour le badge
       let statusType: "particulier" | "micro_entrepreneur" | "professionnel" = "particulier";
@@ -375,18 +436,57 @@ export const searchAnnouncers = query({
       });
     }
 
-    // Trier: disponibles d'abord, puis par distance
-    results.sort((a, b) => {
-      // Disponibles en premier
-      if (a.availability.status === "available" && b.availability.status !== "available") return -1;
-      if (a.availability.status !== "available" && b.availability.status === "available") return 1;
+    // Trier selon le critère choisi
+    const sortBy = args.sortBy ?? "relevance";
 
-      // Puis par distance
-      if (a.distance !== undefined && b.distance !== undefined) {
-        return a.distance - b.distance;
+    results.sort((a, b) => {
+      // Disponibles en premier (toujours, sauf si tri explicite)
+      if (sortBy === "relevance" || sortBy === "distance") {
+        if (a.availability.status === "available" && b.availability.status !== "available") return -1;
+        if (a.availability.status !== "available" && b.availability.status === "available") return 1;
       }
 
-      return 0;
+      // Appliquer le tri demandé
+      switch (sortBy) {
+        case "price_asc":
+          // Prix croissant (les moins chers en premier)
+          if (a.basePrice !== undefined && b.basePrice !== undefined) {
+            return a.basePrice - b.basePrice;
+          }
+          if (a.basePrice === undefined) return 1;
+          if (b.basePrice === undefined) return -1;
+          return 0;
+
+        case "price_desc":
+          // Prix décroissant (les plus chers en premier)
+          if (a.basePrice !== undefined && b.basePrice !== undefined) {
+            return b.basePrice - a.basePrice;
+          }
+          if (a.basePrice === undefined) return 1;
+          if (b.basePrice === undefined) return -1;
+          return 0;
+
+        case "rating":
+          // Mieux notés en premier
+          return b.rating - a.rating;
+
+        case "distance":
+          // Plus proches en premier
+          if (a.distance !== undefined && b.distance !== undefined) {
+            return a.distance - b.distance;
+          }
+          if (a.distance === undefined) return 1;
+          if (b.distance === undefined) return -1;
+          return 0;
+
+        case "relevance":
+        default:
+          // Pertinence: disponibles puis par distance
+          if (a.distance !== undefined && b.distance !== undefined) {
+            return a.distance - b.distance;
+          }
+          return 0;
+      }
     });
 
     return results.slice(0, limit);
