@@ -21,21 +21,25 @@ export interface SitterLocation {
   firstName: string;
   lastName: string;
   avatar: string;
-  profileImage: string;
+  profileImage: string | null;
   location: string;
   coordinates: {
     lat: number;
     lng: number;
   };
-  services: ServiceType[];
+  services: string[]; // Dynamic services from admin panel (can be ServiceType or custom)
   rating: number;
   reviewCount: number;
   hourlyRate: number;
   verified: boolean;
-  description: string;
+  description?: string;
   acceptedAnimals: string[];
-  responseTime: string;
+  responseTime?: string;
   available: boolean;
+  // Nouveaux champs
+  distance?: number; // Distance en km
+  statusType?: "particulier" | "micro_entrepreneur" | "professionnel";
+  basePrice?: number; // Prix de base en centimes
 }
 
 // Service types available
@@ -320,7 +324,7 @@ export const PARIS_CENTER = {
 export function filterSitters(
   sitters: SitterLocation[],
   filters: {
-    services?: ServiceType[];
+    services?: string[];
     location?: string;
     minRating?: number;
     verifiedOnly?: boolean;

@@ -238,7 +238,8 @@ export default defineSchema({
     clientName: v.string(),
     clientPhone: v.optional(v.string()),
 
-    // Animal
+    // Animal (référence ou données inline pour invités)
+    animalId: v.optional(v.id("animals")), // Référence si utilisateur connecté
     animal: v.object({
       name: v.string(),
       type: v.string(),
@@ -315,6 +316,86 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_date", ["userId", "date"]),
+
+  // Fiches animaux des utilisateurs
+  animals: defineTable({
+    // Propriétaire
+    userId: v.id("users"),
+
+    // Informations de base
+    name: v.string(),
+    type: v.string(), // "chien", "chat", "oiseau", etc.
+    breed: v.optional(v.string()), // Race
+    gender: v.union(v.literal("male"), v.literal("female"), v.literal("unknown")),
+    birthDate: v.optional(v.string()), // "YYYY-MM-DD"
+
+    // Description
+    description: v.optional(v.string()),
+
+    // Galerie photos (plusieurs photos possibles)
+    photos: v.optional(v.array(v.object({
+      storageId: v.id("_storage"),
+      isPrimary: v.boolean(), // Photo principale affichée en miniature
+      order: v.number(), // Ordre d'affichage
+    }))),
+
+    // Traits de caractère - Système de tags par section
+    // Section "Compatibilité"
+    compatibilityTraits: v.optional(v.array(v.string())),
+    // Ex: ["Ne s'entend pas avec les mâles", "Ne s'entend pas avec les chats"]
+
+    // Section "Comportement"
+    behaviorTraits: v.optional(v.array(v.string())),
+    // Ex: ["Anxieux", "Agressif", "Peureux", "Joueur", "Calme", "Énergique"]
+
+    // Section "Besoins"
+    needsTraits: v.optional(v.array(v.string())),
+    // Ex: ["A besoin de se dépenser", "Demande beaucoup d'attention"]
+
+    // Traits personnalisés (ajoutés par l'utilisateur)
+    customTraits: v.optional(v.array(v.string())),
+
+    // Contraintes particulières (texte libre)
+    specialNeeds: v.optional(v.string()),
+    medicalConditions: v.optional(v.string()),
+
+    // Métadonnées
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_active", ["userId", "isActive"]),
+
+  // Réservations en attente (avant finalisation)
+  pendingBookings: defineTable({
+    // Données de la réservation
+    announcerId: v.id("users"),
+    serviceId: v.id("services"),
+    variantId: v.string(),
+    optionIds: v.optional(v.array(v.string())),
+
+    // Dates sélectionnées
+    startDate: v.string(),
+    endDate: v.string(),
+    startTime: v.optional(v.string()),
+
+    // Prix calculé
+    calculatedAmount: v.number(),
+
+    // Si utilisateur connecté
+    userId: v.optional(v.id("users")),
+
+    // Si invité (données temporaires)
+    guestEmail: v.optional(v.string()),
+
+    // Expiration (24h)
+    expiresAt: v.number(),
+
+    createdAt: v.number(),
+  })
+    .index("by_expires", ["expiresAt"])
+    .index("by_user", ["userId"]),
 
   // Préférences utilisateur
   userPreferences: defineTable({

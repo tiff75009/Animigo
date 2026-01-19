@@ -139,9 +139,9 @@ export function Hero() {
             variants={itemVariants}
             className="text-lg sm:text-xl md:text-2xl text-text-light max-w-2xl mx-auto"
           >
-            Trouvez le garde idéal près de chez vous.{" "}
+            Trouvez le professionnel idéal pour votre animal.{" "}
             <span className="text-foreground font-medium">
-              Chiens, chats, lapins
+              Garde, toilettage, promenade
             </span>{" "}
             et plus encore !
           </motion.p>
@@ -153,7 +153,7 @@ export function Hero() {
           >
             <Button variant="primary" size="lg" className="group">
               <Search className="w-5 h-5 mr-2" />
-              Trouver un garde
+              Rechercher un service
             </Button>
             <Button variant="outline" size="lg">
               Je propose mes services

@@ -1,0 +1,312 @@
+"use client";
+
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { X, PawPrint, ChevronDown, ChevronUp, Plus } from "lucide-react";
+import TraitSelector from "./TraitSelector";
+
+// Types d'animaux
+const ANIMAL_TYPES = [
+  { id: "chien", name: "Chien", emoji: "🐕" },
+  { id: "chat", name: "Chat", emoji: "🐱" },
+  { id: "oiseau", name: "Oiseau", emoji: "🐦" },
+  { id: "rongeur", name: "Rongeur", emoji: "🐹" },
+  { id: "poisson", name: "Poisson", emoji: "🐠" },
+  { id: "reptile", name: "Reptile", emoji: "🦎" },
+  { id: "nac", name: "NAC", emoji: "🐾" },
+];
+
+// Genres
+const GENDERS = [
+  { id: "male", name: "Mâle" },
+  { id: "female", name: "Femelle" },
+  { id: "unknown", name: "Inconnu" },
+];
+
+// Traits prédéfinis
+const COMPATIBILITY_TRAITS = [
+  "Ne s'entend pas avec les mâles",
+  "Ne s'entend pas avec les femelles",
+  "Ne s'entend pas avec les chiens",
+  "Ne s'entend pas avec les chats",
+  "Ne s'entend pas avec les enfants",
+  "Ne s'entend pas avec les autres animaux",
+];
+
+const BEHAVIOR_TRAITS = [
+  "Anxieux",
+  "Peureux",
+  "Agressif",
+  "Joueur",
+  "Calme",
+  "Énergique",
+  "Sociable",
+  "Indépendant",
+  "Affectueux",
+  "Territorial",
+];
+
+const NEEDS_TRAITS = [
+  "A besoin de se dépenser",
+  "Demande beaucoup d'attention",
+  "Régime alimentaire spécial",
+  "Besoin de sorties fréquentes",
+  "Nécessite un environnement calme",
+  "Traitement médical régulier",
+];
+
+export interface GuestAnimalData {
+  name: string;
+  type: string;
+  gender: "male" | "female" | "unknown";
+  breed?: string;
+  birthDate?: string;
+  description?: string;
+  compatibilityTraits: string[];
+  behaviorTraits: string[];
+  needsTraits: string[];
+  customTraits: string[];
+  specialNeeds?: string;
+  medicalConditions?: string;
+}
+
+interface GuestAnimalFormProps {
+  data: GuestAnimalData;
+  onChange: (data: GuestAnimalData) => void;
+  errors?: Record<string, string>;
+}
+
+export default function GuestAnimalForm({
+  data,
+  onChange,
+  errors = {},
+}: GuestAnimalFormProps) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const selectedType = ANIMAL_TYPES.find((t) => t.id === data.type);
+
+  return (
+    <div className="space-y-6">
+      {/* En-tête avec l'animal sélectionné */}
+      {data.name && data.type && (
+        <div className="flex items-center gap-3 p-4 bg-primary/5 rounded-xl">
+          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-2xl">
+            {selectedType?.emoji || "🐾"}
+          </div>
+          <div>
+            <p className="font-semibold text-foreground">{data.name}</p>
+            <p className="text-sm text-text-light">
+              {selectedType?.name || data.type}
+              {data.breed && ` • ${data.breed}`}
+              {data.gender !== "unknown" && ` • ${GENDERS.find((g) => g.id === data.gender)?.name}`}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Informations de base */}
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          {/* Type d'animal */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Type d&apos;animal <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={data.type}
+              onChange={(e) => onChange({ ...data, type: e.target.value })}
+              className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all appearance-none bg-white ${
+                errors.type ? "border-red-500" : "border-gray-200"
+              }`}
+            >
+              <option value="">Sélectionner...</option>
+              {ANIMAL_TYPES.map((type) => (
+                <option key={type.id} value={type.id}>
+                  {type.emoji} {type.name}
+                </option>
+              ))}
+            </select>
+            {errors.type && <p className="text-xs text-red-500 mt-1">{errors.type}</p>}
+          </div>
+
+          {/* Genre */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Genre <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={data.gender}
+              onChange={(e) =>
+                onChange({ ...data, gender: e.target.value as "male" | "female" | "unknown" })
+              }
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all appearance-none bg-white"
+            >
+              {GENDERS.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          {/* Nom */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Nom <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={data.name}
+              onChange={(e) => onChange({ ...data, name: e.target.value })}
+              placeholder="Ex: Max"
+              className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all ${
+                errors.name ? "border-red-500" : "border-gray-200"
+              }`}
+            />
+            {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
+          </div>
+
+          {/* Race */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Race
+            </label>
+            <input
+              type="text"
+              value={data.breed || ""}
+              onChange={(e) => onChange({ ...data, breed: e.target.value })}
+              placeholder="Ex: Labrador"
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+            />
+          </div>
+        </div>
+
+        {/* Description */}
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-2">
+            Description
+          </label>
+          <textarea
+            value={data.description || ""}
+            onChange={(e) => onChange({ ...data, description: e.target.value })}
+            placeholder="Décrivez votre animal (personnalité, habitudes, particularités...)"
+            rows={3}
+            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-none"
+          />
+        </div>
+      </div>
+
+      {/* Bouton pour afficher les options avancées */}
+      <button
+        type="button"
+        onClick={() => setShowAdvanced(!showAdvanced)}
+        className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium text-primary hover:bg-primary/5 rounded-xl transition-colors"
+      >
+        {showAdvanced ? (
+          <>
+            <ChevronUp className="w-4 h-4" />
+            Masquer les options avancées
+          </>
+        ) : (
+          <>
+            <ChevronDown className="w-4 h-4" />
+            Ajouter des informations complémentaires
+          </>
+        )}
+      </button>
+
+      {/* Options avancées */}
+      <AnimatePresence>
+        {showAdvanced && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="space-y-6 overflow-hidden"
+          >
+            {/* Traits de caractère */}
+            <div className="space-y-4 pt-4 border-t border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                Traits de caractère
+              </h3>
+
+              <TraitSelector
+                title="Compatibilité"
+                icon="🔗"
+                predefinedTraits={COMPATIBILITY_TRAITS}
+                selectedTraits={data.compatibilityTraits}
+                onTraitsChange={(traits) => onChange({ ...data, compatibilityTraits: traits })}
+              />
+
+              <TraitSelector
+                title="Comportement"
+                icon="🎭"
+                predefinedTraits={BEHAVIOR_TRAITS}
+                selectedTraits={data.behaviorTraits}
+                onTraitsChange={(traits) => onChange({ ...data, behaviorTraits: traits })}
+              />
+
+              <TraitSelector
+                title="Besoins"
+                icon="✨"
+                predefinedTraits={NEEDS_TRAITS}
+                selectedTraits={data.needsTraits}
+                onTraitsChange={(traits) => onChange({ ...data, needsTraits: traits })}
+              />
+
+              <TraitSelector
+                title="Traits personnalisés"
+                icon="🏷️"
+                predefinedTraits={[]}
+                selectedTraits={data.customTraits}
+                onTraitsChange={(traits) => onChange({ ...data, customTraits: traits })}
+                allowCustom
+                customPlaceholder="Ajouter un trait..."
+              />
+            </div>
+
+            {/* Contraintes particulières */}
+            <div className="space-y-4 pt-4 border-t border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                Contraintes particulières
+              </h3>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Besoins particuliers
+                </label>
+                <textarea
+                  value={data.specialNeeds || ""}
+                  onChange={(e) => onChange({ ...data, specialNeeds: e.target.value })}
+                  placeholder="Indiquez les besoins spécifiques de votre animal..."
+                  rows={2}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Conditions médicales
+                </label>
+                <textarea
+                  value={data.medicalConditions || ""}
+                  onChange={(e) => onChange({ ...data, medicalConditions: e.target.value })}
+                  placeholder="Conditions médicales, allergies, traitements en cours..."
+                  rows={2}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-none"
+                />
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Note sur les photos */}
+      <p className="text-xs text-text-light text-center italic">
+        Vous pourrez ajouter des photos de votre animal après la création de votre compte.
+      </p>
+    </div>
+  );
+}

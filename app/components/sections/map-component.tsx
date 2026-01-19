@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import Image from "next/image";
@@ -46,13 +46,16 @@ const createCustomIcon = (isSelected: boolean, isVerified: boolean) => {
 // Map center controller component
 function MapController({
   selectedSitter,
+  searchCenter,
 }: {
   selectedSitter: SitterLocation | null;
+  searchCenter?: { lat: number; lng: number } | null;
 }) {
   const map = useMap();
 
   useEffect(() => {
-    if (selectedSitter) {
+    if (selectedSitter?.coordinates) {
+      // Si un sitter est sélectionné, centrer sur lui
       map.flyTo(
         [selectedSitter.coordinates.lat, selectedSitter.coordinates.lng],
         14,
@@ -61,64 +64,149 @@ function MapController({
     }
   }, [selectedSitter, map]);
 
+  // Centrer sur la localisation de recherche quand elle change
+  useEffect(() => {
+    if (searchCenter && !selectedSitter) {
+      map.flyTo([searchCenter.lat, searchCenter.lng], 13, { duration: 0.5 });
+    }
+  }, [searchCenter, selectedSitter, map]);
+
   return null;
+}
+
+// Helper pour formater le prix
+function formatPrice(cents: number): string {
+  return (cents / 100).toFixed(2).replace(".", ",") + " €";
+}
+
+// Helper pour extraire la ville
+function extractCity(location: string): string {
+  const parts = location.split(",").map((p) => p.trim());
+  const lastPart = parts[parts.length - 1];
+  if (/^\d/.test(lastPart)) {
+    const cityMatch = lastPart.match(/\d+\s+(.+)/);
+    return cityMatch ? cityMatch[1] : lastPart;
+  }
+  return lastPart;
 }
 
 // Popup content component
 function SitterPopup({ sitter }: { sitter: SitterLocation }) {
+  // Déterminer le label du badge de statut
+  const getStatusLabel = () => {
+    switch (sitter.statusType) {
+      case "professionnel": return "Pro";
+      case "micro_entrepreneur": return "Micro-ent.";
+      default: return "Particulier";
+    }
+  };
+
+  const getStatusColor = () => {
+    switch (sitter.statusType) {
+      case "professionnel": return "bg-blue-100 text-blue-700";
+      case "micro_entrepreneur": return "bg-purple-100 text-purple-700";
+      default: return "bg-gray-100 text-gray-600";
+    }
+  };
+
   return (
-    <div className="min-w-[200px]">
-      <div className="flex items-center gap-3 mb-2">
-        <div className="relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
-          <Image
-            src={sitter.profileImage}
-            alt={sitter.firstName}
-            fill
-            className="object-cover"
-          />
+    <div className="min-w-[260px] max-w-[300px]">
+      {/* Header avec photo et infos */}
+      <div className="flex items-start gap-3 mb-3">
+        <div className="relative w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 ring-2 ring-primary/20">
+          {sitter.profileImage ? (
+            <Image
+              src={sitter.profileImage}
+              alt={sitter.firstName}
+              fill
+              className="object-cover"
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
+              <span className="text-2xl font-semibold text-primary">
+                {sitter.firstName.charAt(0).toUpperCase()}
+              </span>
+            </div>
+          )}
+          {sitter.verified && (
+            <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5">
+              <CheckCircle className="w-4 h-4 text-secondary fill-secondary/20" />
+            </div>
+          )}
         </div>
-        <div>
-          <h4 className="font-semibold text-foreground flex items-center gap-1">
+        <div className="flex-1 min-w-0">
+          <h4 className="font-semibold text-foreground text-base truncate">
             {sitter.firstName} {sitter.lastName.charAt(0)}.
-            {sitter.verified && (
-              <CheckCircle className="w-4 h-4 text-secondary" />
-            )}
           </h4>
-          <div className="flex items-center gap-1 text-sm">
-            <Star className="w-3 h-3 fill-accent text-accent" />
-            <span className="font-medium">{sitter.rating}</span>
-            <span className="text-text-light">({sitter.reviewCount})</span>
+          <div className="flex items-center gap-2 mt-0.5">
+            <div className="flex items-center gap-1">
+              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+              <span className="font-semibold text-sm">{sitter.rating.toFixed(1)}</span>
+              <span className="text-xs text-text-light">({sitter.reviewCount})</span>
+            </div>
+            {sitter.statusType && (
+              <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded-full ${getStatusColor()}`}>
+                {getStatusLabel()}
+              </span>
+            )}
           </div>
         </div>
       </div>
 
-      <p className="text-sm text-text-light flex items-center gap-1 mb-2">
-        <MapPin className="w-3 h-3" />
-        {sitter.location}
-      </p>
+      {/* Localisation et distance */}
+      <div className="flex items-center gap-2 text-sm text-text-light mb-3">
+        <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+        <span className="truncate">{extractCity(sitter.location)}</span>
+        {sitter.distance !== undefined && (
+          <span className="text-primary font-medium whitespace-nowrap">
+            • {sitter.distance.toFixed(1)} km
+          </span>
+        )}
+      </div>
 
-      <div className="flex flex-wrap gap-1 mb-2">
-        {sitter.services.slice(0, 3).map((service) => {
+      {/* Services */}
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {sitter.services.slice(0, 4).map((service) => {
           const info = serviceTypes.find((s) => s.id === service);
           return (
             <span
               key={service}
-              className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full"
+              className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary text-xs font-medium rounded-lg"
             >
-              {info?.emoji} {info?.label}
+              {info?.emoji} {info?.label || service}
             </span>
           );
         })}
+        {sitter.services.length > 4 && (
+          <span className="px-2 py-1 bg-gray-100 text-text-light text-xs rounded-lg">
+            +{sitter.services.length - 4}
+          </span>
+        )}
       </div>
 
-      <div className="flex items-center justify-between pt-2 border-t border-foreground/10">
-        <span className="text-sm text-text-light">À partir de</span>
-        <span className="font-bold text-primary">{sitter.hourlyRate}€/h</span>
-      </div>
+      {/* Animaux acceptés */}
+      {sitter.acceptedAnimals && sitter.acceptedAnimals.length > 0 && (
+        <div className="flex items-center gap-1.5 text-xs text-text-light mb-3">
+          <span>🐾</span>
+          <span>{sitter.acceptedAnimals.slice(0, 3).join(", ")}</span>
+          {sitter.acceptedAnimals.length > 3 && (
+            <span>+{sitter.acceptedAnimals.length - 3}</span>
+          )}
+        </div>
+      )}
 
-      <button className="w-full mt-3 px-4 py-2 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors">
-        Voir le profil
-      </button>
+      {/* Prix et CTA */}
+      <div className="pt-3 border-t border-gray-100">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm text-text-light">À partir de</span>
+          <span className="text-lg font-bold text-primary">
+            {sitter.basePrice ? formatPrice(sitter.basePrice) : `${sitter.hourlyRate}€`}
+          </span>
+        </div>
+        <button className="w-full py-2.5 bg-gradient-to-r from-primary to-secondary text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-all shadow-sm">
+          Voir les formules
+        </button>
+      </div>
     </div>
   );
 }
@@ -127,18 +215,41 @@ interface MapComponentProps {
   sitters: SitterLocation[];
   selectedSitter: SitterLocation | null;
   onSitterSelect: (sitter: SitterLocation) => void;
+  searchCenter?: { lat: number; lng: number } | null;
 }
 
 export default function MapComponent({
   sitters,
   selectedSitter,
   onSitterSelect,
+  searchCenter,
 }: MapComponentProps) {
   const mapRef = useRef<L.Map>(null);
+  const [isMounted, setIsMounted] = useState(false);
+
+  // S'assurer que le composant est monté côté client
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Utiliser le centre de recherche si disponible, sinon Paris par défaut
+  const initialCenter = searchCenter ?? PARIS_CENTER;
+
+  // Ne pas rendre la carte tant que le composant n'est pas monté côté client
+  if (!isMounted) {
+    return (
+      <div className="w-full h-full bg-gray-100 rounded-2xl flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-2" />
+          <p className="text-text-light">Chargement de la carte...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <MapContainer
-      center={[PARIS_CENTER.lat, PARIS_CENTER.lng]}
+      center={[initialCenter.lat, initialCenter.lng]}
       zoom={12}
       style={{ height: "100%", width: "100%" }}
       ref={mapRef}
@@ -148,25 +259,27 @@ export default function MapComponent({
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
-      <MapController selectedSitter={selectedSitter} />
+      <MapController selectedSitter={selectedSitter} searchCenter={searchCenter} />
 
-      {sitters.map((sitter) => (
-        <Marker
-          key={sitter.id}
-          position={[sitter.coordinates.lat, sitter.coordinates.lng]}
-          icon={createCustomIcon(
-            selectedSitter?.id === sitter.id,
-            sitter.verified
-          )}
-          eventHandlers={{
-            click: () => onSitterSelect(sitter),
-          }}
-        >
-          <Popup>
-            <SitterPopup sitter={sitter} />
-          </Popup>
-        </Marker>
-      ))}
+      {sitters
+        .filter((sitter) => sitter.coordinates)
+        .map((sitter) => (
+          <Marker
+            key={sitter.id}
+            position={[sitter.coordinates.lat, sitter.coordinates.lng]}
+            icon={createCustomIcon(
+              selectedSitter?.id === sitter.id,
+              sitter.verified
+            )}
+            eventHandlers={{
+              click: () => onSitterSelect(sitter),
+            }}
+          >
+            <Popup>
+              <SitterPopup sitter={sitter} />
+            </Popup>
+          </Marker>
+        ))}
     </MapContainer>
   );
 }
