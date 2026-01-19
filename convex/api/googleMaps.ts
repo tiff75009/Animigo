@@ -42,6 +42,7 @@ export const searchAddress = action({
   args: {
     query: v.string(),
     sessionToken: v.optional(v.string()),
+    searchType: v.optional(v.union(v.literal("address"), v.literal("regions"))), // address = rue exacte, regions = villes/départements
   },
   handler: async (ctx, args): Promise<{
     success: boolean;
@@ -65,10 +66,12 @@ export const searchAddress = action({
 
     try {
       // Construire l'URL de l'API Places Autocomplete
+      // Types: address = adresses exactes, (regions) = villes/départements/régions
+      const searchType = args.searchType ?? "regions";
       const params = new URLSearchParams({
         input: args.query,
         key: apiKey,
-        types: "address",
+        types: searchType === "address" ? "address" : "(regions)",
         components: "country:fr", // Limiter à la France
         language: "fr",
       });
@@ -330,6 +333,99 @@ export const geocodeAddress = action({
       };
     } catch (error) {
       console.error("Erreur geocodeAddress:", error);
+      return {
+        success: false,
+        error: "Impossible de contacter l'API Geocoding",
+      };
+    }
+  },
+});
+
+// Reverse geocoding (coordonnées vers adresse)
+export const reverseGeocode = action({
+  args: {
+    lat: v.number(),
+    lng: v.number(),
+  },
+  handler: async (ctx, args): Promise<{
+    success: boolean;
+    address?: string;
+    city?: string;
+    postalCode?: string;
+    error?: string;
+  }> => {
+    // Récupérer la clé API
+    const apiKey = await ctx.runQuery(internal.api.googleMaps.getApiKeyInternal);
+
+    if (!apiKey) {
+      return {
+        success: false,
+        error: "API Google Maps non configurée",
+      };
+    }
+
+    try {
+      const params = new URLSearchParams({
+        latlng: `${args.lat},${args.lng}`,
+        key: apiKey,
+        language: "fr",
+        result_type: "street_address|locality|postal_code",
+      });
+
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?${params}`
+      );
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: `Erreur API Reverse Geocoding (${response.status})`,
+        };
+      }
+
+      const data = await response.json();
+
+      if (data.status !== "OK" || !data.results?.length) {
+        return {
+          success: false,
+          error: "Adresse non trouvée pour ces coordonnées",
+        };
+      }
+
+      const result = data.results[0];
+      const addressComponents = result.address_components || [];
+
+      // Extraire les composants d'adresse
+      let postalCode = "";
+      let city = "";
+
+      for (const component of addressComponents) {
+        const types = component.types as string[];
+
+        if (types.includes("postal_code")) {
+          postalCode = component.long_name;
+        }
+        if (types.includes("locality")) {
+          city = component.long_name;
+        }
+      }
+
+      // Construire une adresse lisible (ville + code postal)
+      const addressParts = [];
+      if (city) addressParts.push(city);
+      if (postalCode) addressParts.push(`(${postalCode})`);
+      const address = addressParts.length > 0
+        ? addressParts.join(" ")
+        : result.formatted_address || "Position actuelle";
+
+      return {
+        success: true,
+        address,
+        city,
+        postalCode,
+      };
+    } catch (error) {
+      console.error("Erreur reverseGeocode:", error);
       return {
         success: false,
         error: "Impossible de contacter l'API Geocoding",

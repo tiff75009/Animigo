@@ -20,6 +20,7 @@ import {
   Code,
   Circle,
   UserPlus,
+  Percent,
 } from "lucide-react";
 
 interface NavItem {
@@ -100,6 +101,11 @@ export function AdminSidebar() {
     {
       title: "Configuration",
       items: [
+        {
+          label: "Commissions",
+          href: "/admin/commissions",
+          icon: Percent,
+        },
         {
           label: "Invitations Admin",
           href: "/admin/invitations",

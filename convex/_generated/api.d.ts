@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as admin_commissions from "../admin/commissions.js";
 import type * as admin_config from "../admin/config.js";
 import type * as admin_devPresence from "../admin/devPresence.js";
 import type * as admin_invitations from "../admin/invitations.js";
@@ -47,6 +48,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "admin/commissions": typeof admin_commissions;
   "admin/config": typeof admin_config;
   "admin/devPresence": typeof admin_devPresence;
   "admin/invitations": typeof admin_invitations;

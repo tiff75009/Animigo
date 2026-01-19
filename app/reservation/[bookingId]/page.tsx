@@ -21,6 +21,8 @@ import {
   Sparkles,
   Plus,
   Check,
+  Percent,
+  Info,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -28,6 +30,8 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { AnimalSelector, GuestAnimalForm, type GuestAnimalData } from "@/app/components/animals";
+import AddressAutocomplete from "@/app/components/ui/AddressAutocomplete";
+import ConfirmationModal from "@/app/components/ui/ConfirmationModal";
 
 // Types
 interface ServiceOption {
@@ -151,6 +155,8 @@ export default function ReservationPage({
   const [notes, setNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
 
   // Guest data
   const [guestData, setGuestData] = useState<GuestData>({
@@ -201,6 +207,14 @@ export default function ReservationPage({
   const bookingData = useQuery(
     api.public.booking.getPendingBooking,
     { bookingId: bookingId as Id<"pendingBookings"> }
+  );
+
+  // Récupérer le taux de commission basé sur le type d'annonceur
+  const commissionData = useQuery(
+    api.admin.commissions.getCommissionRate,
+    bookingData?.announcer?.statusType
+      ? { announcerType: bookingData.announcer.statusType }
+      : "skip"
   );
 
   // Mutations
@@ -254,6 +268,11 @@ export default function ReservationPage({
 
   const totalAmount = calculateTotalAmount();
 
+  // Calculer la commission
+  const commissionRate = commissionData?.rate ?? 0;
+  const commissionAmount = Math.round((totalAmount * commissionRate) / 100);
+  const totalWithCommission = totalAmount + commissionAmount;
+
   // Toggle option selection
   const toggleOption = (optionId: string) => {
     setSelectedOptionIds((prev) =>
@@ -262,20 +281,6 @@ export default function ReservationPage({
         : [...prev, optionId]
     );
   };
-
-  // Validation
-  const canSubmitLoggedIn = isLoggedIn && selectedAnimalId && address.trim();
-  const canSubmitGuest =
-    !isLoggedIn &&
-    guestData.firstName.trim() &&
-    guestData.lastName.trim() &&
-    guestData.email.trim() &&
-    guestData.phone.trim() &&
-    guestData.password.length >= 6 &&
-    guestData.password === guestData.confirmPassword &&
-    guestAnimalData.name.trim() &&
-    guestAnimalData.type &&
-    address.trim();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -300,6 +305,85 @@ export default function ReservationPage({
     }
   };
 
+  // Validation côté client
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (isLoggedIn) {
+      // Validation utilisateur connecté
+      if (!selectedAnimalId) {
+        errors.animal = "Veuillez sélectionner un animal";
+      }
+    } else {
+      // Validation invité
+      if (!guestData.firstName.trim()) {
+        errors.firstName = "Le prénom est requis";
+      }
+      if (!guestData.lastName.trim()) {
+        errors.lastName = "Le nom est requis";
+      }
+      if (!guestData.email.trim()) {
+        errors.email = "L'email est requis";
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestData.email)) {
+        errors.email = "L'email n'est pas valide";
+      }
+      if (!guestData.phone.trim()) {
+        errors.phone = "Le téléphone est requis";
+      }
+      if (guestData.password.length < 6) {
+        errors.password = "Le mot de passe doit contenir au moins 6 caractères";
+      }
+      if (guestData.password !== guestData.confirmPassword) {
+        errors.confirmPassword = "Les mots de passe ne correspondent pas";
+      }
+      if (!guestAnimalData.name.trim()) {
+        errors.animalName = "Le nom de l'animal est requis";
+      }
+      if (!guestAnimalData.type) {
+        errors.animalType = "Le type d'animal est requis";
+      }
+    }
+
+    // Validation commune
+    if (!address.trim()) {
+      errors.address = "L'adresse est requise";
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // Extraire le message d'erreur d'une ConvexError
+  const extractErrorMessage = (err: unknown): string => {
+    if (err && typeof err === "object") {
+      // ConvexError stocke le message dans data
+      if ("data" in err && typeof err.data === "string") {
+        return err.data;
+      }
+      // Erreur standard avec message
+      if ("message" in err && typeof err.message === "string") {
+        return err.message;
+      }
+    }
+    return "Une erreur est survenue. Veuillez réessayer.";
+  };
+
+  // Ouvrir la modale de confirmation après validation
+  const handleOpenConfirmation = () => {
+    if (!bookingData) return;
+
+    // Validation côté client
+    if (!validateForm()) {
+      setError("Veuillez corriger les erreurs dans le formulaire");
+      return;
+    }
+
+    setError(null);
+    setFieldErrors({});
+    setShowConfirmationModal(true);
+  };
+
+  // Soumettre la réservation après confirmation dans la modale
   const handleSubmit = async () => {
     if (!bookingData) return;
 
@@ -316,10 +400,11 @@ export default function ReservationPage({
           location: address,
           notes: notes || undefined,
           updatedOptionIds: selectedOptionIds,
-          updatedAmount: totalAmount,
+          updatedAmount: totalWithCommission,
         });
 
         if (result.success) {
+          setShowConfirmationModal(false);
           router.push(`/dashboard?tab=missions&success=booking`);
         }
       } else {
@@ -327,43 +412,47 @@ export default function ReservationPage({
         const result = await finalizeAsGuest({
           bookingId: bookingId as Id<"pendingBookings">,
           userData: {
-            firstName: guestData.firstName,
-            lastName: guestData.lastName,
-            email: guestData.email,
-            phone: guestData.phone,
+            firstName: guestData.firstName.trim(),
+            lastName: guestData.lastName.trim(),
+            email: guestData.email.trim().toLowerCase(),
+            phone: guestData.phone.trim(),
             password: guestData.password,
           },
           animalData: {
-            name: guestAnimalData.name,
+            name: guestAnimalData.name.trim(),
             type: guestAnimalData.type,
             gender: guestAnimalData.gender,
-            breed: guestAnimalData.breed || undefined,
+            breed: guestAnimalData.breed?.trim() || undefined,
             birthDate: guestAnimalData.birthDate || undefined,
-            description: guestAnimalData.description || undefined,
+            description: guestAnimalData.description?.trim() || undefined,
             compatibilityTraits: guestAnimalData.compatibilityTraits.length > 0 ? guestAnimalData.compatibilityTraits : undefined,
             behaviorTraits: guestAnimalData.behaviorTraits.length > 0 ? guestAnimalData.behaviorTraits : undefined,
             needsTraits: guestAnimalData.needsTraits.length > 0 ? guestAnimalData.needsTraits : undefined,
             customTraits: guestAnimalData.customTraits.length > 0 ? guestAnimalData.customTraits : undefined,
-            specialNeeds: guestAnimalData.specialNeeds || undefined,
-            medicalConditions: guestAnimalData.medicalConditions || undefined,
+            specialNeeds: guestAnimalData.specialNeeds?.trim() || undefined,
+            medicalConditions: guestAnimalData.medicalConditions?.trim() || undefined,
           },
-          location: address,
-          notes: notes || undefined,
+          location: address.trim(),
+          notes: notes?.trim() || undefined,
           updatedOptionIds: selectedOptionIds,
-          updatedAmount: totalAmount,
+          updatedAmount: totalWithCommission,
         });
 
         if (result.success && result.token) {
           localStorage.setItem("session_token", result.token);
+          setShowConfirmationModal(false);
           router.push(`/dashboard?tab=missions&success=booking`);
         }
       }
     } catch (err) {
       console.error("Erreur:", err);
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Une erreur est survenue");
+      const errorMessage = extractErrorMessage(err);
+      setError(errorMessage);
+      setShowConfirmationModal(false);
+
+      // Si l'erreur concerne l'email existant, ajouter une erreur de champ
+      if (errorMessage.includes("email") || errorMessage.includes("compte existe")) {
+        setFieldErrors(prev => ({ ...prev, email: errorMessage }));
       }
     } finally {
       setIsSubmitting(false);
@@ -533,9 +622,14 @@ export default function ReservationPage({
                               onChange={(e) =>
                                 setGuestData({ ...guestData, firstName: e.target.value })
                               }
-                              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                              className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all ${
+                                fieldErrors.firstName ? "border-red-500 bg-red-50" : "border-gray-200"
+                              }`}
                               placeholder="Jean"
                             />
+                            {fieldErrors.firstName && (
+                              <p className="mt-1 text-sm text-red-500">{fieldErrors.firstName}</p>
+                            )}
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-foreground mb-2">
@@ -547,9 +641,14 @@ export default function ReservationPage({
                               onChange={(e) =>
                                 setGuestData({ ...guestData, lastName: e.target.value })
                               }
-                              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                              className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all ${
+                                fieldErrors.lastName ? "border-red-500 bg-red-50" : "border-gray-200"
+                              }`}
                               placeholder="Dupont"
                             />
+                            {fieldErrors.lastName && (
+                              <p className="mt-1 text-sm text-red-500">{fieldErrors.lastName}</p>
+                            )}
                           </div>
                         </div>
 
@@ -565,10 +664,15 @@ export default function ReservationPage({
                               onChange={(e) =>
                                 setGuestData({ ...guestData, email: e.target.value })
                               }
-                              className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                              className={`w-full pl-12 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all ${
+                                fieldErrors.email ? "border-red-500 bg-red-50" : "border-gray-200"
+                              }`}
                               placeholder="votre@email.com"
                             />
                           </div>
+                          {fieldErrors.email && (
+                            <p className="mt-1 text-sm text-red-500">{fieldErrors.email}</p>
+                          )}
                         </div>
 
                         <div>
@@ -583,10 +687,15 @@ export default function ReservationPage({
                               onChange={(e) =>
                                 setGuestData({ ...guestData, phone: e.target.value })
                               }
-                              className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                              className={`w-full pl-12 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all ${
+                                fieldErrors.phone ? "border-red-500 bg-red-50" : "border-gray-200"
+                              }`}
                               placeholder="06 12 34 56 78"
                             />
                           </div>
+                          {fieldErrors.phone && (
+                            <p className="mt-1 text-sm text-red-500">{fieldErrors.phone}</p>
+                          )}
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
@@ -602,10 +711,15 @@ export default function ReservationPage({
                                 onChange={(e) =>
                                   setGuestData({ ...guestData, password: e.target.value })
                                 }
-                                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                                className={`w-full pl-12 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all ${
+                                  fieldErrors.password ? "border-red-500 bg-red-50" : "border-gray-200"
+                                }`}
                                 placeholder="••••••••"
                               />
                             </div>
+                            {fieldErrors.password && (
+                              <p className="mt-1 text-sm text-red-500">{fieldErrors.password}</p>
+                            )}
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-foreground mb-2">
@@ -618,17 +732,21 @@ export default function ReservationPage({
                                 setGuestData({ ...guestData, confirmPassword: e.target.value })
                               }
                               className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all ${
-                                guestData.confirmPassword &&
-                                guestData.password !== guestData.confirmPassword
+                                fieldErrors.confirmPassword ||
+                                (guestData.confirmPassword &&
+                                guestData.password !== guestData.confirmPassword)
                                   ? "border-red-500 bg-red-50"
                                   : "border-gray-200"
                               }`}
                               placeholder="••••••••"
                             />
+                            {fieldErrors.confirmPassword && (
+                              <p className="mt-1 text-sm text-red-500">{fieldErrors.confirmPassword}</p>
+                            )}
                           </div>
                         </div>
-                        {guestData.password.length > 0 && guestData.password.length < 6 && (
-                          <p className="text-sm text-red-500 flex items-center gap-1">
+                        {guestData.password.length > 0 && guestData.password.length < 6 && !fieldErrors.password && (
+                          <p className="text-sm text-amber-600 flex items-center gap-1">
                             <AlertCircle className="w-4 h-4" />
                             Le mot de passe doit contenir au moins 6 caractères
                           </p>
@@ -655,17 +773,33 @@ export default function ReservationPage({
               </div>
               <div className="p-6">
                 {isLoggedIn && token ? (
-                  <AnimalSelector
-                    token={token}
-                    selectedAnimalId={selectedAnimalId}
-                    onSelect={setSelectedAnimalId}
-                    compact
-                  />
+                  <>
+                    <AnimalSelector
+                      token={token}
+                      selectedAnimalId={selectedAnimalId}
+                      onSelect={setSelectedAnimalId}
+                      compact
+                    />
+                    {fieldErrors.animal && (
+                      <p className="mt-3 text-sm text-red-500 flex items-center gap-1">
+                        <AlertCircle className="w-4 h-4" />
+                        {fieldErrors.animal}
+                      </p>
+                    )}
+                  </>
                 ) : (
-                  <GuestAnimalForm
-                    data={guestAnimalData}
-                    onChange={setGuestAnimalData}
-                  />
+                  <>
+                    <GuestAnimalForm
+                      data={guestAnimalData}
+                      onChange={setGuestAnimalData}
+                    />
+                    {(fieldErrors.animalName || fieldErrors.animalType) && (
+                      <p className="mt-3 text-sm text-red-500 flex items-center gap-1">
+                        <AlertCircle className="w-4 h-4" />
+                        {fieldErrors.animalName || fieldErrors.animalType}
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             </motion.div>
@@ -746,7 +880,7 @@ export default function ReservationPage({
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="bg-white rounded-2xl shadow-sm overflow-hidden"
+              className="bg-white rounded-2xl shadow-sm overflow-visible relative z-20"
             >
               <div className="bg-gradient-to-r from-accent to-accent/80 px-6 py-4">
                 <h2 className="text-lg font-semibold text-white flex items-center gap-2">
@@ -755,16 +889,29 @@ export default function ReservationPage({
                 </h2>
               </div>
               <div className="p-6">
-                <div className="relative">
-                  <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    placeholder="Entrez votre adresse complète..."
-                    className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                  />
-                </div>
+                <AddressAutocomplete
+                  value={address}
+                  onChange={(data) => {
+                    if (data) {
+                      // Construire l'adresse complète depuis les données structurées
+                      const fullAddress = [
+                        data.address,
+                        data.postalCode,
+                        data.city,
+                      ]
+                        .filter(Boolean)
+                        .join(", ");
+                      setAddress(fullAddress);
+                    }
+                  }}
+                  onInputChange={(value) => setAddress(value)}
+                  onManualChange={(value) => setAddress(value)}
+                  placeholder="Rechercher une adresse exacte..."
+                  allowManualEntry={true}
+                  searchType="address"
+                  helperText="Saisissez l'adresse où aura lieu la prestation"
+                  error={fieldErrors.address}
+                />
               </div>
             </motion.div>
 
@@ -966,52 +1113,92 @@ export default function ReservationPage({
                       </span>
                     </div>
                   )}
-                  <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                    <span className="font-medium text-foreground">Total à payer</span>
-                    <span className="text-2xl font-bold text-primary">
+
+                  {/* Sous-total */}
+                  <div className="flex items-center justify-between text-sm pt-2 border-t border-gray-100">
+                    <span className="text-text-light">Sous-total prestation</span>
+                    <span className="text-foreground font-medium">
                       {formatPrice(totalAmount)}
+                    </span>
+                  </div>
+
+                  {/* Commission */}
+                  {commissionRate > 0 && (
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-text-light flex items-center gap-1">
+                          <Percent className="w-3 h-3" />
+                          Frais de service ({commissionRate}%)
+                        </span>
+                        <span className="text-foreground">
+                          +{formatPrice(commissionAmount)}
+                        </span>
+                      </div>
+                      <div className="mt-1 p-2 bg-blue-50 rounded-lg">
+                        <p className="text-xs text-blue-600 flex items-start gap-1.5">
+                          <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                          <span>
+                            Ces frais assurent le bon fonctionnement de la plateforme,
+                            la mise en relation sécurisée et notre service client.
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Total final */}
+                  <div className="flex items-center justify-between pt-3 mt-3 border-t-2 border-primary/20">
+                    <span className="font-semibold text-foreground">Total à payer</span>
+                    <span className="text-2xl font-bold text-primary">
+                      {formatPrice(totalWithCommission)}
                     </span>
                   </div>
                 </div>
 
                 {/* Bouton Confirmer */}
                 <button
-                  onClick={handleSubmit}
-                  disabled={isSubmitting || (!canSubmitLoggedIn && !canSubmitGuest)}
+                  onClick={handleOpenConfirmation}
+                  disabled={isSubmitting}
                   className="w-full mt-6 py-4 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-primary/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none transition-all flex items-center justify-center gap-2"
                 >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Confirmation...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-5 h-5" />
-                      Confirmer la réservation
-                    </>
-                  )}
+                  <Sparkles className="w-5 h-5" />
+                  Confirmer la réservation
                 </button>
 
                 {/* Erreur */}
                 {error && (
-                  <div className="mt-4 bg-red-50 text-red-600 p-4 rounded-xl flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm">{error}</p>
-                  </div>
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mt-4 bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-start gap-3"
+                  >
+                    <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5 text-red-500" />
+                    <div className="flex-1">
+                      <p className="font-medium text-sm">{error}</p>
+                      {Object.keys(fieldErrors).length > 0 && (
+                        <p className="text-xs text-red-600 mt-1">
+                          Vérifiez les champs marqués en rouge ci-dessus
+                        </p>
+                      )}
+                    </div>
+                  </motion.div>
                 )}
 
-                <p className="text-center text-xs text-text-light mt-4">
-                  En confirmant, vous acceptez nos{" "}
-                  <Link href="/cgu" className="text-primary hover:underline">
-                    conditions générales
-                  </Link>
-                </p>
               </div>
             </motion.div>
           </div>
         </div>
       </div>
+
+      {/* Modale de confirmation */}
+      <ConfirmationModal
+        isOpen={showConfirmationModal}
+        onClose={() => setShowConfirmationModal(false)}
+        onConfirm={handleSubmit}
+        isSubmitting={isSubmitting}
+        isGuest={!isLoggedIn}
+        userEmail={isLoggedIn ? sessionData?.user?.email : guestData.email}
+      />
     </div>
   );
 }

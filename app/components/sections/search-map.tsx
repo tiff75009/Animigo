@@ -27,6 +27,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Calendar,
+  Target,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { useSearch, type AnnouncerResult } from "@/app/hooks/useSearch";
@@ -873,6 +874,7 @@ export function SearchMapSection() {
     setCategory,
     setAnimalType,
     setLocation,
+    setRadius,
     setDate,
     setTime,
     setDateRange,
@@ -882,6 +884,7 @@ export function SearchMapSection() {
 
   const [selectedAnnouncer, setSelectedAnnouncer] = useState<AnnouncerResult | null>(null);
   const [formulasModalAnnouncer, setFormulasModalAnnouncer] = useState<AnnouncerResult | null>(null);
+  const [mapStyle, setMapStyle] = useState<"default" | "plan">("default");
 
   // Convert results to map-compatible format (only those with coordinates)
   const mapSitters = results
@@ -962,7 +965,7 @@ export function SearchMapSection() {
           />
         </motion.div>
 
-        {/* Search Bar with Location and Animal Type */}
+        {/* Search Bar with Location, Radius and Animal Type */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -976,8 +979,28 @@ export function SearchMapSection() {
               <LocationSearchBar
                 value={filters.location}
                 onChange={setLocation}
+                onGeolocationRequest={() => setMapStyle("plan")}
                 placeholder="Ville, code postal..."
               />
+            </div>
+
+            {/* Radius selector */}
+            <div className="relative">
+              <div className="flex items-center gap-2 h-full px-4 py-3 rounded-xl border-2 border-foreground/10 bg-white">
+                <Target className="w-5 h-5 text-primary" />
+                <select
+                  value={filters.radius}
+                  onChange={(e) => setRadius(Number(e.target.value))}
+                  className="bg-transparent text-foreground font-medium focus:outline-none cursor-pointer pr-2"
+                >
+                  <option value={5}>5 km</option>
+                  <option value={10}>10 km</option>
+                  <option value={15}>15 km</option>
+                  <option value={20}>20 km</option>
+                  <option value={30}>30 km</option>
+                  <option value={50}>50 km</option>
+                </select>
+              </div>
             </div>
 
             {/* Animal Type */}
@@ -1126,6 +1149,8 @@ export function SearchMapSection() {
                   if (found) setSelectedAnnouncer(found);
                 }}
                 searchCenter={filters.location.coordinates ?? null}
+                searchRadius={filters.radius}
+                mapStyle={mapStyle}
               />
             </div>
           </div>

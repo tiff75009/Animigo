@@ -29,6 +29,7 @@ export interface SearchFilters {
   category: ServiceCategory | null;
   animalType: string | null;
   location: LocationData;
+  radius: number; // Rayon de recherche en km
   // Pour services hourly
   date: string | null; // "YYYY-MM-DD"
   time: string | null; // "HH:MM"
@@ -67,6 +68,7 @@ const initialFilters: SearchFilters = {
   category: null,
   animalType: null,
   location: { text: "" },
+  radius: 10, // 10km par défaut
   date: null,
   time: null,
   startDate: null,
@@ -101,7 +103,7 @@ export function useSearch() {
 
     if (filters.location.coordinates) {
       args.coordinates = filters.location.coordinates;
-      args.radiusKm = 20;
+      args.radiusKm = filters.radius;
     }
 
     // Date unique (hourly)
@@ -147,6 +149,10 @@ export function useSearch() {
     setFilters((prev) => ({ ...prev, location }));
   }, []);
 
+  const setRadius = useCallback((radius: number) => {
+    setFilters((prev) => ({ ...prev, radius }));
+  }, []);
+
   const setDate = useCallback((date: string | null) => {
     setFilters((prev) => ({ ...prev, date }));
   }, []);
@@ -180,6 +186,7 @@ export function useSearch() {
     setCategory,
     setAnimalType,
     setLocation,
+    setRadius,
     setDate,
     setTime,
     setDateRange,

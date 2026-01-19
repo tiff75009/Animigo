@@ -11,6 +11,33 @@ import "leaflet/dist/leaflet.css";
 // Fix Leaflet default icon issue
 delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
 
+// Obfuscate coordinates with ~100m random offset for privacy
+// Uses a seeded random based on sitter ID for consistency
+function obfuscateCoordinates(
+  coords: { lat: number; lng: number },
+  sitterId: string
+): { lat: number; lng: number } {
+  // Generate a pseudo-random number based on sitter ID (consistent for same sitter)
+  let seed = 0;
+  for (let i = 0; i < sitterId.length; i++) {
+    seed = ((seed << 5) - seed + sitterId.charCodeAt(i)) | 0;
+  }
+
+  // Use the seed to generate consistent random values
+  const random1 = Math.abs(Math.sin(seed) * 10000) % 1;
+  const random2 = Math.abs(Math.cos(seed) * 10000) % 1;
+
+  // ~100m offset (0.0009 degrees is approximately 100m at mid-latitudes)
+  // Random angle and distance between 50m and 150m
+  const angle = random1 * 2 * Math.PI;
+  const distance = 0.00045 + random2 * 0.0009; // 50m to 150m in degrees
+
+  return {
+    lat: coords.lat + distance * Math.cos(angle),
+    lng: coords.lng + distance * Math.sin(angle) / Math.cos(coords.lat * Math.PI / 180),
+  };
+}
+
 // Custom marker icons
 const createCustomIcon = (isSelected: boolean, isVerified: boolean) => {
   const color = isSelected ? "#FF6B6B" : isVerified ? "#4ECDC4" : "#6C63FF";
@@ -43,13 +70,26 @@ const createCustomIcon = (isSelected: boolean, isVerified: boolean) => {
   });
 };
 
+// Calculate zoom level based on radius in km
+function getZoomForRadius(radiusKm: number): number {
+  // Approximate zoom levels for different radii
+  if (radiusKm <= 5) return 13;
+  if (radiusKm <= 10) return 12;
+  if (radiusKm <= 15) return 11.5;
+  if (radiusKm <= 20) return 11;
+  if (radiusKm <= 30) return 10.5;
+  return 10; // 50km+
+}
+
 // Map center controller component
 function MapController({
   selectedSitter,
   searchCenter,
+  searchRadius,
 }: {
   selectedSitter: SitterLocation | null;
   searchCenter?: { lat: number; lng: number } | null;
+  searchRadius?: number;
 }) {
   const map = useMap();
 
@@ -67,9 +107,10 @@ function MapController({
   // Centrer sur la localisation de recherche quand elle change
   useEffect(() => {
     if (searchCenter && !selectedSitter) {
-      map.flyTo([searchCenter.lat, searchCenter.lng], 13, { duration: 0.5 });
+      const zoom = getZoomForRadius(searchRadius ?? 10);
+      map.flyTo([searchCenter.lat, searchCenter.lng], zoom, { duration: 0.5 });
     }
-  }, [searchCenter, selectedSitter, map]);
+  }, [searchCenter, searchRadius, selectedSitter, map]);
 
   return null;
 }
@@ -216,16 +257,34 @@ interface MapComponentProps {
   selectedSitter: SitterLocation | null;
   onSitterSelect: (sitter: SitterLocation) => void;
   searchCenter?: { lat: number; lng: number } | null;
+  searchRadius?: number; // Rayon de recherche en km
+  mapStyle?: "default" | "plan"; // plan = simplified street map
 }
+
+// Tile layer configurations
+const TILE_LAYERS = {
+  default: {
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  },
+  plan: {
+    // CartoDB Positron - cleaner, more readable plan style
+    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  },
+};
 
 export default function MapComponent({
   sitters,
   selectedSitter,
   onSitterSelect,
   searchCenter,
+  searchRadius,
+  mapStyle = "default",
 }: MapComponentProps) {
   const mapRef = useRef<L.Map>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const tileConfig = TILE_LAYERS[mapStyle];
 
   // S'assurer que le composant est monté côté client
   useEffect(() => {
@@ -255,31 +314,36 @@ export default function MapComponent({
       ref={mapRef}
     >
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        key={mapStyle} // Force re-render when style changes
+        attribution={tileConfig.attribution}
+        url={tileConfig.url}
       />
 
-      <MapController selectedSitter={selectedSitter} searchCenter={searchCenter} />
+      <MapController selectedSitter={selectedSitter} searchCenter={searchCenter} searchRadius={searchRadius} />
 
       {sitters
         .filter((sitter) => sitter.coordinates)
-        .map((sitter) => (
-          <Marker
-            key={sitter.id}
-            position={[sitter.coordinates.lat, sitter.coordinates.lng]}
-            icon={createCustomIcon(
-              selectedSitter?.id === sitter.id,
-              sitter.verified
-            )}
-            eventHandlers={{
-              click: () => onSitterSelect(sitter),
-            }}
-          >
-            <Popup>
-              <SitterPopup sitter={sitter} />
-            </Popup>
-          </Marker>
-        ))}
+        .map((sitter) => {
+          // Obfuscate position for privacy (~500m random offset)
+          const obfuscatedCoords = obfuscateCoordinates(sitter.coordinates, sitter.id);
+          return (
+            <Marker
+              key={sitter.id}
+              position={[obfuscatedCoords.lat, obfuscatedCoords.lng]}
+              icon={createCustomIcon(
+                selectedSitter?.id === sitter.id,
+                sitter.verified
+              )}
+              eventHandlers={{
+                click: () => onSitterSelect(sitter),
+              }}
+            >
+              <Popup>
+                <SitterPopup sitter={sitter} />
+              </Popup>
+            </Marker>
+          );
+        })}
     </MapContainer>
   );
 }

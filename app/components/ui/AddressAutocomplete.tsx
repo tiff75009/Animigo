@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MapPin, Loader2, X, AlertCircle } from "lucide-react";
+import { MapPin, Loader2, X, AlertCircle, Edit3 } from "lucide-react";
 import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { cn } from "@/app/lib/utils";
@@ -21,29 +21,36 @@ interface AddressAutocompleteProps {
   value: string;
   onChange: (data: AddressData | null) => void;
   onInputChange?: (value: string) => void;
+  onManualChange?: (value: string) => void; // Pour la saisie manuelle
   placeholder?: string;
   className?: string;
   error?: string;
   label?: string;
   helperText?: string;
   disabled?: boolean;
+  allowManualEntry?: boolean; // Permet la saisie manuelle
+  searchType?: "address" | "regions"; // address = rue exacte, regions = villes/départements
 }
 
 export default function AddressAutocomplete({
   value,
   onChange,
   onInputChange,
+  onManualChange,
   placeholder = "Entrez une adresse...",
   className,
   error,
   label,
   helperText,
   disabled,
+  allowManualEntry = false,
+  searchType = "regions",
 }: AddressAutocompleteProps) {
   const [inputValue, setInputValue] = useState(value);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  const [isManualMode, setIsManualMode] = useState(false);
   const [predictions, setPredictions] = useState<
     Array<{
       placeId: string;
@@ -105,6 +112,7 @@ export default function AddressAutocomplete({
         const result = await searchAddress({
           query,
           sessionToken: sessionTokenRef.current,
+          searchType,
         });
 
         if (result.success && result.predictions) {
@@ -122,7 +130,7 @@ export default function AddressAutocomplete({
         setIsLoading(false);
       }
     },
-    [searchAddress]
+    [searchAddress, searchType]
   );
 
   // Gestion de la saisie
@@ -130,6 +138,12 @@ export default function AddressAutocomplete({
     const newValue = e.target.value;
     setInputValue(newValue);
     onInputChange?.(newValue);
+
+    // En mode manuel, notifier directement
+    if (isManualMode) {
+      onManualChange?.(newValue);
+      return;
+    }
 
     // Si l'input est vide, effacer les données structurées
     if (newValue.trim() === "") {
@@ -147,6 +161,23 @@ export default function AddressAutocomplete({
     debounceRef.current = setTimeout(() => {
       handleSearch(newValue);
     }, 300);
+  };
+
+  // Basculer en mode manuel
+  const switchToManualMode = () => {
+    setIsManualMode(true);
+    setIsOpen(false);
+    setPredictions([]);
+    onManualChange?.(inputValue);
+  };
+
+  // Revenir au mode autocomplete
+  const switchToAutocompleteMode = () => {
+    setIsManualMode(false);
+    setInputValue("");
+    onChange(null);
+    onManualChange?.("");
+    inputRef.current?.focus();
   };
 
   // Sélection d'une prédiction
@@ -198,6 +229,8 @@ export default function AddressAutocomplete({
     setInputValue("");
     setPredictions([]);
     onChange(null);
+    onManualChange?.("");
+    setIsManualMode(false);
     inputRef.current?.focus();
   };
 
@@ -206,6 +239,11 @@ export default function AddressAutocomplete({
       {label && (
         <label className="block text-sm font-medium text-foreground mb-1.5">
           {label}
+          {isManualMode && (
+            <span className="ml-2 text-xs font-normal text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+              Mode manuel
+            </span>
+          )}
         </label>
       )}
 
@@ -213,13 +251,17 @@ export default function AddressAutocomplete({
         animate={{
           borderColor: error
             ? "rgb(239, 68, 68)"
-            : isFocused
-              ? "var(--primary)"
-              : "rgba(0, 0, 0, 0.1)",
+            : isManualMode
+              ? "rgb(217, 119, 6)"
+              : isFocused
+                ? "var(--primary)"
+                : "rgba(0, 0, 0, 0.1)",
           boxShadow: isFocused
             ? error
               ? "0 0 0 3px rgba(239, 68, 68, 0.1)"
-              : "0 0 0 3px rgba(255, 107, 107, 0.1)"
+              : isManualMode
+                ? "0 0 0 3px rgba(217, 119, 6, 0.1)"
+                : "0 0 0 3px rgba(255, 107, 107, 0.1)"
             : "none",
         }}
         transition={{ duration: 0.2 }}
@@ -228,6 +270,8 @@ export default function AddressAutocomplete({
         <div className="absolute left-4 top-1/2 -translate-y-1/2 text-text-light">
           {isLoading ? (
             <Loader2 className="w-5 h-5 animate-spin text-primary" />
+          ) : isManualMode ? (
+            <Edit3 className="w-5 h-5 text-amber-600" />
           ) : (
             <MapPin className="w-5 h-5" />
           )}
@@ -240,10 +284,10 @@ export default function AddressAutocomplete({
           onChange={handleInputChange}
           onFocus={() => {
             setIsFocused(true);
-            if (predictions.length > 0) setIsOpen(true);
+            if (predictions.length > 0 && !isManualMode) setIsOpen(true);
           }}
           onBlur={() => setIsFocused(false)}
-          placeholder={placeholder}
+          placeholder={isManualMode ? "Saisissez votre adresse complète..." : placeholder}
           disabled={disabled}
           className={cn(
             "w-full px-4 py-3 pl-12 pr-10 rounded-xl bg-transparent text-foreground placeholder:text-text-light/60",
@@ -262,6 +306,18 @@ export default function AddressAutocomplete({
           </button>
         )}
       </motion.div>
+
+      {/* Bouton pour revenir au mode autocomplete */}
+      {isManualMode && allowManualEntry && (
+        <button
+          type="button"
+          onClick={switchToAutocompleteMode}
+          className="mt-2 text-sm text-primary hover:underline flex items-center gap-1"
+        >
+          <MapPin className="w-4 h-4" />
+          Rechercher une adresse
+        </button>
+      )}
 
       {helperText && !error && !apiError && (
         <p className="mt-1.5 text-xs text-text-light">{helperText}</p>
@@ -291,13 +347,13 @@ export default function AddressAutocomplete({
 
       {/* Dropdown des suggestions */}
       <AnimatePresence>
-        {isOpen && predictions.length > 0 && (
+        {isOpen && predictions.length > 0 && !isManualMode && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.15 }}
-            className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-lg border border-foreground/10 overflow-hidden"
+            className="absolute z-[100] w-full mt-2 bg-white rounded-xl shadow-xl border border-foreground/10 overflow-hidden"
           >
             <ul className="py-1 max-h-60 overflow-auto">
               {predictions.map((prediction) => (
@@ -321,10 +377,43 @@ export default function AddressAutocomplete({
                   </button>
                 </li>
               ))}
+
+              {/* Option saisie manuelle */}
+              {allowManualEntry && (
+                <li className="border-t border-foreground/10">
+                  <button
+                    type="button"
+                    onClick={switchToManualMode}
+                    className="w-full px-4 py-3 text-left hover:bg-amber-50 transition-colors flex items-start gap-3"
+                  >
+                    <Edit3 className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-medium text-amber-700">
+                        Adresse non trouvée ?
+                      </div>
+                      <div className="text-sm text-amber-600">
+                        Saisir manuellement
+                      </div>
+                    </div>
+                  </button>
+                </li>
+              )}
             </ul>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Option saisie manuelle si aucune prédiction */}
+      {allowManualEntry && !isManualMode && inputValue.length >= 3 && predictions.length === 0 && !isLoading && !isOpen && (
+        <button
+          type="button"
+          onClick={switchToManualMode}
+          className="mt-2 text-sm text-amber-600 hover:text-amber-700 flex items-center gap-1"
+        >
+          <Edit3 className="w-4 h-4" />
+          Adresse non trouvée ? Saisir manuellement
+        </button>
+      )}
     </div>
   );
 }

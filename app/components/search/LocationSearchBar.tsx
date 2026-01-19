@@ -21,6 +21,7 @@ interface LocationData {
 interface LocationSearchBarProps {
   value: LocationData;
   onChange: (location: LocationData) => void;
+  onGeolocationRequest?: () => void; // Callback pour passer en mode plan
   placeholder?: string;
   className?: string;
 }
@@ -28,6 +29,7 @@ interface LocationSearchBarProps {
 export default function LocationSearchBar({
   value,
   onChange,
+  onGeolocationRequest,
   placeholder = "Ville, code postal...",
   className,
 }: LocationSearchBarProps) {
@@ -43,10 +45,12 @@ export default function LocationSearchBar({
   >([]);
   const [isSearching, setIsSearching] = useState(false);
   const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(null);
+  const [isReverseGeocoding, setIsReverseGeocoding] = useState(false);
 
   const { coordinates: geoCoords, isLoading: isGeoLoading, error: geoError, requestLocation } = useGeolocation();
   const searchAddress = useAction(api.api.googleMaps.searchAddress);
   const getPlaceDetails = useAction(api.api.googleMaps.getPlaceDetails);
+  const reverseGeocode = useAction(api.api.googleMaps.reverseGeocode);
 
   // Sync input value with external value
   useEffect(() => {
@@ -55,15 +59,38 @@ export default function LocationSearchBar({
     }
   }, [value.text]);
 
-  // Handle geolocation result
+  // Handle geolocation result with reverse geocoding
   useEffect(() => {
-    if (geoCoords && !geoError) {
-      // Reverse geocode to get address (simplified - just show coordinates for now)
-      onChange({
-        text: "Ma position actuelle",
-        coordinates: geoCoords,
-      });
-      setInputValue("Ma position actuelle");
+    if (geoCoords && !geoError && !isReverseGeocoding) {
+      setIsReverseGeocoding(true);
+
+      // Reverse geocode to get actual address
+      reverseGeocode({ lat: geoCoords.lat, lng: geoCoords.lng })
+        .then((result) => {
+          const addressText = result.success && result.address
+            ? result.address
+            : "Ma position actuelle";
+
+          onChange({
+            text: addressText,
+            coordinates: geoCoords,
+          });
+          setInputValue(addressText);
+
+          // Notify parent to switch to plan view
+          onGeolocationRequest?.();
+        })
+        .catch(() => {
+          onChange({
+            text: "Ma position actuelle",
+            coordinates: geoCoords,
+          });
+          setInputValue("Ma position actuelle");
+          onGeolocationRequest?.();
+        })
+        .finally(() => {
+          setIsReverseGeocoding(false);
+        });
     }
   }, [geoCoords, geoError]);
 
