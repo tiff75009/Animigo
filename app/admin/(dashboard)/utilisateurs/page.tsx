@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAdminAuth } from "@/app/hooks/useAdminAuth";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
   Filter,
@@ -16,11 +16,206 @@ import {
   MoreVertical,
   ChevronLeft,
   ChevronRight,
+  Trash2,
+  AlertTriangle,
+  X,
+  Loader2,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 
 type AccountTypeFilter = "all" | "annonceur_pro" | "annonceur_particulier" | "utilisateur";
 type StatusFilter = "all" | "active" | "inactive";
+
+interface User {
+  _id: Id<"users">;
+  email: string;
+  firstName: string;
+  lastName: string;
+  accountType: string;
+  phone?: string;
+  companyName?: string;
+  isActive: boolean;
+  emailVerified?: boolean;
+  createdAt: number;
+  role?: string;
+}
+
+// Dropdown Menu Component
+function ActionMenu({
+  user,
+  onDelete,
+}: {
+  user: User;
+  onDelete: (user: User) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const isAdmin = user.role === "admin";
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+      >
+        <MoreVertical className="w-5 h-5 text-slate-400" />
+      </button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -10 }}
+            className="absolute right-0 top-full mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden"
+          >
+            <button
+              onClick={() => {
+                if (!isAdmin) {
+                  onDelete(user);
+                }
+                setIsOpen(false);
+              }}
+              disabled={isAdmin}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                isAdmin
+                  ? "text-slate-500 cursor-not-allowed"
+                  : "text-red-400 hover:bg-red-500/10"
+              }`}
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Supprimer le compte</span>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// Delete Confirmation Modal
+function DeleteModal({
+  isOpen,
+  user,
+  onClose,
+  onConfirm,
+  isDeleting,
+}: {
+  isOpen: boolean;
+  user: User | null;
+  onClose: () => void;
+  onConfirm: () => void;
+  isDeleting: boolean;
+}) {
+  if (!isOpen || !user) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.95, opacity: 0 }}
+          className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="flex items-start justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6 text-red-500" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white">
+                  Supprimer le compte
+                </h3>
+                <p className="text-slate-400 text-sm">
+                  Cette action est irréversible
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5 text-slate-400" />
+            </button>
+          </div>
+
+          {/* User info */}
+          <div className="bg-slate-800/50 rounded-xl p-4 mb-6">
+            <p className="text-white font-medium">
+              {user.firstName} {user.lastName}
+            </p>
+            <p className="text-slate-400 text-sm">{user.email}</p>
+            {user.companyName && (
+              <p className="text-slate-500 text-sm mt-1">{user.companyName}</p>
+            )}
+          </div>
+
+          {/* Warning */}
+          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6">
+            <p className="text-red-400 text-sm">
+              <strong>Attention :</strong> La suppression de ce compte entraînera
+              la suppression définitive de :
+            </p>
+            <ul className="text-red-400/80 text-sm mt-2 space-y-1 ml-4 list-disc">
+              <li>Toutes les sessions actives</li>
+              <li>Les animaux enregistrés</li>
+              <li>Les réservations en attente</li>
+              <li>Les disponibilités (si annonceur)</li>
+            </ul>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              disabled={isDeleting}
+              className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50"
+            >
+              Annuler
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={isDeleting}
+              className="flex-1 flex items-center justify-center gap-2 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-medium transition-colors disabled:opacity-50"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Suppression...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-5 h-5" />
+                  Supprimer
+                </>
+              )}
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
 
 export default function UtilisateursPage() {
   const { token } = useAdminAuth();
@@ -29,6 +224,11 @@ export default function UtilisateursPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [page, setPage] = useState(0);
   const pageSize = 10;
+
+  // Delete modal state
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const users = useQuery(
     api.admin.users.listUsers,
@@ -45,6 +245,7 @@ export default function UtilisateursPage() {
   );
 
   const toggleActive = useMutation(api.admin.users.toggleUserActive);
+  const deleteUser = useMutation(api.admin.users.deleteUser);
 
   const handleToggleActive = async (userId: Id<"users">) => {
     if (!token) return;
@@ -52,6 +253,27 @@ export default function UtilisateursPage() {
       await toggleActive({ token, userId });
     } catch (error) {
       console.error("Erreur:", error);
+    }
+  };
+
+  const handleDeleteClick = (user: User) => {
+    setUserToDelete(user);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!token || !userToDelete) return;
+
+    setIsDeleting(true);
+    try {
+      await deleteUser({ token, userId: userToDelete._id });
+      setDeleteModalOpen(false);
+      setUserToDelete(null);
+    } catch (error) {
+      console.error("Erreur lors de la suppression:", error);
+      alert("Erreur lors de la suppression du compte");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -189,6 +411,11 @@ export default function UtilisateursPage() {
                     <div>
                       <p className="text-white font-medium">
                         {user.firstName} {user.lastName}
+                        {user.role === "admin" && (
+                          <span className="ml-2 px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-xs rounded-full">
+                            Admin
+                          </span>
+                        )}
                       </p>
                       {user.companyName && (
                         <p className="text-slate-400 text-sm">
@@ -226,8 +453,11 @@ export default function UtilisateursPage() {
                   <td className="px-6 py-4">
                     <button
                       onClick={() => handleToggleActive(user._id)}
+                      disabled={user.role === "admin"}
                       className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                        user.isActive
+                        user.role === "admin"
+                          ? "bg-slate-700/50 text-slate-500 cursor-not-allowed"
+                          : user.isActive
                           ? "bg-green-500/20 text-green-400 hover:bg-green-500/30"
                           : "bg-red-500/20 text-red-400 hover:bg-red-500/30"
                       }`}
@@ -246,9 +476,7 @@ export default function UtilisateursPage() {
                     </button>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button className="p-2 hover:bg-slate-800 rounded-lg transition-colors">
-                      <MoreVertical className="w-5 h-5 text-slate-400" />
-                    </button>
+                    <ActionMenu user={user} onDelete={handleDeleteClick} />
                   </td>
                 </motion.tr>
               ))}
@@ -289,6 +517,18 @@ export default function UtilisateursPage() {
           </div>
         )}
       </div>
+
+      {/* Delete Modal */}
+      <DeleteModal
+        isOpen={deleteModalOpen}
+        user={userToDelete}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setUserToDelete(null);
+        }}
+        onConfirm={handleDeleteConfirm}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 }

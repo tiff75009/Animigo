@@ -178,8 +178,17 @@ export const getMissionsByStatus = query({
       clientName: m.clientName,
       clientPhone: m.clientPhone,
       animal: m.animal,
+      animalId: m.animalId,
       serviceName: m.serviceName,
       serviceCategory: m.serviceCategory,
+      variantId: m.variantId,
+      variantName: m.variantName,
+      optionIds: m.optionIds,
+      optionNames: m.optionNames,
+      basePrice: m.basePrice,
+      optionsPrice: m.optionsPrice,
+      platformFee: m.platformFee,
+      announcerEarnings: m.announcerEarnings,
       startDate: m.startDate,
       endDate: m.endDate,
       startTime: m.startTime,
@@ -188,6 +197,8 @@ export const getMissionsByStatus = query({
       amount: m.amount,
       paymentStatus: m.paymentStatus,
       location: m.location,
+      city: m.city,
+      clientCoordinates: m.clientCoordinates,
       clientNotes: m.clientNotes,
       announcerNotes: m.announcerNotes,
     }));
@@ -452,5 +463,102 @@ export const createTestMission = mutation({
     });
 
     return { success: true, missionId };
+  },
+});
+
+/**
+ * Récupérer les coordonnées du profil annonceur pour calcul distance
+ */
+export const getAnnouncerCoordinates = query({
+  args: {
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+
+    if (!session || session.expiresAt < Date.now()) {
+      return null;
+    }
+
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", session.userId))
+      .first();
+
+    if (!profile || !profile.coordinates) {
+      return null;
+    }
+
+    return {
+      coordinates: profile.coordinates,
+      city: profile.city,
+    };
+  },
+});
+
+/**
+ * Récupérer les détails de l'animal d'une mission
+ */
+export const getMissionAnimalDetails = query({
+  args: {
+    token: v.string(),
+    missionId: v.id("missions"),
+  },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+
+    if (!session || session.expiresAt < Date.now()) {
+      return null;
+    }
+
+    const mission = await ctx.db.get(args.missionId);
+    if (!mission || mission.announcerId !== session.userId) {
+      return null;
+    }
+
+    // Si pas d'animalId, retourner les infos inline
+    if (!mission.animalId) {
+      return {
+        name: mission.animal.name,
+        type: mission.animal.type,
+        emoji: mission.animal.emoji,
+        isInline: true,
+      };
+    }
+
+    // Sinon récupérer la fiche complète
+    const animal = await ctx.db.get(mission.animalId);
+    if (!animal) {
+      return {
+        name: mission.animal.name,
+        type: mission.animal.type,
+        emoji: mission.animal.emoji,
+        isInline: true,
+      };
+    }
+
+    return {
+      id: animal._id,
+      name: animal.name,
+      type: animal.type,
+      emoji: mission.animal.emoji,
+      gender: animal.gender,
+      breed: animal.breed,
+      birthDate: animal.birthDate,
+      description: animal.description,
+      compatibilityTraits: animal.compatibilityTraits,
+      behaviorTraits: animal.behaviorTraits,
+      needsTraits: animal.needsTraits,
+      customTraits: animal.customTraits,
+      specialNeeds: animal.specialNeeds,
+      medicalConditions: animal.medicalConditions,
+      isInline: false,
+    };
   },
 });

@@ -16,6 +16,8 @@ import {
   AlertCircle,
   Loader2,
   ExternalLink,
+  Mail,
+  Globe,
 } from "lucide-react";
 
 interface ConfigField {
@@ -37,6 +39,30 @@ interface IntegrationSection {
 }
 
 const integrations: IntegrationSection[] = [
+  {
+    id: "app_config",
+    name: "Configuration Application",
+    description: "URL et paramètres de l'application",
+    icon: Globe,
+    color: "bg-indigo-500",
+    docsUrl: "#",
+    fields: [
+      {
+        key: "app_url",
+        label: "URL de l'application",
+        description: "URL de base (ex: http://localhost:3000 en dev, https://animigo.fr en prod)",
+        isSecret: false,
+        placeholder: "http://localhost:3000",
+      },
+      {
+        key: "app_environment",
+        label: "Environnement",
+        description: "development ou production",
+        isSecret: false,
+        placeholder: "development",
+      },
+    ],
+  },
   {
     id: "google_maps",
     name: "Service Google",
@@ -99,6 +125,37 @@ const integrations: IntegrationSection[] = [
         description: "Clé API Société.com",
         isSecret: true,
         placeholder: "Votre clé API",
+      },
+    ],
+  },
+  {
+    id: "resend",
+    name: "Resend",
+    description: "Service d'envoi d'emails transactionnels",
+    icon: Mail,
+    color: "bg-rose-500",
+    docsUrl: "https://resend.com/api-keys",
+    fields: [
+      {
+        key: "resend_api_key",
+        label: "API Key",
+        description: "Clé API Resend (re_...)",
+        isSecret: true,
+        placeholder: "re_...",
+      },
+      {
+        key: "resend_from_email",
+        label: "Email expéditeur",
+        description: "Adresse email d'envoi (doit être vérifiée sur Resend)",
+        isSecret: false,
+        placeholder: "noreply@votredomaine.com",
+      },
+      {
+        key: "resend_from_name",
+        label: "Nom expéditeur",
+        description: "Nom affiché comme expéditeur des emails",
+        isSecret: false,
+        placeholder: "Animigo",
       },
     ],
   },

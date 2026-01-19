@@ -24,6 +24,21 @@ import { Id } from "@/convex/_generated/dataModel";
 type AnnonceurFilter = "all" | "annonceur_pro" | "annonceur_particulier";
 type StatusFilter = "all" | "active" | "inactive";
 
+type UserItem = {
+  _id: Id<"users">;
+  email: string;
+  firstName: string;
+  lastName: string;
+  accountType: string;
+  phone?: string;
+  siret?: string;
+  companyName?: string;
+  isActive: boolean;
+  emailVerified: boolean;
+  createdAt: number;
+  role: string;
+};
+
 export default function AnnonceursPage() {
   const { token } = useAdminAuth();
   const [search, setSearch] = useState("");
@@ -48,7 +63,7 @@ export default function AnnonceursPage() {
 
   // Filter only annonceurs
   const annonceurs = users?.users.filter(
-    (u) => u.accountType === "annonceur_pro" || u.accountType === "annonceur_particulier"
+    (u: UserItem) => u.accountType === "annonceur_pro" || u.accountType === "annonceur_particulier"
   );
 
   const toggleActive = useMutation(api.admin.users.toggleUserActive);
@@ -94,7 +109,7 @@ export default function AnnonceursPage() {
             <div>
               <p className="text-slate-400 text-sm">Professionnels</p>
               <p className="text-xl font-bold text-white">
-                {users?.users.filter((u) => u.accountType === "annonceur_pro").length ?? 0}
+                {users?.users.filter((u: UserItem) => u.accountType === "annonceur_pro").length ?? 0}
               </p>
             </div>
           </div>
@@ -113,7 +128,7 @@ export default function AnnonceursPage() {
             <div>
               <p className="text-slate-400 text-sm">Particuliers</p>
               <p className="text-xl font-bold text-white">
-                {users?.users.filter((u) => u.accountType === "annonceur_particulier").length ?? 0}
+                {users?.users.filter((u: UserItem) => u.accountType === "annonceur_particulier").length ?? 0}
               </p>
             </div>
           </div>
@@ -133,7 +148,7 @@ export default function AnnonceursPage() {
               <p className="text-slate-400 text-sm">Actifs</p>
               <p className="text-xl font-bold text-white">
                 {users?.users.filter(
-                  (u) =>
+                  (u: UserItem) =>
                     (u.accountType === "annonceur_pro" ||
                       u.accountType === "annonceur_particulier") &&
                     u.isActive

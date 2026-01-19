@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { Id } from "../_generated/dataModel";
 import { ConvexError } from "convex/values";
 import { ANIMAL_TYPES } from "../animals";
+import { internal } from "../_generated/api";
 
 // Générer toutes les dates entre deux dates (YYYY-MM-DD)
 function getDatesBetween(startDate: string, endDate: string): string[] {
@@ -229,6 +230,11 @@ export const finalizeBooking = mutation({
     bookingId: v.id("pendingBookings"),
     animalId: v.id("animals"),
     location: v.string(),
+    city: v.optional(v.string()),
+    coordinates: v.optional(v.object({
+      lat: v.number(),
+      lng: v.number(),
+    })),
     notes: v.optional(v.string()),
     // Options mises à jour (si l'utilisateur a modifié sur la page de réservation)
     updatedOptionIds: v.optional(v.array(v.string())),
@@ -363,6 +369,8 @@ export const finalizeBooking = mutation({
       amount: finalAmount,
       paymentStatus: "not_due",
       location: args.location,
+      city: args.city,
+      clientCoordinates: args.coordinates,
       clientNotes: args.notes,
       createdAt: now,
       updatedAt: now,
@@ -379,6 +387,9 @@ export const finalizeBooking = mutation({
 });
 
 // Finaliser une réservation en tant qu'invité (création de compte)
+// NOTE: Pour les utilisateurs non inscrits, la mission n'est PAS créée immédiatement.
+// L'utilisateur doit d'abord vérifier son email. La mission sera créée lors de la
+// vérification de l'email (voir convex/api/emailInternal.ts - verifyEmailToken).
 export const finalizeBookingAsGuest = mutation({
   args: {
     bookingId: v.id("pendingBookings"),
@@ -406,6 +417,11 @@ export const finalizeBookingAsGuest = mutation({
       medicalConditions: v.optional(v.string()),
     }),
     location: v.string(),
+    city: v.optional(v.string()),
+    coordinates: v.optional(v.object({
+      lat: v.number(),
+      lng: v.number(),
+    })),
     notes: v.optional(v.string()),
     // Options mises à jour (si l'utilisateur a modifié sur la page de réservation)
     updatedOptionIds: v.optional(v.array(v.string())),
@@ -438,12 +454,6 @@ export const finalizeBookingAsGuest = mutation({
     if (!service) {
       throw new ConvexError("Service non trouvé");
     }
-
-    // Récupérer la catégorie
-    const category = await ctx.db
-      .query("serviceCategories")
-      .withIndex("by_slug", (q) => q.eq("slug", service.category))
-      .first();
 
     // Récupérer la variante
     const variant = await ctx.db
@@ -502,7 +512,7 @@ export const finalizeBookingAsGuest = mutation({
     // Pour l'instant, on utilise un hash simple - À REMPLACER PAR BCRYPT
     const passwordHash = args.userData.password; // TODO: Implémenter bcrypt
 
-    // 1. Créer le compte utilisateur
+    // 1. Créer le compte utilisateur (email NON vérifié, compte INACTIF jusqu'à vérification)
     const userId = await ctx.db.insert("users", {
       email: args.userData.email.toLowerCase(),
       passwordHash,
@@ -514,13 +524,13 @@ export const finalizeBookingAsGuest = mutation({
       createdAt: now,
       updatedAt: now,
       emailVerified: false,
-      isActive: true,
+      isActive: false,
     });
 
     // 2. Créer la fiche animal
     const animalType = ANIMAL_TYPES.find((t) => t.id === args.animalData.type);
 
-    const animalId = await ctx.db.insert("animals", {
+    await ctx.db.insert("animals", {
       userId,
       name: args.animalData.name.trim(),
       type: args.animalData.type,
@@ -539,31 +549,24 @@ export const finalizeBookingAsGuest = mutation({
       updatedAt: now,
     });
 
-    // 3. Créer la mission
-    const missionId = await ctx.db.insert("missions", {
-      announcerId: pendingBooking.announcerId,
-      clientId: userId,
-      serviceId: pendingBooking.serviceId,
-      animalId,
-      clientName: `${args.userData.firstName} ${args.userData.lastName}`,
-      clientPhone: args.userData.phone,
-      animal: {
-        name: args.animalData.name,
-        type: args.animalData.type,
-        emoji: animalType?.emoji ?? "🐾",
-      },
-      serviceName: `${category?.name ?? service.category} - ${variant.name}`,
-      serviceCategory: service.category,
-      startDate: pendingBooking.startDate,
-      endDate: pendingBooking.endDate,
-      startTime: pendingBooking.startTime,
-      status: "pending_acceptance",
-      amount: finalAmount,
-      paymentStatus: "not_due",
+    // 3. Mettre à jour la pending booking avec le statut et les données client
+    // NE PAS supprimer la pending booking - elle sera convertie en mission après vérification email
+    await ctx.db.patch(args.bookingId, {
+      userId,
+      status: "awaiting_email_verification",
       location: args.location,
-      clientNotes: args.notes,
-      createdAt: now,
-      updatedAt: now,
+      city: args.city,
+      coordinates: args.coordinates,
+      calculatedAmount: finalAmount,
+      optionIds: args.updatedOptionIds,
+      clientData: {
+        firstName: args.userData.firstName.trim(),
+        lastName: args.userData.lastName.trim(),
+        phone: args.userData.phone.trim(),
+        animalName: args.animalData.name.trim(),
+        animalType: args.animalData.type,
+        notes: args.notes,
+      },
     });
 
     // 4. Créer une session pour l'utilisateur
@@ -577,12 +580,72 @@ export const finalizeBookingAsGuest = mutation({
       createdAt: now,
     });
 
-    // 5. Supprimer la réservation en attente
-    await ctx.db.delete(args.bookingId);
+    // 5. Créer un token de vérification email avec contexte "reservation"
+    const verificationToken = await ctx.runMutation(internal.api.emailInternal.createVerificationToken, {
+      userId,
+      email: args.userData.email.toLowerCase(),
+      context: "reservation",
+      pendingBookingId: args.bookingId,
+    });
 
+    // 6. Récupérer les détails de la réservation pour l'email
+    const announcer = await ctx.db.get(pendingBooking.announcerId);
+    const category = await ctx.db
+      .query("serviceCategories")
+      .withIndex("by_slug", (q) => q.eq("slug", service.category))
+      .first();
+
+    // 6bis. Récupérer la config email depuis la DB (pour passer à l'action)
+    const apiKeyConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "resend_api_key"))
+      .first();
+    const fromEmailConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "resend_from_email"))
+      .first();
+    const fromNameConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
+      .first();
+
+    // 6ter. Récupérer l'URL de l'application depuis la DB
+    const appUrlConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "app_url"))
+      .first();
+
+    // 7. Envoyer l'email de vérification avec contexte réservation
+    await ctx.scheduler.runAfter(0, internal.api.email.sendVerificationEmail, {
+      userId,
+      email: args.userData.email.toLowerCase(),
+      firstName: args.userData.firstName.trim(),
+      token: verificationToken,
+      context: "reservation",
+      reservationData: {
+        serviceName: `${category?.name ?? service.category} - ${variant.name}`,
+        announcerName: announcer ? `${announcer.firstName} ${announcer.lastName.charAt(0)}.` : "Annonceur",
+        startDate: pendingBooking.startDate,
+        endDate: pendingBooking.endDate,
+        startTime: pendingBooking.startTime,
+        animalName: args.animalData.name.trim(),
+        location: args.location,
+        totalAmount: finalAmount,
+      },
+      // Passer la config email depuis la mutation (car ctx.runQuery échoue dans les actions sur self-hosted)
+      emailConfig: apiKeyConfig?.value ? {
+        apiKey: apiKeyConfig.value,
+        fromEmail: fromEmailConfig?.value,
+        fromName: fromNameConfig?.value,
+      } : undefined,
+      // Passer l'URL de l'application depuis la DB
+      appUrl: appUrlConfig?.value || undefined,
+    });
+
+    // Retourner le succès - la mission sera créée après vérification de l'email
     return {
       success: true,
-      missionId,
+      requiresEmailVerification: true,
       userId,
       token,
       expiresAt: sessionExpiresAt,

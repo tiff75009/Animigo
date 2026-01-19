@@ -102,6 +102,80 @@ export const toggleUserActive = mutation({
   },
 });
 
+// Mutation: Supprimer un utilisateur
+export const deleteUser = mutation({
+  args: {
+    token: v.string(),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx, args.token);
+
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new ConvexError("Utilisateur non trouvé");
+
+    // Ne pas permettre de supprimer un admin
+    if (user.role === "admin") {
+      throw new ConvexError("Impossible de supprimer un administrateur");
+    }
+
+    // Supprimer toutes les sessions de l'utilisateur
+    const sessions = await ctx.db
+      .query("sessions")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    for (const session of sessions) {
+      await ctx.db.delete(session._id);
+    }
+
+    // Supprimer les tokens de vérification email
+    const emailTokens = await ctx.db
+      .query("emailVerificationTokens")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    for (const token of emailTokens) {
+      await ctx.db.delete(token._id);
+    }
+
+    // Supprimer les animaux de l'utilisateur
+    const animals = await ctx.db
+      .query("animals")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    for (const animal of animals) {
+      await ctx.db.delete(animal._id);
+    }
+
+    // Supprimer les pending bookings de l'utilisateur
+    const pendingBookings = await ctx.db
+      .query("pendingBookings")
+      .filter((q) => q.eq(q.field("userId"), args.userId))
+      .collect();
+
+    for (const booking of pendingBookings) {
+      await ctx.db.delete(booking._id);
+    }
+
+    // Supprimer les disponibilités (si annonceur)
+    const availabilities = await ctx.db
+      .query("availability")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    for (const availability of availabilities) {
+      await ctx.db.delete(availability._id);
+    }
+
+    // Supprimer l'utilisateur
+    await ctx.db.delete(args.userId);
+
+    return { success: true };
+  },
+});
+
 // Query: Détails d'un utilisateur
 export const getUserDetails = query({
   args: {

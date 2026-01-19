@@ -326,6 +326,31 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.4.0 - Systeme de Missions et Reservations
+- **Cartes de mission redesignees**
+  - Design plus compact et moderne
+  - Affichage du prenom uniquement (confidentialite)
+  - Masquage de l'adresse exacte et telephone avant acceptation
+  - Affichage de la ville uniquement
+  - Badge de statut colore
+- **Modal de details de mission**
+  - Informations client (prenom, animal)
+  - Service, formule et options choisies
+  - Dates, horaires et localisation
+  - Notes du client
+  - Decomposition du prix avec commission plateforme (15%)
+  - Revenus annonceur mis en avant
+  - Lien vers la fiche animal si disponible
+- **Calcul de distance automatique**
+  - Distance calculee entre l'adresse de l'annonceur et du client
+  - Utilisation de la formule Haversine
+  - Affichage en km ou metres
+  - Necessite l'autocomplete Google Maps pour les coordonnees
+- **Flux de reservation ameliore**
+  - Sauvegarde des coordonnees GPS lors de la reservation
+  - Extraction automatique de la ville
+  - Support de l'autocomplete d'adresse Google Maps
+
 ### v0.3.1 - Ameliorations UX Services
 - Header des cartes de service cliquable pour ouvrir/fermer la modification
 - Indicateur visuel (chevron) de l'etat ouvert/ferme

@@ -249,6 +249,16 @@ export default defineSchema({
     // Service
     serviceName: v.string(),
     serviceCategory: v.string(),
+    variantId: v.optional(v.string()), // ID de la formule choisie
+    variantName: v.optional(v.string()), // Nom de la formule (dénormalisé)
+    optionIds: v.optional(v.array(v.string())), // IDs des options choisies
+    optionNames: v.optional(v.array(v.string())), // Noms des options (dénormalisé)
+
+    // Prix détaillé
+    basePrice: v.optional(v.number()), // Prix de base de la formule (centimes)
+    optionsPrice: v.optional(v.number()), // Prix des options (centimes)
+    platformFee: v.optional(v.number()), // Commission plateforme (centimes)
+    announcerEarnings: v.optional(v.number()), // Revenus annonceur après commission (centimes)
 
     // Dates
     startDate: v.string(), // "YYYY-MM-DD"
@@ -276,7 +286,12 @@ export default defineSchema({
     ),
 
     // Localisation
-    location: v.string(),
+    location: v.string(), // Adresse complète
+    city: v.optional(v.string()), // Ville extraite
+    clientCoordinates: v.optional(v.object({
+      lat: v.number(),
+      lng: v.number(),
+    })),
 
     // Notes
     clientNotes: v.optional(v.string()),
@@ -389,13 +404,41 @@ export default defineSchema({
     // Si invité (données temporaires)
     guestEmail: v.optional(v.string()),
 
+    // Statut de la réservation en attente
+    status: v.optional(v.union(
+      v.literal("pending"), // En attente de finalisation
+      v.literal("awaiting_email_verification"), // En attente de vérification email
+      v.literal("email_verified"), // Email vérifié, prêt à créer la mission
+      v.literal("completed"), // Converti en mission
+      v.literal("expired") // Expiré
+    )),
+
+    // Données du client pour réservation invité
+    clientData: v.optional(v.object({
+      firstName: v.string(),
+      lastName: v.string(),
+      phone: v.string(),
+      animalName: v.string(),
+      animalType: v.string(),
+      notes: v.optional(v.string()),
+    })),
+
+    // Adresse de la prestation
+    location: v.optional(v.string()),
+    city: v.optional(v.string()), // Ville extraite
+    coordinates: v.optional(v.object({
+      lat: v.number(),
+      lng: v.number(),
+    })),
+
     // Expiration (24h)
     expiresAt: v.number(),
 
     createdAt: v.number(),
   })
     .index("by_expires", ["expiresAt"])
-    .index("by_user", ["userId"]),
+    .index("by_user", ["userId"])
+    .index("by_status", ["status"]),
 
   // Préférences utilisateur
   userPreferences: defineTable({
@@ -472,6 +515,75 @@ export default defineSchema({
     onlineSince: v.number(), // Début de la session
     userAgent: v.optional(v.string()),
   }).index("by_devKey", ["devKeyId"]),
+
+  // Tokens de vérification d'email
+  emailVerificationTokens: defineTable({
+    userId: v.id("users"),
+    token: v.string(), // Token unique 64 chars hex
+    email: v.string(), // Email à vérifier
+    expiresAt: v.number(), // Expiration (24h)
+    createdAt: v.number(),
+    usedAt: v.optional(v.number()), // Date d'utilisation si utilisé
+    // Contexte de la vérification
+    context: v.optional(v.union(
+      v.literal("registration"), // Inscription simple
+      v.literal("reservation") // Inscription via réservation
+    )),
+    // Référence à la réservation en attente (si contexte = reservation)
+    pendingBookingId: v.optional(v.id("pendingBookings")),
+  })
+    .index("by_token", ["token"])
+    .index("by_user", ["userId"])
+    .index("by_expires", ["expiresAt"])
+    .index("by_pending_booking", ["pendingBookingId"]),
+
+  // Templates d'emails personnalisables
+  emailTemplates: defineTable({
+    // Identifiant unique du template
+    slug: v.string(), // "verification", "verification_reservation", "welcome", "reservation_confirmation", etc.
+    name: v.string(), // Nom affiché dans l'admin
+    description: v.optional(v.string()), // Description du template
+
+    // Contenu du template
+    subject: v.string(), // Sujet de l'email (avec variables)
+    htmlContent: v.string(), // Contenu HTML (avec variables)
+
+    // Variables disponibles pour ce template
+    availableVariables: v.array(v.object({
+      key: v.string(), // ex: "firstName"
+      description: v.string(), // ex: "Prénom de l'utilisateur"
+      example: v.optional(v.string()), // ex: "Jean"
+    })),
+
+    // Métadonnées
+    isActive: v.boolean(),
+    isSystem: v.boolean(), // true = template système non supprimable
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    updatedBy: v.optional(v.id("users")),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_active", ["isActive"]),
+
+  // Historique des emails envoyés
+  emailLogs: defineTable({
+    to: v.string(),
+    from: v.string(),
+    subject: v.string(),
+    template: v.string(), // "verification", "reservation_confirmation", etc.
+    status: v.union(
+      v.literal("sent"),
+      v.literal("failed"),
+      v.literal("pending")
+    ),
+    resendId: v.optional(v.string()), // ID Resend pour tracking
+    errorMessage: v.optional(v.string()),
+    metadata: v.optional(v.any()), // Données additionnelles (userId, bookingId, etc.)
+    createdAt: v.number(),
+  })
+    .index("by_to", ["to"])
+    .index("by_template", ["template"])
+    .index("by_status", ["status"]),
 
   // Invitations administrateur (tokens à usage unique)
   adminInvitations: defineTable({

@@ -152,6 +152,8 @@ export default function ReservationPage({
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [selectedAnimalId, setSelectedAnimalId] = useState<Id<"animals"> | null>(null);
   const [address, setAddress] = useState("");
+  const [city, setCity] = useState<string | null>(null);
+  const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(null);
   const [notes, setNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -398,6 +400,8 @@ export default function ReservationPage({
           bookingId: bookingId as Id<"pendingBookings">,
           animalId: selectedAnimalId,
           location: address,
+          city: city || undefined,
+          coordinates: coordinates || undefined,
           notes: notes || undefined,
           updatedOptionIds: selectedOptionIds,
           updatedAmount: totalWithCommission,
@@ -433,6 +437,8 @@ export default function ReservationPage({
             medicalConditions: guestAnimalData.medicalConditions?.trim() || undefined,
           },
           location: address.trim(),
+          city: city || undefined,
+          coordinates: coordinates || undefined,
           notes: notes?.trim() || undefined,
           updatedOptionIds: selectedOptionIds,
           updatedAmount: totalWithCommission,
@@ -441,7 +447,13 @@ export default function ReservationPage({
         if (result.success && result.token) {
           localStorage.setItem("session_token", result.token);
           setShowConfirmationModal(false);
-          router.push(`/dashboard?tab=missions&success=booking`);
+
+          // Si l'email doit être vérifié, rediriger vers une page de confirmation
+          if (result.requiresEmailVerification) {
+            router.push(`/reservation/confirmation-email?email=${encodeURIComponent(guestData.email.trim().toLowerCase())}`);
+          } else {
+            router.push(`/dashboard?tab=missions&success=booking`);
+          }
         }
       }
     } catch (err) {
@@ -902,10 +914,20 @@ export default function ReservationPage({
                         .filter(Boolean)
                         .join(", ");
                       setAddress(fullAddress);
+                      setCity(data.city);
+                      setCoordinates(data.coordinates);
+                    } else {
+                      setCity(null);
+                      setCoordinates(null);
                     }
                   }}
                   onInputChange={(value) => setAddress(value)}
-                  onManualChange={(value) => setAddress(value)}
+                  onManualChange={(value) => {
+                    setAddress(value);
+                    // En mode manuel, on ne peut pas avoir les coordonnées
+                    setCity(null);
+                    setCoordinates(null);
+                  }}
                   placeholder="Rechercher une adresse exacte..."
                   allowManualEntry={true}
                   searchType="address"

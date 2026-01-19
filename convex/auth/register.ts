@@ -1,5 +1,6 @@
 import { mutation } from "../_generated/server";
 import { v } from "convex/values";
+import { internal } from "../_generated/api";
 import {
   hashPassword,
   generateSessionToken,
@@ -125,6 +126,29 @@ export const registerPro = mutation({
       createdAt: now,
     });
 
+    // Créer le token de vérification et programmer l'envoi d'email
+    const verificationTokenBytes = new Uint8Array(32);
+    crypto.getRandomValues(verificationTokenBytes);
+    const verificationToken = Array.from(verificationTokenBytes)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    await ctx.db.insert("emailVerificationTokens", {
+      userId,
+      token: verificationToken,
+      email: args.email.toLowerCase(),
+      expiresAt: now + 24 * 60 * 60 * 1000, // 24h
+      createdAt: now,
+    });
+
+    // Scheduler l'envoi d'email de vérification
+    await ctx.scheduler.runAfter(0, internal.api.email.sendVerificationEmail, {
+      userId,
+      email: args.email.toLowerCase(),
+      firstName: args.firstName.trim(),
+      token: verificationToken,
+    });
+
     return {
       success: true,
       token,
@@ -192,6 +216,29 @@ export const registerParticulier = mutation({
       createdAt: now,
     });
 
+    // Créer le token de vérification et programmer l'envoi d'email
+    const verificationTokenBytes = new Uint8Array(32);
+    crypto.getRandomValues(verificationTokenBytes);
+    const verificationToken = Array.from(verificationTokenBytes)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    await ctx.db.insert("emailVerificationTokens", {
+      userId,
+      token: verificationToken,
+      email: args.email.toLowerCase(),
+      expiresAt: now + 24 * 60 * 60 * 1000, // 24h
+      createdAt: now,
+    });
+
+    // Scheduler l'envoi d'email de vérification
+    await ctx.scheduler.runAfter(0, internal.api.email.sendVerificationEmail, {
+      userId,
+      email: args.email.toLowerCase(),
+      firstName: args.firstName.trim(),
+      token: verificationToken,
+    });
+
     return {
       success: true,
       token,
@@ -256,6 +303,29 @@ export const registerUtilisateur = mutation({
       token,
       expiresAt,
       createdAt: now,
+    });
+
+    // Créer le token de vérification et programmer l'envoi d'email
+    const verificationTokenBytes = new Uint8Array(32);
+    crypto.getRandomValues(verificationTokenBytes);
+    const verificationToken = Array.from(verificationTokenBytes)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    await ctx.db.insert("emailVerificationTokens", {
+      userId,
+      token: verificationToken,
+      email: args.email.toLowerCase(),
+      expiresAt: now + 24 * 60 * 60 * 1000, // 24h
+      createdAt: now,
+    });
+
+    // Scheduler l'envoi d'email de vérification
+    await ctx.scheduler.runAfter(0, internal.api.email.sendVerificationEmail, {
+      userId,
+      email: args.email.toLowerCase(),
+      firstName: args.firstName.trim(),
+      token: verificationToken,
     });
 
     return {
