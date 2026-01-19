@@ -113,8 +113,8 @@ export const upsertProfile = mutation({
       googlePlaceId?: string;
     };
 
-    if (args.googlePlaceId && args.coordinates) {
-      // Données Google Maps fournies
+    if (args.coordinates || args.googlePlaceId) {
+      // Données Google Maps fournies (au moins coordonnées ou placeId)
       locationFields = {
         postalCode: nullToUndefined(args.postalCode) || undefined,
         city: nullToUndefined(args.city) || undefined,
@@ -123,7 +123,7 @@ export const upsertProfile = mutation({
         coordinates: nullToUndefined(args.coordinates),
         googlePlaceId: nullToUndefined(args.googlePlaceId),
       };
-    } else {
+    } else if (args.location) {
       // Fallback: parser la localisation texte
       const locationData = parseLocationString(args.location);
       locationFields = {
@@ -134,6 +134,9 @@ export const upsertProfile = mutation({
         coordinates: undefined,
         googlePlaceId: undefined,
       };
+    } else {
+      // Pas de données de localisation
+      locationFields = {};
     }
 
     const profileData = {

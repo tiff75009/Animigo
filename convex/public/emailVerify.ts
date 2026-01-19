@@ -110,6 +110,14 @@ export const verifyEmail = mutation({
           return emojis[type.toLowerCase()] || "🐾";
         };
 
+        // Récupérer l'animal créé pour cet utilisateur
+        // L'animal a été créé dans finalizeBookingAsGuest avec toutes ses données
+        const userAnimal = await ctx.db
+          .query("animals")
+          .withIndex("by_user", (q) => q.eq("userId", tokenDoc.userId))
+          .filter((q) => q.eq(q.field("name"), pendingBooking.clientData?.animalName || ""))
+          .first();
+
         // Créer la mission avec toutes les infos
         const missionId = await ctx.db.insert("missions", {
           announcerId: pendingBooking.announcerId,
@@ -117,6 +125,7 @@ export const verifyEmail = mutation({
           serviceId: pendingBooking.serviceId,
           clientName: `${pendingBooking.clientData?.firstName || user.firstName} ${pendingBooking.clientData?.lastName || user.lastName}`,
           clientPhone: pendingBooking.clientData?.phone || user.phone,
+          animalId: userAnimal?._id,
           animal: {
             name: pendingBooking.clientData?.animalName || "Animal",
             type: pendingBooking.clientData?.animalType || "autre",
@@ -135,6 +144,7 @@ export const verifyEmail = mutation({
           startDate: pendingBooking.startDate,
           endDate: pendingBooking.endDate,
           startTime: pendingBooking.startTime,
+          endTime: pendingBooking.endTime,
           status: "pending_acceptance",
           amount: totalAmount,
           paymentStatus: "not_due",

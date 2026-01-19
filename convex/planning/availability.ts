@@ -192,12 +192,19 @@ export const setAvailabilityRange = mutation({
     const now = Date.now();
 
     // Générer toutes les dates de la plage
+    // Parser les dates manuellement pour éviter les problèmes de fuseau horaire
+    const [startYear, startMonth, startDay] = args.startDate.split("-").map(Number);
+    const [endYear, endMonth, endDay] = args.endDate.split("-").map(Number);
+
     const dates: string[] = [];
-    const currentDate = new Date(args.startDate);
-    const endDate = new Date(args.endDate);
+    const currentDate = new Date(startYear, startMonth - 1, startDay);
+    const endDate = new Date(endYear, endMonth - 1, endDay);
 
     while (currentDate <= endDate) {
-      dates.push(currentDate.toISOString().split("T")[0]);
+      const year = currentDate.getFullYear();
+      const month = String(currentDate.getMonth() + 1).padStart(2, "0");
+      const day = String(currentDate.getDate()).padStart(2, "0");
+      dates.push(`${year}-${month}-${day}`);
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
@@ -389,8 +396,11 @@ export const setWeekendsUnavailable = mutation({
     while (currentDate <= lastDay) {
       const dayOfWeek = currentDate.getDay();
       if (dayOfWeek === 0 || dayOfWeek === 6) {
-        // Dimanche ou Samedi
-        weekendDates.push(currentDate.toISOString().split("T")[0]);
+        // Dimanche ou Samedi - Formater sans toISOString()
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, "0");
+        const day = String(currentDate.getDate()).padStart(2, "0");
+        weekendDates.push(`${year}-${month}-${day}`);
       }
       currentDate.setDate(currentDate.getDate() + 1);
     }

@@ -240,6 +240,7 @@ export const sendVerificationEmail = internalAction({
       startDate: v.string(),
       endDate: v.string(),
       startTime: v.optional(v.string()),
+      endTime: v.optional(v.string()),
       animalName: v.optional(v.string()),
       location: v.optional(v.string()),
       totalAmount: v.number(),

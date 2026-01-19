@@ -284,9 +284,10 @@ export default function LocationSection({
             value={location}
             onChange={handleAddressSelect}
             onInputChange={onLocationChange}
-            placeholder="Ex: 10 rue de la Paix"
-            label="Adresse"
-            helperText="Commencez à taper pour rechercher"
+            placeholder="Ex: 10 rue de la Paix, 75001 Paris"
+            label="Adresse exacte"
+            helperText="Saisissez votre adresse complète (rue, numéro, ville)"
+            searchType="address"
           />
 
           <AutoFilledField

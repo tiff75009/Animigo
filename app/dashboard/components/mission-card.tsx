@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/app/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -16,8 +16,17 @@ import {
   ChevronRight,
   Info,
   Navigation,
+  Heart,
+  AlertTriangle,
+  Stethoscope,
+  Sparkles,
+  Users,
+  Activity,
+  Loader2,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 // Types pour les missions Convex
 export interface ConvexMission {
@@ -60,9 +69,50 @@ interface MissionCardProps {
   showActions?: boolean;
   onAccept?: (id: string) => void;
   onRefuse?: (id: string) => void;
-  onViewAnimal?: (animalId: Id<"animals">) => void;
   announcerCoordinates?: { lat: number; lng: number } | null;
+  token?: string | null;
 }
+
+// Types pour les traits d'animaux
+const ANIMAL_TRAITS = {
+  compatibility: {
+    label: "Compatibilité",
+    icon: Users,
+    traits: {
+      "good_with_dogs": "S'entend avec les chiens",
+      "good_with_cats": "S'entend avec les chats",
+      "good_with_children": "Aime les enfants",
+      "good_with_strangers": "Sociable avec les inconnus",
+      "prefers_alone": "Préfère être seul",
+    },
+  },
+  behavior: {
+    label: "Comportement",
+    icon: Activity,
+    traits: {
+      "calm": "Calme",
+      "energetic": "Énergique",
+      "playful": "Joueur",
+      "shy": "Timide",
+      "independent": "Indépendant",
+      "affectionate": "Câlin",
+      "protective": "Protecteur",
+      "anxious": "Anxieux",
+    },
+  },
+  needs: {
+    label: "Besoins",
+    icon: Heart,
+    traits: {
+      "daily_walks": "Promenades quotidiennes",
+      "regular_grooming": "Toilettage régulier",
+      "special_diet": "Régime spécial",
+      "medication": "Médicaments",
+      "lots_of_attention": "Beaucoup d'attention",
+      "quiet_environment": "Environnement calme",
+    },
+  },
+};
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   completed: { label: "Terminée", color: "bg-green-100 text-green-700" },
@@ -163,10 +213,11 @@ export function MissionCard({
   showActions = false,
   onAccept,
   onRefuse,
-  onViewAnimal,
   announcerCoordinates,
+  token,
 }: MissionCardProps) {
   const [showDetails, setShowDetails] = useState(false);
+  const [showAnimalModal, setShowAnimalModal] = useState(false);
   const status = statusConfig[mission.status] || statusConfig.pending_acceptance;
   const isAccepted = mission.status !== "pending_acceptance" && mission.status !== "pending_confirmation";
 
@@ -288,9 +339,21 @@ export function MissionCard({
           <MissionDetailsModal
             mission={mission}
             onClose={() => setShowDetails(false)}
-            onViewAnimal={onViewAnimal}
+            onViewAnimal={() => setShowAnimalModal(true)}
             isAccepted={isAccepted}
             distance={distance}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Modal fiche animal */}
+      <AnimatePresence>
+        {showAnimalModal && token && (
+          <AnimalDetailsModal
+            missionId={mission.id}
+            token={token}
+            animalEmoji={mission.animal.emoji}
+            onClose={() => setShowAnimalModal(false)}
           />
         )}
       </AnimatePresence>
@@ -302,7 +365,7 @@ export function MissionCard({
 interface MissionDetailsModalProps {
   mission: ConvexMission;
   onClose: () => void;
-  onViewAnimal?: (animalId: Id<"animals">) => void;
+  onViewAnimal?: () => void;
   isAccepted: boolean;
   distance: number | null;
 }
@@ -365,10 +428,10 @@ function MissionDetailsModal({
                   {mission.animal.name} ({mission.animal.type})
                 </p>
               </div>
-              {mission.animalId && onViewAnimal && (
+              {onViewAnimal && (
                 <motion.button
                   className="px-2.5 py-1.5 bg-purple/10 text-purple rounded-lg text-xs font-medium flex items-center gap-1"
-                  onClick={() => onViewAnimal(mission.animalId!)}
+                  onClick={onViewAnimal}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
@@ -479,6 +542,278 @@ function MissionDetailsModal({
               <p className="text-xs text-blue-800">
                 L'adresse exacte et le téléphone seront visibles après acceptation de la mission.
               </p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="sticky bottom-0 bg-white p-3 border-t border-slate-100">
+          <button
+            className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-foreground rounded-xl font-medium text-sm"
+            onClick={onClose}
+          >
+            Fermer
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// Modal de la fiche animal
+interface AnimalDetailsModalProps {
+  missionId: Id<"missions">;
+  token: string;
+  animalEmoji: string;
+  onClose: () => void;
+}
+
+function AnimalDetailsModal({
+  missionId,
+  token,
+  animalEmoji,
+  onClose,
+}: AnimalDetailsModalProps) {
+  const animalData = useQuery(
+    api.planning.missions.getMissionAnimalDetails,
+    { token, missionId }
+  );
+
+  // Helper pour calculer l'âge
+  const calculateAge = (birthDate?: string): string | null => {
+    if (!birthDate) return null;
+    const birth = new Date(birthDate);
+    const now = new Date();
+    const years = now.getFullYear() - birth.getFullYear();
+    const months = now.getMonth() - birth.getMonth();
+
+    if (years < 1) {
+      const totalMonths = years * 12 + months;
+      return totalMonths <= 0 ? "Moins d'un mois" : `${totalMonths} mois`;
+    }
+    return years === 1 ? "1 an" : `${years} ans`;
+  };
+
+  // Helper pour traduire le genre
+  const getGenderLabel = (gender?: string): string => {
+    switch (gender) {
+      case "male": return "Mâle";
+      case "female": return "Femelle";
+      default: return "Non précisé";
+    }
+  };
+
+  // Helper pour traduire un trait
+  const getTraitLabel = (traitId: string, category: keyof typeof ANIMAL_TRAITS): string => {
+    const traits = ANIMAL_TRAITS[category].traits as Record<string, string>;
+    return traits[traitId] || traitId;
+  };
+
+  return (
+    <motion.div
+      className="fixed inset-0 bg-black/50 z-[60] flex items-end sm:items-center justify-center"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+    >
+      <motion.div
+        className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md max-h-[85vh] overflow-y-auto"
+        initial={{ y: 100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 100, opacity: 0 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="sticky top-0 bg-gradient-to-r from-purple/90 to-primary/90 px-4 py-3 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <span className="text-2xl">{animalEmoji}</span>
+            Fiche de l'animal
+          </h2>
+          <motion.button
+            className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center"
+            onClick={onClose}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+          >
+            <X className="w-4 h-4 text-white" />
+          </motion.button>
+        </div>
+
+        <div className="p-4">
+          {/* Loading state */}
+          {animalData === undefined && (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 text-purple animate-spin" />
+            </div>
+          )}
+
+          {/* Error state */}
+          {animalData === null && (
+            <div className="text-center py-8">
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle className="w-8 h-8 text-text-light" />
+              </div>
+              <p className="text-text-light">Impossible de charger les informations de l'animal.</p>
+            </div>
+          )}
+
+          {/* Animal data */}
+          {animalData && (
+            <div className="space-y-4">
+              {/* Infos principales */}
+              <div className="bg-gradient-to-br from-purple/5 to-primary/5 rounded-xl p-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-4xl shadow-sm">
+                    {animalEmoji}
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-foreground">{animalData.name}</h3>
+                    <p className="text-text-light capitalize">{animalData.type}</p>
+                    {animalData.breed && (
+                      <p className="text-sm text-purple font-medium">{animalData.breed}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Détails */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-50 rounded-xl p-3">
+                  <p className="text-xs text-text-light mb-1">Genre</p>
+                  <p className="font-semibold text-foreground">{getGenderLabel(animalData.gender)}</p>
+                </div>
+                <div className="bg-slate-50 rounded-xl p-3">
+                  <p className="text-xs text-text-light mb-1">Âge</p>
+                  <p className="font-semibold text-foreground">
+                    {calculateAge(animalData.birthDate) || "Non précisé"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Description */}
+              {animalData.description && (
+                <div className="bg-slate-50 rounded-xl p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sparkles className="w-4 h-4 text-purple" />
+                    <span className="font-semibold text-foreground text-sm">Description</span>
+                  </div>
+                  <p className="text-sm text-text-light">{animalData.description}</p>
+                </div>
+              )}
+
+              {/* Compatibilité */}
+              {animalData.compatibilityTraits && animalData.compatibilityTraits.length > 0 && (
+                <div className="bg-slate-50 rounded-xl p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Users className="w-4 h-4 text-secondary" />
+                    <span className="font-semibold text-foreground text-sm">Compatibilité</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {animalData.compatibilityTraits.map((trait: string) => (
+                      <span
+                        key={trait}
+                        className="px-2 py-1 bg-secondary/10 text-secondary text-xs rounded-full"
+                      >
+                        {getTraitLabel(trait, "compatibility")}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Comportement */}
+              {animalData.behaviorTraits && animalData.behaviorTraits.length > 0 && (
+                <div className="bg-slate-50 rounded-xl p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Activity className="w-4 h-4 text-primary" />
+                    <span className="font-semibold text-foreground text-sm">Comportement</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {animalData.behaviorTraits.map((trait: string) => (
+                      <span
+                        key={trait}
+                        className="px-2 py-1 bg-primary/10 text-primary text-xs rounded-full"
+                      >
+                        {getTraitLabel(trait, "behavior")}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Besoins */}
+              {animalData.needsTraits && animalData.needsTraits.length > 0 && (
+                <div className="bg-slate-50 rounded-xl p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Heart className="w-4 h-4 text-pink-500" />
+                    <span className="font-semibold text-foreground text-sm">Besoins particuliers</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {animalData.needsTraits.map((trait: string) => (
+                      <span
+                        key={trait}
+                        className="px-2 py-1 bg-pink-100 text-pink-700 text-xs rounded-full"
+                      >
+                        {getTraitLabel(trait, "needs")}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Traits personnalisés */}
+              {animalData.customTraits && animalData.customTraits.length > 0 && (
+                <div className="bg-slate-50 rounded-xl p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sparkles className="w-4 h-4 text-accent" />
+                    <span className="font-semibold text-foreground text-sm">Autres caractéristiques</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {animalData.customTraits.map((trait: string, idx: number) => (
+                      <span
+                        key={idx}
+                        className="px-2 py-1 bg-accent/20 text-foreground text-xs rounded-full"
+                      >
+                        {trait}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Besoins spéciaux */}
+              {animalData.specialNeeds && (
+                <div className="bg-orange-50 rounded-xl p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle className="w-4 h-4 text-orange-500" />
+                    <span className="font-semibold text-foreground text-sm">Besoins spéciaux</span>
+                  </div>
+                  <p className="text-sm text-text-light">{animalData.specialNeeds}</p>
+                </div>
+              )}
+
+              {/* Conditions médicales */}
+              {animalData.medicalConditions && (
+                <div className="bg-red-50 rounded-xl p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Stethoscope className="w-4 h-4 text-red-500" />
+                    <span className="font-semibold text-foreground text-sm">Conditions médicales</span>
+                  </div>
+                  <p className="text-sm text-text-light">{animalData.medicalConditions}</p>
+                </div>
+              )}
+
+              {/* Message si données inline seulement */}
+              {animalData.isInline && (
+                <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-lg">
+                  <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-blue-800">
+                    Cette fiche contient uniquement les informations de base.
+                    Le propriétaire n'a pas encore créé de fiche détaillée pour cet animal.
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>

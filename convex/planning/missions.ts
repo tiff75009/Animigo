@@ -95,11 +95,19 @@ export const getMissionStats = query({
     }
 
     // Calculer les dates de début et fin du mois
+    // Utiliser le formatage local pour éviter les problèmes de fuseau horaire
+    const formatDateLocal = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+
     const startDate = new Date(args.year, args.month, 1);
     const endDate = new Date(args.year, args.month + 1, 0);
 
-    const startDateStr = startDate.toISOString().split("T")[0];
-    const endDateStr = endDate.toISOString().split("T")[0];
+    const startDateStr = formatDateLocal(startDate);
+    const endDateStr = formatDateLocal(endDate);
 
     // Récupérer les missions du mois
     const missions = await ctx.db
@@ -432,10 +440,19 @@ export const createTestMission = mutation({
 
     const now = Date.now();
     const today = new Date();
-    const startDate = today.toISOString().split("T")[0];
-    const endDate = new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .split("T")[0];
+
+    // Formater sans toISOString() pour éviter les problèmes de fuseau horaire
+    const formatDateLocal = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+
+    const startDate = formatDateLocal(today);
+    const endDateObj = new Date(today);
+    endDateObj.setDate(today.getDate() + 2);
+    const endDate = formatDateLocal(endDateObj);
 
     const missionId = await ctx.db.insert("missions", {
       announcerId: session.userId,

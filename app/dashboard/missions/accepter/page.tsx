@@ -510,6 +510,7 @@ export default function MissionsAccepterPage() {
                 onAccept={handleAcceptClick}
                 onRefuse={handleRefuseClick}
                 announcerCoordinates={announcerData?.coordinates}
+                token={token}
               />
             </motion.div>
           ))}

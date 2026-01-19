@@ -4,15 +4,28 @@ import { Id } from "../_generated/dataModel";
 import { ConvexError } from "convex/values";
 import { ANIMAL_TYPES } from "../animals";
 import { internal } from "../_generated/api";
+import { missionsOverlap, addMinutesToTime } from "../lib/timeUtils";
 
 // Générer toutes les dates entre deux dates (YYYY-MM-DD)
+// Utilise une approche sans conversion UTC pour éviter les décalages de fuseau horaire
 function getDatesBetween(startDate: string, endDate: string): string[] {
   const dates: string[] = [];
-  const current = new Date(startDate);
-  const end = new Date(endDate);
+
+  // Parser les dates manuellement pour éviter les problèmes de fuseau horaire
+  const [startYear, startMonth, startDay] = startDate.split("-").map(Number);
+  const [endYear, endMonth, endDay] = endDate.split("-").map(Number);
+
+  // Créer les dates en spécifiant année, mois, jour (mois 0-indexé)
+  const current = new Date(startYear, startMonth - 1, startDay);
+  const end = new Date(endYear, endMonth - 1, endDay);
 
   while (current <= end) {
-    dates.push(current.toISOString().split("T")[0]);
+    // Formater sans toISOString() pour éviter la conversion UTC
+    const year = current.getFullYear();
+    const month = String(current.getMonth() + 1).padStart(2, "0");
+    const day = String(current.getDate()).padStart(2, "0");
+    dates.push(`${year}-${month}-${day}`);
+
     current.setDate(current.getDate() + 1);
   }
 
@@ -58,6 +71,16 @@ export const createPendingBooking = mutation({
       }
     }
 
+    // Récupérer la variante pour obtenir la durée
+    const variant = await ctx.db.get(args.variantId as Id<"serviceVariants">);
+    const duration = variant?.duration || 60; // Par défaut 60 minutes
+
+    // Calculer endTime si startTime est fourni
+    let endTime: string | undefined;
+    if (args.startTime) {
+      endTime = addMinutesToTime(args.startTime, duration);
+    }
+
     const now = Date.now();
     // Expiration dans 24h
     const expiresAt = now + 24 * 60 * 60 * 1000;
@@ -70,6 +93,7 @@ export const createPendingBooking = mutation({
       startDate: args.startDate,
       endDate: args.endDate,
       startTime: args.startTime,
+      endTime,
       calculatedAmount: args.calculatedAmount,
       userId,
       expiresAt,
@@ -215,6 +239,7 @@ export const getPendingBooking = query({
         startDate: pendingBooking.startDate,
         endDate: pendingBooking.endDate,
         startTime: pendingBooking.startTime,
+        endTime: pendingBooking.endTime,
       },
       amount: pendingBooking.calculatedAmount,
       userId: pendingBooking.userId,
@@ -318,7 +343,7 @@ export const finalizeBooking = mutation({
       }
     }
 
-    // Vérifier les conflits de missions
+    // Vérifier les conflits de missions (avec détection temporelle)
     const existingMissions = await ctx.db
       .query("missions")
       .withIndex("by_announcer", (q) => q.eq("announcerId", pendingBooking.announcerId))
@@ -331,12 +356,23 @@ export const finalizeBooking = mutation({
       )
       .collect();
 
+    // Construire l'objet de la nouvelle mission pour la comparaison temporelle
+    const newMissionSlot = {
+      startDate: pendingBooking.startDate,
+      endDate: pendingBooking.endDate,
+      startTime: pendingBooking.startTime,
+      endTime: pendingBooking.endTime,
+    };
+
     const hasConflict = existingMissions.some((m) =>
-      datesOverlap(m.startDate, m.endDate, pendingBooking.startDate, pendingBooking.endDate)
+      missionsOverlap(
+        { startDate: m.startDate, endDate: m.endDate, startTime: m.startTime, endTime: m.endTime },
+        newMissionSlot
+      )
     );
 
     if (hasConflict) {
-      throw new ConvexError("L'annonceur a déjà une réservation sur ces dates");
+      throw new ConvexError("L'annonceur a déjà une réservation sur ce créneau");
     }
 
     // Trouver le type d'animal pour l'emoji
@@ -365,6 +401,7 @@ export const finalizeBooking = mutation({
       startDate: pendingBooking.startDate,
       endDate: pendingBooking.endDate,
       startTime: pendingBooking.startTime,
+      endTime: pendingBooking.endTime,
       status: "pending_acceptance",
       amount: finalAmount,
       paymentStatus: "not_due",
@@ -482,7 +519,7 @@ export const finalizeBookingAsGuest = mutation({
       }
     }
 
-    // Vérifier les conflits de missions
+    // Vérifier les conflits de missions (avec détection temporelle)
     const existingMissions = await ctx.db
       .query("missions")
       .withIndex("by_announcer", (q) => q.eq("announcerId", pendingBooking.announcerId))
@@ -495,12 +532,23 @@ export const finalizeBookingAsGuest = mutation({
       )
       .collect();
 
+    // Construire l'objet de la nouvelle mission pour la comparaison temporelle
+    const newMissionSlot = {
+      startDate: pendingBooking.startDate,
+      endDate: pendingBooking.endDate,
+      startTime: pendingBooking.startTime,
+      endTime: pendingBooking.endTime,
+    };
+
     const hasConflict = existingMissions.some((m) =>
-      datesOverlap(m.startDate, m.endDate, pendingBooking.startDate, pendingBooking.endDate)
+      missionsOverlap(
+        { startDate: m.startDate, endDate: m.endDate, startTime: m.startTime, endTime: m.endTime },
+        newMissionSlot
+      )
     );
 
     if (hasConflict) {
-      throw new ConvexError("L'annonceur a déjà une réservation sur ces dates");
+      throw new ConvexError("L'annonceur a déjà une réservation sur ce créneau");
     }
 
     const now = Date.now();
@@ -628,6 +676,7 @@ export const finalizeBookingAsGuest = mutation({
         startDate: pendingBooking.startDate,
         endDate: pendingBooking.endDate,
         startTime: pendingBooking.startTime,
+        endTime: pendingBooking.endTime,
         animalName: args.animalData.name.trim(),
         location: args.location,
         totalAmount: finalAmount,

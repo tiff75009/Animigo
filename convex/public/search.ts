@@ -2,6 +2,7 @@ import { query, mutation } from "../_generated/server";
 import { v } from "convex/values";
 import { Id, Doc } from "../_generated/dataModel";
 import { ConvexError } from "convex/values";
+import { missionsOverlap, addMinutesToTime } from "../lib/timeUtils";
 
 // Calcul de distance avec la formule de Haversine (en km)
 function calculateDistance(
@@ -34,13 +35,25 @@ function datesOverlap(
 }
 
 // Générer toutes les dates entre deux dates (YYYY-MM-DD)
+// Utilise une approche sans conversion UTC pour éviter les décalages de fuseau horaire
 function getDatesBetween(startDate: string, endDate: string): string[] {
   const dates: string[] = [];
-  const current = new Date(startDate);
-  const end = new Date(endDate);
+
+  // Parser les dates manuellement pour éviter les problèmes de fuseau horaire
+  const [startYear, startMonth, startDay] = startDate.split("-").map(Number);
+  const [endYear, endMonth, endDay] = endDate.split("-").map(Number);
+
+  // Créer les dates en spécifiant année, mois, jour (mois 0-indexé)
+  const current = new Date(startYear, startMonth - 1, startDay);
+  const end = new Date(endYear, endMonth - 1, endDay);
 
   while (current <= end) {
-    dates.push(current.toISOString().split("T")[0]);
+    // Formater sans toISOString() pour éviter la conversion UTC
+    const year = current.getFullYear();
+    const month = String(current.getMonth() + 1).padStart(2, "0");
+    const day = String(current.getDate()).padStart(2, "0");
+    dates.push(`${year}-${month}-${day}`);
+
     current.setDate(current.getDate() + 1);
   }
 
@@ -207,19 +220,21 @@ export const searchAnnouncers = query({
           )
           .collect();
 
-        // Vérifier chevauchement de dates avec missions existantes
+        // Vérifier chevauchement de créneaux avec missions existantes (détection temporelle)
         const hasConflictingMission = existingMissions.some((mission) => {
-          if (args.date) {
-            return datesOverlap(mission.startDate, mission.endDate, args.date, args.date);
-          } else if (args.startDate && args.endDate) {
-            return datesOverlap(
-              mission.startDate,
-              mission.endDate,
-              args.startDate,
-              args.endDate
-            );
-          }
-          return false;
+          // Construire le créneau de recherche
+          const searchSlot = {
+            startDate: args.date || args.startDate!,
+            endDate: args.date || args.endDate!,
+            startTime: args.time,
+            // Estimer la durée si une heure est fournie (1h par défaut pour la recherche)
+            endTime: args.time ? addMinutesToTime(args.time, 60) : undefined,
+          };
+
+          return missionsOverlap(
+            { startDate: mission.startDate, endDate: mission.endDate, startTime: mission.startTime, endTime: mission.endTime },
+            searchSlot
+          );
         });
 
         // Vérifier disponibilité partielle (créneaux horaires)
@@ -254,17 +269,27 @@ export const searchAnnouncers = query({
           for (let i = 1; i <= 30; i++) {
             const d = new Date(today);
             d.setDate(d.getDate() + i);
-            nextDays.push(d.toISOString().split("T")[0]);
+            // Formater sans toISOString() pour éviter la conversion UTC
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, "0");
+            const day = String(d.getDate()).padStart(2, "0");
+            nextDays.push(`${year}-${month}-${day}`);
           }
 
           let nextAvailable: string | undefined;
           for (const day of nextDays) {
             const isUnavailable = unavailableDateSet.has(day);
-            const hasConflict = existingMissions.some((m) =>
-              datesOverlap(m.startDate, m.endDate, day, day)
-            );
+            // Vérifier si une mission bloque TOUTE la journée (pas seulement un créneau)
+            const hasFullDayBlock = existingMissions.some((m) => {
+              // D'abord vérifier si la mission couvre ce jour
+              if (!datesOverlap(m.startDate, m.endDate, day, day)) return false;
+              // Vérifier si c'est un blocage journée entière
+              const isMultiDay = m.startDate !== m.endDate;
+              const hasNoTimeSlot = !m.startTime || !m.endTime;
+              return isMultiDay || hasNoTimeSlot;
+            });
 
-            if (!isUnavailable && !hasConflict) {
+            if (!isUnavailable && !hasFullDayBlock) {
               nextAvailable = day;
               break;
             }
@@ -381,6 +406,7 @@ interface ServiceDetail {
   category: string;
   categoryName: string;
   categoryIcon?: string;
+  categoryDescription?: string;
   animalTypes: string[];
   variants: ServiceVariant[];
   options: ServiceOption[];
@@ -428,6 +454,7 @@ export const getAnnouncerServiceDetails = query({
         category: service.category,
         categoryName: categoryData?.name ?? service.category,
         categoryIcon: categoryData?.icon,
+        categoryDescription: categoryData?.description,
         animalTypes: service.animalTypes,
         variants: variants.map((v) => ({
           id: v._id,
@@ -492,9 +519,11 @@ export const getAnnouncerAlternativeSlots = query({
 
     // Générer les dates du mois
     const allDates = getDatesBetween(args.monthStart, args.monthEnd);
-    const today = new Date().toISOString().split("T")[0];
+    // Formater la date du jour sans toISOString()
+    const todayDate = new Date();
+    const today = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, "0")}-${String(todayDate.getDate()).padStart(2, "0")}`;
 
-    // Filtrer les dates disponibles
+    // Filtrer les dates disponibles ou partiellement disponibles
     const availableDates = allDates.filter((date) => {
       // Ignorer les dates passées
       if (date < today) return false;
@@ -502,12 +531,24 @@ export const getAnnouncerAlternativeSlots = query({
       // Ignorer les indisponibilités manuelles
       if (unavailableDates.has(date)) return false;
 
-      // Ignorer les dates avec missions
-      const hasConflict = missions.some((m) =>
+      // Vérifier les missions pour cette date
+      const dayMissions = missions.filter((m) =>
         datesOverlap(m.startDate, m.endDate, date, date)
       );
-      if (hasConflict) return false;
 
+      // Si pas de missions, la date est disponible
+      if (dayMissions.length === 0) return true;
+
+      // Si une mission bloque toute la journée (multi-jours ou sans heures), exclure
+      const hasFullDayBlock = dayMissions.some((m) => {
+        const isMultiDay = m.startDate !== m.endDate;
+        const hasNoTimeSlot = !m.startTime || !m.endTime;
+        return isMultiDay || hasNoTimeSlot;
+      });
+
+      if (hasFullDayBlock) return false;
+
+      // Sinon, il y a des créneaux spécifiques occupés, mais d'autres heures sont disponibles
       return true;
     });
 
@@ -535,6 +576,15 @@ export const getAnnouncerAvailabilityCalendar = query({
     endDate: v.string(), // "YYYY-MM-DD"
   },
   handler: async (ctx, args) => {
+    // Récupérer le profil de l'annonceur pour les buffers
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", args.announcerId))
+      .first();
+
+    const bufferBefore = profile?.bufferBefore ?? 0;
+    const bufferAfter = profile?.bufferAfter ?? 0;
+
     // Récupérer toutes les indisponibilités
     const unavailabilities = await ctx.db
       .query("availability")
@@ -562,13 +612,16 @@ export const getAnnouncerAvailabilityCalendar = query({
 
     // Générer les dates de la plage
     const allDates = getDatesBetween(args.startDate, args.endDate);
-    const today = new Date().toISOString().split("T")[0];
+    // Formater la date du jour sans toISOString()
+    const todayDate = new Date();
+    const today = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, "0")}-${String(todayDate.getDate()).padStart(2, "0")}`;
 
     // Construire le calendrier
     const calendar: Array<{
       date: string;
       status: "available" | "partial" | "unavailable" | "past";
       timeSlots?: Array<{ startTime: string; endTime: string }>;
+      bookedSlots?: Array<{ startTime: string; endTime: string }>;
     }> = [];
 
     for (const date of allDates) {
@@ -583,16 +636,51 @@ export const getAnnouncerAvailabilityCalendar = query({
         continue;
       }
 
-      // Vérifier conflit avec mission existante
-      const hasConflict = missions.some((m) =>
+      // Trouver les missions pour ce jour
+      const dayMissions = missions.filter((m) =>
         datesOverlap(m.startDate, m.endDate, date, date)
       );
-      if (hasConflict) {
-        calendar.push({ date, status: "unavailable" });
+
+      if (dayMissions.length > 0) {
+        // Vérifier si une mission bloque toute la journée
+        // Une mission bloque toute la journée si:
+        // - Elle couvre plusieurs jours (startDate !== endDate)
+        // - Ou elle n'a pas d'heures définies (startTime/endTime)
+        const hasFullDayBlock = dayMissions.some((m) => {
+          const isMultiDay = m.startDate !== m.endDate;
+          const hasNoTimeSlot = !m.startTime || !m.endTime;
+          return isMultiDay || hasNoTimeSlot;
+        });
+
+        if (hasFullDayBlock) {
+          calendar.push({ date, status: "unavailable" });
+          continue;
+        }
+
+        // Sinon, ce sont des missions avec créneaux horaires spécifiques
+        // Extraire les créneaux occupés
+        const bookedSlots = dayMissions
+          .filter((m) => m.startTime && m.endTime && m.startDate === m.endDate)
+          .map((m) => ({
+            startTime: m.startTime!,
+            endTime: m.endTime!,
+          }));
+
+        // Vérifier aussi les disponibilités partielles définies manuellement
+        const partialAvail = unavailabilities.find(
+          (a) => a.date === date && a.status === "partial"
+        );
+
+        calendar.push({
+          date,
+          status: "partial",
+          timeSlots: partialAvail?.timeSlots,
+          bookedSlots,
+        });
         continue;
       }
 
-      // Vérifier disponibilité partielle
+      // Vérifier disponibilité partielle (définie manuellement)
       const partialAvail = unavailabilities.find(
         (a) => a.date === date && a.status === "partial"
       );
@@ -608,7 +696,11 @@ export const getAnnouncerAvailabilityCalendar = query({
       calendar.push({ date, status: "available" });
     }
 
-    return calendar;
+    return {
+      calendar,
+      bufferBefore,
+      bufferAfter,
+    };
   },
 });
 
@@ -721,7 +813,7 @@ export const createBookingRequest = mutation({
       }
     }
 
-    // Vérifier les conflits de missions
+    // Vérifier les conflits de missions (avec détection temporelle)
     const existingMissions = await ctx.db
       .query("missions")
       .withIndex("by_announcer", (q) => q.eq("announcerId", args.announcerId))
@@ -734,12 +826,23 @@ export const createBookingRequest = mutation({
       )
       .collect();
 
+    // Construire le créneau de la nouvelle mission
+    const newMissionSlot = {
+      startDate: args.startDate,
+      endDate: args.endDate,
+      startTime: args.startTime,
+      endTime: args.endTime,
+    };
+
     const hasConflict = existingMissions.some((m) =>
-      datesOverlap(m.startDate, m.endDate, args.startDate, args.endDate)
+      missionsOverlap(
+        { startDate: m.startDate, endDate: m.endDate, startTime: m.startTime, endTime: m.endTime },
+        newMissionSlot
+      )
     );
 
     if (hasConflict) {
-      throw new ConvexError("L'annonceur a déjà une réservation sur ces dates");
+      throw new ConvexError("L'annonceur a déjà une réservation sur ce créneau");
     }
 
     // Récupérer le profil client pour le téléphone

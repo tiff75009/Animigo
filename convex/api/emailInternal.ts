@@ -207,6 +207,14 @@ export const verifyEmailToken = internalMutation({
           serviceCategory = service.category;
         }
 
+        // Récupérer l'animal créé pour cet utilisateur
+        // L'animal a été créé dans finalizeBookingAsGuest avec toutes ses données
+        const userAnimal = await ctx.db
+          .query("animals")
+          .withIndex("by_user", (q) => q.eq("userId", tokenDoc.userId))
+          .filter((q) => q.eq(q.field("name"), pendingBooking.clientData?.animalName || ""))
+          .first();
+
         // Créer la mission
         const missionId = await ctx.db.insert("missions", {
           announcerId: pendingBooking.announcerId,
@@ -214,6 +222,7 @@ export const verifyEmailToken = internalMutation({
           serviceId: pendingBooking.serviceId,
           clientName: `${pendingBooking.clientData?.firstName || user.firstName} ${pendingBooking.clientData?.lastName || user.lastName}`,
           clientPhone: pendingBooking.clientData?.phone || user.phone,
+          animalId: userAnimal?._id,
           animal: {
             name: pendingBooking.clientData?.animalName || "Animal",
             type: pendingBooking.clientData?.animalType || "autre",
@@ -224,6 +233,7 @@ export const verifyEmailToken = internalMutation({
           startDate: pendingBooking.startDate,
           endDate: pendingBooking.endDate,
           startTime: pendingBooking.startTime,
+          endTime: pendingBooking.endTime,
           status: "pending_acceptance", // En attente d'acceptation par l'annonceur
           amount: pendingBooking.calculatedAmount,
           paymentStatus: "not_due",

@@ -113,7 +113,81 @@ export const updatePlanningPreferences = mutation({
       });
     }
 
-    return { success: true };
+    return { success: true, message: "Préférences de planning enregistrées avec succès" };
+  },
+});
+
+// Update buffer settings (temps avant/après les services)
+export const updateBufferSettings = mutation({
+  args: {
+    token: v.string(),
+    bufferBefore: v.number(), // Minutes à bloquer avant un service (0, 15, 30, 45, 60)
+    bufferAfter: v.number(),  // Minutes à bloquer après un service (0, 15, 30, 45, 60)
+  },
+  handler: async (ctx, args) => {
+    // Validate session
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+
+    if (!session || session.expiresAt < Date.now()) {
+      throw new Error("Session invalide");
+    }
+
+    // Get existing profile
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", session.userId))
+      .first();
+
+    const now = Date.now();
+
+    if (profile) {
+      // Update existing profile
+      await ctx.db.patch(profile._id, {
+        bufferBefore: args.bufferBefore,
+        bufferAfter: args.bufferAfter,
+        updatedAt: now,
+      });
+    } else {
+      // Create profile with buffer settings
+      await ctx.db.insert("profiles", {
+        userId: session.userId,
+        bufferBefore: args.bufferBefore,
+        bufferAfter: args.bufferAfter,
+        updatedAt: now,
+      });
+    }
+
+    return { success: true, message: "Temps de préparation enregistrés avec succès" };
+  },
+});
+
+// Get buffer settings
+export const getBufferSettings = query({
+  args: {
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+
+    if (!session || session.expiresAt < Date.now()) {
+      return { bufferBefore: 0, bufferAfter: 0 };
+    }
+
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", session.userId))
+      .first();
+
+    return {
+      bufferBefore: profile?.bufferBefore ?? 0,
+      bufferAfter: profile?.bufferAfter ?? 0,
+    };
   },
 });
 
@@ -199,6 +273,6 @@ export const updateNotificationPreferences = mutation({
       });
     }
 
-    return { success: true };
+    return { success: true, message: "Préférences de notifications enregistrées avec succès" };
   },
 });

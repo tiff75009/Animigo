@@ -11,6 +11,7 @@ import {
   availabilityColors,
   availabilityLabels,
   formatPrice,
+  formatDateLocal,
 } from "../types";
 
 interface DayViewProps {
@@ -30,7 +31,7 @@ export function DayView({
   onMissionClick,
   onToggleAvailability,
 }: DayViewProps) {
-  const dateStr = currentDate.toISOString().split("T")[0];
+  const dateStr = formatDateLocal(currentDate);
 
   // Get day's missions
   const dayMissions = missions.filter((mission) => {

@@ -8,8 +8,10 @@ import { Star, CheckCircle, MapPin } from "lucide-react";
 import { PARIS_CENTER, serviceTypes, type SitterLocation } from "@/app/lib/search-data";
 import "leaflet/dist/leaflet.css";
 
-// Fix Leaflet default icon issue
-delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
+// Fix Leaflet default icon issue - only run on client
+if (typeof window !== "undefined") {
+  delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
+}
 
 // Obfuscate coordinates with ~100m random offset for privacy
 // Uses a seeded random based on sitter ID for consistency
@@ -282,22 +284,42 @@ export default function MapComponent({
   searchRadius,
   mapStyle = "default",
 }: MapComponentProps) {
-  const mapRef = useRef<L.Map>(null);
-  const [isMounted, setIsMounted] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const [isClient, setIsClient] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
   const tileConfig = TILE_LAYERS[mapStyle];
-
-  // S'assurer que le composant est monté côté client
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
 
   // Utiliser le centre de recherche si disponible, sinon Paris par défaut
   const initialCenter = searchCenter ?? PARIS_CENTER;
 
-  // Ne pas rendre la carte tant que le composant n'est pas monté côté client
-  if (!isMounted) {
+  // Vérifier que nous sommes côté client (évite les erreurs SSR)
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  // Attendre que le conteneur soit monté dans le DOM
+  useEffect(() => {
+    // Ne rien faire si pas côté client
+    if (!isClient) return;
+
+    // Utiliser un petit délai pour s'assurer que le DOM est complètement prêt
+    const timeoutId = setTimeout(() => {
+      if (containerRef.current) {
+        setMapReady(true);
+      }
+    }, 150);
+
+    return () => clearTimeout(timeoutId);
+  }, [isClient]);
+
+  // Loading state - attendre que le client soit prêt ET que le conteneur soit monté
+  if (!isClient || !mapReady) {
     return (
-      <div className="w-full h-full bg-gray-100 rounded-2xl flex items-center justify-center">
+      <div
+        ref={containerRef}
+        className="w-full h-full bg-gray-100 rounded-2xl flex items-center justify-center"
+      >
         <div className="text-center">
           <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-2" />
           <p className="text-text-light">Chargement de la carte...</p>
@@ -307,43 +329,45 @@ export default function MapComponent({
   }
 
   return (
-    <MapContainer
-      center={[initialCenter.lat, initialCenter.lng]}
-      zoom={12}
-      style={{ height: "100%", width: "100%" }}
-      ref={mapRef}
-    >
-      <TileLayer
-        key={mapStyle} // Force re-render when style changes
-        attribution={tileConfig.attribution}
-        url={tileConfig.url}
-      />
+    <div ref={containerRef} className="w-full h-full">
+      <MapContainer
+        center={[initialCenter.lat, initialCenter.lng]}
+        zoom={12}
+        style={{ height: "100%", width: "100%" }}
+        ref={mapRef}
+      >
+        <TileLayer
+          key={mapStyle}
+          attribution={tileConfig.attribution}
+          url={tileConfig.url}
+        />
 
-      <MapController selectedSitter={selectedSitter} searchCenter={searchCenter} searchRadius={searchRadius} />
+        <MapController selectedSitter={selectedSitter} searchCenter={searchCenter} searchRadius={searchRadius} />
 
-      {sitters
-        .filter((sitter) => sitter.coordinates)
-        .map((sitter) => {
-          // Obfuscate position for privacy (~500m random offset)
-          const obfuscatedCoords = obfuscateCoordinates(sitter.coordinates, sitter.id);
-          return (
-            <Marker
-              key={sitter.id}
-              position={[obfuscatedCoords.lat, obfuscatedCoords.lng]}
-              icon={createCustomIcon(
-                selectedSitter?.id === sitter.id,
-                sitter.verified
-              )}
-              eventHandlers={{
-                click: () => onSitterSelect(sitter),
-              }}
-            >
-              <Popup>
-                <SitterPopup sitter={sitter} />
-              </Popup>
-            </Marker>
-          );
-        })}
-    </MapContainer>
+        {sitters
+          .filter((sitter) => sitter.coordinates)
+          .map((sitter) => {
+            // Obfuscate position for privacy (~500m random offset)
+            const obfuscatedCoords = obfuscateCoordinates(sitter.coordinates, sitter.id);
+            return (
+              <Marker
+                key={sitter.id}
+                position={[obfuscatedCoords.lat, obfuscatedCoords.lng]}
+                icon={createCustomIcon(
+                  selectedSitter?.id === sitter.id,
+                  sitter.verified
+                )}
+                eventHandlers={{
+                  click: () => onSitterSelect(sitter),
+                }}
+              >
+                <Popup>
+                  <SitterPopup sitter={sitter} />
+                </Popup>
+              </Marker>
+            );
+          })}
+      </MapContainer>
+    </div>
   );
 }

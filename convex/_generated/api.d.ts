@@ -29,6 +29,7 @@ import type * as auth_login from "../auth/login.js";
 import type * as auth_register from "../auth/register.js";
 import type * as auth_session from "../auth/session.js";
 import type * as auth_utils from "../auth/utils.js";
+import type * as lib_timeUtils from "../lib/timeUtils.js";
 import type * as planning_availability from "../planning/availability.js";
 import type * as planning_missions from "../planning/missions.js";
 import type * as public_booking from "../public/booking.js";
@@ -73,6 +74,7 @@ declare const fullApi: ApiFromModules<{
   "auth/register": typeof auth_register;
   "auth/session": typeof auth_session;
   "auth/utils": typeof auth_utils;
+  "lib/timeUtils": typeof lib_timeUtils;
   "planning/availability": typeof planning_availability;
   "planning/missions": typeof planning_missions;
   "public/booking": typeof public_booking;

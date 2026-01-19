@@ -167,6 +167,13 @@ bun run build
     - Statistiques mensuelles (missions, revenus)
   - **Vue liste** pour mobile
 
+- **Page Parametres** (`/dashboard/parametres`)
+  - **Onglet Planning**
+    - Horaires d'acceptation des reservations
+    - Mode de facturation (arrondi ou exact)
+    - Temps de preparation avant/apres services (buffers)
+    - Exemple visuel du temps bloque
+
 ### Integrations API
 
 #### API INSEE (SIRENE)
@@ -325,6 +332,24 @@ Utilisation de Framer Motion avec des variants predefinies :
 ---
 
 ## Changelog recent
+
+### v0.5.0 - Gestion des creneaux et temps de preparation
+- **Blocage intelligent des creneaux horaires**
+  - Blocage par creneau horaire au lieu du jour entier
+  - Si une mission est reservee de 10h a 12h, seuls ces creneaux sont bloques
+  - Les autres creneaux de la journee restent disponibles
+- **Temps de preparation (buffers)**
+  - Configuration du temps a bloquer avant chaque service
+  - Configuration du temps a bloquer apres chaque service
+  - Options alignees sur les creneaux de 30 minutes (0, 30, 60, 90 min)
+  - Exemple visuel du temps bloque dans les parametres
+- **Parametres de planning ameliores**
+  - Bouton unique "Enregistrer les preferences" pour tous les parametres
+  - Messages de succes cote serveur
+  - Gestion des erreurs avec affichage utilisateur
+- **Corrections diverses**
+  - Correction du bug Leaflet "appendChild" (SSR)
+  - Utilisation du bon token d'authentification (auth_token)
 
 ### v0.4.0 - Systeme de Missions et Reservations
 - **Cartes de mission redesignees**

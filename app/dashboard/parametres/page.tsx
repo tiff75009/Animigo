@@ -614,7 +614,8 @@ function PlanningTab() {
   const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
-    setToken(localStorage.getItem("session_token"));
+    // Utiliser auth_token pour les utilisateurs connectés
+    setToken(localStorage.getItem("auth_token"));
   }, []);
 
   // Fetch user preferences from backend
@@ -623,10 +624,17 @@ function PlanningTab() {
     token ? { token } : "skip"
   );
 
+  // Fetch buffer settings from backend
+  const bufferSettings = useQuery(
+    api.services.preferences.getBufferSettings,
+    token ? { token } : "skip"
+  );
+
   // Fetch global workday config from admin
   const workdayConfig = useQuery(api.admin.config.getWorkdayConfig);
 
   const updatePreferences = useMutation(api.services.preferences.updatePlanningPreferences);
+  const updateBuffers = useMutation(api.services.preferences.updateBufferSettings);
 
   // Workday config from admin (read-only for users)
   const workdayHours = workdayConfig?.workdayHours ?? 8;
@@ -639,6 +647,12 @@ function PlanningTab() {
   const [roundUpThreshold, setRoundUpThreshold] = useState(2);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  // Local state for buffer settings
+  const [bufferBefore, setBufferBefore] = useState(0);
+  const [bufferAfter, setBufferAfter] = useState(0);
 
   // Sync local state with backend preferences
   useEffect(() => {
@@ -650,22 +664,52 @@ function PlanningTab() {
     }
   }, [preferences]);
 
+  // Sync buffer settings with backend
+  useEffect(() => {
+    if (bufferSettings) {
+      setBufferBefore(bufferSettings.bufferBefore ?? 0);
+      setBufferAfter(bufferSettings.bufferAfter ?? 0);
+    }
+  }, [bufferSettings]);
+
   const handleSave = async () => {
-    if (!token) return;
+    if (!token) {
+      setErrorMessage("Session expirée. Veuillez vous reconnecter.");
+      setTimeout(() => setErrorMessage(""), 3000);
+      return;
+    }
 
     setSaving(true);
+    setErrorMessage("");
     try {
-      await updatePreferences({
+      // Sauvegarder les préférences de planning
+      const prefsResult = await updatePreferences({
         token,
         acceptReservationsFrom,
         acceptReservationsTo,
         billingMode,
         roundUpThreshold,
       });
+
+      // Sauvegarder les temps de préparation (buffers)
+      const buffersResult = await updateBuffers({
+        token,
+        bufferBefore,
+        bufferAfter,
+      });
+
+      // Récupérer le message du serveur
+      const message = prefsResult?.message || buffersResult?.message || "Préférences enregistrées avec succès";
+      setSuccessMessage(message);
       setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      setTimeout(() => {
+        setSaved(false);
+        setSuccessMessage("");
+      }, 3000);
     } catch (error) {
       console.error("Failed to save preferences:", error);
+      setErrorMessage(error instanceof Error ? error.message : "Erreur lors de la sauvegarde");
+      setTimeout(() => setErrorMessage(""), 5000);
     } finally {
       setSaving(false);
     }
@@ -744,6 +788,105 @@ function PlanningTab() {
               Ces valeurs sont définies par la plateforme pour le calcul des tarifs.
             </p>
           </div>
+        </div>
+      </SectionCard>
+
+      {/* Buffer Settings */}
+      <SectionCard title="Temps de préparation" icon={Clock}>
+        <div className="space-y-4">
+          <p className="text-sm text-text-light">
+            Bloquez du temps avant et après vos services pour vous préparer ou vous déplacer.
+            Ces créneaux seront automatiquement indisponibles pour les clients.
+          </p>
+
+          {/* Buffer Before */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Temps à bloquer avant chaque service
+            </label>
+            <p className="text-xs text-text-light mb-3">
+              Ce temps vous permet de vous préparer avant l&apos;arrivée du client.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {[0, 30, 60, 90].map((minutes) => (
+                <motion.button
+                  key={minutes}
+                  onClick={() => setBufferBefore(minutes)}
+                  className={cn(
+                    "px-4 py-2 rounded-xl font-medium transition-colors",
+                    bufferBefore === minutes
+                      ? "bg-primary text-white"
+                      : "bg-gray-100 text-foreground hover:bg-gray-200"
+                  )}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {minutes === 0 ? "Aucun" : minutes < 60 ? `${minutes} min` : `${minutes / 60}h`}
+                </motion.button>
+              ))}
+            </div>
+          </div>
+
+          {/* Buffer After */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Temps à bloquer après chaque service
+            </label>
+            <p className="text-xs text-text-light mb-3">
+              Ce temps vous permet de ranger, vous reposer ou vous déplacer vers le prochain client.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {[0, 30, 60, 90].map((minutes) => (
+                <motion.button
+                  key={minutes}
+                  onClick={() => setBufferAfter(minutes)}
+                  className={cn(
+                    "px-4 py-2 rounded-xl font-medium transition-colors",
+                    bufferAfter === minutes
+                      ? "bg-primary text-white"
+                      : "bg-gray-100 text-foreground hover:bg-gray-200"
+                  )}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {minutes === 0 ? "Aucun" : minutes < 60 ? `${minutes} min` : `${minutes / 60}h`}
+                </motion.button>
+              ))}
+            </div>
+          </div>
+
+          {/* Example */}
+          {(bufferBefore > 0 || bufferAfter > 0) && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <h4 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                Exemple
+              </h4>
+              <p className="text-sm text-blue-700">
+                Pour un service réservé de <span className="font-semibold">10h00 à 12h00</span> :
+              </p>
+              <p className="text-sm text-blue-800 font-medium mt-1">
+                Période bloquée :{" "}
+                <span className="bg-blue-100 px-2 py-0.5 rounded">
+                  {(() => {
+                    const startMinutes = 10 * 60 - bufferBefore;
+                    const endMinutes = 12 * 60 + bufferAfter;
+                    const startH = Math.floor(startMinutes / 60);
+                    const startM = startMinutes % 60;
+                    const endH = Math.floor(endMinutes / 60);
+                    const endM = endMinutes % 60;
+                    return `${startH}h${startM > 0 ? startM.toString().padStart(2, "0") : "00"} - ${endH}h${endM > 0 ? endM.toString().padStart(2, "0") : "00"}`;
+                  })()}
+                </span>
+              </p>
+              <p className="text-xs text-blue-600 mt-2">
+                Les créneaux de {bufferBefore > 0 && `${bufferBefore} min avant`}
+                {bufferBefore > 0 && bufferAfter > 0 && " et "}
+                {bufferAfter > 0 && `${bufferAfter} min après`}
+                {" "}seront automatiquement indisponibles.
+              </p>
+            </div>
+          )}
         </div>
       </SectionCard>
 
@@ -879,8 +1022,16 @@ function PlanningTab() {
         </div>
       </SectionCard>
 
+      {/* Error Message */}
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl">
+          {errorMessage}
+        </div>
+      )}
+
       {/* Save Button */}
       <motion.button
+        type="button"
         onClick={handleSave}
         disabled={saving}
         className={cn(
@@ -895,7 +1046,7 @@ function PlanningTab() {
         {saved ? (
           <>
             <Check className="w-5 h-5" />
-            Préférences enregistrées
+            {successMessage || "Préférences enregistrées"}
           </>
         ) : saving ? (
           "Enregistrement..."

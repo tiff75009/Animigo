@@ -102,6 +102,10 @@ export default defineSchema({
       breed: v.optional(v.string()), // Race
       age: v.optional(v.number()), // Âge en années
     }))),
+    // Buffers de temps autour des services (en minutes)
+    // Permet à l'annonceur de bloquer du temps avant/après chaque service
+    bufferBefore: v.optional(v.number()), // Minutes à bloquer avant un service (0, 15, 30, 45, 60)
+    bufferAfter: v.optional(v.number()),  // Minutes à bloquer après un service (0, 15, 30, 45, 60)
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
@@ -394,6 +398,7 @@ export default defineSchema({
     startDate: v.string(),
     endDate: v.string(),
     startTime: v.optional(v.string()),
+    endTime: v.optional(v.string()), // Heure de fin calculée (startTime + durée)
 
     // Prix calculé
     calculatedAmount: v.number(),

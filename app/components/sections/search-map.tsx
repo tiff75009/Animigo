@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import dynamic from "next/dynamic";
@@ -122,20 +122,43 @@ function FormulasModal({
   isOpen,
   onClose,
   announcer,
+  searchFilters,
 }: {
   isOpen: boolean;
   onClose: () => void;
   announcer: AnnouncerResult;
+  searchFilters?: {
+    category: { slug: string; name: string } | null;
+    date: string | null;
+    time: string | null;
+    startDate: string | null;
+    endDate: string | null;
+  };
 }) {
   const router = useRouter();
   const [step, setStep] = useState<"formulas" | "booking">("formulas");
   const [selection, setSelection] = useState<BookingSelection | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [selectedEndDate, setSelectedEndDate] = useState<string | null>(null);
-  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  // Pré-remplir les dates depuis les filtres de recherche
+  const [selectedDate, setSelectedDate] = useState<string | null>(
+    searchFilters?.date ?? searchFilters?.startDate ?? null
+  );
+  const [selectedEndDate, setSelectedEndDate] = useState<string | null>(
+    searchFilters?.endDate ?? null
+  );
+  const [selectedTime, setSelectedTime] = useState<string | null>(
+    searchFilters?.time ?? null
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
-  const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    // Initialiser le calendrier au mois de la date sélectionnée si disponible
+    const initialDate = searchFilters?.date ?? searchFilters?.startDate;
+    return initialDate ? new Date(initialDate) : new Date();
+  });
+  // Filtre par catégorie dans la modale ("all" ou slug de catégorie)
+  const [categoryFilter, setCategoryFilter] = useState<string>(
+    searchFilters?.category?.slug ?? "all"
+  );
 
   // Mutation pour cr\u00e9er une r\u00e9servation en attente
   const createPendingBooking = useMutation(api.public.booking.createPendingBooking);
@@ -150,14 +173,22 @@ function FormulasModal({
   const startOfMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
   const endOfMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0);
 
+  // Fonction pour formater une date sans conversion UTC
+  const formatDateLocal = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
   const availabilityCalendar = useQuery(
     api.public.search.getAnnouncerAvailabilityCalendar,
     isOpen && selection && step === "booking"
       ? {
           announcerId: announcer.id as Id<"users">,
           serviceCategory: selection.serviceCategory,
-          startDate: startOfMonth.toISOString().split("T")[0],
-          endDate: endOfMonth.toISOString().split("T")[0],
+          startDate: formatDateLocal(startOfMonth),
+          endDate: formatDateLocal(endOfMonth),
         }
       : "skip"
   );
@@ -166,12 +197,30 @@ function FormulasModal({
   const handleClose = () => {
     setStep("formulas");
     setSelection(null);
-    setSelectedDate(null);
-    setSelectedEndDate(null);
-    setSelectedTime(null);
+    setSelectedDate(searchFilters?.date ?? searchFilters?.startDate ?? null);
+    setSelectedEndDate(searchFilters?.endDate ?? null);
+    setSelectedTime(searchFilters?.time ?? null);
     setBookingError(null);
+    setCategoryFilter(searchFilters?.category?.slug ?? "all");
     onClose();
   };
+
+  // Filtrer les services par catégorie
+  const filteredServices = useMemo(() => {
+    if (!serviceDetails) return [];
+    if (categoryFilter === "all") return serviceDetails;
+    return serviceDetails.filter((service) => service.category === categoryFilter);
+  }, [serviceDetails, categoryFilter]);
+
+  // Obtenir les catégories disponibles pour le filtre
+  const availableCategories = useMemo(() => {
+    if (!serviceDetails) return [];
+    return serviceDetails.map((service) => ({
+      slug: service.category,
+      name: service.categoryName,
+      icon: service.categoryIcon,
+    }));
+  }, [serviceDetails]);
 
   // Handle variant selection
   const handleSelectVariant = (
@@ -265,8 +314,8 @@ function FormulasModal({
   if (!isOpen) return null;
 
   const isLoading = serviceDetails === undefined;
-  const totalVariants = serviceDetails?.reduce((acc, s) => acc + s.variants.length, 0) ?? 0;
-  const totalOptions = serviceDetails?.reduce((acc, s) => acc + s.options.length, 0) ?? 0;
+  const totalVariants = filteredServices.reduce((acc, s) => acc + s.variants.length, 0);
+  const totalOptions = filteredServices.reduce((acc, s) => acc + s.options.length, 0);
 
   // Generate calendar days
   const generateCalendarDays = () => {
@@ -281,7 +330,7 @@ function FormulasModal({
     for (let i = startPadding - 1; i >= 0; i--) {
       const d = new Date(year, month, -i);
       days.push({
-        date: d.toISOString().split("T")[0],
+        date: formatDateLocal(d),
         day: d.getDate(),
         isCurrentMonth: false,
       });
@@ -291,7 +340,7 @@ function FormulasModal({
     for (let i = 1; i <= lastDay.getDate(); i++) {
       const d = new Date(year, month, i);
       days.push({
-        date: d.toISOString().split("T")[0],
+        date: formatDateLocal(d),
         day: i,
         isCurrentMonth: true,
       });
@@ -303,7 +352,7 @@ function FormulasModal({
       for (let i = 1; i <= remaining; i++) {
         const d = new Date(year, month + 1, i);
         days.push({
-          date: d.toISOString().split("T")[0],
+          date: formatDateLocal(d),
           day: i,
           isCurrentMonth: false,
         });
@@ -317,10 +366,73 @@ function FormulasModal({
   const weekDays = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
   const monthNames = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
+  // Extraire les données du calendrier et les buffers
+  const calendarData = availabilityCalendar?.calendar ?? [];
+  const bufferBefore = availabilityCalendar?.bufferBefore ?? 0;
+  const bufferAfter = availabilityCalendar?.bufferAfter ?? 0;
+
   const getDateStatus = (date: string) => {
     if (!availabilityCalendar) return "loading";
-    const dayInfo = availabilityCalendar.find((d) => d.date === date);
+    const dayInfo = calendarData.find((d) => d.date === date);
     return dayInfo?.status ?? "available";
+  };
+
+  // Récupérer les créneaux réservés pour une date
+  const getBookedSlotsForDate = (date: string) => {
+    if (!availabilityCalendar) return [];
+    const dayInfo = calendarData.find((d) => d.date === date);
+    return dayInfo?.bookedSlots ?? [];
+  };
+
+  // Convertir l'heure "HH:MM" en minutes depuis minuit
+  const parseTime = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+  };
+
+  // Soustraire des minutes d'une heure (pour buffer before)
+  const subtractMinutes = (time: string, minutes: number): string => {
+    const total = Math.max(0, parseTime(time) - minutes);
+    const h = Math.floor(total / 60);
+    const m = total % 60;
+    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+  };
+
+  // Ajouter des minutes à une heure (pour buffer after)
+  const addMinutes = (time: string, minutes: number): string => {
+    const total = Math.min(24 * 60 - 1, parseTime(time) + minutes);
+    const h = Math.floor(total / 60);
+    const m = total % 60;
+    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+  };
+
+  // Vérifier si un créneau horaire tombe dans une période déjà réservée (avec buffers)
+  const isTimeSlotBooked = (time: string) => {
+    if (!selectedDate) return false;
+
+    const bookedSlots = getBookedSlotsForDate(selectedDate);
+    if (bookedSlots.length === 0) return false;
+
+    const slotStart = parseTime(time);
+
+    // Vérifier si le créneau tombe dans une période déjà réservée (avec buffers)
+    return bookedSlots.some((booked) => {
+      // Appliquer les buffers: étendre la période bloquée
+      const effectiveStart = subtractMinutes(booked.startTime, bufferBefore);
+      const effectiveEnd = addMinutes(booked.endTime, bufferAfter);
+
+      const bookedStart = parseTime(effectiveStart);
+      const bookedEnd = parseTime(effectiveEnd);
+
+      // Un créneau est bloqué s'il tombe dans la période réservée étendue
+      // Exemple: réservé 8h30-10h30 avec buffer 30min avant/après
+      // Période effective bloquée: 8h00-11h00
+      // - 7h30: LIBRE
+      // - 8h00, 8h30, ..., 10h30, 11h00: BLOQUÉ
+      // - 11h30: LIBRE
+
+      return slotStart >= bookedStart && slotStart <= bookedEnd;
+    });
   };
 
   const isRangeMode = selection?.variantPriceUnit === "day";
@@ -427,15 +539,50 @@ function FormulasModal({
                       </div>
                     ) : serviceDetails && serviceDetails.length > 0 ? (
                       <div className="space-y-6">
-                        {serviceDetails.map((service) => (
+                        {/* Filtre par catégorie */}
+                        {availableCategories.length > 1 && (
+                          <div className="flex flex-wrap gap-2 pb-4 border-b border-foreground/10">
+                            <button
+                              onClick={() => setCategoryFilter("all")}
+                              className={cn(
+                                "px-4 py-2 rounded-full text-sm font-medium transition-all",
+                                categoryFilter === "all"
+                                  ? "bg-primary text-white"
+                                  : "bg-foreground/5 text-foreground/70 hover:bg-foreground/10"
+                              )}
+                            >
+                              Tout ({serviceDetails.length})
+                            </button>
+                            {availableCategories.map((cat) => (
+                              <button
+                                key={cat.slug}
+                                onClick={() => setCategoryFilter(cat.slug)}
+                                className={cn(
+                                  "px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2",
+                                  categoryFilter === cat.slug
+                                    ? "bg-primary text-white"
+                                    : "bg-foreground/5 text-foreground/70 hover:bg-foreground/10"
+                                )}
+                              >
+                                {cat.icon && <span>{cat.icon}</span>}
+                                {cat.name}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {filteredServices.map((service) => (
                           <div key={service.id} className="space-y-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-xl">
+                            <div className="flex items-start gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-xl flex-shrink-0">
                                 {service.categoryIcon ?? "✨"}
                               </div>
-                              <div>
+                              <div className="flex-1">
                                 <h4 className="font-semibold text-foreground">{service.categoryName}</h4>
                                 <p className="text-xs text-text-light">{service.animalTypes.join(", ")}</p>
+                                {service.categoryDescription && (
+                                  <p className="text-sm text-text-light mt-1">{service.categoryDescription}</p>
+                                )}
                               </div>
                             </div>
 
@@ -517,11 +664,25 @@ function FormulasModal({
                               </div>
                             )}
 
-                            {serviceDetails.indexOf(service) < serviceDetails.length - 1 && (
+                            {filteredServices.indexOf(service) < filteredServices.length - 1 && (
                               <div className="border-b border-foreground/10" />
                             )}
                           </div>
                         ))}
+
+                        {/* Message si aucune formule après filtrage */}
+                        {filteredServices.length === 0 && categoryFilter !== "all" && (
+                          <div className="text-center py-6">
+                            <div className="text-3xl mb-2">🔍</div>
+                            <p className="text-text-light text-sm">Aucune formule dans cette catégorie</p>
+                            <button
+                              onClick={() => setCategoryFilter("all")}
+                              className="mt-2 text-primary text-sm font-medium hover:underline"
+                            >
+                              Voir toutes les formules
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="text-center py-10">
@@ -639,21 +800,55 @@ function FormulasModal({
                           Sélectionnez une heure
                         </h4>
                         <div className="grid grid-cols-5 gap-2">
-                          {bookingTimeSlots.map((time) => (
-                            <button
-                              key={time}
-                              onClick={() => setSelectedTime(time)}
-                              className={cn(
-                                "py-2 text-sm font-medium rounded-lg transition-all",
-                                selectedTime === time
-                                  ? "bg-primary text-white"
-                                  : "bg-foreground/5 hover:bg-primary/10"
-                              )}
-                            >
-                              {time}
-                            </button>
-                          ))}
+                          {bookingTimeSlots.map((time) => {
+                            const isBooked = isTimeSlotBooked(time);
+                            return (
+                              <button
+                                key={time}
+                                disabled={isBooked}
+                                onClick={() => setSelectedTime(time)}
+                                className={cn(
+                                  "py-2 text-sm font-medium rounded-lg transition-all",
+                                  isBooked
+                                    ? "bg-red-100 text-red-400 cursor-not-allowed line-through"
+                                    : selectedTime === time
+                                    ? "bg-primary text-white"
+                                    : "bg-foreground/5 hover:bg-primary/10"
+                                )}
+                                title={isBooked ? "Ce créneau est déjà réservé" : undefined}
+                              >
+                                {time}
+                              </button>
+                            );
+                          })}
                         </div>
+                        {getBookedSlotsForDate(selectedDate).length > 0 && (
+                          <div className="mt-3 p-2 bg-red-50 rounded-lg border border-red-100">
+                            <p className="text-xs font-medium text-red-700 mb-1">
+                              Créneaux déjà réservés :
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {getBookedSlotsForDate(selectedDate).map((slot, idx) => (
+                                <span key={idx} className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">
+                                  {slot.startTime} - {slot.endTime}
+                                </span>
+                              ))}
+                            </div>
+                            <p className="text-xs text-red-600/70 mt-1">
+                              {(bufferBefore > 0 || bufferAfter > 0) ? (
+                                <>
+                                  Période bloquée étendue
+                                  {bufferBefore > 0 && ` de ${bufferBefore >= 60 ? `${bufferBefore / 60}h` : `${bufferBefore} min`} avant`}
+                                  {bufferBefore > 0 && bufferAfter > 0 && " et"}
+                                  {bufferAfter > 0 && ` de ${bufferAfter >= 60 ? `${bufferAfter / 60}h` : `${bufferAfter} min`} après`}
+                                  {" "}chaque réservation
+                                </>
+                              ) : (
+                                "Les heures barrées tombent dans cette période réservée"
+                              )}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -1183,6 +1378,13 @@ export function SearchMapSection() {
           isOpen={!!formulasModalAnnouncer}
           onClose={() => setFormulasModalAnnouncer(null)}
           announcer={formulasModalAnnouncer}
+          searchFilters={{
+            category: filters.category ? { slug: filters.category.slug, name: filters.category.name } : null,
+            date: filters.date,
+            time: filters.time,
+            startDate: filters.startDate,
+            endDate: filters.endDate,
+          }}
         />
       )}
     </section>

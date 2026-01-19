@@ -9,6 +9,7 @@ import {
   statusColors,
   availabilityColors,
   dayNames,
+  formatDateLocal,
 } from "../types";
 
 interface WeekViewProps {
@@ -98,7 +99,7 @@ export function WeekView({
 
   // Get missions for a specific date
   const getMissionsForDate = (date: Date): Mission[] => {
-    const dateStr = date.toISOString().split("T")[0];
+    const dateStr = formatDateLocal(date);
     return missions.filter((mission) => {
       return mission.startDate <= dateStr && mission.endDate >= dateStr;
     });
@@ -106,7 +107,7 @@ export function WeekView({
 
   // Get availability for a specific date
   const getAvailabilityForDate = (date: Date): Availability | null => {
-    const dateStr = date.toISOString().split("T")[0];
+    const dateStr = formatDateLocal(date);
     return availability.find((a) => a.date === dateStr) || null;
   };
 
@@ -140,7 +141,7 @@ export function WeekView({
           {weekDates.map((date, index) => {
             const today = isToday(date);
             const dayAvailability = getAvailabilityForDate(date);
-            const dateStr = date.toISOString().split("T")[0];
+            const dateStr = formatDateLocal(date);
             const inSelection = isInSelectionRange(dateStr);
 
             return (
@@ -188,7 +189,7 @@ export function WeekView({
               </div>
               {/* Day cells */}
               {weekDates.map((date, dayIndex) => {
-                const dateStr = date.toISOString().split("T")[0];
+                const dateStr = formatDateLocal(date);
                 const dayAvailability = getAvailabilityForDate(date);
 
                 return (
