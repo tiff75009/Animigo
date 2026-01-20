@@ -167,7 +167,7 @@ export function FormulasModal({ isOpen, onClose, announcer, searchFilters }: For
     setBookingError(null);
 
     try {
-      const token = localStorage.getItem("session_token") || undefined;
+      const token = localStorage.getItem("auth_token") || undefined;
       const result = await createPendingBooking({
         announcerId: announcer.id as Id<"users">,
         serviceId: selection.serviceId as Id<"services">,

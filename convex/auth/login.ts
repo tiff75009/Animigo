@@ -38,8 +38,17 @@ export const login = mutation({
       return { success: false, error: "Email ou mot de passe incorrect" };
     }
 
+    // Vérifier si l'email a été vérifié
+    if (!user.emailVerified) {
+      return {
+        success: false,
+        error: "Veuillez vérifier votre adresse email pour activer votre compte. Un email de confirmation vous a été envoyé."
+      };
+    }
+
+    // Vérifier si le compte est actif (désactivé manuellement par un admin)
     if (!user.isActive) {
-      return { success: false, error: "Ce compte a été désactivé" };
+      return { success: false, error: "Ce compte a été désactivé. Contactez le support pour plus d'informations." };
     }
 
     // Vérifier le mot de passe

@@ -279,7 +279,7 @@ function FormulasModal({
 
     try {
       // R\u00e9cup\u00e9rer le token (optionnel)
-      const token = localStorage.getItem("session_token") || undefined;
+      const token = localStorage.getItem("auth_token") || undefined;
 
       // Cr\u00e9er la r\u00e9servation en attente
       const result = await createPendingBooking({

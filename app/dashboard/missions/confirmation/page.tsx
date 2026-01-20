@@ -206,7 +206,7 @@ export default function MissionsConfirmationPage() {
   const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
-    const storedToken = localStorage.getItem("session_token");
+    const storedToken = localStorage.getItem("auth_token");
     if (storedToken) {
       setToken(storedToken);
     }

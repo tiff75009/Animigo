@@ -185,7 +185,7 @@ export default function ReservationPage({
 
   // Récupérer le token au chargement
   useEffect(() => {
-    const storedToken = localStorage.getItem("session_token");
+    const storedToken = localStorage.getItem("auth_token");
     if (storedToken) {
       setToken(storedToken);
     }
@@ -295,7 +295,7 @@ export default function ReservationPage({
       });
 
       if (result.success && result.token) {
-        localStorage.setItem("session_token", result.token);
+        localStorage.setItem("auth_token", result.token);
         setToken(result.token);
         setIsLoggedIn(true);
         setShowLoginForm(false);
@@ -445,7 +445,7 @@ export default function ReservationPage({
         });
 
         if (result.success && result.token) {
-          localStorage.setItem("session_token", result.token);
+          localStorage.setItem("auth_token", result.token);
           setShowConfirmationModal(false);
 
           // Si l'email doit être vérifié, rediriger vers une page de confirmation
