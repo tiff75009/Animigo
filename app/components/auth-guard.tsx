@@ -33,7 +33,7 @@ export function AuthGuard({
     ) {
       // Rediriger vers la bonne page
       if (user.accountType === "utilisateur") {
-        router.push("/recherche");
+        router.push("/client");
       } else {
         router.push("/dashboard");
       }

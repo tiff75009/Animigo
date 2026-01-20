@@ -22,6 +22,7 @@ import {
   UserPlus,
   Percent,
   Mail,
+  CalendarCheck,
 } from "lucide-react";
 
 interface NavItem {
@@ -71,6 +72,11 @@ export function AdminSidebar() {
           href: "/admin/moderation/services",
           icon: ShieldAlert,
           badge: moderationStats?.pending || 0,
+        },
+        {
+          label: "Réservations",
+          href: "/admin/reservations",
+          icon: CalendarCheck,
         },
       ],
     },

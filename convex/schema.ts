@@ -370,20 +370,35 @@ export default defineSchema({
     gender: v.union(v.literal("male"), v.literal("female"), v.literal("unknown")),
     birthDate: v.optional(v.string()), // "YYYY-MM-DD"
 
+    // Caractéristiques physiques
+    weight: v.optional(v.number()), // Poids en kg
+    size: v.optional(v.string()), // "petit", "moyen", "grand", "très grand"
+
     // Description
     description: v.optional(v.string()),
 
-    // Galerie photos (plusieurs photos possibles)
+    // Photo de profil (Cloudinary)
+    profilePhoto: v.optional(v.string()), // URL Cloudinary
+
+    // Galerie photos (Cloudinary URLs)
+    galleryPhotos: v.optional(v.array(v.string())), // URLs Cloudinary
+
+    // Ancien système de photos (Convex storage) - pour rétrocompatibilité
     photos: v.optional(v.array(v.object({
       storageId: v.id("_storage"),
-      isPrimary: v.boolean(), // Photo principale affichée en miniature
-      order: v.number(), // Ordre d'affichage
+      isPrimary: v.boolean(),
+      order: v.number(),
     }))),
 
+    // Compatibilité sociale (réponses explicites)
+    goodWithChildren: v.optional(v.boolean()),
+    goodWithDogs: v.optional(v.boolean()),
+    goodWithCats: v.optional(v.boolean()),
+    goodWithOtherAnimals: v.optional(v.boolean()),
+
     // Traits de caractère - Système de tags par section
-    // Section "Compatibilité"
+    // Section "Compatibilité" (ancien système pour rétrocompatibilité)
     compatibilityTraits: v.optional(v.array(v.string())),
-    // Ex: ["Ne s'entend pas avec les mâles", "Ne s'entend pas avec les chats"]
 
     // Section "Comportement"
     behaviorTraits: v.optional(v.array(v.string())),
@@ -395,6 +410,10 @@ export default defineSchema({
 
     // Traits personnalisés (ajoutés par l'utilisateur)
     customTraits: v.optional(v.array(v.string())),
+
+    // Allergies
+    hasAllergies: v.optional(v.boolean()),
+    allergiesDetails: v.optional(v.string()),
 
     // Contraintes particulières (texte libre)
     specialNeeds: v.optional(v.string()),
@@ -655,8 +674,9 @@ export default defineSchema({
     missionId: v.id("missions"),
 
     // Identifiants Stripe
-    checkoutSessionId: v.string(), // cs_xxx
-    paymentIntentId: v.optional(v.string()), // pi_xxx (renseigné après checkout)
+    checkoutSessionId: v.optional(v.string()), // cs_xxx (pour Checkout Session)
+    paymentIntentId: v.optional(v.string()), // pi_xxx
+    clientSecret: v.optional(v.string()), // Pour Stripe Elements
 
     // Montants (en centimes)
     amount: v.number(), // Montant total
@@ -674,9 +694,9 @@ export default defineSchema({
       v.literal("refunded") // Remboursé au client
     ),
 
-    // URL de paiement
-    checkoutUrl: v.string(),
-    expiresAt: v.number(), // Timestamp expiration session (+1h)
+    // URL de paiement (interne ou Stripe)
+    checkoutUrl: v.optional(v.string()),
+    expiresAt: v.number(), // Timestamp expiration (+1h)
 
     // Timestamps capture
     authorizedAt: v.optional(v.number()), // Date pré-autorisation

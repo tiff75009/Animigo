@@ -47,6 +47,14 @@ export const NEEDS_TRAITS = [
   "Traitement médical régulier",
 ];
 
+// Tailles disponibles
+export const ANIMAL_SIZES = [
+  { id: "petit", name: "Petit", description: "Moins de 10kg" },
+  { id: "moyen", name: "Moyen", description: "10-25kg" },
+  { id: "grand", name: "Grand", description: "25-45kg" },
+  { id: "tres_grand", name: "Très grand", description: "Plus de 45kg" },
+];
+
 // Récupérer les animaux d'un utilisateur
 export const getUserAnimals = query({
   args: { token: v.string() },
@@ -90,6 +98,12 @@ export const getUserAnimals = query({
         // Trouver le type d'animal pour l'emoji
         const animalType = ANIMAL_TYPES.find((t) => t.id === animal.type);
 
+        // Utiliser la photo de profil Cloudinary si disponible, sinon l'ancienne méthode
+        const profilePhotoUrl = animal.profilePhoto ||
+          photoUrls.find((p) => p.isPrimary)?.url ||
+          photoUrls[0]?.url ||
+          null;
+
         return {
           id: animal._id,
           name: animal.name,
@@ -98,13 +112,23 @@ export const getUserAnimals = query({
           breed: animal.breed,
           gender: animal.gender,
           birthDate: animal.birthDate,
+          weight: animal.weight,
+          size: animal.size,
           description: animal.description,
-          photos: photoUrls,
-          primaryPhotoUrl: photoUrls.find((p) => p.isPrimary)?.url || photoUrls[0]?.url || null,
+          profilePhoto: animal.profilePhoto,
+          galleryPhotos: animal.galleryPhotos || [],
+          photos: photoUrls, // Ancien système pour rétrocompatibilité
+          primaryPhotoUrl: profilePhotoUrl,
+          goodWithChildren: animal.goodWithChildren,
+          goodWithDogs: animal.goodWithDogs,
+          goodWithCats: animal.goodWithCats,
+          goodWithOtherAnimals: animal.goodWithOtherAnimals,
           compatibilityTraits: animal.compatibilityTraits || [],
           behaviorTraits: animal.behaviorTraits || [],
           needsTraits: animal.needsTraits || [],
           customTraits: animal.customTraits || [],
+          hasAllergies: animal.hasAllergies,
+          allergiesDetails: animal.allergiesDetails,
           specialNeeds: animal.specialNeeds,
           medicalConditions: animal.medicalConditions,
           createdAt: animal.createdAt,
@@ -158,6 +182,12 @@ export const getAnimal = query({
 
     const animalType = ANIMAL_TYPES.find((t) => t.id === animal.type);
 
+    // Utiliser la photo de profil Cloudinary si disponible
+    const profilePhotoUrl = animal.profilePhoto ||
+      photoUrls.find((p) => p.isPrimary)?.url ||
+      photoUrls[0]?.url ||
+      null;
+
     return {
       id: animal._id,
       name: animal.name,
@@ -166,13 +196,23 @@ export const getAnimal = query({
       breed: animal.breed,
       gender: animal.gender,
       birthDate: animal.birthDate,
+      weight: animal.weight,
+      size: animal.size,
       description: animal.description,
+      profilePhoto: animal.profilePhoto,
+      galleryPhotos: animal.galleryPhotos || [],
       photos: photoUrls,
-      primaryPhotoUrl: photoUrls.find((p) => p.isPrimary)?.url || photoUrls[0]?.url || null,
+      primaryPhotoUrl: profilePhotoUrl,
+      goodWithChildren: animal.goodWithChildren,
+      goodWithDogs: animal.goodWithDogs,
+      goodWithCats: animal.goodWithCats,
+      goodWithOtherAnimals: animal.goodWithOtherAnimals,
       compatibilityTraits: animal.compatibilityTraits || [],
       behaviorTraits: animal.behaviorTraits || [],
       needsTraits: animal.needsTraits || [],
       customTraits: animal.customTraits || [],
+      hasAllergies: animal.hasAllergies,
+      allergiesDetails: animal.allergiesDetails,
       specialNeeds: animal.specialNeeds,
       medicalConditions: animal.medicalConditions,
       createdAt: animal.createdAt,
@@ -190,16 +230,26 @@ export const createAnimal = mutation({
     gender: v.union(v.literal("male"), v.literal("female"), v.literal("unknown")),
     breed: v.optional(v.string()),
     birthDate: v.optional(v.string()),
+    weight: v.optional(v.number()),
+    size: v.optional(v.string()),
     description: v.optional(v.string()),
+    profilePhoto: v.optional(v.string()),
+    galleryPhotos: v.optional(v.array(v.string())),
     photos: v.optional(v.array(v.object({
       storageId: v.id("_storage"),
       isPrimary: v.boolean(),
       order: v.number(),
     }))),
+    goodWithChildren: v.optional(v.boolean()),
+    goodWithDogs: v.optional(v.boolean()),
+    goodWithCats: v.optional(v.boolean()),
+    goodWithOtherAnimals: v.optional(v.boolean()),
     compatibilityTraits: v.optional(v.array(v.string())),
     behaviorTraits: v.optional(v.array(v.string())),
     needsTraits: v.optional(v.array(v.string())),
     customTraits: v.optional(v.array(v.string())),
+    hasAllergies: v.optional(v.boolean()),
+    allergiesDetails: v.optional(v.string()),
     specialNeeds: v.optional(v.string()),
     medicalConditions: v.optional(v.string()),
   },
@@ -237,12 +287,22 @@ export const createAnimal = mutation({
       gender: args.gender,
       breed: args.breed?.trim() || undefined,
       birthDate: args.birthDate || undefined,
+      weight: args.weight || undefined,
+      size: args.size || undefined,
       description: args.description?.trim() || undefined,
+      profilePhoto: args.profilePhoto || undefined,
+      galleryPhotos: args.galleryPhotos || undefined,
       photos: args.photos || undefined,
+      goodWithChildren: args.goodWithChildren,
+      goodWithDogs: args.goodWithDogs,
+      goodWithCats: args.goodWithCats,
+      goodWithOtherAnimals: args.goodWithOtherAnimals,
       compatibilityTraits: args.compatibilityTraits || undefined,
       behaviorTraits: args.behaviorTraits || undefined,
       needsTraits: args.needsTraits || undefined,
       customTraits: args.customTraits || undefined,
+      hasAllergies: args.hasAllergies,
+      allergiesDetails: args.allergiesDetails?.trim() || undefined,
       specialNeeds: args.specialNeeds?.trim() || undefined,
       medicalConditions: args.medicalConditions?.trim() || undefined,
       isActive: true,
@@ -264,16 +324,26 @@ export const updateAnimal = mutation({
     gender: v.optional(v.union(v.literal("male"), v.literal("female"), v.literal("unknown"))),
     breed: v.optional(v.string()),
     birthDate: v.optional(v.string()),
+    weight: v.optional(v.number()),
+    size: v.optional(v.string()),
     description: v.optional(v.string()),
+    profilePhoto: v.optional(v.string()),
+    galleryPhotos: v.optional(v.array(v.string())),
     photos: v.optional(v.array(v.object({
       storageId: v.id("_storage"),
       isPrimary: v.boolean(),
       order: v.number(),
     }))),
+    goodWithChildren: v.optional(v.boolean()),
+    goodWithDogs: v.optional(v.boolean()),
+    goodWithCats: v.optional(v.boolean()),
+    goodWithOtherAnimals: v.optional(v.boolean()),
     compatibilityTraits: v.optional(v.array(v.string())),
     behaviorTraits: v.optional(v.array(v.string())),
     needsTraits: v.optional(v.array(v.string())),
     customTraits: v.optional(v.array(v.string())),
+    hasAllergies: v.optional(v.boolean()),
+    allergiesDetails: v.optional(v.string()),
     specialNeeds: v.optional(v.string()),
     medicalConditions: v.optional(v.string()),
   },
@@ -322,12 +392,22 @@ export const updateAnimal = mutation({
     if (args.gender !== undefined) updates.gender = args.gender;
     if (args.breed !== undefined) updates.breed = args.breed.trim() || undefined;
     if (args.birthDate !== undefined) updates.birthDate = args.birthDate || undefined;
+    if (args.weight !== undefined) updates.weight = args.weight || undefined;
+    if (args.size !== undefined) updates.size = args.size || undefined;
     if (args.description !== undefined) updates.description = args.description.trim() || undefined;
+    if (args.profilePhoto !== undefined) updates.profilePhoto = args.profilePhoto || undefined;
+    if (args.galleryPhotos !== undefined) updates.galleryPhotos = args.galleryPhotos;
     if (args.photos !== undefined) updates.photos = args.photos;
+    if (args.goodWithChildren !== undefined) updates.goodWithChildren = args.goodWithChildren;
+    if (args.goodWithDogs !== undefined) updates.goodWithDogs = args.goodWithDogs;
+    if (args.goodWithCats !== undefined) updates.goodWithCats = args.goodWithCats;
+    if (args.goodWithOtherAnimals !== undefined) updates.goodWithOtherAnimals = args.goodWithOtherAnimals;
     if (args.compatibilityTraits !== undefined) updates.compatibilityTraits = args.compatibilityTraits;
     if (args.behaviorTraits !== undefined) updates.behaviorTraits = args.behaviorTraits;
     if (args.needsTraits !== undefined) updates.needsTraits = args.needsTraits;
     if (args.customTraits !== undefined) updates.customTraits = args.customTraits;
+    if (args.hasAllergies !== undefined) updates.hasAllergies = args.hasAllergies;
+    if (args.allergiesDetails !== undefined) updates.allergiesDetails = args.allergiesDetails?.trim() || undefined;
     if (args.specialNeeds !== undefined) updates.specialNeeds = args.specialNeeds.trim() || undefined;
     if (args.medicalConditions !== undefined) updates.medicalConditions = args.medicalConditions.trim() || undefined;
 

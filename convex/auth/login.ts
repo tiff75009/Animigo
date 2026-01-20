@@ -77,7 +77,7 @@ export const login = mutation({
     if (user.role === "admin") {
       redirectPath = "/admin";
     } else if (user.accountType === "utilisateur") {
-      redirectPath = "/recherche";
+      redirectPath = "/client";
     }
 
     return {

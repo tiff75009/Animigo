@@ -290,37 +290,51 @@ export const acceptMission = mutation({
       .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
       .first();
 
+    // Récupérer les configs Convex pour l'API HTTP (workaround self-hosted)
+    const convexUrlConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "convex_url"))
+      .first();
+
+    const convexAdminKeyConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "convex_admin_key"))
+      .first();
+
     if (!stripeSecretKeyConfig?.value) {
       throw new ConvexError("Stripe non configuré - clé secrète manquante");
     }
 
-    const now = Date.now();
+    if (!convexUrlConfig?.value || !convexAdminKeyConfig?.value) {
+      throw new ConvexError("Configuration manquante - convex_url ou convex_admin_key");
+    }
 
-    // Créer un payment record préliminaire (sera mis à jour par le webhook)
-    // NOTE: Sur Convex self-hosted, les actions ne peuvent pas appeler runMutation/scheduler
-    // donc on crée le record ici avant de scheduler l'action Stripe
+    const now = Date.now();
+    const expiresAt = now + 24 * 60 * 60 * 1000; // +24h
+
+    // Créer le payment record AVANT de scheduler l'action
+    // (car les actions ne peuvent pas appeler runMutation sur Convex self-hosted)
     const paymentId = await ctx.db.insert("stripePayments", {
       missionId: args.missionId,
-      checkoutSessionId: "pending", // Sera mis à jour par webhook
-      checkoutUrl: "pending", // Sera mis à jour par webhook
+      // paymentIntentId et clientSecret seront mis à jour par l'action via scheduler
       amount,
       platformFee,
       announcerEarnings,
       status: "pending",
-      expiresAt: now + 3600 * 1000, // +1h
+      expiresAt,
       createdAt: now,
       updatedAt: now,
     });
 
-    // Mettre à jour le statut de la mission
+    // Mettre à jour le statut de la mission en attente de paiement
     await ctx.db.patch(args.missionId, {
       status: "pending_confirmation",
       stripePaymentId: paymentId,
       updatedAt: now,
     });
 
-    // Planifier la création de la session Stripe (action asynchrone)
-    await ctx.scheduler.runAfter(0, internal.api.stripe.createCheckoutSession, {
+    // Planifier la création du PaymentIntent Stripe (paiement intégré via Stripe Elements)
+    await ctx.scheduler.runAfter(0, internal.api.stripe.createPaymentIntent, {
       missionId: args.missionId,
       amount,
       platformFee,
@@ -335,6 +349,8 @@ export const acceptMission = mutation({
       // Configs passées depuis la mutation (contourne le bug ctx.runQuery sur self-hosted)
       stripeSecretKey: stripeSecretKeyConfig.value,
       appUrl: appUrlConfig?.value || "http://localhost:3000",
+      convexUrl: convexUrlConfig.value, // URL Convex pour l'API HTTP
+      convexAdminKey: convexAdminKeyConfig.value, // Admin key pour l'authentification
       // Config email pour l'envoi du lien de paiement
       emailConfig: emailApiKeyConfig?.value
         ? {
@@ -755,5 +771,64 @@ export const getMissionAnimalDetails = query({
       medicalConditions: animal.medicalConditions,
       isInline: false,
     };
+  },
+});
+
+/**
+ * Récupère les missions d'un client (propriétaire d'animal)
+ */
+export const getClientMissions = query({
+  args: {
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+
+    if (!session || session.expiresAt < Date.now()) {
+      return [];
+    }
+
+    // Récupérer toutes les missions où l'utilisateur est le client
+    const missions = await ctx.db
+      .query("missions")
+      .withIndex("by_client", (q) => q.eq("clientId", session.userId))
+      .order("desc")
+      .collect();
+
+    // Récupérer les infos des annonceurs
+    const missionsWithDetails = await Promise.all(
+      missions.map(async (m) => {
+        const announcer = await ctx.db.get(m.announcerId);
+
+        return {
+          id: m._id,
+          announcerId: m.announcerId,
+          announcerName: announcer
+            ? `${announcer.firstName} ${announcer.lastName.charAt(0)}.`
+            : "Annonceur",
+          announcerPhone: announcer?.phone,
+          animal: m.animal,
+          serviceName: m.serviceName,
+          serviceCategory: m.serviceCategory,
+          startDate: m.startDate,
+          endDate: m.endDate,
+          startTime: m.startTime,
+          endTime: m.endTime,
+          status: m.status,
+          amount: m.amount,
+          paymentStatus: m.paymentStatus,
+          location: m.location,
+          clientNotes: m.clientNotes,
+          announcerNotes: m.announcerNotes,
+          cancellationReason: m.cancellationReason,
+          createdAt: m.createdAt,
+        };
+      })
+    );
+
+    return missionsWithDetails;
   },
 });
