@@ -209,13 +209,13 @@ function FormulasModal({
   const filteredServices = useMemo(() => {
     if (!serviceDetails) return [];
     if (categoryFilter === "all") return serviceDetails;
-    return serviceDetails.filter((service) => service.category === categoryFilter);
+    return serviceDetails.filter((service: { category: string }) => service.category === categoryFilter);
   }, [serviceDetails, categoryFilter]);
 
   // Obtenir les catégories disponibles pour le filtre
   const availableCategories = useMemo(() => {
     if (!serviceDetails) return [];
-    return serviceDetails.map((service) => ({
+    return serviceDetails.map((service: { category: string; categoryName: string; categoryIcon?: string }) => ({
       slug: service.category,
       name: service.categoryName,
       icon: service.categoryIcon,
@@ -314,8 +314,8 @@ function FormulasModal({
   if (!isOpen) return null;
 
   const isLoading = serviceDetails === undefined;
-  const totalVariants = filteredServices.reduce((acc, s) => acc + s.variants.length, 0);
-  const totalOptions = filteredServices.reduce((acc, s) => acc + s.options.length, 0);
+  const totalVariants = filteredServices.reduce((acc: number, s: { variants: unknown[] }) => acc + s.variants.length, 0);
+  const totalOptions = filteredServices.reduce((acc: number, s: { options: unknown[] }) => acc + s.options.length, 0);
 
   // Generate calendar days
   const generateCalendarDays = () => {
@@ -373,14 +373,14 @@ function FormulasModal({
 
   const getDateStatus = (date: string) => {
     if (!availabilityCalendar) return "loading";
-    const dayInfo = calendarData.find((d) => d.date === date);
+    const dayInfo = calendarData.find((d: { date: string; status?: string }) => d.date === date);
     return dayInfo?.status ?? "available";
   };
 
   // Récupérer les créneaux réservés pour une date
   const getBookedSlotsForDate = (date: string) => {
     if (!availabilityCalendar) return [];
-    const dayInfo = calendarData.find((d) => d.date === date);
+    const dayInfo = calendarData.find((d: { date: string; bookedSlots?: Array<{ startTime: string; endTime: string }> }) => d.date === date);
     return dayInfo?.bookedSlots ?? [];
   };
 
@@ -416,7 +416,7 @@ function FormulasModal({
     const slotStart = parseTime(time);
 
     // Vérifier si le créneau tombe dans une période déjà réservée (avec buffers)
-    return bookedSlots.some((booked) => {
+    return bookedSlots.some((booked: { startTime: string; endTime: string }) => {
       // Appliquer les buffers: étendre la période bloquée
       const effectiveStart = subtractMinutes(booked.startTime, bufferBefore);
       const effectiveEnd = addMinutes(booked.endTime, bufferAfter);
@@ -486,8 +486,7 @@ function FormulasModal({
                     </div>
                     <div>
                       <h3 className="font-bold text-lg text-foreground">
-                        {step === "success" ? "Réservation envoyée !" :
-                         step === "booking" ? `Réserver avec ${announcer.firstName}` :
+                        {step === "booking" ? `Réserver avec ${announcer.firstName}` :
                          `${announcer.firstName} ${announcer.lastName.charAt(0)}.`}
                       </h3>
                       {step === "formulas" && (
@@ -553,7 +552,7 @@ function FormulasModal({
                             >
                               Tout ({serviceDetails.length})
                             </button>
-                            {availableCategories.map((cat) => (
+                            {availableCategories.map((cat: { slug: string; name: string; icon?: string }) => (
                               <button
                                 key={cat.slug}
                                 onClick={() => setCategoryFilter(cat.slug)}
@@ -571,7 +570,24 @@ function FormulasModal({
                           </div>
                         )}
 
-                        {filteredServices.map((service) => (
+                        {filteredServices.map((service: {
+                          id: string;
+                          category: string;
+                          categoryName: string;
+                          categoryIcon?: string;
+                          categoryDescription?: string;
+                          animalTypes: string[];
+                          variants: Array<{
+                            id: string;
+                            name: string;
+                            price: number;
+                            priceUnit: string;
+                            duration?: number;
+                            description?: string;
+                            includedFeatures?: string[];
+                          }>;
+                          options: Array<{ id: string; name: string; price: number; priceType?: string }>;
+                        }) => (
                           <div key={service.id} className="space-y-4">
                             <div className="flex items-start gap-3">
                               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-xl flex-shrink-0">
@@ -588,7 +604,15 @@ function FormulasModal({
 
                             {service.variants.length > 0 && (
                               <div className="space-y-2">
-                                {service.variants.map((variant) => (
+                                {service.variants.map((variant: {
+                                id: string;
+                                name: string;
+                                price: number;
+                                priceUnit: string;
+                                duration?: number;
+                                description?: string;
+                                includedFeatures?: string[];
+                              }) => (
                                   <div
                                     key={variant.id}
                                     className="p-4 bg-primary/5 rounded-xl border border-primary/10 hover:border-primary/30 transition-colors"
@@ -608,7 +632,7 @@ function FormulasModal({
                                         )}
                                         {variant.includedFeatures && variant.includedFeatures.length > 0 && (
                                           <div className="mt-2 space-y-1">
-                                            {variant.includedFeatures.map((feature, idx) => (
+                                            {variant.includedFeatures.map((feature: string, idx: number) => (
                                               <div key={idx} className="flex items-center gap-2 text-sm text-secondary">
                                                 <Check className="w-3.5 h-3.5" />
                                                 <span>{feature}</span>
@@ -653,11 +677,11 @@ function FormulasModal({
                               <div className="space-y-2">
                                 <p className="text-xs font-semibold text-foreground/50 uppercase tracking-wider">Options additionnelles</p>
                                 <div className="flex flex-wrap gap-2">
-                                  {service.options.map((option) => (
+                                  {service.options.map((option: { id: string; name: string; price: number; priceType?: string }) => (
                                     <div key={option.id} className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-sm">
                                       <Zap className="w-4 h-4 text-amber-500" />
                                       <span className="font-medium text-amber-800">{option.name}</span>
-                                      <span className="text-amber-600 font-semibold">+{formatPrice(option.price)}{priceTypeLabels[option.priceType] ?? ""}</span>
+                                      <span className="text-amber-600 font-semibold">+{formatPrice(option.price)}{option.priceType ? priceTypeLabels[option.priceType] : ""}</span>
                                     </div>
                                   ))}
                                 </div>
@@ -828,7 +852,7 @@ function FormulasModal({
                               Créneaux déjà réservés :
                             </p>
                             <div className="flex flex-wrap gap-1">
-                              {getBookedSlotsForDate(selectedDate).map((slot, idx) => (
+                              {getBookedSlotsForDate(selectedDate).map((slot: { startTime: string; endTime: string }, idx: number) => (
                                 <span key={idx} className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">
                                   {slot.startTime} - {slot.endTime}
                                 </span>
@@ -1083,8 +1107,8 @@ export function SearchMapSection() {
 
   // Convert results to map-compatible format (only those with coordinates)
   const mapSitters = results
-    .filter((r) => r.coordinates !== undefined)
-    .map((r) => ({
+    .filter((r: AnnouncerResult) => r.coordinates !== undefined)
+    .map((r: AnnouncerResult) => ({
       id: r.id,
       firstName: r.firstName,
       lastName: r.lastName,
@@ -1316,7 +1340,7 @@ export function SearchMapSection() {
                   )}
                 </div>
               ) : (
-                results.map((announcer) => (
+                results.map((announcer: AnnouncerResult) => (
                   <AnnouncerCard
                     key={announcer.id}
                     announcer={announcer}
@@ -1336,11 +1360,11 @@ export function SearchMapSection() {
                 sitters={mapSitters}
                 selectedSitter={
                   selectedAnnouncer
-                    ? mapSitters.find((s) => s.id === selectedAnnouncer.id) ?? null
+                    ? mapSitters.find((s: { id: string }) => s.id === selectedAnnouncer.id) ?? null
                     : null
                 }
                 onSitterSelect={(sitter) => {
-                  const found = results.find((r) => r.id === sitter.id);
+                  const found = results.find((r: AnnouncerResult) => r.id === sitter.id);
                   if (found) setSelectedAnnouncer(found);
                 }}
                 searchCenter={filters.location.coordinates ?? null}

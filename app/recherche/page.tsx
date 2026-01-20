@@ -17,6 +17,16 @@ import {
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { useSearch, type AnnouncerResult } from "@/app/hooks/useSearch";
+import { Id } from "@/convex/_generated/dataModel";
+
+interface ServiceCategory {
+  id: Id<"serviceCategories">;
+  slug: string;
+  name: string;
+  icon: string;
+  imageUrl?: string;
+  billingType?: "hourly" | "daily" | "flexible";
+}
 import { LocationSearchBar } from "@/app/components/search";
 import FilterSidebar from "@/app/components/search/FilterSidebar";
 import {
@@ -143,7 +153,7 @@ export default function RecherchePage() {
                 <span>🔍</span>
                 <span>Tous les services</span>
               </button>
-              {categories?.map((cat) => (
+              {categories?.map((cat: ServiceCategory) => (
                 <button
                   key={cat.id}
                   onClick={() => {
@@ -306,7 +316,7 @@ export default function RecherchePage() {
             <EmptyState onReset={resetAllFilters} />
           ) : viewMode === "grid" ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {results.map((announcer, index) => (
+              {results.map((announcer: AnnouncerResult, index: number) => (
                 <AnnouncerCardGrid
                   key={announcer.id}
                   announcer={announcer}
@@ -317,7 +327,7 @@ export default function RecherchePage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {results.map((announcer, index) => (
+              {results.map((announcer: AnnouncerResult, index: number) => (
                 <AnnouncerCardList
                   key={announcer.id}
                   announcer={announcer}

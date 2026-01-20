@@ -20,6 +20,14 @@ import {
   Globe,
 } from "lucide-react";
 
+interface ConfigItem {
+  key: string;
+  value: string;
+  isSecret: boolean;
+  environment: "development" | "production";
+  updatedAt: number;
+}
+
 interface ConfigField {
   key: string;
   label: string;
@@ -178,7 +186,7 @@ export default function IntegrationsPage() {
 
   const getConfigValue = (key: string) => {
     if (values[key] !== undefined) return values[key];
-    const config = configs?.find((c) => c.key === key);
+    const config = configs?.find((c: ConfigItem) => c.key === key);
     return config?.value || "";
   };
 

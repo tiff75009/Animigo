@@ -208,7 +208,19 @@ export default function ServiceModerationPage() {
 
       {/* Services list */}
       <div className="space-y-4">
-        {servicesData?.services.map((service) => (
+        {servicesData?.services.map((service: {
+          id: Id<"services">;
+          name?: string;
+          category: string;
+          description?: string;
+          price?: number;
+          basePrice?: number;
+          priceUnit?: string;
+          moderationStatus?: string;
+          moderationNote?: string;
+          createdAt: number;
+          user?: { firstName: string; lastName: string; email: string; accountType: string } | null;
+        }) => (
           <motion.div
             key={service.id}
             layout

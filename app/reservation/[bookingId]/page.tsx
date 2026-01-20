@@ -230,7 +230,7 @@ export default function ReservationPage({
   // Initialiser les options sélectionnées depuis les données de réservation
   useEffect(() => {
     if (bookingData?.options) {
-      setSelectedOptionIds(bookingData.options.map((opt) => opt.id));
+      setSelectedOptionIds(bookingData.options.map((opt: ServiceOption) => opt.id));
     }
   }, [bookingData?.options]);
 
@@ -259,7 +259,7 @@ export default function ReservationPage({
 
     // Ajouter les options actuellement sélectionnées
     for (const optId of selectedOptionIds) {
-      const option = bookingData.availableOptions?.find((o) => o.id === optId);
+      const option = bookingData.availableOptions?.find((o: ServiceOption) => o.id === optId);
       if (option) {
         total += option.price;
       }
@@ -835,7 +835,7 @@ export default function ReservationPage({
                 </div>
                 <div className="p-6">
                   <div className="space-y-3">
-                    {bookingData.availableOptions.map((option) => {
+                    {bookingData.availableOptions.map((option: ServiceOption) => {
                       const isSelected = selectedOptionIds.includes(option.id);
                       return (
                         <div
@@ -1081,7 +1081,7 @@ export default function ReservationPage({
                     <div className="space-y-1">
                       {selectedOptionIds.map((optId) => {
                         const option = bookingData.availableOptions?.find(
-                          (o) => o.id === optId
+                          (o: ServiceOption) => o.id === optId
                         );
                         if (!option) return null;
                         return (
@@ -1125,9 +1125,9 @@ export default function ReservationPage({
                       </span>
                       <span className="text-foreground">
                         +{formatPrice(
-                          selectedOptionIds.reduce((sum, optId) => {
+                          selectedOptionIds.reduce((sum: number, optId: string) => {
                             const option = bookingData.availableOptions?.find(
-                              (o) => o.id === optId
+                              (o: ServiceOption) => o.id === optId
                             );
                             return sum + (option?.price || 0);
                           }, 0)

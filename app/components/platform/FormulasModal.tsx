@@ -109,12 +109,12 @@ export function FormulasModal({ isOpen, onClose, announcer, searchFilters }: For
   const filteredServices = useMemo(() => {
     if (!serviceDetails) return [];
     if (categoryFilter === "all") return serviceDetails;
-    return serviceDetails.filter((s) => s.category === categoryFilter);
+    return serviceDetails.filter((s: { category: string }) => s.category === categoryFilter);
   }, [serviceDetails, categoryFilter]);
 
   const availableCategories = useMemo(() => {
     if (!serviceDetails) return [];
-    return serviceDetails.map((s) => ({
+    return serviceDetails.map((s: { category: string; categoryName: string; categoryIcon?: string }) => ({
       slug: s.category,
       name: s.categoryName,
       icon: s.categoryIcon,
@@ -198,7 +198,7 @@ export function FormulasModal({ isOpen, onClose, announcer, searchFilters }: For
   if (!isOpen) return null;
 
   const isLoading = serviceDetails === undefined;
-  const totalVariants = filteredServices.reduce((acc, s) => acc + s.variants.length, 0);
+  const totalVariants = filteredServices.reduce((acc: number, s: { variants: unknown[] }) => acc + s.variants.length, 0);
 
   const generateCalendarDays = () => {
     const year = calendarMonth.getFullYear();
@@ -231,12 +231,12 @@ export function FormulasModal({ isOpen, onClose, announcer, searchFilters }: For
 
   const getDateStatus = (date: string) => {
     if (!availabilityCalendar) return "loading";
-    const dayInfo = calendarData.find((d) => d.date === date);
+    const dayInfo = calendarData.find((d: { date: string; status?: string }) => d.date === date);
     return dayInfo?.status ?? "available";
   };
 
   const getBookedSlotsForDate = (date: string) => {
-    const dayInfo = calendarData.find((d) => d.date === date);
+    const dayInfo = calendarData.find((d: { date: string; bookedSlots?: Array<{ startTime: string; endTime: string }> }) => d.date === date);
     return dayInfo?.bookedSlots ?? [];
   };
 
@@ -250,7 +250,7 @@ export function FormulasModal({ isOpen, onClose, announcer, searchFilters }: For
       return h * 60 + m;
     };
     const slotStart = parseTime(time);
-    return bookedSlots.some((booked) => {
+    return bookedSlots.some((booked: { startTime: string; endTime: string }) => {
       const bookedStart = parseTime(booked.startTime) - bufferBefore;
       const bookedEnd = parseTime(booked.endTime) + bufferAfter;
       return slotStart >= bookedStart && slotStart <= bookedEnd;
@@ -339,7 +339,7 @@ export function FormulasModal({ isOpen, onClose, announcer, searchFilters }: For
                             >
                               Tout
                             </button>
-                            {availableCategories.map((cat) => (
+                            {availableCategories.map((cat: { slug: string; name: string; icon?: string }) => (
                               <button
                                 key={cat.slug}
                                 onClick={() => setCategoryFilter(cat.slug)}
@@ -357,14 +357,37 @@ export function FormulasModal({ isOpen, onClose, announcer, searchFilters }: For
                           </div>
                         )}
 
-                        {filteredServices.map((service) => (
+                        {filteredServices.map((service: {
+                          id: string;
+                          category: string;
+                          categoryName: string;
+                          categoryIcon?: string;
+                          variants: Array<{
+                            id: string;
+                            name: string;
+                            price: number;
+                            priceUnit: string;
+                            duration?: number;
+                            description?: string;
+                            includedFeatures?: string[];
+                          }>;
+                          options: Array<{ id: string; name: string; price: number }>;
+                        }) => (
                           <div key={service.id} className="space-y-3">
                             <div className="flex items-center gap-2">
                               <span className="text-xl">{service.categoryIcon ?? "✨"}</span>
                               <h4 className="font-semibold text-gray-900">{service.categoryName}</h4>
                             </div>
 
-                            {service.variants.map((variant) => (
+                            {service.variants.map((variant: {
+                              id: string;
+                              name: string;
+                              price: number;
+                              priceUnit: string;
+                              duration?: number;
+                              description?: string;
+                              includedFeatures?: string[];
+                            }) => (
                               <div
                                 key={variant.id}
                                 className="p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
@@ -384,7 +407,7 @@ export function FormulasModal({ isOpen, onClose, announcer, searchFilters }: For
                                     )}
                                     {variant.includedFeatures && variant.includedFeatures.length > 0 && (
                                       <div className="mt-2 flex flex-wrap gap-1">
-                                        {variant.includedFeatures.slice(0, 3).map((f, i) => (
+                                        {variant.includedFeatures.slice(0, 3).map((f: string, i: number) => (
                                           <span key={i} className="text-xs text-secondary flex items-center gap-1">
                                             <Check className="w-3 h-3" />
                                             {f}
@@ -426,7 +449,7 @@ export function FormulasModal({ isOpen, onClose, announcer, searchFilters }: For
 
                             {service.options.length > 0 && (
                               <div className="flex flex-wrap gap-2 pt-2">
-                                {service.options.map((opt) => (
+                                {service.options.map((opt: { id: string; name: string; price: number }) => (
                                   <span key={opt.id} className="text-xs px-2 py-1 bg-amber-50 text-amber-700 rounded-full flex items-center gap-1">
                                     <Zap className="w-3 h-3" />
                                     {opt.name} +{formatPrice(opt.price)}

@@ -194,7 +194,7 @@ export const getPendingBooking = query({
       name: opt.name,
       description: opt.description,
       price: opt.price,
-      priceUnit: opt.priceUnit,
+      priceType: opt.priceType,
     }));
 
     // Déterminer le type de statut pour le badge

@@ -390,7 +390,18 @@ export default function InvitationsPage() {
                 </tr>
               )}
               {invitations?.success &&
-                invitations.invitations.map((inv) => {
+                invitations.invitations.map((inv: {
+                  id: Id<"adminInvitations">;
+                  status: string;
+                  note?: string;
+                  token: string;
+                  createdAt: number;
+                  expiresAt: number;
+                  usedAt?: number;
+                  revokedAt?: number;
+                  createdBy?: { firstName: string; lastName: string } | null;
+                  usedBy?: { firstName: string; lastName: string; email: string } | null;
+                }) => {
                   const config = statusConfig[inv.status as Exclude<InvitationStatus, "all">];
                   const StatusIcon = config?.icon || Clock;
 

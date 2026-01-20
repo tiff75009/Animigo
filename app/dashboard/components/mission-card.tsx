@@ -30,8 +30,8 @@ import { api } from "@/convex/_generated/api";
 
 // Types pour les missions Convex
 export interface ConvexMission {
-  id: Id<"missions">;
-  clientId: Id<"users">;
+  id: Id<"missions"> | string;
+  clientId: Id<"users"> | string;
   clientName: string;
   clientPhone?: string;
   animal: {
@@ -562,7 +562,7 @@ function MissionDetailsModal({
 
 // Modal de la fiche animal
 interface AnimalDetailsModalProps {
-  missionId: Id<"missions">;
+  missionId: Id<"missions"> | string;
   token: string;
   animalEmoji: string;
   onClose: () => void;

@@ -977,7 +977,7 @@ export const createBookingRequest = mutation({
       clientId: session.userId,
       serviceId: args.serviceId,
       clientName: `${client.firstName} ${client.lastName}`,
-      clientPhone: clientProfile?.phone,
+      clientPhone: client.phone,
       animal: args.animal,
       serviceName: `${category?.name ?? service.category} - ${variant.name}`,
       serviceCategory: service.category,

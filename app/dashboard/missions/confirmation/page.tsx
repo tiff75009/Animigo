@@ -218,7 +218,7 @@ export default function MissionsConfirmationPage() {
   );
 
   const isLoading = missions === undefined;
-  const totalAmount = missions?.reduce((sum, m) => sum + m.amount, 0) || 0;
+  const totalAmount = missions?.reduce((sum: number, m: { amount: number }) => sum + m.amount, 0) || 0;
 
   const formatCurrency = (cents: number) => {
     return new Intl.NumberFormat("fr-FR", {
@@ -340,7 +340,7 @@ export default function MissionsConfirmationPage() {
             </Link>
           </div>
         ) : (
-          missions.map((mission, index) => (
+          missions.map((mission: Mission, index: number) => (
             <motion.div
               key={mission.id}
               initial={{ opacity: 0, y: 20 }}

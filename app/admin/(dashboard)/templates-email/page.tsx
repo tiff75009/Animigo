@@ -62,7 +62,7 @@ export default function EmailTemplatesPage() {
   const resetTemplate = useMutation(api.admin.emailTemplates.resetToDefault);
   const seedDefaults = useMutation(api.admin.emailTemplates.seedDefaults);
 
-  const currentTemplate = templates?.find((t) => t.slug === selectedTemplate);
+  const currentTemplate = templates?.find((t: EmailTemplate) => t.slug === selectedTemplate);
 
   useEffect(() => {
     if (currentTemplate) {
@@ -159,7 +159,7 @@ export default function EmailTemplatesPage() {
     if (!currentTemplate) return "";
 
     let preview = editedHtml;
-    currentTemplate.availableVariables.forEach((v) => {
+    currentTemplate.availableVariables.forEach((v: TemplateVariable) => {
       const regex = new RegExp(`\\{\\{${v.key}\\}\\}`, "g");
       preview = preview.replace(regex, v.example || `[${v.key}]`);
     });
@@ -237,7 +237,7 @@ export default function EmailTemplatesPage() {
               <h2 className="font-semibold text-white">Templates</h2>
             </div>
             <div className="p-2">
-              {templates.map((template) => (
+              {templates.map((template: EmailTemplate) => (
                 <button
                   key={template.slug}
                   onClick={() => setSelectedTemplate(template.slug)}
@@ -327,7 +327,7 @@ export default function EmailTemplatesPage() {
                         className="overflow-hidden"
                       >
                         <div className="mt-3 flex flex-wrap gap-2">
-                          {currentTemplate.availableVariables.map((v) => (
+                          {currentTemplate.availableVariables.map((v: TemplateVariable) => (
                             <div
                               key={v.key}
                               className="group flex items-center gap-1 px-3 py-1.5 bg-slate-800 rounded-lg border border-slate-700"
@@ -450,7 +450,7 @@ export default function EmailTemplatesPage() {
                         <p className="text-xs text-slate-500 mb-1">Sujet :</p>
                         <p className="text-white font-medium">
                           {currentTemplate.availableVariables.reduce(
-                            (acc, v) =>
+                            (acc: string, v: TemplateVariable) =>
                               acc.replace(
                                 new RegExp(`\\{\\{${v.key}\\}\\}`, "g"),
                                 v.example || `[${v.key}]`

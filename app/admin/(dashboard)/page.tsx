@@ -215,7 +215,7 @@ export default function AdminDashboardPage() {
         </div>
         <div className="space-y-3">
           {onlineDevs && onlineDevs.length > 0 ? (
-            onlineDevs.map((dev, index) => (
+            onlineDevs.map((dev: { name: string; onlineSince: number }, index: number) => (
               <motion.div
                 key={dev.name}
                 className="flex items-center justify-between p-3 bg-slate-800 rounded-lg"

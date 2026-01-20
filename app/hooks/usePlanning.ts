@@ -326,7 +326,7 @@ export function usePlanning({
   const getMissionsForDay = useCallback(
     (date: string): Mission[] => {
       if (!missions) return [];
-      return missions.filter((m) => m.startDate <= date && m.endDate >= date);
+      return missions.filter((m: Mission) => m.startDate <= date && m.endDate >= date);
     },
     [missions]
   );
@@ -335,7 +335,7 @@ export function usePlanning({
   const getAvailabilityForDay = useCallback(
     (date: string): Availability | null => {
       if (!availability) return null;
-      return availability.find((a) => a.date === date) || null;
+      return availability.find((a: Availability) => a.date === date) || null;
     },
     [availability]
   );

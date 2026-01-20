@@ -8,6 +8,17 @@ import { motion } from "framer-motion";
 import { Key, Plus, Trash2, Copy, Check, Circle, Code } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 
+interface DevKey {
+  id: Id<"devKeys">;
+  name: string;
+  isActive: boolean;
+  createdAt: number;
+  revokedAt: number | null;
+  isOnline: boolean;
+  onlineSince: number | null;
+  lastSeen: number | null;
+}
+
 function formatRelativeTime(timestamp: number): string {
   const diff = Date.now() - timestamp;
   const seconds = Math.floor(diff / 1000);
@@ -76,8 +87,8 @@ export default function DevKeysPage() {
     }
   };
 
-  const onlineCount = devKeys?.filter((dk) => dk.isOnline).length ?? 0;
-  const activeCount = devKeys?.filter((dk) => dk.isActive).length ?? 0;
+  const onlineCount = devKeys?.filter((dk: DevKey) => dk.isOnline).length ?? 0;
+  const activeCount = devKeys?.filter((dk: DevKey) => dk.isActive).length ?? 0;
 
   return (
     <div className="p-8">
@@ -228,7 +239,7 @@ export default function DevKeysPage() {
                   </td>
                 </tr>
               )}
-              {devKeys?.map((dk) => (
+              {devKeys?.map((dk: DevKey) => (
                 <tr
                   key={dk.id}
                   className={`${!dk.isActive ? "opacity-50" : ""} hover:bg-slate-800/30 transition-colors`}

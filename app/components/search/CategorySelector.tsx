@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/app/lib/utils";
 import { ServiceCategory } from "@/app/hooks/useSearch";
 import { Loader2 } from "lucide-react";
@@ -53,7 +54,14 @@ export default function CategorySelector({
       </motion.button>
 
       {/* Catégories dynamiques */}
-      {categories.map((category) => {
+      {categories.map((category: {
+        id: Id<"serviceCategories">;
+        slug: string;
+        name: string;
+        icon?: string;
+        imageUrl?: string | null;
+        billingType?: string;
+      }) => {
         const isSelected = selectedCategory?.slug === category.slug;
 
         return (

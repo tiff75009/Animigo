@@ -472,7 +472,17 @@ export default function ServiceCategoriesPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-700">
-            {categories?.map((category, index) => (
+            {categories?.map((category: {
+              id: Id<"serviceCategories">;
+              slug: string;
+              name: string;
+              description?: string;
+              icon?: string;
+              imageUrl?: string;
+              billingType?: string;
+              defaultHourlyPrice?: number;
+              isActive: boolean;
+            }, index: number) => (
               <motion.tr
                 key={category.id}
                 initial={{ opacity: 0 }}

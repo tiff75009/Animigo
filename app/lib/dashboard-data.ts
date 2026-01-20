@@ -18,10 +18,13 @@ export interface Animal {
 
 export interface Mission {
   id: string;
+  clientId: string;
   clientName: string;
   clientAvatar: string;
   animal: Animal;
   service: string;
+  serviceName: string;
+  serviceCategory: string;
   startDate: string;
   endDate: string;
   status: MissionStatus;
@@ -112,10 +115,13 @@ export const mockMissions: Mission[] = [
   // Completed missions
   {
     id: "m1",
+    clientId: "c1",
     clientName: "Marie Dupont",
     clientAvatar: "👩‍🦰",
     animal: { name: "Luna", type: "Chien", emoji: "🐕" },
     service: "Garde à domicile",
+    serviceName: "Garde à domicile",
+    serviceCategory: "garde",
     startDate: "2024-01-05",
     endDate: "2024-01-12",
     status: "completed",
@@ -125,10 +131,13 @@ export const mockMissions: Mission[] = [
   },
   {
     id: "m2",
+    clientId: "c2",
     clientName: "Thomas Martin",
     clientAvatar: "👨",
     animal: { name: "Mochi", type: "Chat", emoji: "🐈" },
     service: "Visites quotidiennes",
+    serviceName: "Visites quotidiennes",
+    serviceCategory: "visite",
     startDate: "2024-01-08",
     endDate: "2024-01-15",
     status: "completed",
@@ -138,10 +147,13 @@ export const mockMissions: Mission[] = [
   },
   {
     id: "m3",
+    clientId: "c3",
     clientName: "Sophie Laurent",
     clientAvatar: "👩",
     animal: { name: "Rex", type: "Chien", emoji: "🐕" },
     service: "Promenades",
+    serviceName: "Promenades",
+    serviceCategory: "promenade",
     startDate: "2024-01-10",
     endDate: "2024-01-17",
     status: "completed",
@@ -152,10 +164,13 @@ export const mockMissions: Mission[] = [
   // In progress missions
   {
     id: "m4",
+    clientId: "c4",
     clientName: "Lucas Petit",
     clientAvatar: "👨‍🦱",
     animal: { name: "Rocky", type: "Chien", emoji: "🐕" },
     service: "Garde à domicile",
+    serviceName: "Garde à domicile",
+    serviceCategory: "garde",
     startDate: "2024-01-14",
     endDate: "2024-01-21",
     status: "in_progress",
@@ -165,10 +180,13 @@ export const mockMissions: Mission[] = [
   },
   {
     id: "m5",
+    clientId: "c5",
     clientName: "Emma Rousseau",
     clientAvatar: "👩‍🦳",
     animal: { name: "Kiwi", type: "Perruche", emoji: "🦜" },
     service: "Visites quotidiennes",
+    serviceName: "Visites quotidiennes",
+    serviceCategory: "visite",
     startDate: "2024-01-13",
     endDate: "2024-01-18",
     status: "in_progress",
@@ -179,10 +197,13 @@ export const mockMissions: Mission[] = [
   // Upcoming missions
   {
     id: "m6",
+    clientId: "c6",
     clientName: "Léa Bernard",
     clientAvatar: "👩",
     animal: { name: "Caramel", type: "Lapin", emoji: "🐰" },
     service: "Pension",
+    serviceName: "Pension",
+    serviceCategory: "pension",
     startDate: "2024-01-25",
     endDate: "2024-02-01",
     status: "upcoming",
@@ -192,10 +213,13 @@ export const mockMissions: Mission[] = [
   },
   {
     id: "m7",
+    clientId: "c7",
     clientName: "Pierre Durand",
     clientAvatar: "👨",
     animal: { name: "Max", type: "Chien", emoji: "🐕" },
     service: "Garde à domicile",
+    serviceName: "Garde à domicile",
+    serviceCategory: "garde",
     startDate: "2024-02-05",
     endDate: "2024-02-12",
     status: "upcoming",
@@ -205,10 +229,13 @@ export const mockMissions: Mission[] = [
   },
   {
     id: "m8",
+    clientId: "c8",
     clientName: "Claire Moreau",
     clientAvatar: "👩‍🦰",
     animal: { name: "Nala", type: "Chat", emoji: "🐈" },
     service: "Visites quotidiennes",
+    serviceName: "Visites quotidiennes",
+    serviceCategory: "visite",
     startDate: "2024-02-10",
     endDate: "2024-02-15",
     status: "upcoming",
@@ -219,10 +246,13 @@ export const mockMissions: Mission[] = [
   // Pending acceptance
   {
     id: "m9",
+    clientId: "c9",
     clientName: "Antoine Leroy",
     clientAvatar: "👨‍🦱",
     animal: { name: "Simba", type: "Chat", emoji: "🐈" },
     service: "Garde à domicile",
+    serviceName: "Garde à domicile",
+    serviceCategory: "garde",
     startDate: "2024-02-20",
     endDate: "2024-02-27",
     status: "pending_acceptance",
@@ -232,10 +262,13 @@ export const mockMissions: Mission[] = [
   },
   {
     id: "m10",
+    clientId: "c10",
     clientName: "Julie Blanc",
     clientAvatar: "👩",
     animal: { name: "Coco", type: "Perroquet", emoji: "🦜" },
     service: "Visites quotidiennes",
+    serviceName: "Visites quotidiennes",
+    serviceCategory: "visite",
     startDate: "2024-01-22",
     endDate: "2024-01-24",
     status: "pending_acceptance",
@@ -246,10 +279,13 @@ export const mockMissions: Mission[] = [
   // Pending confirmation
   {
     id: "m11",
+    clientId: "c11",
     clientName: "Marc Girard",
     clientAvatar: "👨",
     animal: { name: "Buddy", type: "Chien", emoji: "🐕" },
     service: "Promenades",
+    serviceName: "Promenades",
+    serviceCategory: "promenade",
     startDate: "2024-02-15",
     endDate: "2024-02-22",
     status: "pending_confirmation",
@@ -260,10 +296,13 @@ export const mockMissions: Mission[] = [
   // Refused
   {
     id: "m12",
+    clientId: "c12",
     clientName: "Nathalie Roux",
     clientAvatar: "👩‍🦳",
     animal: { name: "Thor", type: "Chien", emoji: "🐕" },
     service: "Transport",
+    serviceName: "Transport",
+    serviceCategory: "transport",
     startDate: "2024-01-20",
     endDate: "2024-01-20",
     status: "refused",
@@ -274,10 +313,13 @@ export const mockMissions: Mission[] = [
   // Cancelled
   {
     id: "m13",
+    clientId: "c13",
     clientName: "François Mercier",
     clientAvatar: "👨",
     animal: { name: "Milo", type: "Chat", emoji: "🐈" },
     service: "Garde à domicile",
+    serviceName: "Garde à domicile",
+    serviceCategory: "garde",
     startDate: "2024-01-18",
     endDate: "2024-01-25",
     status: "cancelled",
@@ -287,10 +329,13 @@ export const mockMissions: Mission[] = [
   },
   {
     id: "m14",
+    clientId: "c14",
     clientName: "Isabelle Faure",
     clientAvatar: "👩",
     animal: { name: "Bella", type: "Chien", emoji: "🐕" },
     service: "Pension",
+    serviceName: "Pension",
+    serviceCategory: "pension",
     startDate: "2024-01-22",
     endDate: "2024-01-29",
     status: "cancelled",

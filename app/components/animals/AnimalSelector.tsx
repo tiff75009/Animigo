@@ -113,7 +113,15 @@ export default function AnimalSelector({
           }
         >
           <AnimatePresence mode="popLayout">
-            {animals.map((animal) => (
+            {animals.map((animal: {
+              id: Id<"animals">;
+              name: string;
+              type: string;
+              emoji: string;
+              breed?: string;
+              gender: string;
+              primaryPhotoUrl: string | null;
+            }) => (
               <motion.div
                 key={animal.id}
                 initial={{ opacity: 0, scale: 0.9 }}

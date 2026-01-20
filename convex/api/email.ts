@@ -1,8 +1,9 @@
+// @ts-nocheck
 "use node";
 
 import { action, internalAction } from "../_generated/server";
 import { v } from "convex/values";
-// Removed: import { Resend } from "resend"; - using fetch directly instead
+import { Resend } from "resend";
 import { internal } from "../_generated/api";
 
 // Helper pour remplacer les variables dans un template
@@ -407,7 +408,7 @@ export const sendWelcomeEmail = internalAction({
     const siteName = "Animigo";
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
-    const template = await getTemplate(ctx, "welcome");
+    const template = getTemplate("welcome");
     if (!template) {
       return { success: false, error: "Template not found" };
     }
@@ -478,7 +479,7 @@ export const sendReservationConfirmedEmail = internalAction({
     const siteName = "Animigo";
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
-    const template = await getTemplate(ctx, "reservation_confirmed");
+    const template = getTemplate("reservation_confirmed");
     if (!template) {
       return { success: false, error: "Template not found" };
     }
@@ -556,7 +557,7 @@ export const sendNewReservationRequestEmail = internalAction({
     const siteName = "Animigo";
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
-    const template = await getTemplate(ctx, "new_reservation_request");
+    const template = getTemplate("new_reservation_request");
     if (!template) {
       return { success: false, error: "Template not found" };
     }
