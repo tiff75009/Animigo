@@ -1,4 +1,4 @@
-import { mutation, query } from "../_generated/server";
+import { mutation, query, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
 import { requireAdmin } from "./utils";
 
@@ -88,9 +88,9 @@ const DEFAULT_TEMPLATES = [
   },
   {
     slug: "reservation_accepted",
-    name: "Réservation acceptée",
-    description: "Email envoyé au client quand l'annonceur accepte la réservation",
-    subject: "Votre réservation a été acceptée ! - {{siteName}}",
+    name: "Réservation acceptée - Paiement requis",
+    description: "Email envoyé au client quand l'annonceur accepte la réservation avec lien de paiement Stripe",
+    subject: "Votre réservation a été acceptée - Finalisez le paiement ! - {{siteName}}",
     availableVariables: [
       { key: "firstName", description: "Prénom du client", example: "Jean" },
       { key: "siteName", description: "Nom du site", example: "Animigo" },
@@ -98,8 +98,10 @@ const DEFAULT_TEMPLATES = [
       { key: "serviceName", description: "Nom du service", example: "Garde de chien" },
       { key: "startDate", description: "Date de début", example: "15/02/2025" },
       { key: "endDate", description: "Date de fin", example: "17/02/2025" },
-      { key: "paymentUrl", description: "Lien de paiement", example: "https://..." },
+      { key: "animalName", description: "Nom de l'animal", example: "Max" },
+      { key: "paymentUrl", description: "Lien de paiement Stripe", example: "https://checkout.stripe.com/..." },
       { key: "totalAmount", description: "Montant total", example: "150,00 €" },
+      { key: "expirationTime", description: "Durée de validité du lien", example: "1 heure" },
     ],
     isSystem: true,
   },
@@ -302,27 +304,41 @@ const getDefaultHtmlContent = (slug: string): string => {
       return `
 <!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>${baseStyle} .header { background: linear-gradient(135deg, #10B981 0%, #059669 100%); }</style></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>${baseStyle} .header { background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%); }</style></head>
 <body>
 <div style="padding: 40px 20px; background-color: #f4f4f5;">
   <div class="container">
     <div class="header">
-      <h1>🎉 Réservation acceptée !</h1>
+      <h1>🎉 Bonne nouvelle !</h1>
+      <p>Votre réservation a été acceptée</p>
     </div>
     <div class="content">
-      <h2>Bonne nouvelle {{firstName}} !</h2>
-      <p>{{announcerName}} a accepté votre demande de réservation. Vous pouvez maintenant procéder au paiement pour confirmer définitivement votre réservation.</p>
+      <h2>Bonjour {{firstName}} !</h2>
+      <p>{{announcerName}} a accepté votre demande de réservation. Pour confirmer définitivement votre prestation, veuillez procéder au paiement sécurisé.</p>
 
       <div class="info-box">
         <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">📋 Récapitulatif</p>
         <p style="margin: 5px 0; color: #475569;"><strong>Service :</strong> {{serviceName}}</p>
         <p style="margin: 5px 0; color: #475569;"><strong>Prestataire :</strong> {{announcerName}}</p>
         <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Montant à payer :</strong> {{totalAmount}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Animal :</strong> {{animalName}}</p>
+        <p style="margin: 10px 0 0 0; font-size: 20px; font-weight: bold; color: #0369a1;">Montant : {{totalAmount}}</p>
       </div>
 
       <div style="text-align: center; margin: 30px 0;">
-        <a href="{{paymentUrl}}" class="btn" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%);">💳 Procéder au paiement</a>
+        <a href="{{paymentUrl}}" class="btn" style="background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%);">💳 Procéder au paiement</a>
+      </div>
+
+      <div class="warning-box">
+        <p style="margin: 0; color: #92400e; font-size: 14px;">
+          ⏰ <strong>Important :</strong> Ce lien expire dans {{expirationTime}}. Passé ce délai, vous devrez contacter {{announcerName}} pour une nouvelle demande.
+        </p>
+      </div>
+
+      <div style="margin-top: 20px; padding: 15px; background-color: #ecfdf5; border-radius: 12px;">
+        <p style="margin: 0; color: #065f46; font-size: 14px;">
+          🔒 <strong>Paiement sécurisé :</strong> Vos fonds seront réservés (non débités) jusqu'à la réalisation de la prestation. Vous pourrez confirmer la fin de prestation pour déclencher le paiement définitif. Si vous ne confirmez pas sous 48h après la fin, le paiement sera automatiquement finalisé.
+        </p>
       </div>
     </div>
     <div class="footer">
@@ -462,8 +478,8 @@ export const resetToDefault = mutation({
   },
 });
 
-// Query interne: Récupérer un template par slug (sans auth pour les actions)
-export const getTemplateBySlug = query({
+// Query interne: Récupérer un template par slug (sans auth pour les actions internes)
+export const getTemplateBySlug = internalQuery({
   args: { slug: v.string() },
   handler: async (ctx, args) => {
     const template = await ctx.db

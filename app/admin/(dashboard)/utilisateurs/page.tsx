@@ -20,6 +20,9 @@ import {
   AlertTriangle,
   X,
   Loader2,
+  Send,
+  ShieldCheck,
+  KeyRound,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 
@@ -44,9 +47,21 @@ interface User {
 function ActionMenu({
   user,
   onDelete,
+  onActivate,
+  onResendEmail,
+  onSendPasswordReset,
+  isActivating,
+  isResending,
+  isSendingPasswordReset,
 }: {
   user: User;
   onDelete: (user: User) => void;
+  onActivate: (user: User) => void;
+  onResendEmail: (user: User) => void;
+  onSendPasswordReset: (user: User) => void;
+  isActivating: boolean;
+  isResending: boolean;
+  isSendingPasswordReset: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -62,6 +77,8 @@ function ActionMenu({
   }, []);
 
   const isAdmin = user.role === "admin";
+  const canActivate = !isAdmin && !user.emailVerified;
+  const canResendEmail = !isAdmin && !user.emailVerified;
 
   return (
     <div className="relative" ref={menuRef}>
@@ -78,8 +95,81 @@ function ActionMenu({
             initial={{ opacity: 0, scale: 0.95, y: -10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: -10 }}
-            className="absolute right-0 top-full mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden"
+            className="absolute right-0 top-full mt-1 w-56 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden"
           >
+            {/* Activer manuellement */}
+            <button
+              onClick={() => {
+                if (canActivate && !isActivating) {
+                  onActivate(user);
+                }
+                setIsOpen(false);
+              }}
+              disabled={!canActivate || isActivating}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                !canActivate || isActivating
+                  ? "text-slate-500 cursor-not-allowed"
+                  : "text-green-400 hover:bg-green-500/10"
+              }`}
+            >
+              {isActivating ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <ShieldCheck className="w-4 h-4" />
+              )}
+              <span>Activer manuellement</span>
+            </button>
+
+            {/* Renvoyer email de confirmation */}
+            <button
+              onClick={() => {
+                if (canResendEmail && !isResending) {
+                  onResendEmail(user);
+                }
+                setIsOpen(false);
+              }}
+              disabled={!canResendEmail || isResending}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                !canResendEmail || isResending
+                  ? "text-slate-500 cursor-not-allowed"
+                  : "text-blue-400 hover:bg-blue-500/10"
+              }`}
+            >
+              {isResending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
+              <span>Renvoyer email confirmation</span>
+            </button>
+
+            {/* Envoyer lien réinitialisation mot de passe */}
+            <button
+              onClick={() => {
+                if (!isAdmin && !isSendingPasswordReset) {
+                  onSendPasswordReset(user);
+                }
+                setIsOpen(false);
+              }}
+              disabled={isAdmin || isSendingPasswordReset}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                isAdmin || isSendingPasswordReset
+                  ? "text-slate-500 cursor-not-allowed"
+                  : "text-amber-400 hover:bg-amber-500/10"
+              }`}
+            >
+              {isSendingPasswordReset ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <KeyRound className="w-4 h-4" />
+              )}
+              <span>Réinitialiser mot de passe</span>
+            </button>
+
+            {/* Séparateur */}
+            <div className="border-t border-slate-700 my-1" />
+
+            {/* Supprimer */}
             <button
               onClick={() => {
                 if (!isAdmin) {
@@ -230,6 +320,11 @@ export default function UtilisateursPage() {
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Action states
+  const [activatingUserId, setActivatingUserId] = useState<Id<"users"> | null>(null);
+  const [resendingUserId, setResendingUserId] = useState<Id<"users"> | null>(null);
+  const [passwordResetUserId, setPasswordResetUserId] = useState<Id<"users"> | null>(null);
+
   const users = useQuery(
     api.admin.users.listUsers,
     token
@@ -246,6 +341,9 @@ export default function UtilisateursPage() {
 
   const toggleActive = useMutation(api.admin.users.toggleUserActive);
   const deleteUser = useMutation(api.admin.users.deleteUser);
+  const activateUserManually = useMutation(api.admin.users.activateUserManually);
+  const resendVerificationEmail = useMutation(api.admin.users.adminResendVerificationEmail);
+  const sendPasswordResetEmail = useMutation(api.admin.users.adminSendPasswordResetEmail);
 
   const handleToggleActive = async (userId: Id<"users">) => {
     if (!token) return;
@@ -259,6 +357,47 @@ export default function UtilisateursPage() {
   const handleDeleteClick = (user: User) => {
     setUserToDelete(user);
     setDeleteModalOpen(true);
+  };
+
+  const handleActivateUser = async (user: User) => {
+    if (!token) return;
+    setActivatingUserId(user._id);
+    try {
+      await activateUserManually({ token, userId: user._id });
+    } catch (error) {
+      console.error("Erreur lors de l'activation:", error);
+      alert("Erreur lors de l'activation de l'utilisateur");
+    } finally {
+      setActivatingUserId(null);
+    }
+  };
+
+  const handleResendEmail = async (user: User) => {
+    if (!token) return;
+    setResendingUserId(user._id);
+    try {
+      await resendVerificationEmail({ token, userId: user._id });
+      alert("Email de confirmation envoyé avec succès");
+    } catch (error) {
+      console.error("Erreur lors de l'envoi:", error);
+      alert("Erreur lors de l'envoi de l'email");
+    } finally {
+      setResendingUserId(null);
+    }
+  };
+
+  const handleSendPasswordReset = async (user: User) => {
+    if (!token) return;
+    setPasswordResetUserId(user._id);
+    try {
+      await sendPasswordResetEmail({ token, userId: user._id });
+      alert("Email de réinitialisation de mot de passe envoyé avec succès");
+    } catch (error) {
+      console.error("Erreur lors de l'envoi:", error);
+      alert("Erreur lors de l'envoi de l'email de réinitialisation");
+    } finally {
+      setPasswordResetUserId(null);
+    }
   };
 
   const handleDeleteConfirm = async () => {
@@ -476,7 +615,16 @@ export default function UtilisateursPage() {
                     </button>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <ActionMenu user={user} onDelete={handleDeleteClick} />
+                    <ActionMenu
+                      user={user}
+                      onDelete={handleDeleteClick}
+                      onActivate={handleActivateUser}
+                      onResendEmail={handleResendEmail}
+                      onSendPasswordReset={handleSendPasswordReset}
+                      isActivating={activatingUserId === user._id}
+                      isResending={resendingUserId === user._id}
+                      isSendingPasswordReset={passwordResetUserId === user._id}
+                    />
                   </td>
                 </motion.tr>
               ))}

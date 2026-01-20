@@ -2,6 +2,7 @@ import { mutation, query } from "../_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { requireAdmin } from "./utils";
+import { internal } from "../_generated/api";
 
 // Query: Liste des utilisateurs avec pagination et filtres
 export const listUsers = query({
@@ -214,5 +215,213 @@ export const getUserDetails = query({
       role: user.role || "user",
       activeSessions,
     };
+  },
+});
+
+// Mutation: Activer manuellement un utilisateur (email vérifié + compte actif)
+export const activateUserManually = mutation({
+  args: {
+    token: v.string(),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx, args.token);
+
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new ConvexError("Utilisateur non trouvé");
+
+    // Ne pas permettre de modifier un admin
+    if (user.role === "admin") {
+      throw new ConvexError("Impossible de modifier un administrateur");
+    }
+
+    // Vérifier si déjà activé
+    if (user.emailVerified && user.isActive) {
+      throw new ConvexError("Cet utilisateur est déjà activé");
+    }
+
+    await ctx.db.patch(args.userId, {
+      emailVerified: true,
+      isActive: true,
+      updatedAt: Date.now(),
+    });
+
+    return { success: true };
+  },
+});
+
+// Mutation: Renvoyer un email de confirmation (crée un nouveau token et programme l'envoi)
+export const adminResendVerificationEmail = mutation({
+  args: {
+    token: v.string(),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx, args.token);
+
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new ConvexError("Utilisateur non trouvé");
+
+    // Ne pas permettre de modifier un admin
+    if (user.role === "admin") {
+      throw new ConvexError("Impossible de modifier un administrateur");
+    }
+
+    // Vérifier si l'email n'est pas déjà vérifié
+    if (user.emailVerified) {
+      throw new ConvexError("L'email de cet utilisateur est déjà vérifié");
+    }
+
+    // Supprimer les anciens tokens pour cet utilisateur
+    const oldTokens = await ctx.db
+      .query("emailVerificationTokens")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    for (const token of oldTokens) {
+      await ctx.db.delete(token._id);
+    }
+
+    // Générer un nouveau token (64 chars hex)
+    const tokenBytes = new Uint8Array(32);
+    crypto.getRandomValues(tokenBytes);
+    const verificationToken = Array.from(tokenBytes)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    // Créer le token (expire dans 24h)
+    await ctx.db.insert("emailVerificationTokens", {
+      userId: args.userId,
+      token: verificationToken,
+      email: user.email,
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+      createdAt: Date.now(),
+      context: "registration",
+    });
+
+    // Récupérer les configs email pour les passer à l'action
+    const apiKeyConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "resend_api_key"))
+      .first();
+
+    const fromEmailConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "resend_from_email"))
+      .first();
+
+    const fromNameConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
+      .first();
+
+    const appUrlConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "app_url"))
+      .first();
+
+    // Programmer l'envoi d'email
+    await ctx.scheduler.runAfter(0, internal.api.email.sendVerificationEmail, {
+      userId: args.userId,
+      email: user.email,
+      firstName: user.firstName,
+      token: verificationToken,
+      context: "registration",
+      emailConfig: apiKeyConfig?.value
+        ? {
+            apiKey: apiKeyConfig.value,
+            fromEmail: fromEmailConfig?.value,
+            fromName: fromNameConfig?.value,
+          }
+        : undefined,
+      appUrl: appUrlConfig?.value,
+    });
+
+    return { success: true };
+  },
+});
+
+// Mutation: Envoyer un email de réinitialisation de mot de passe
+export const adminSendPasswordResetEmail = mutation({
+  args: {
+    token: v.string(),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx, args.token);
+
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new ConvexError("Utilisateur non trouvé");
+
+    // Ne pas permettre de modifier un admin
+    if (user.role === "admin") {
+      throw new ConvexError("Impossible de modifier un administrateur");
+    }
+
+    // Supprimer les anciens tokens pour cet utilisateur
+    const oldTokens = await ctx.db
+      .query("passwordResetTokens")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    for (const token of oldTokens) {
+      await ctx.db.delete(token._id);
+    }
+
+    // Générer un nouveau token (64 chars hex)
+    const tokenBytes = new Uint8Array(32);
+    crypto.getRandomValues(tokenBytes);
+    const resetToken = Array.from(tokenBytes)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    // Créer le token (expire dans 1h)
+    await ctx.db.insert("passwordResetTokens", {
+      userId: args.userId,
+      token: resetToken,
+      email: user.email,
+      expiresAt: Date.now() + 1 * 60 * 60 * 1000, // 1 heure
+      createdAt: Date.now(),
+      createdByAdmin: true,
+    });
+
+    // Récupérer les configs email pour les passer à l'action
+    const apiKeyConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "resend_api_key"))
+      .first();
+
+    const fromEmailConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "resend_from_email"))
+      .first();
+
+    const fromNameConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
+      .first();
+
+    const appUrlConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "app_url"))
+      .first();
+
+    // Programmer l'envoi d'email
+    await ctx.scheduler.runAfter(0, internal.api.email.sendPasswordResetEmail, {
+      userId: args.userId,
+      email: user.email,
+      firstName: user.firstName,
+      token: resetToken,
+      emailConfig: apiKeyConfig?.value
+        ? {
+            apiKey: apiKeyConfig.value,
+            fromEmail: fromEmailConfig?.value,
+            fromName: fromNameConfig?.value,
+          }
+        : undefined,
+      appUrl: appUrlConfig?.value,
+    });
+
+    return { success: true };
   },
 });

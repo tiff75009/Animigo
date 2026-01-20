@@ -1,5 +1,8 @@
-import { QueryCtx, MutationCtx } from "../_generated/server";
+// @ts-nocheck
+import { QueryCtx, MutationCtx, ActionCtx, internalQuery } from "../_generated/server";
 import { Doc } from "../_generated/dataModel";
+import { internal } from "../_generated/api";
+import { v } from "convex/values";
 
 // Types pour les réponses d'authentification admin
 export type AdminAuthResult =
@@ -65,3 +68,41 @@ export async function requireAdmin(
 
   return { user: result.user, session: result.session };
 }
+
+/**
+ * Vérifier l'authentification admin dans une action
+ * Utilise une query interne pour vérifier le token
+ */
+export async function requireAdminAction(
+  ctx: ActionCtx,
+  token: string
+): Promise<{ userId: string }> {
+  const result = await ctx.runQuery(internal.admin.utils.checkAdminToken, {
+    token,
+  });
+
+  if (!result.success) {
+    throw new Error(result.error);
+  }
+
+  return { userId: result.userId };
+}
+
+/**
+ * Query interne pour vérifier un token admin (appelée par les actions)
+ */
+export const checkAdminToken = internalQuery({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    const result = await checkAdmin(ctx, args.token);
+
+    if (!result.success) {
+      return { success: false as const, error: result.error };
+    }
+
+    return {
+      success: true as const,
+      userId: result.user._id,
+    };
+  },
+});

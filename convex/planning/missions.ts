@@ -264,10 +264,59 @@ export const acceptMission = mutation({
     const platformFee = mission.platformFee || Math.round(amount * 0.15); // 15% par défaut
     const announcerEarnings = mission.announcerEarnings || (amount - platformFee);
 
+    // Récupérer les configs Stripe et Email pour les passer à l'action
+    const stripeSecretKeyConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "stripe_secret_key"))
+      .first();
+
+    const appUrlConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "app_url"))
+      .first();
+
+    const emailApiKeyConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "resend_api_key"))
+      .first();
+
+    const emailFromConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "resend_from_email"))
+      .first();
+
+    const emailFromNameConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
+      .first();
+
+    if (!stripeSecretKeyConfig?.value) {
+      throw new ConvexError("Stripe non configuré - clé secrète manquante");
+    }
+
+    const now = Date.now();
+
+    // Créer un payment record préliminaire (sera mis à jour par le webhook)
+    // NOTE: Sur Convex self-hosted, les actions ne peuvent pas appeler runMutation/scheduler
+    // donc on crée le record ici avant de scheduler l'action Stripe
+    const paymentId = await ctx.db.insert("stripePayments", {
+      missionId: args.missionId,
+      checkoutSessionId: "pending", // Sera mis à jour par webhook
+      checkoutUrl: "pending", // Sera mis à jour par webhook
+      amount,
+      platformFee,
+      announcerEarnings,
+      status: "pending",
+      expiresAt: now + 3600 * 1000, // +1h
+      createdAt: now,
+      updatedAt: now,
+    });
+
     // Mettre à jour le statut de la mission
     await ctx.db.patch(args.missionId, {
       status: "pending_confirmation",
-      updatedAt: Date.now(),
+      stripePaymentId: paymentId,
+      updatedAt: now,
     });
 
     // Planifier la création de la session Stripe (action asynchrone)
@@ -283,6 +332,17 @@ export const acceptMission = mutation({
       startDate: mission.startDate,
       endDate: mission.endDate,
       animalName: mission.animal?.name,
+      // Configs passées depuis la mutation (contourne le bug ctx.runQuery sur self-hosted)
+      stripeSecretKey: stripeSecretKeyConfig.value,
+      appUrl: appUrlConfig?.value || "http://localhost:3000",
+      // Config email pour l'envoi du lien de paiement
+      emailConfig: emailApiKeyConfig?.value
+        ? {
+            apiKey: emailApiKeyConfig.value,
+            fromEmail: emailFromConfig?.value,
+            fromName: emailFromNameConfig?.value,
+          }
+        : undefined,
     });
 
     return { success: true };
@@ -473,6 +533,16 @@ export const confirmMissionCompletion = mutation({
       throw new ConvexError("Le paiement n'est pas autorisé");
     }
 
+    // Récupérer la clé Stripe pour la passer à l'action
+    const stripeSecretKeyConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "stripe_secret_key"))
+      .first();
+
+    if (!stripeSecretKeyConfig?.value) {
+      throw new ConvexError("Stripe non configuré - clé secrète manquante");
+    }
+
     const now = Date.now();
 
     // Marquer la confirmation par le client
@@ -485,6 +555,7 @@ export const confirmMissionCompletion = mutation({
     await ctx.scheduler.runAfter(0, internal.api.stripe.capturePayment, {
       paymentIntentId: payment.paymentIntentId,
       missionId: args.missionId,
+      stripeSecretKey: stripeSecretKeyConfig.value,
     });
 
     return { success: true };

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAdminAuth } from "@/app/hooks/useAdminAuth";
 import { motion } from "framer-motion";
@@ -18,6 +18,12 @@ import {
   ExternalLink,
   Mail,
   Globe,
+  Copy,
+  Webhook,
+  Info,
+  Zap,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 
 interface ConfigItem {
@@ -36,6 +42,18 @@ interface ConfigField {
   placeholder: string;
 }
 
+interface WebhookEvent {
+  event: string;
+  description: string;
+}
+
+interface WebhookInfo {
+  urlKey: string; // Key from systemConfig to build webhook URL
+  description: string;
+  events: WebhookEvent[];
+  testCommand?: string;
+}
+
 interface IntegrationSection {
   id: string;
   name: string;
@@ -44,6 +62,7 @@ interface IntegrationSection {
   color: string;
   docsUrl: string;
   fields: ConfigField[];
+  webhookInfo?: WebhookInfo;
 }
 
 const integrations: IntegrationSection[] = [
@@ -90,8 +109,8 @@ const integrations: IntegrationSection[] = [
   },
   {
     id: "stripe",
-    name: "Stripe Connect",
-    description: "Paiements et gestion des comptes vendeurs",
+    name: "Stripe Paiements",
+    description: "Paiements sécurisés avec pré-autorisation",
     icon: CreditCard,
     color: "bg-purple-500",
     docsUrl: "https://dashboard.stripe.com/apikeys",
@@ -113,11 +132,33 @@ const integrations: IntegrationSection[] = [
       {
         key: "stripe_webhook_secret",
         label: "Secret Webhook",
-        description: "Secret pour valider les webhooks Stripe",
+        description: "Secret pour valider les webhooks (whsec_...)",
         isSecret: true,
         placeholder: "whsec_...",
       },
     ],
+    webhookInfo: {
+      urlKey: "convex_site_url",
+      description: "Configurez ce webhook dans votre dashboard Stripe pour recevoir les notifications de paiement et de virement.",
+      events: [
+        // Checkout & Paiements
+        { event: "checkout.session.completed", description: "Paiement autorisé (pré-autorisation réussie)" },
+        { event: "checkout.session.expired", description: "Session de paiement expirée (1h)" },
+        { event: "payment_intent.succeeded", description: "Capture du paiement réussie" },
+        { event: "payment_intent.canceled", description: "Paiement annulé" },
+        { event: "payment_intent.payment_failed", description: "Échec du paiement" },
+        // Remboursements
+        { event: "charge.refunded", description: "Remboursement effectué au client" },
+        { event: "refund.failed", description: "Échec du remboursement" },
+        // Virements aux annonceurs (Stripe Connect)
+        { event: "transfer.created", description: "Transfert vers annonceur créé" },
+        { event: "payout.paid", description: "Virement bancaire effectué à l'annonceur" },
+        { event: "payout.failed", description: "Échec du virement à l'annonceur" },
+        // Comptes Connect (onboarding annonceurs)
+        { event: "account.updated", description: "Compte Stripe Connect mis à jour (vérification)" },
+      ],
+      testCommand: "stripe listen --forward-to",
+    },
   },
   {
     id: "societe",
@@ -176,6 +217,16 @@ export default function IntegrationsPage() {
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
+  const [testingStripe, setTestingStripe] = useState(false);
+  const [stripeTestResult, setStripeTestResult] = useState<{
+    success: boolean;
+    message?: string;
+    availableBalance?: string;
+    pendingBalance?: string;
+    livemode?: boolean;
+    error?: string;
+  } | null>(null);
 
   const configs = useQuery(
     api.admin.config.getAllConfigs,
@@ -183,11 +234,59 @@ export default function IntegrationsPage() {
   );
 
   const updateConfig = useMutation(api.admin.config.updateConfig);
+  const testStripeConnection = useAction(api.admin.config.testStripeConnection);
 
   const getConfigValue = (key: string) => {
     if (values[key] !== undefined) return values[key];
     const config = configs?.find((c: ConfigItem) => c.key === key);
     return config?.value || "";
+  };
+
+  // Générer l'URL du webhook Stripe basée sur l'URL Convex
+  const getStripeWebhookUrl = () => {
+    // L'URL du site Convex est basée sur NEXT_PUBLIC_CONVEX_URL
+    // Format: https://xxx.convex.cloud -> https://xxx.convex.site/stripe-webhook
+    const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL || "";
+    if (convexUrl) {
+      return convexUrl.replace(".convex.cloud", ".convex.site") + "/stripe-webhook";
+    }
+    return "[URL_CONVEX].convex.site/stripe-webhook";
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedWebhook(true);
+    setTimeout(() => setCopiedWebhook(false), 2000);
+  };
+
+  const handleTestStripe = async () => {
+    if (!token) return;
+
+    // Récupérer la clé secrète depuis le formulaire ou la config
+    const secretKey = getConfigValue("stripe_secret_key");
+
+    if (!secretKey) {
+      setStripeTestResult({
+        success: false,
+        error: "Veuillez d'abord entrer et sauvegarder votre clé secrète Stripe.",
+      });
+      return;
+    }
+
+    setTestingStripe(true);
+    setStripeTestResult(null);
+
+    try {
+      const result = await testStripeConnection({ token, secretKey });
+      setStripeTestResult(result);
+    } catch (error) {
+      setStripeTestResult({
+        success: false,
+        error: error instanceof Error ? error.message : "Erreur inconnue",
+      });
+    } finally {
+      setTestingStripe(false);
+    }
   };
 
   const handleSave = async (key: string, isSecret: boolean) => {
@@ -360,6 +459,163 @@ export default function IntegrationsPage() {
                 </div>
               ))}
             </div>
+
+            {/* Test Connection Section - Stripe only */}
+            {integration.id === "stripe" && (
+              <div className="p-6 border-t border-slate-800">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-yellow-400" />
+                    <h3 className="text-lg font-semibold text-white">Tester la connexion</h3>
+                  </div>
+                  <button
+                    onClick={handleTestStripe}
+                    disabled={testingStripe}
+                    className="px-4 py-2 rounded-lg font-medium flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white transition-colors disabled:opacity-50"
+                  >
+                    {testingStripe ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Test en cours...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4" />
+                        Tester l&apos;API
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {stripeTestResult && (
+                  <div className={`mt-4 p-4 rounded-lg border ${
+                    stripeTestResult.success
+                      ? "bg-green-500/10 border-green-500/30"
+                      : "bg-red-500/10 border-red-500/30"
+                  }`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      {stripeTestResult.success ? (
+                        <>
+                          <CheckCircle className="w-5 h-5 text-green-400" />
+                          <span className="text-green-400 font-medium">Connexion réussie</span>
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="w-5 h-5 text-red-400" />
+                          <span className="text-red-400 font-medium">Erreur de connexion</span>
+                        </>
+                      )}
+                    </div>
+                    {stripeTestResult.success ? (
+                      <div className="text-sm text-slate-300 space-y-1">
+                        <p><strong>Statut :</strong> {stripeTestResult.message}</p>
+                        <p><strong>Solde disponible :</strong> {stripeTestResult.availableBalance}</p>
+                        <p><strong>Solde en attente :</strong> {stripeTestResult.pendingBalance}</p>
+                        <p><strong>Mode :</strong> {stripeTestResult.livemode ? "🔴 Production" : "🟡 Test"}</p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-red-300">{stripeTestResult.error}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Webhook Info Section */}
+            {integration.webhookInfo && (
+              <div className="p-6 border-t border-slate-800 bg-slate-800/30">
+                <div className="flex items-center gap-2 mb-4">
+                  <Webhook className="w-5 h-5 text-purple-400" />
+                  <h3 className="text-lg font-semibold text-white">Configuration Webhook</h3>
+                </div>
+
+                <p className="text-slate-400 text-sm mb-4">
+                  {integration.webhookInfo.description}
+                </p>
+
+                {/* Webhook URL */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    URL du Webhook à configurer dans Stripe
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="flex-1 px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg font-mono text-sm text-emerald-400 overflow-x-auto">
+                      {getStripeWebhookUrl()}
+                    </div>
+                    <button
+                      onClick={() => copyToClipboard(getStripeWebhookUrl())}
+                      className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors ${
+                        copiedWebhook
+                          ? "bg-green-500 text-white"
+                          : "bg-slate-700 hover:bg-slate-600 text-slate-300"
+                      }`}
+                    >
+                      {copiedWebhook ? (
+                        <>
+                          <Check className="w-4 h-4" />
+                          Copié
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" />
+                          Copier
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Events to subscribe */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Événements à sélectionner dans Stripe
+                  </label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {integration.webhookInfo.events.map((evt) => (
+                      <div
+                        key={evt.event}
+                        className="flex items-start gap-3 p-3 bg-slate-900 rounded-lg border border-slate-700"
+                      >
+                        <div className="flex-shrink-0 mt-0.5">
+                          <div className="w-2 h-2 bg-purple-400 rounded-full" />
+                        </div>
+                        <div>
+                          <code className="text-xs text-purple-300 font-mono">
+                            {evt.event}
+                          </code>
+                          <p className="text-slate-400 text-xs mt-0.5">
+                            {evt.description}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Instructions */}
+                <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <Info className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm">
+                      <p className="text-blue-300 font-medium mb-2">Instructions de configuration :</p>
+                      <ol className="text-blue-300/80 space-y-1 list-decimal list-inside">
+                        <li>Allez dans <a href="https://dashboard.stripe.com/webhooks" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-200">Stripe Dashboard → Webhooks</a></li>
+                        <li>Cliquez sur &quot;Ajouter un endpoint&quot;</li>
+                        <li>Collez l&apos;URL du webhook ci-dessus</li>
+                        <li>Sélectionnez les événements listés</li>
+                        <li>Copiez le &quot;Signing secret&quot; (whsec_...) et collez-le dans le champ &quot;Secret Webhook&quot; ci-dessus</li>
+                      </ol>
+                      {integration.webhookInfo.testCommand && (
+                        <div className="mt-3 p-2 bg-slate-900 rounded font-mono text-xs text-slate-400">
+                          <span className="text-slate-500"># Test en local avec Stripe CLI :</span><br />
+                          {integration.webhookInfo.testCommand} {getStripeWebhookUrl()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </motion.div>
         ))}
       </div>

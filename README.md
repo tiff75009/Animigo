@@ -320,7 +320,29 @@ convex/
 - `availability` - Disponibilites des annonceurs
 - `userPreferences` - Preferences utilisateur (notifications, facturation)
 - `stripePayments` - Paiements Stripe (sessions, pre-autorisations, captures)
+- `passwordResetTokens` - Tokens de reinitialisation de mot de passe
+- `emailVerificationTokens` - Tokens de verification d'email
 - `systemConfig` - Configuration systeme
+
+---
+
+## Convex Self-Hosted - Limitations connues
+
+Sur une instance Convex self-hosted, les **actions** (fonctions avec `"use node"`) ne peuvent pas :
+- Appeler `ctx.runQuery()` - retourne HTML 404 au lieu des donnees
+- Appeler `ctx.runMutation()` - retourne HTML 404 au lieu des donnees
+- Appeler `ctx.scheduler.runAfter()` - retourne "Transient error" avec HTML
+
+**Workaround implemente** :
+1. Les mutations recuperent les configs (Stripe, email) depuis la base de donnees
+2. Les configs sont passees en parametres aux actions
+3. Les actions font uniquement des appels HTTP externes (Stripe API, Resend API)
+4. Les operations de base de donnees sont faites dans les mutations avant/apres les actions
+
+Fichiers impactes :
+- `convex/api/stripe.ts` - `createCheckoutSession`, `capturePayment`, `cancelPaymentAuthorization`
+- `convex/api/email.ts` - `sendVerificationEmail`, `sendPasswordResetEmail`
+- `convex/planning/missions.ts` - `acceptMission`, `confirmMissionCompletion`
 
 ---
 
@@ -368,6 +390,20 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.7.1 - Gestion Admin Utilisateurs et Corrections Convex Self-Hosted
+- **Actions admin utilisateurs** (`/admin/utilisateurs`)
+  - Bouton "Activer manuellement" : active un compte (emailVerified + isActive)
+  - Bouton "Renvoyer email confirmation" : genere nouveau token et renvoie l'email
+  - Bouton "Reinitialiser mot de passe" : envoie un lien de reset par email
+- **Nouvelle table `passwordResetTokens`**
+  - Tokens de reinitialisation avec expiration 1h
+  - Marquage si cree par admin
+- **Corrections Convex self-hosted**
+  - Les actions Convex ne peuvent pas appeler `ctx.runQuery`, `ctx.runMutation` ou `ctx.scheduler.runAfter` sur Convex self-hosted (retourne HTML 404)
+  - Workaround : passer les configs (Stripe, email) en parametres depuis les mutations
+  - L'email de paiement est maintenant envoye directement depuis l'action Stripe
+  - Le payment record est cree dans la mutation avant de scheduler l'action
+
 ### v0.7.0 - Systeme de Paiement Stripe
 - **Integration Stripe complete**
   - Pre-autorisation (empreinte bancaire) avec capture manuelle
@@ -387,7 +423,7 @@ Utilisation de Framer Motion avec des variants predefinies :
   - `/paiement/annule` - Page d'annulation avec options
 - **Nouvelle table `stripePayments`**
   - Suivi complet des sessions Checkout
-  - Statuts : pending, authorized, captured, cancelled, expired, failed
+  - Statuts : pending, authorized, captured, cancelled, expired, failed, refunded
   - Historique des captures et annulations
 
 ### v0.6.0 - Page Recherche Avancée

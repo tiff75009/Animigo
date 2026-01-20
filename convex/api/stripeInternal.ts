@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { internalMutation, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
+import { internal } from "../_generated/api";
 
 /**
  * Récupérer la clé secrète Stripe
@@ -360,5 +361,168 @@ export const getMissionPaymentData = internalQuery({
       announcer,
       payment,
     };
+  },
+});
+
+/**
+ * Marquer le paiement comme remboursé
+ */
+export const markPaymentRefunded = internalMutation({
+  args: {
+    paymentIntentId: v.string(),
+    refundedAmount: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const payment = await ctx.db
+      .query("stripePayments")
+      .withIndex("by_payment_intent", (q) =>
+        q.eq("paymentIntentId", args.paymentIntentId)
+      )
+      .first();
+
+    if (!payment) {
+      console.log("Paiement non trouvé pour remboursement:", args.paymentIntentId);
+      return;
+    }
+
+    const now = Date.now();
+
+    await ctx.db.patch(payment._id, {
+      status: "refunded" as any,
+      refundedAt: now,
+      refundedAmount: args.refundedAmount,
+      updatedAt: now,
+    });
+
+    // Mettre à jour la mission
+    await ctx.db.patch(payment.missionId, {
+      paymentStatus: "refunded",
+      updatedAt: now,
+    });
+  },
+});
+
+/**
+ * Marquer le transfert comme créé (virement vers annonceur initié)
+ */
+export const markTransferCreated = internalMutation({
+  args: {
+    missionId: v.id("missions"),
+    transferId: v.string(),
+    amount: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const mission = await ctx.db.get(args.missionId);
+    if (!mission?.stripePaymentId) return;
+
+    const now = Date.now();
+
+    await ctx.db.patch(mission.stripePaymentId, {
+      transferId: args.transferId,
+      transferAmount: args.amount,
+      transferCreatedAt: now,
+      updatedAt: now,
+    });
+
+    await ctx.db.patch(args.missionId, {
+      announcerPaymentStatus: "pending",
+      updatedAt: now,
+    });
+  },
+});
+
+/**
+ * Mettre à jour le statut du compte Stripe Connect d'un annonceur
+ */
+export const updateConnectAccountStatus = internalMutation({
+  args: {
+    stripeAccountId: v.string(),
+    chargesEnabled: v.boolean(),
+    payoutsEnabled: v.boolean(),
+    detailsSubmitted: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    // Trouver l'utilisateur avec ce compte Stripe
+    const users = await ctx.db.query("users").collect();
+    const user = users.find((u: any) => u.stripeAccountId === args.stripeAccountId);
+
+    if (!user) {
+      console.log("Utilisateur non trouvé pour compte Stripe:", args.stripeAccountId);
+      return;
+    }
+
+    const now = Date.now();
+
+    await ctx.db.patch(user._id, {
+      stripeChargesEnabled: args.chargesEnabled,
+      stripePayoutsEnabled: args.payoutsEnabled,
+      stripeDetailsSubmitted: args.detailsSubmitted,
+      stripeAccountUpdatedAt: now,
+      updatedAt: now,
+    });
+
+    console.log(`Compte Connect ${args.stripeAccountId} mis à jour pour user ${user._id}`);
+  },
+});
+
+/**
+ * Déclencher l'auto-capture des paiements (appelé par cron)
+ * Cette mutation récupère les configs et planifie les captures
+ * (contourne le bug ctx.runQuery dans les actions sur Convex self-hosted)
+ */
+export const triggerAutoCapture = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    console.log("=== triggerAutoCapture START ===");
+    const now = Date.now();
+
+    // Récupérer la clé Stripe
+    const stripeSecretKeyConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "stripe_secret_key"))
+      .first();
+
+    if (!stripeSecretKeyConfig?.value) {
+      console.log("Stripe non configuré - clé secrète manquante");
+      return { processed: 0, errors: 0, total: 0, error: "Stripe non configuré" };
+    }
+
+    // Récupérer les missions éligibles à l'auto-capture
+    const allMissions = await ctx.db.query("missions").collect();
+
+    const eligibleMissions = allMissions.filter(
+      (m) =>
+        m.status === "completed" &&
+        m.paymentStatus === "pending" &&
+        m.autoCaptureScheduledAt &&
+        m.autoCaptureScheduledAt <= now &&
+        m.stripePaymentId
+    );
+
+    console.log(`Auto-capture: ${eligibleMissions.length} missions éligibles`);
+
+    // Récupérer les infos de paiement et planifier les captures
+    let scheduled = 0;
+    for (const mission of eligibleMissions) {
+      if (mission.stripePaymentId) {
+        const payment = await ctx.db.get(mission.stripePaymentId);
+        if (
+          payment &&
+          payment.status === "authorized" &&
+          payment.paymentIntentId
+        ) {
+          // Planifier la capture avec la clé Stripe
+          await ctx.scheduler.runAfter(0, internal.api.stripe.capturePayment, {
+            paymentIntentId: payment.paymentIntentId,
+            missionId: mission._id,
+            stripeSecretKey: stripeSecretKeyConfig.value,
+          });
+          scheduled++;
+          console.log(`Auto-capture planifiée pour mission ${mission._id}`);
+        }
+      }
+    }
+
+    return { processed: 0, errors: 0, total: eligibleMissions.length, scheduled };
   },
 });

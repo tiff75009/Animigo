@@ -118,6 +118,82 @@ export const handleStripeWebhook = internalAction({
         break;
       }
 
+      case "payment_intent.succeeded": {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        console.log(`Capture réussie: ${paymentIntent.id}`);
+        // La capture est gérée par notre code, mais on log pour confirmation
+        break;
+      }
+
+      case "charge.refunded": {
+        const charge = event.data.object as Stripe.Charge;
+        console.log(`Remboursement effectué: ${charge.id}`);
+
+        // Récupérer le PaymentIntent associé
+        const paymentIntentId = typeof charge.payment_intent === "string"
+          ? charge.payment_intent
+          : charge.payment_intent?.id;
+
+        if (paymentIntentId) {
+          await ctx.runMutation(internal.api.stripeInternal.markPaymentRefunded, {
+            paymentIntentId,
+            refundedAmount: charge.amount_refunded,
+          });
+        }
+        break;
+      }
+
+      case "refund.failed": {
+        const refund = event.data.object as Stripe.Refund;
+        console.error(`Échec du remboursement: ${refund.id}`);
+        // TODO: Notifier l'admin
+        break;
+      }
+
+      case "transfer.created": {
+        const transfer = event.data.object as Stripe.Transfer;
+        console.log(`Transfert créé: ${transfer.id} - ${transfer.amount / 100}€`);
+
+        const missionId = transfer.metadata?.missionId;
+        if (missionId) {
+          await ctx.runMutation(internal.api.stripeInternal.markTransferCreated, {
+            missionId: missionId as any,
+            transferId: transfer.id,
+            amount: transfer.amount,
+          });
+        }
+        break;
+      }
+
+      case "payout.paid": {
+        const payout = event.data.object as Stripe.Payout;
+        console.log(`Virement effectué: ${payout.id} - ${payout.amount / 100}€`);
+        // Les payouts sont au niveau du compte Connect, pas directement liés à une mission
+        // TODO: Mettre à jour le statut de virement si nécessaire
+        break;
+      }
+
+      case "payout.failed": {
+        const payout = event.data.object as Stripe.Payout;
+        console.error(`Échec virement: ${payout.id} - ${payout.failure_message}`);
+        // TODO: Notifier l'annonceur et l'admin
+        break;
+      }
+
+      case "account.updated": {
+        const account = event.data.object as Stripe.Account;
+        console.log(`Compte Connect mis à jour: ${account.id}`);
+
+        // Mettre à jour le statut de vérification de l'annonceur
+        await ctx.runMutation(internal.api.stripeInternal.updateConnectAccountStatus, {
+          stripeAccountId: account.id,
+          chargesEnabled: account.charges_enabled || false,
+          payoutsEnabled: account.payouts_enabled || false,
+          detailsSubmitted: account.details_submitted || false,
+        });
+        break;
+      }
+
       default:
         console.log(`Événement non géré: ${event.type}`);
     }

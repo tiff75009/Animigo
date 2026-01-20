@@ -207,6 +207,41 @@ const DEFAULT_TEMPLATES: Record<string, { subject: string; html: string }> = {
 </body>
 </html>`,
   },
+  password_reset: {
+    subject: "Réinitialisation de votre mot de passe - {{siteName}}",
+    html: `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
+<div style="padding: 40px 20px; background-color: #f4f4f5;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+    <div style="background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%); padding: 40px 30px; text-align: center;">
+      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">🔐 {{siteName}}</h1>
+    </div>
+    <div style="padding: 40px 30px;">
+      <h2 style="margin: 0 0 20px 0; color: #1e293b; font-size: 24px;">Bonjour {{firstName}} !</h2>
+      <p style="margin: 0 0 20px 0; color: #475569; font-size: 16px; line-height: 1.6;">
+        Vous avez demandé (ou un administrateur a initié) la réinitialisation de votre mot de passe sur {{siteName}}.
+      </p>
+      <p style="margin: 0 0 20px 0; color: #475569; font-size: 16px; line-height: 1.6;">
+        Cliquez sur le bouton ci-dessous pour créer un nouveau mot de passe :
+      </p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="{{resetUrl}}" style="display: inline-block; background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 50px; font-weight: bold; font-size: 16px;">🔑 Réinitialiser mon mot de passe</a>
+      </div>
+      <div style="margin-top: 30px; padding: 20px; background-color: #fef3c7; border-radius: 12px; border-left: 4px solid #f59e0b;">
+        <p style="margin: 0; color: #92400e; font-size: 14px;">⚠️ Ce lien expire dans {{expirationHours}} heure(s). Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
+      </div>
+    </div>
+    <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+      <p style="margin: 0; color: #94a3b8; font-size: 12px;">© 2025 {{siteName}}. Tous droits réservés.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>`,
+  },
 };
 
 // Helper pour récupérer un template (utilise les templates par défaut - bypass database pour éviter le bug des appels internes)
@@ -643,3 +678,92 @@ export const resendVerificationEmail = action({
 
 // Note: verifyEmail a été déplacé vers convex/public/emailVerify.ts (mutation au lieu d'action)
 // car ctx.runMutation échoue dans les actions sur Convex self-hosted
+
+// Action interne pour envoyer un email de réinitialisation de mot de passe
+export const sendPasswordResetEmail = internalAction({
+  args: {
+    userId: v.id("users"),
+    email: v.string(),
+    firstName: v.string(),
+    token: v.string(),
+    // Config email passée depuis la mutation (contourne le bug ctx.runQuery sur self-hosted)
+    emailConfig: v.optional(v.object({
+      apiKey: v.string(),
+      fromEmail: v.optional(v.string()),
+      fromName: v.optional(v.string()),
+    })),
+    // URL de l'application passée depuis la mutation
+    appUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    console.log("=== sendPasswordResetEmail START ===");
+
+    try {
+      // Utiliser la config passée en argument, sinon fallback sur env vars
+      const apiKey = args.emailConfig?.apiKey || process.env.RESEND_API_KEY;
+      const fromEmail = args.emailConfig?.fromEmail || process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+      const fromName = args.emailConfig?.fromName || process.env.RESEND_FROM_NAME || "Animigo";
+
+      if (!apiKey) {
+        console.error("No API key configured");
+        return { success: false, error: "Email service not configured" };
+      }
+
+      if (!apiKey.startsWith("re_")) {
+        console.error("Invalid Resend API key format");
+        return { success: false, error: "Invalid API key format" };
+      }
+
+      const siteName = "Animigo";
+      const appUrl = args.appUrl || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+      const resetUrl = `${appUrl}/reset-password?token=${args.token}`;
+
+      const template = getTemplate("password_reset");
+      if (!template) {
+        console.error("Template password_reset not found");
+        return { success: false, error: "Template not found" };
+      }
+
+      const variables = {
+        firstName: args.firstName,
+        resetUrl,
+        siteName,
+        expirationHours: 1,
+      };
+
+      const subject = replaceVariables(template.subject, variables);
+      const html = replaceVariables(template.htmlContent, variables);
+
+      console.log("Sending password reset email to:", args.email);
+
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: `${fromName} <${fromEmail}>`,
+          to: [args.email],
+          subject,
+          html,
+        }),
+      });
+
+      const responseText = await response.text();
+
+      if (!response.ok) {
+        throw new Error(`Resend API error: ${response.status} - ${responseText}`);
+      }
+
+      const result = JSON.parse(responseText);
+      console.log("Password reset email sent successfully:", result);
+
+      return { success: true, id: result.id };
+    } catch (error) {
+      console.error("Failed to send password reset email:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      return { success: false, error: errorMessage };
+    }
+  },
+});

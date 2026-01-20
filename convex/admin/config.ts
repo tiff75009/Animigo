@@ -1,6 +1,8 @@
-import { mutation, query } from "../_generated/server";
+// @ts-nocheck
+import { action, mutation, query } from "../_generated/server";
 import { v } from "convex/values";
-import { requireAdmin } from "./utils";
+import { requireAdmin, requireAdminAction } from "./utils";
+import { internal } from "../_generated/api";
 
 // Query: Lire une configuration
 export const getConfig = query({
@@ -162,5 +164,22 @@ export const toggleServiceModeration = mutation({
     }
 
     return { success: true, enabled: args.enabled };
+  },
+});
+
+// Action: Tester la connexion Stripe
+export const testStripeConnection = action({
+  args: {
+    token: v.string(),
+    secretKey: v.string(), // La clé est passée depuis le frontend
+  },
+  handler: async (ctx, args) => {
+    await requireAdminAction(ctx, args.token);
+
+    const result = await ctx.runAction(internal.api.stripe.testConnection, {
+      secretKey: args.secretKey,
+    });
+
+    return result;
   },
 });

@@ -7,11 +7,13 @@ const crons = cronJobs();
  * Auto-capture des paiements
  * Exécuté toutes les heures pour capturer les paiements des missions
  * terminées depuis 48h sans confirmation client
+ * NOTE: Utilise une mutation au lieu d'une action pour contourner
+ * le bug ctx.runQuery sur Convex self-hosted
  */
 crons.hourly(
   "auto-capture-payments",
   { minuteUTC: 0 },
-  internal.api.stripe.processAutoCapture
+  internal.api.stripeInternal.triggerAutoCapture
 );
 
 /**

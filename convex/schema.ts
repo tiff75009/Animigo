@@ -41,11 +41,19 @@ export default defineSchema({
 
     // Role (admin ou user)
     role: v.optional(v.union(v.literal("user"), v.literal("admin"))),
+
+    // Stripe Connect (pour annonceurs - virements)
+    stripeAccountId: v.optional(v.string()), // acct_xxx
+    stripeChargesEnabled: v.optional(v.boolean()), // Peut recevoir des paiements
+    stripePayoutsEnabled: v.optional(v.boolean()), // Peut recevoir des virements
+    stripeDetailsSubmitted: v.optional(v.boolean()), // Onboarding terminé
+    stripeAccountUpdatedAt: v.optional(v.number()), // Dernière mise à jour
   })
     .index("by_email", ["email"])
     .index("by_account_type", ["accountType"])
     .index("by_siret", ["siret"])
-    .index("by_role", ["role"]),
+    .index("by_role", ["role"])
+    .index("by_stripe_account", ["stripeAccountId"]),
 
   sessions: defineTable({
     userId: v.id("users"),
@@ -281,13 +289,21 @@ export default defineSchema({
       v.literal("cancelled") // Annulée
     ),
 
-    // Paiement
+    // Paiement client
     amount: v.number(), // Montant en centimes
     paymentStatus: v.union(
       v.literal("not_due"), // Pas encore dû
-      v.literal("pending"), // En attente de paiement
-      v.literal("paid") // Payé
+      v.literal("pending"), // En attente de paiement (fonds bloqués)
+      v.literal("paid"), // Payé (capturé)
+      v.literal("refunded") // Remboursé
     ),
+
+    // Paiement annonceur (virement)
+    announcerPaymentStatus: v.optional(v.union(
+      v.literal("not_due"), // Pas encore dû
+      v.literal("pending"), // Transfert créé, en attente
+      v.literal("paid") // Virement effectué
+    )),
 
     // Localisation
     location: v.string(), // Adresse complète
@@ -548,6 +564,20 @@ export default defineSchema({
     .index("by_expires", ["expiresAt"])
     .index("by_pending_booking", ["pendingBookingId"]),
 
+  // Tokens de réinitialisation de mot de passe
+  passwordResetTokens: defineTable({
+    userId: v.id("users"),
+    token: v.string(), // Token unique 64 chars hex
+    email: v.string(), // Email de l'utilisateur
+    expiresAt: v.number(), // Expiration (1h)
+    createdAt: v.number(),
+    usedAt: v.optional(v.number()), // Date d'utilisation si utilisé
+    createdByAdmin: v.optional(v.boolean()), // true si créé par un admin
+  })
+    .index("by_token", ["token"])
+    .index("by_user", ["userId"])
+    .index("by_expires", ["expiresAt"]),
+
   // Templates d'emails personnalisables
   emailTemplates: defineTable({
     // Identifiant unique du template
@@ -640,7 +670,8 @@ export default defineSchema({
       v.literal("captured"), // Paiement capturé
       v.literal("cancelled"), // Annulé (pré-autorisation relâchée)
       v.literal("expired"), // Session expirée (1h)
-      v.literal("failed") // Échec du paiement
+      v.literal("failed"), // Échec du paiement
+      v.literal("refunded") // Remboursé au client
     ),
 
     // URL de paiement
@@ -651,6 +682,15 @@ export default defineSchema({
     authorizedAt: v.optional(v.number()), // Date pré-autorisation
     capturedAt: v.optional(v.number()), // Date capture
     cancelledAt: v.optional(v.number()), // Date annulation
+
+    // Remboursement
+    refundedAt: v.optional(v.number()), // Date remboursement
+    refundedAmount: v.optional(v.number()), // Montant remboursé (centimes)
+
+    // Transfert vers annonceur (Stripe Connect)
+    transferId: v.optional(v.string()), // tr_xxx
+    transferAmount: v.optional(v.number()), // Montant transféré (centimes)
+    transferCreatedAt: v.optional(v.number()), // Date création transfert
 
     // Métadonnées Stripe
     stripeCustomerId: v.optional(v.string()),
