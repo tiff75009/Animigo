@@ -1,38 +1,17 @@
 "use client";
 
-import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, PawPrint, Loader2 } from "lucide-react";
+import { Plus, PawPrint, Loader2, ExternalLink } from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import Link from "next/link";
 import AnimalCard from "./AnimalCard";
-import AnimalFormModal from "./AnimalFormModal";
-
-interface Animal {
-  id: Id<"animals">;
-  name: string;
-  type: string;
-  emoji: string;
-  breed?: string;
-  gender: string;
-  primaryPhotoUrl: string | null;
-  photos: Array<{ url: string; isPrimary: boolean; order: number }>;
-  compatibilityTraits: string[];
-  behaviorTraits: string[];
-  needsTraits: string[];
-  customTraits: string[];
-  specialNeeds?: string;
-  medicalConditions?: string;
-  birthDate?: string;
-  description?: string;
-}
 
 interface AnimalSelectorProps {
   token: string;
   selectedAnimalId: Id<"animals"> | null;
   onSelect: (animalId: Id<"animals">) => void;
-  onAnimalCreated?: (animal: Animal) => void;
   compact?: boolean;
 }
 
@@ -40,41 +19,12 @@ export default function AnimalSelector({
   token,
   selectedAnimalId,
   onSelect,
-  onAnimalCreated,
   compact = false,
 }: AnimalSelectorProps) {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingAnimal, setEditingAnimal] = useState<Animal | null>(null);
-
   // Récupérer les animaux de l'utilisateur
   const animals = useQuery(api.animals.getUserAnimals, { token });
 
   const isLoading = animals === undefined;
-
-  const handleOpenCreate = () => {
-    setEditingAnimal(null);
-    setIsModalOpen(true);
-  };
-
-  const handleOpenEdit = (animal: Animal) => {
-    setEditingAnimal(animal);
-    setIsModalOpen(true);
-  };
-
-  const handleSave = (animalData: {
-    id?: Id<"animals">;
-    name: string;
-    type: string;
-    gender: "male" | "female" | "unknown";
-  }) => {
-    // Si c'est une création et qu'on a un callback
-    if (!editingAnimal && onAnimalCreated && animalData.id) {
-      // Auto-sélectionner le nouvel animal
-      onSelect(animalData.id);
-    }
-    setIsModalOpen(false);
-    setEditingAnimal(null);
-  };
 
   if (isLoading) {
     return (
@@ -94,13 +44,14 @@ export default function AnimalSelector({
           <PawPrint className="w-5 h-5 text-primary" />
           Sélectionner un animal
         </h3>
-        <button
-          onClick={handleOpenCreate}
+        <Link
+          href="/client/mes-animaux/nouveau"
           className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
         >
           <Plus className="w-4 h-4" />
           Ajouter
-        </button>
+          <ExternalLink className="w-3 h-3 ml-0.5" />
+        </Link>
       </div>
 
       {/* Liste des animaux */}
@@ -139,7 +90,6 @@ export default function AnimalSelector({
                   photoUrl={animal.primaryPhotoUrl}
                   isSelected={selectedAnimalId === animal.id}
                   onSelect={() => onSelect(animal.id)}
-                  onEdit={() => handleOpenEdit(animal as Animal)}
                   compact={compact}
                 />
               </motion.div>
@@ -157,52 +107,16 @@ export default function AnimalSelector({
           <p className="text-sm text-gray-500 mb-4">
             Créez une fiche pour votre compagnon pour pouvoir réserver
           </p>
-          <button
-            onClick={handleOpenCreate}
+          <Link
+            href="/client/mes-animaux/nouveau"
             className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Créer ma première fiche animal
-          </button>
+            <ExternalLink className="w-4 h-4 ml-1" />
+          </Link>
         </div>
       )}
-
-      {/* Modale de création/édition */}
-      <AnimalFormModal
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setEditingAnimal(null);
-        }}
-        onSave={handleSave}
-        token={token}
-        initialData={
-          editingAnimal
-            ? {
-                id: editingAnimal.id,
-                name: editingAnimal.name,
-                type: editingAnimal.type,
-                gender: editingAnimal.gender as "male" | "female" | "unknown",
-                breed: editingAnimal.breed,
-                birthDate: editingAnimal.birthDate,
-                description: editingAnimal.description,
-                photos: editingAnimal.photos.map((p, i) => ({
-                  storageId: "" as unknown as Id<"_storage">, // Sera rempli par le composant
-                  url: p.url,
-                  isPrimary: p.isPrimary,
-                  order: p.order,
-                })),
-                compatibilityTraits: editingAnimal.compatibilityTraits,
-                behaviorTraits: editingAnimal.behaviorTraits,
-                needsTraits: editingAnimal.needsTraits,
-                customTraits: editingAnimal.customTraits,
-                specialNeeds: editingAnimal.specialNeeds,
-                medicalConditions: editingAnimal.medicalConditions,
-              }
-            : null
-        }
-        mode={editingAnimal ? "edit" : "create"}
-      />
     </div>
   );
 }
