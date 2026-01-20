@@ -420,7 +420,7 @@ export const searchAnnouncers = query({
         firstName: announcer.firstName,
         lastName: announcer.lastName,
         profileImage: profileImageUrl,
-        location: profile.location ?? profile.city ?? "",
+        location: profile.city ?? profile.location ?? "",
         coordinates: profile.coordinates,
         distance,
         rating: 4.5, // TODO: Calculer depuis les avis

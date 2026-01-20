@@ -239,7 +239,7 @@ export default function AnnonceursPage() {
               </tr>
             </thead>
             <tbody>
-              {annonceurs?.map((user, index) => (
+              {annonceurs?.map((user: UserItem, index: number) => (
                 <motion.tr
                   key={user._id}
                   className="border-b border-slate-800/50 hover:bg-slate-800/30"

@@ -3,15 +3,16 @@
 import { cn } from "@/app/lib/utils";
 import { navLinks } from "@/app/lib/constants";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Search, UserPlus, Sparkles, LayoutDashboard, LogOut } from "lucide-react";
+import { Menu, X, Search, LogIn, UserPlus, LayoutDashboard, LogOut, ChevronDown } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useAuthState } from "@/app/hooks/useAuthState";
-import { UserMenu } from "@/app/components/user-menu";
+import Link from "next/link";
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [hoveredLink, setHoveredLink] = useState<string | null>(null);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const { isLoading, isAuthenticated, isAdmin, user, logout } = useAuthState();
 
@@ -24,6 +25,20 @@ export function Navbar() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, [handleScroll]);
 
+  // Fermer le menu profil si on clique ailleurs
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-profile-menu]')) {
+        setIsProfileOpen(false);
+      }
+    };
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, []);
+
+  const initials = user ? `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.toUpperCase() : "";
+
   return (
     <>
       <motion.nav
@@ -31,175 +46,280 @@ export function Navbar() {
         animate={{ y: 0 }}
         transition={{ type: "spring", stiffness: 100, damping: 20 }}
         className={cn(
-          "fixed top-4 left-4 right-4 z-50 transition-all duration-500 rounded-2xl",
+          "fixed top-3 left-3 right-3 z-50 transition-all duration-300 rounded-2xl",
           isScrolled
-            ? "bg-white/70 backdrop-blur-xl shadow-lg shadow-primary/10 border border-white/50"
-            : "bg-white/40 backdrop-blur-md"
+            ? "bg-white/80 backdrop-blur-xl shadow-lg shadow-black/5 border border-gray-200/50"
+            : "bg-white/50 backdrop-blur-md border border-white/50"
         )}
       >
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex items-center justify-between h-16">
+        <div className="max-w-7xl mx-auto px-4 lg:px-6">
+          <div className="flex items-center justify-between h-14 lg:h-16">
+
             {/* Logo */}
-            <motion.a
-              href="#"
-              className="flex items-center gap-3 group"
-              whileHover={{ scale: 1.02 }}
-            >
-              {/* Animated paw logo */}
-              <div className="relative">
+            <Link href="/" className="flex items-center gap-2.5 group shrink-0">
+              <motion.div
+                className="relative w-9 h-9 lg:w-10 lg:h-10 bg-gradient-to-br from-primary via-primary to-secondary rounded-xl flex items-center justify-center shadow-md shadow-primary/25"
+                whileHover={{ scale: 1.05, rotate: -3 }}
+                transition={{ type: "spring", stiffness: 400 }}
+              >
+                <span className="text-base lg:text-lg">🐾</span>
                 <motion.div
-                  className="w-11 h-11 bg-gradient-to-br from-primary to-secondary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/30"
-                  whileHover={{ rotate: [0, -10, 10, 0] }}
-                  transition={{ duration: 0.5 }}
-                >
-                  <motion.span
-                    className="text-xl"
-                    animate={{ y: [0, -2, 0] }}
-                    transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                  >
-                    🐾
-                  </motion.span>
-                </motion.div>
-                {/* Sparkle effect */}
-                <motion.div
-                  className="absolute -top-1 -right-1 text-xs"
-                  animate={{ scale: [1, 1.2, 1], rotate: [0, 180, 360] }}
-                  transition={{ duration: 3, repeat: Infinity }}
-                >
-                  ✨
-                </motion.div>
-              </div>
+                  className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-accent rounded-full"
+                  animate={{ scale: [1, 1.2, 1] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                />
+              </motion.div>
               <div className="flex flex-col">
-                <span className="text-xl font-extrabold text-foreground leading-tight">
+                <span className="text-lg lg:text-xl font-bold text-gray-900 leading-none">
                   Anim<span className="text-primary">igo</span>
                 </span>
-                <span className="text-[10px] text-text-light font-medium -mt-1 hidden sm:block">
+                <span className="text-[9px] lg:text-[10px] text-gray-500 font-medium hidden sm:block">
                   Le bonheur de vos animaux
                 </span>
               </div>
-            </motion.a>
+            </Link>
 
-            {/* Desktop Navigation */}
-            <div className="hidden lg:flex items-center gap-1">
+            {/* Desktop Navigation - Centre */}
+            <div className="hidden lg:flex items-center gap-0.5 bg-gray-100/80 rounded-xl p-1">
               {navLinks.map((link) => (
                 <motion.a
                   key={link.href}
                   href={link.href}
-                  className="relative px-4 py-2 rounded-xl font-medium text-foreground/70 hover:text-foreground transition-colors"
+                  className="relative px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
                   onHoverStart={() => setHoveredLink(link.href)}
                   onHoverEnd={() => setHoveredLink(null)}
-                  whileHover={{ y: -2 }}
                 >
-                  <span className="relative z-10 flex items-center gap-2">
-                    <span className="text-sm opacity-0 group-hover:opacity-100 transition-opacity">
-                      {link.emoji}
-                    </span>
-                    {link.label}
-                  </span>
-                  {/* Animated background on hover */}
+                  <span className="relative z-10">{link.label}</span>
                   <AnimatePresence>
                     {hoveredLink === link.href && (
                       <motion.div
                         layoutId="navHover"
-                        className="absolute inset-0 bg-primary/10 rounded-xl"
+                        className="absolute inset-0 bg-white rounded-lg shadow-sm"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        transition={{ duration: 0.2 }}
+                        transition={{ duration: 0.15 }}
+                        style={{ zIndex: 0 }}
                       />
                     )}
                   </AnimatePresence>
-                  {/* Underline effect */}
-                  <motion.div
-                    className="absolute bottom-1 left-4 right-4 h-0.5 bg-gradient-to-r from-primary to-secondary rounded-full"
-                    initial={{ scaleX: 0 }}
-                    whileHover={{ scaleX: 1 }}
-                    transition={{ duration: 0.2 }}
-                  />
                 </motion.a>
               ))}
             </div>
 
-            {/* Desktop CTAs */}
-            <div className="hidden lg:flex items-center gap-3">
-              {!isLoading && isAuthenticated && user ? (
-                <UserMenu user={user} isAdmin={isAdmin} onLogout={logout} />
-              ) : (
-                <motion.a
-                  href="/inscription"
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-foreground/80 hover:text-primary transition-colors"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+            {/* Tablette Navigation - Centre (md only) */}
+            <div className="hidden md:flex lg:hidden items-center gap-0.5 bg-gray-100/80 rounded-xl p-1">
+              {navLinks.slice(0, 2).map((link) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-white transition-all"
                 >
-                  <UserPlus className="w-4 h-4" />
-                  <span>S&apos;inscrire</span>
-                </motion.a>
+                  {link.label}
+                </a>
+              ))}
+              <div className="relative group">
+                <button className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-white transition-all">
+                  Plus
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </button>
+                <div className="absolute top-full right-0 mt-2 py-2 bg-white rounded-xl shadow-xl border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all min-w-[160px]">
+                  {navLinks.slice(2).map((link) => (
+                    <a
+                      key={link.href}
+                      href={link.href}
+                      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                    >
+                      <span>{link.emoji}</span>
+                      {link.label}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Desktop CTAs - Droite */}
+            <div className="hidden md:flex items-center gap-2">
+              {!isLoading && isAuthenticated && user ? (
+                /* Menu Profil Connecté */
+                <div className="relative" data-profile-menu>
+                  <motion.button
+                    onClick={() => setIsProfileOpen(!isProfileOpen)}
+                    className={cn(
+                      "flex items-center gap-2 pl-1 pr-3 py-1 rounded-full transition-all",
+                      isProfileOpen
+                        ? "bg-gray-100 shadow-inner"
+                        : "hover:bg-gray-100/80"
+                    )}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <div className="w-8 h-8 bg-gradient-to-br from-primary to-secondary rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm">
+                      {initials}
+                    </div>
+                    <span className="text-sm font-medium text-gray-700 hidden lg:block max-w-[100px] truncate">
+                      {user.firstName}
+                    </span>
+                    <motion.div
+                      animate={{ rotate: isProfileOpen ? 180 : 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                    </motion.div>
+                  </motion.button>
+
+                  <AnimatePresence>
+                    {isProfileOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 overflow-hidden"
+                      >
+                        {/* Header profil */}
+                        <div className="p-4 bg-gradient-to-br from-primary/5 via-secondary/5 to-transparent">
+                          <div className="flex items-center gap-3">
+                            <div className="w-11 h-11 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center text-white font-bold shadow-md">
+                              {initials}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-gray-900 truncate">
+                                {user.firstName} {user.lastName}
+                              </p>
+                              <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="p-2">
+                          <Link
+                            href={isAdmin ? "/admin" : "/dashboard"}
+                            onClick={() => setIsProfileOpen(false)}
+                            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                              <LayoutDashboard className="w-4 h-4 text-primary" />
+                            </div>
+                            <span className="font-medium">{isAdmin ? "Administration" : "Dashboard"}</span>
+                          </Link>
+                        </div>
+
+                        <div className="mx-3 h-px bg-gray-100" />
+
+                        <div className="p-2">
+                          <button
+                            onClick={() => {
+                              setIsProfileOpen(false);
+                              logout();
+                            }}
+                            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-red-600 hover:bg-red-50 transition-colors"
+                          >
+                            <div className="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center">
+                              <LogOut className="w-4 h-4" />
+                            </div>
+                            <span className="font-medium">Se déconnecter</span>
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              ) : (
+                /* Boutons Auth - Non connecté */
+                <div className="flex items-center gap-1.5">
+                  <Link
+                    href="/connexion"
+                    className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100/80 transition-all"
+                  >
+                    Se connecter
+                  </Link>
+                  <Link
+                    href="/inscription"
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-primary border border-primary/20 rounded-lg hover:bg-primary/5 hover:border-primary/30 transition-all"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>S&apos;inscrire</span>
+                  </Link>
+                </div>
               )}
-              <motion.a
+
+              {/* CTA Recherche */}
+              <Link
                 href="/recherche"
-                className="group flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white bg-gradient-to-r from-primary to-primary/80 shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all"
-                whileHover={{ scale: 1.02, y: -1 }}
-                whileTap={{ scale: 0.98 }}
+                className="group flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-primary to-primary/90 rounded-xl shadow-md shadow-primary/25 hover:shadow-lg hover:shadow-primary/30 hover:-translate-y-0.5 transition-all"
               >
                 <Search className="w-4 h-4" />
-                <span>Trouver un service</span>
+                <span className="hidden lg:inline">Rechercher</span>
                 <motion.span
-                  className="text-sm"
-                  animate={{ x: [0, 3, 0] }}
+                  className="text-white/80"
+                  animate={{ x: [0, 2, 0] }}
                   transition={{ duration: 1.5, repeat: Infinity }}
                 >
                   →
                 </motion.span>
-              </motion.a>
+              </Link>
             </div>
 
             {/* Mobile Menu Button */}
-            <motion.button
-              className="lg:hidden p-2.5 rounded-xl bg-primary/10 text-primary"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <AnimatePresence mode="wait">
-                {isMobileMenuOpen ? (
-                  <motion.div
-                    key="close"
-                    initial={{ rotate: -90, opacity: 0 }}
-                    animate={{ rotate: 0, opacity: 1 }}
-                    exit={{ rotate: 90, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <X size={22} />
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key="menu"
-                    initial={{ rotate: 90, opacity: 0 }}
-                    animate={{ rotate: 0, opacity: 1 }}
-                    exit={{ rotate: -90, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <Menu size={22} />
-                  </motion.div>
+            <div className="flex md:hidden items-center gap-2">
+              <Link
+                href="/recherche"
+                className="p-2.5 bg-primary text-white rounded-xl shadow-md shadow-primary/25"
+              >
+                <Search className="w-4 h-4" />
+              </Link>
+              <motion.button
+                className={cn(
+                  "p-2.5 rounded-xl transition-colors",
+                  isMobileMenuOpen
+                    ? "bg-gray-900 text-white"
+                    : "bg-gray-100 text-gray-700"
                 )}
-              </AnimatePresence>
-            </motion.button>
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                whileTap={{ scale: 0.95 }}
+              >
+                <AnimatePresence mode="wait">
+                  {isMobileMenuOpen ? (
+                    <motion.div
+                      key="close"
+                      initial={{ rotate: -90, opacity: 0 }}
+                      animate={{ rotate: 0, opacity: 1 }}
+                      exit={{ rotate: 90, opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      <X className="w-5 h-5" />
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="menu"
+                      initial={{ rotate: 90, opacity: 0 }}
+                      animate={{ rotate: 0, opacity: 1 }}
+                      exit={{ rotate: -90, opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      <Menu className="w-5 h-5" />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.button>
+            </div>
           </div>
         </div>
       </motion.nav>
 
-      {/* Mobile Menu - Full screen overlay */}
+      {/* Mobile Menu */}
       <AnimatePresence>
         {isMobileMenuOpen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 lg:hidden"
+            className="fixed inset-0 z-40 md:hidden"
           >
             {/* Backdrop */}
             <motion.div
-              className="absolute inset-0 bg-background/80 backdrop-blur-xl"
+              className="absolute inset-0 bg-black/20 backdrop-blur-sm"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -208,118 +328,100 @@ export function Navbar() {
 
             {/* Menu content */}
             <motion.div
-              className="absolute top-24 left-4 right-4 bg-white rounded-3xl shadow-2xl shadow-primary/20 p-6 border border-primary/10"
-              initial={{ opacity: 0, y: -20, scale: 0.95 }}
+              className="absolute top-20 left-3 right-3 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden"
+              initial={{ opacity: 0, y: -10, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.95 }}
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              exit={{ opacity: 0, y: -10, scale: 0.98 }}
+              transition={{ type: "spring", stiffness: 400, damping: 30 }}
             >
-              {/* Links */}
-              <div className="space-y-2">
+              {/* Navigation Links */}
+              <div className="p-2">
                 {navLinks.map((link, index) => (
                   <motion.a
                     key={link.href}
                     href={link.href}
-                    className="flex items-center gap-4 p-4 rounded-2xl hover:bg-primary/5 transition-colors group"
+                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
                     onClick={() => setIsMobileMenuOpen(false)}
-                    initial={{ opacity: 0, x: -20 }}
+                    initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.1 }}
+                    transition={{ delay: index * 0.05 }}
                   >
-                    <span className="text-2xl group-hover:scale-110 transition-transform">
-                      {link.emoji}
-                    </span>
-                    <span className="font-semibold text-foreground text-lg">
-                      {link.label}
-                    </span>
+                    <span className="text-lg">{link.emoji}</span>
+                    <span className="font-medium text-gray-900">{link.label}</span>
                   </motion.a>
                 ))}
               </div>
 
-              {/* Divider */}
-              <div className="my-6 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+              <div className="mx-4 h-px bg-gray-100" />
 
-              {/* CTAs */}
-              <div className="space-y-3">
+              {/* Auth Section */}
+              <div className="p-3">
                 {!isLoading && isAuthenticated && user ? (
-                  <>
-                    {/* Info utilisateur mobile */}
-                    <motion.div
-                      className="flex items-center gap-3 p-3 rounded-2xl bg-primary/5 border border-primary/10"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.4 }}
-                    >
-                      <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center text-white font-bold">
-                        {user.firstName.charAt(0)}{user.lastName.charAt(0)}
+                  <div className="space-y-2">
+                    {/* User Info */}
+                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                      <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center text-white font-bold text-sm">
+                        {initials}
                       </div>
-                      <div className="flex-1">
-                        <p className="font-semibold text-foreground">{user.firstName} {user.lastName}</p>
-                        <p className="text-sm text-foreground/60">{user.email}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-900 truncate">
+                          {user.firstName} {user.lastName}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate">{user.email}</p>
                       </div>
-                    </motion.div>
-                    <motion.a
+                    </div>
+
+                    <Link
                       href={isAdmin ? "/admin" : "/dashboard"}
-                      className="flex items-center justify-center gap-2 w-full p-4 rounded-2xl font-semibold text-primary border-2 border-primary/20 hover:border-primary/40 hover:bg-primary/5 transition-all"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.5 }}
                       onClick={() => setIsMobileMenuOpen(false)}
+                      className="flex items-center justify-center gap-2 w-full p-3 bg-gray-900 text-white font-medium rounded-xl"
                     >
-                      <LayoutDashboard className="w-5 h-5" />
-                      {isAdmin ? "Administration" : "Mon Dashboard"}
-                    </motion.a>
-                    <motion.button
+                      <LayoutDashboard className="w-4 h-4" />
+                      {isAdmin ? "Administration" : "Dashboard"}
+                    </Link>
+
+                    <button
                       onClick={() => {
                         setIsMobileMenuOpen(false);
                         logout();
                       }}
-                      className="flex items-center justify-center gap-2 w-full p-4 rounded-2xl font-semibold text-red-600 border-2 border-red-200 hover:border-red-300 hover:bg-red-50 transition-all"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.6 }}
+                      className="flex items-center justify-center gap-2 w-full p-3 text-red-600 font-medium rounded-xl border border-red-200 hover:bg-red-50 transition-colors"
                     >
-                      <LogOut className="w-5 h-5" />
+                      <LogOut className="w-4 h-4" />
                       Se déconnecter
-                    </motion.button>
-                  </>
+                    </button>
+                  </div>
                 ) : (
-                  <>
-                    <motion.a
-                      href="/inscription"
-                      className="flex items-center justify-center gap-2 w-full p-4 rounded-2xl font-semibold text-primary border-2 border-primary/20 hover:border-primary/40 hover:bg-primary/5 transition-all"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.4 }}
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Link
+                        href="/connexion"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="flex items-center justify-center gap-2 p-3 text-gray-700 font-medium rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors"
+                      >
+                        <LogIn className="w-4 h-4" />
+                        Connexion
+                      </Link>
+                      <Link
+                        href="/inscription"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="flex items-center justify-center gap-2 p-3 text-primary font-medium rounded-xl border border-primary/20 hover:bg-primary/5 transition-colors"
+                      >
+                        <UserPlus className="w-4 h-4" />
+                        Inscription
+                      </Link>
+                    </div>
+                    <Link
+                      href="/recherche"
                       onClick={() => setIsMobileMenuOpen(false)}
+                      className="flex items-center justify-center gap-2 w-full p-3.5 bg-gradient-to-r from-primary to-secondary text-white font-semibold rounded-xl shadow-lg shadow-primary/25"
                     >
-                      <UserPlus className="w-5 h-5" />
-                      S&apos;inscrire
-                    </motion.a>
-                  </>
+                      <Search className="w-4 h-4" />
+                      Trouver un prestataire
+                    </Link>
+                  </div>
                 )}
-                <motion.a
-                  href="/recherche"
-                  className="flex items-center justify-center gap-2 w-full p-4 rounded-2xl font-semibold text-white bg-gradient-to-r from-primary to-secondary shadow-lg shadow-primary/30"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: isAuthenticated ? 0.7 : 0.5 }}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  <Search className="w-5 h-5" />
-                  Trouver un service
-                  <Sparkles className="w-4 h-4" />
-                </motion.a>
               </div>
-
-              {/* Fun decoration */}
-              <motion.div
-                className="absolute -bottom-3 left-1/2 -translate-x-1/2 text-2xl"
-                animate={{ y: [0, -5, 0] }}
-                transition={{ duration: 2, repeat: Infinity }}
-              >
-                🐕
-              </motion.div>
             </motion.div>
           </motion.div>
         )}
