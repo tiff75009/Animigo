@@ -174,6 +174,36 @@ bun run build
     - Temps de preparation avant/apres services (buffers)
     - Exemple visuel du temps bloque
 
+### Systeme de Paiement Stripe
+
+Integration complete de Stripe avec pre-autorisation (empreinte bancaire) :
+
+- **Flux de paiement**
+  1. Annonceur accepte une mission → Creation Checkout Session Stripe (1h validite)
+  2. Email automatique au client avec lien de paiement
+  3. Client paie → Pre-autorisation (fonds bloques, pas debites)
+  4. Mission passe en "A venir" puis "En cours" puis "Terminee"
+  5. Client confirme la fin de prestation OU auto-capture apres 48h
+  6. Paiement capture → Fonds debites
+
+- **Pages de paiement**
+  - `/paiement/succes` - Confirmation de paiement reussi
+  - `/paiement/annule` - Page d'annulation
+
+- **Configuration admin** (`/admin/integrations`)
+  - `stripe_secret_key` - Cle secrete Stripe
+  - `stripe_public_key` - Cle publique Stripe
+  - `stripe_webhook_secret` - Secret du webhook
+  - `app_url` - URL de l'application
+
+- **Webhook Stripe**
+  - URL : `https://[votre-url-convex].convex.site/stripe-webhook`
+  - Evenements geres : `checkout.session.completed`, `checkout.session.expired`, `payment_intent.canceled`
+
+- **Cron jobs automatiques**
+  - Auto-capture des paiements (toutes les heures)
+  - Nettoyage des sessions expirees (toutes les 6h)
+
 ### Integrations API
 
 #### API INSEE (SIRENE)
@@ -289,6 +319,7 @@ convex/
 - `missions` - Reservations de services
 - `availability` - Disponibilites des annonceurs
 - `userPreferences` - Preferences utilisateur (notifications, facturation)
+- `stripePayments` - Paiements Stripe (sessions, pre-autorisations, captures)
 - `systemConfig` - Configuration systeme
 
 ---
@@ -336,6 +367,28 @@ Utilisation de Framer Motion avec des variants predefinies :
 ---
 
 ## Changelog recent
+
+### v0.7.0 - Systeme de Paiement Stripe
+- **Integration Stripe complete**
+  - Pre-autorisation (empreinte bancaire) avec capture manuelle
+  - Checkout Session avec lien de paiement valide 1h
+  - Email automatique au client avec lien de paiement
+  - Webhook Convex HTTP pour les evenements Stripe
+- **Flux de mission ameliore**
+  - `acceptMission` declenche automatiquement la creation de session Stripe
+  - Nouvelle mutation `confirmMissionCompletion` pour les clients
+  - Statuts de paiement : `not_due`, `pending`, `paid`
+- **Auto-capture intelligente**
+  - Cron job toutes les heures pour capturer les paiements
+  - Auto-capture 48h apres la fin de mission si pas de confirmation client
+  - Nettoyage automatique des sessions expirees
+- **Pages frontend**
+  - `/paiement/succes` - Page de confirmation avec prochaines etapes
+  - `/paiement/annule` - Page d'annulation avec options
+- **Nouvelle table `stripePayments`**
+  - Suivi complet des sessions Checkout
+  - Statuts : pending, authorized, captured, cancelled, expired, failed
+  - Historique des captures et annulations
 
 ### v0.6.0 - Page Recherche Avancée
 - **Nouvelle page `/recherche`**

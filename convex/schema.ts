@@ -302,6 +302,11 @@ export default defineSchema({
     announcerNotes: v.optional(v.string()),
     cancellationReason: v.optional(v.string()),
 
+    // Stripe - Paiement
+    stripePaymentId: v.optional(v.id("stripePayments")), // Référence au paiement Stripe
+    completedByClientAt: v.optional(v.number()), // Date de confirmation par le client
+    autoCaptureScheduledAt: v.optional(v.number()), // Date prévue pour l'auto-capture (+48h)
+
     // Timestamps
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -309,7 +314,8 @@ export default defineSchema({
     .index("by_announcer", ["announcerId"])
     .index("by_client", ["clientId"])
     .index("by_announcer_status", ["announcerId", "status"])
-    .index("by_announcer_dates", ["announcerId", "startDate"]),
+    .index("by_announcer_dates", ["announcerId", "startDate"])
+    .index("by_auto_capture", ["autoCaptureScheduledAt"]),
 
   // Disponibilités / Indisponibilités des annonceurs
   availability: defineTable({
@@ -613,4 +619,49 @@ export default defineSchema({
     .index("by_token", ["token"])
     .index("by_status", ["status"])
     .index("by_created_by", ["createdBy"]),
+
+  // Paiements Stripe (pré-autorisations et captures)
+  stripePayments: defineTable({
+    missionId: v.id("missions"),
+
+    // Identifiants Stripe
+    checkoutSessionId: v.string(), // cs_xxx
+    paymentIntentId: v.optional(v.string()), // pi_xxx (renseigné après checkout)
+
+    // Montants (en centimes)
+    amount: v.number(), // Montant total
+    platformFee: v.number(), // Commission plateforme
+    announcerEarnings: v.number(), // Revenus annonceur
+
+    // Statut du paiement
+    status: v.union(
+      v.literal("pending"), // Checkout Session créée, en attente client
+      v.literal("authorized"), // Pré-autorisation réussie (fonds bloqués)
+      v.literal("captured"), // Paiement capturé
+      v.literal("cancelled"), // Annulé (pré-autorisation relâchée)
+      v.literal("expired"), // Session expirée (1h)
+      v.literal("failed") // Échec du paiement
+    ),
+
+    // URL de paiement
+    checkoutUrl: v.string(),
+    expiresAt: v.number(), // Timestamp expiration session (+1h)
+
+    // Timestamps capture
+    authorizedAt: v.optional(v.number()), // Date pré-autorisation
+    capturedAt: v.optional(v.number()), // Date capture
+    cancelledAt: v.optional(v.number()), // Date annulation
+
+    // Métadonnées Stripe
+    stripeCustomerId: v.optional(v.string()),
+    receiptUrl: v.optional(v.string()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_mission", ["missionId"])
+    .index("by_checkout_session", ["checkoutSessionId"])
+    .index("by_payment_intent", ["paymentIntentId"])
+    .index("by_status", ["status"])
+    .index("by_expires", ["expiresAt"]),
 });
