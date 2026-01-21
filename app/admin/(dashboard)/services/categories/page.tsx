@@ -907,8 +907,8 @@ export default function ServiceCategoriesPage() {
       </AnimatePresence>
 
       {/* Categories List */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-        <table className="w-full">
+      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-x-auto">
+        <table className="w-full min-w-[1200px]">
           <thead>
             <tr className="border-b border-slate-700">
               <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
