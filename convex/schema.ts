@@ -82,6 +82,7 @@ export default defineSchema({
   // Profil annonceur (description, bio, etc.)
   profiles: defineTable({
     userId: v.id("users"),
+    profileImageUrl: v.optional(v.string()), // URL Cloudinary de la photo de profil
     bio: v.optional(v.string()), // Description courte
     description: v.optional(v.string()), // Description détaillée
     experience: v.optional(v.string()), // Années d'expérience, formations
@@ -101,7 +102,24 @@ export default defineSchema({
     })),
     googlePlaceId: v.optional(v.string()), // ID Google Maps pour référence
     acceptedAnimals: v.optional(v.array(v.string())), // ["chien", "chat", "rongeur", etc.]
+
+    // Conditions de garde - Logement
+    housingType: v.optional(v.union(
+      v.literal("house"),      // Maison
+      v.literal("apartment")   // Appartement
+    )),
+    housingSize: v.optional(v.number()), // Surface en m²
     hasGarden: v.optional(v.boolean()),
+    gardenSize: v.optional(v.string()), // "petit", "moyen", "grand"
+
+    // Conditions de garde - Mode de vie
+    isSmoker: v.optional(v.boolean()),
+    hasChildren: v.optional(v.boolean()),
+    childrenAges: v.optional(v.array(v.string())), // ["0-3", "4-10", "11-17"]
+
+    // Conditions de garde - Alimentation
+    providesFood: v.optional(v.boolean()), // L'annonceur fournit l'alimentation
+
     hasVehicle: v.optional(v.boolean()),
     // Animaux de l'annonceur
     ownedAnimals: v.optional(v.array(v.object({

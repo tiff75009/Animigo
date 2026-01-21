@@ -407,7 +407,6 @@ export default function MapComponent({
             onSitterSelect={onSitterSelect}
             searchCenter={searchCenter}
             searchRadius={searchRadius}
-            mapStyle={mapStyle}
             initialCenter={initialCenter}
             tileConfig={tileConfig}
           />

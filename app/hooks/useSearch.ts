@@ -46,6 +46,8 @@ export interface SearchFilters {
   endTime: string | null; // "HH:MM"
   // Options
   includeUnavailable: boolean;
+  // Mode de recherche
+  searchMode: "garde" | "services" | null;
 }
 
 export interface AnnouncerResult {
@@ -83,6 +85,7 @@ const initialFilters: SearchFilters = {
   endDate: null,
   endTime: null,
   includeUnavailable: false,
+  searchMode: "garde", // Par défaut en mode garde
 };
 
 export function useSearch() {
@@ -93,6 +96,7 @@ export function useSearch() {
   const queryArgs = useMemo(() => {
     const args: {
       categorySlug?: string;
+      excludeCategory?: string;
       animalType?: string;
       coordinates?: Coordinates;
       radiusKm?: number;
@@ -114,7 +118,19 @@ export function useSearch() {
       sortBy?: string;
     } = {};
 
-    if (filters.category) {
+    // Appliquer le mode de recherche
+    if (filters.searchMode === "garde") {
+      // Mode garde: filtrer uniquement les gardes
+      args.categorySlug = "garde";
+    } else if (filters.searchMode === "services") {
+      // Mode services: exclure les gardes, ou filtrer par catégorie spécifique
+      if (filters.category) {
+        args.categorySlug = filters.category.slug;
+      } else {
+        args.excludeCategory = "garde";
+      }
+    } else if (filters.category) {
+      // Mode null ou pas de mode: utiliser la catégorie sélectionnée
       args.categorySlug = filters.category.slug;
     }
 
@@ -230,6 +246,15 @@ export function useSearch() {
     setFilters((prev) => ({ ...prev, includeUnavailable: include }));
   }, []);
 
+  const setSearchMode = useCallback((mode: "garde" | "services" | null) => {
+    setFilters((prev) => ({
+      ...prev,
+      searchMode: mode,
+      // Reset la catégorie quand on change de mode
+      category: null,
+    }));
+  }, []);
+
   const resetFilters = useCallback(() => {
     setFilters(initialFilters);
   }, []);
@@ -265,6 +290,7 @@ export function useSearch() {
     setEndTime,
     setDateRange,
     setIncludeUnavailable,
+    setSearchMode,
     resetFilters,
 
     // Actions filtres avancés

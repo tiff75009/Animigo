@@ -3,9 +3,9 @@
 import { motion } from "framer-motion";
 import Image from "next/image";
 import {
-  MapPin,
   CheckCircle,
   Home,
+  Building2,
   TreeDeciduous,
   Baby,
   Heart,
@@ -16,8 +16,6 @@ import {
   Euro,
   Utensils,
   Star,
-  Shield,
-  MessageSquare,
   Edit,
   XCircle,
   Ban,
@@ -27,12 +25,25 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  Car,
+  Cigarette,
+  CigaretteOff,
+  Plus,
+  Trash2,
+  PawPrint,
   type LucideIcon,
+  Loader2,
 } from "lucide-react";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { AnimatePresence } from "framer-motion";
-import { mockUserProfile, mockReviews, calculateStats, type PricingTier } from "@/app/lib/dashboard-data";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { useAuth } from "@/app/hooks/useAuth";
+import { mockReviews, calculateStats, type PricingTier } from "@/app/lib/dashboard-data";
 import { cn } from "@/app/lib/utils";
+import ProfileCard from "../components/ProfileCard";
+import ProfileCompletionBar from "../components/ProfileCompletionBar";
+import ProfileSettingsSection from "../components/ProfileSettingsSection";
 
 // Pricing Card Component
 interface PricingCardProps {
@@ -271,7 +282,7 @@ interface AvailabilityCalendarProps {
 }
 
 function AvailabilityCalendar({ availability }: AvailabilityCalendarProps) {
-  const [currentMonth, setCurrentMonth] = useState(new Date(2024, 0, 1)); // January 2024 for demo
+  const [currentMonth, setCurrentMonth] = useState(new Date());
 
   const daysInMonth = new Date(
     currentMonth.getFullYear(),
@@ -402,18 +413,311 @@ function AvailabilityCalendar({ availability }: AvailabilityCalendarProps) {
   );
 }
 
+// Mock data pour les sections non encore connectées
+const mockPricing = {
+  hourly: { price: 15, average: 14, min: 10, max: 20 },
+  daily: { price: 35, average: 32, min: 25, max: 45 },
+  weekly: { price: 200, average: 190, min: 150, max: 280 },
+  monthly: { price: 700, average: 650, min: 500, max: 900 },
+};
+
+const mockAvailability: { [key: string]: "available" | "partial" | "unavailable" } = {};
+
+const mockAcceptedAnimalTypes = [
+  { type: "Chien", emoji: "🐕", accepted: true },
+  { type: "Chat", emoji: "🐈", accepted: true },
+  { type: "Lapin", emoji: "🐰", accepted: true },
+  { type: "Rongeur", emoji: "🐹", accepted: true },
+  { type: "Oiseau", emoji: "🦜", accepted: false },
+  { type: "Reptile", emoji: "🦎", accepted: false },
+];
+
+const mockActivities = [
+  { id: "a1", name: "Promenades quotidiennes", emoji: "🚶", description: "2 à 3 promenades par jour dans les parcs du quartier" },
+  { id: "a2", name: "Jeux et stimulation", emoji: "🎾", description: "Sessions de jeu régulières pour garder votre animal actif" },
+  { id: "a3", name: "Câlins et attention", emoji: "🤗", description: "Beaucoup d'amour et de moments de complicité" },
+  { id: "a4", name: "Photos et nouvelles", emoji: "📸", description: "Envoi quotidien de photos et mises à jour" },
+];
+
+const mockEnvironmentPhotos = [
+  { id: "p1", url: "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=600&h=400&fit=crop", caption: "Salon lumineux" },
+  { id: "p2", url: "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=600&h=400&fit=crop", caption: "Espace détente" },
+  { id: "p3", url: "https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?w=600&h=400&fit=crop", caption: "Coin repos pour animaux" },
+  { id: "p4", url: "https://images.unsplash.com/photo-1523575708161-ad0fc2a9b951?w=600&h=400&fit=crop", caption: "Balcon ensoleillé" },
+];
+
+// Types d'animaux pour le formulaire
+const ANIMAL_TYPE_OPTIONS = [
+  { value: "chien", label: "Chien", emoji: "🐕" },
+  { value: "chat", label: "Chat", emoji: "🐈" },
+  { value: "lapin", label: "Lapin", emoji: "🐰" },
+  { value: "rongeur", label: "Rongeur", emoji: "🐹" },
+  { value: "oiseau", label: "Oiseau", emoji: "🦜" },
+  { value: "reptile", label: "Reptile", emoji: "🦎" },
+  { value: "poisson", label: "Poisson", emoji: "🐠" },
+  { value: "autre", label: "Autre", emoji: "🐾" },
+];
+
+// Formulaire compact pour ajouter un animal
+function OwnedAnimalForm({
+  onAdd,
+}: {
+  onAdd: (animal: { type: string; name: string; breed?: string; age?: number }) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [animalType, setAnimalType] = useState("");
+  const [animalName, setAnimalName] = useState("");
+  const [animalAge, setAnimalAge] = useState("");
+
+  const handleSubmit = () => {
+    if (!animalType || !animalName.trim()) return;
+
+    onAdd({
+      type: animalType,
+      name: animalName.trim(),
+      age: animalAge ? parseInt(animalAge) : undefined,
+    });
+
+    // Reset form
+    setAnimalType("");
+    setAnimalName("");
+    setAnimalAge("");
+    setIsOpen(false);
+  };
+
+  if (!isOpen) {
+    return (
+      <motion.button
+        type="button"
+        onClick={() => setIsOpen(true)}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-primary hover:bg-primary/10 transition-all"
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+      >
+        <Plus className="w-4 h-4" />
+        <span className="font-medium">Ajouter</span>
+      </motion.button>
+    );
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex flex-wrap items-center gap-2 p-2 bg-white rounded-lg border border-primary/20"
+    >
+      <select
+        value={animalType}
+        onChange={(e) => setAnimalType(e.target.value)}
+        className="px-2 py-1.5 text-sm border border-foreground/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
+      >
+        <option value="">Type...</option>
+        {ANIMAL_TYPE_OPTIONS.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.emoji} {opt.label}
+          </option>
+        ))}
+      </select>
+
+      <input
+        type="text"
+        value={animalName}
+        onChange={(e) => setAnimalName(e.target.value)}
+        placeholder="Nom"
+        className="w-24 px-2 py-1.5 text-sm border border-foreground/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+      />
+
+      <input
+        type="number"
+        min="0"
+        max="30"
+        value={animalAge}
+        onChange={(e) => setAnimalAge(e.target.value)}
+        placeholder="Âge"
+        className="w-16 px-2 py-1.5 text-sm border border-foreground/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+      />
+
+      <motion.button
+        type="button"
+        onClick={handleSubmit}
+        disabled={!animalType || !animalName.trim()}
+        className={cn(
+          "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+          animalType && animalName.trim()
+            ? "bg-primary text-white hover:bg-primary/90"
+            : "bg-foreground/10 text-foreground/40 cursor-not-allowed"
+        )}
+        whileHover={animalType && animalName.trim() ? { scale: 1.02 } : undefined}
+        whileTap={animalType && animalName.trim() ? { scale: 0.98 } : undefined}
+      >
+        OK
+      </motion.button>
+
+      <motion.button
+        type="button"
+        onClick={() => setIsOpen(false)}
+        className="p-1.5 text-foreground/40 hover:text-foreground/60"
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.9 }}
+      >
+        <X className="w-4 h-4" />
+      </motion.button>
+    </motion.div>
+  );
+}
+
 export default function ProfilePage() {
+  const { user, token, isLoading: authLoading } = useAuth();
   const stats = calculateStats();
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("fr-FR", {
-      month: "long",
-      year: "numeric",
-    });
+  // Récupérer le profil Convex
+  const profileData = useQuery(
+    api.services.profile.getProfile,
+    token ? { token } : "skip"
+  );
+
+  // Mutations
+  const upsertProfile = useMutation(api.services.profile.upsertProfile);
+
+  // État de chargement
+  const isLoading = authLoading || profileData === undefined;
+
+  // Données du profil
+  const userInfo = profileData?.user;
+  const profile = profileData?.profile;
+
+  // Photo de profil depuis le profil (URL Cloudinary)
+  const profileImageUrl = profile?.profileImageUrl || null;
+
+  // Calculer le pourcentage de complétion du profil
+  const profileCompletionData = {
+    hasProfilePhoto: !!profileImageUrl,
+    hasDescription: !!profile?.description && profile.description.trim().length > 0,
+    hasLocation: !!profile?.city || !!profile?.location,
+    hasRadius: !!profile?.radius && profile.radius > 0,
+    hasAcceptedAnimals: !!profile?.acceptedAnimals && profile.acceptedAnimals.length > 0,
+    hasEquipments: profile?.hasGarden !== undefined || profile?.hasVehicle !== undefined,
+    hasMaxAnimals: !!profile?.maxAnimalsPerSlot && profile.maxAnimalsPerSlot > 0,
+    hasServices: true, // TODO: vérifier les services
+    hasAvailability: true, // TODO: vérifier les disponibilités
   };
 
+  // Handlers pour les modifications
+  const handleUpdateDescription = useCallback(async (description: string) => {
+    if (!token) throw new Error("Non authentifié");
+    await upsertProfile({ token, description: description || null });
+  }, [token, upsertProfile]);
+
+  const handleUpdateLocation = useCallback(async (data: {
+    location: string;
+    city?: string;
+    postalCode?: string;
+    department?: string;
+    region?: string;
+    coordinates?: { lat: number; lng: number };
+    googlePlaceId?: string;
+  }) => {
+    if (!token) throw new Error("Non authentifié");
+    await upsertProfile({
+      token,
+      location: data.location || null,
+      city: data.city || null,
+      postalCode: data.postalCode || null,
+      department: data.department || null,
+      region: data.region || null,
+      coordinates: data.coordinates || null,
+      googlePlaceId: data.googlePlaceId || null,
+    });
+  }, [token, upsertProfile]);
+
+  const handleUploadAvatar = useCallback(async (cloudinaryUrl: string) => {
+    if (!token) throw new Error("Non authentifié");
+    await upsertProfile({ token, profileImageUrl: cloudinaryUrl });
+  }, [token, upsertProfile]);
+
+  const handleRemoveAvatar = useCallback(async () => {
+    if (!token) throw new Error("Non authentifié");
+    await upsertProfile({ token, profileImageUrl: null });
+  }, [token, upsertProfile]);
+
+  // Handlers pour les paramètres du profil
+  const handleRadiusChange = useCallback(async (radius: number) => {
+    if (!token) throw new Error("Non authentifié");
+    await upsertProfile({ token, radius });
+  }, [token, upsertProfile]);
+
+  const handleAcceptedAnimalsChange = useCallback(async (animals: string[]) => {
+    if (!token) throw new Error("Non authentifié");
+    await upsertProfile({ token, acceptedAnimals: animals });
+  }, [token, upsertProfile]);
+
+  const handleHasGardenChange = useCallback(async (hasGarden: boolean) => {
+    if (!token) throw new Error("Non authentifié");
+    await upsertProfile({ token, hasGarden });
+  }, [token, upsertProfile]);
+
+  const handleHasVehicleChange = useCallback(async (hasVehicle: boolean) => {
+    if (!token) throw new Error("Non authentifié");
+    await upsertProfile({ token, hasVehicle });
+  }, [token, upsertProfile]);
+
+  const handleMaxAnimalsChange = useCallback(async (maxAnimalsPerSlot: number) => {
+    if (!token) throw new Error("Non authentifié");
+    await upsertProfile({ token, maxAnimalsPerSlot });
+  }, [token, upsertProfile]);
+
+  // Handlers pour les conditions de garde
+  const handleHousingTypeChange = useCallback(async (housingType: "house" | "apartment") => {
+    if (!token) throw new Error("Non authentifié");
+    await upsertProfile({ token, housingType });
+  }, [token, upsertProfile]);
+
+  const handleHousingSizeChange = useCallback(async (housingSize: number) => {
+    if (!token) throw new Error("Non authentifié");
+    await upsertProfile({ token, housingSize });
+  }, [token, upsertProfile]);
+
+  const handleGardenSizeChange = useCallback(async (gardenSize: string | null) => {
+    if (!token) throw new Error("Non authentifié");
+    if (gardenSize === null) {
+      await upsertProfile({ token, hasGarden: false, gardenSize: null });
+    } else {
+      await upsertProfile({ token, hasGarden: true, gardenSize });
+    }
+  }, [token, upsertProfile]);
+
+  const handleIsSmokerChange = useCallback(async (isSmoker: boolean) => {
+    if (!token) throw new Error("Non authentifié");
+    await upsertProfile({ token, isSmoker });
+  }, [token, upsertProfile]);
+
+  const handleHasChildrenChange = useCallback(async (hasChildren: boolean, childrenAges?: string[]) => {
+    if (!token) throw new Error("Non authentifié");
+    if (hasChildren && childrenAges) {
+      await upsertProfile({ token, hasChildren, childrenAges });
+    } else {
+      await upsertProfile({ token, hasChildren: false, childrenAges: null });
+    }
+  }, [token, upsertProfile]);
+
+  const handleChildrenAgesChange = useCallback(async (childrenAges: string[]) => {
+    if (!token) throw new Error("Non authentifié");
+    await upsertProfile({ token, childrenAges });
+  }, [token, upsertProfile]);
+
+  const handleProvidesFoodChange = useCallback(async (providesFood: boolean) => {
+    if (!token) throw new Error("Non authentifié");
+    await upsertProfile({ token, providesFood });
+  }, [token, upsertProfile]);
+
+  const handleOwnedAnimalsChange = useCallback(async (ownedAnimals: Array<{ type: string; name: string; breed?: string; age?: number }>) => {
+    if (!token) throw new Error("Non authentifié");
+    await upsertProfile({ token, ownedAnimals: ownedAnimals.length > 0 ? ownedAnimals : null });
+  }, [token, upsertProfile]);
+
+  // Gallery handlers
   const openGallery = (index: number) => {
     setCurrentPhotoIndex(index);
     setGalleryOpen(true);
@@ -425,19 +729,44 @@ export default function ProfilePage() {
 
   const prevPhoto = () => {
     setCurrentPhotoIndex((prev) =>
-      prev === 0 ? mockUserProfile.environmentPhotos.length - 1 : prev - 1
+      prev === 0 ? mockEnvironmentPhotos.length - 1 : prev - 1
     );
   };
 
   const nextPhoto = () => {
     setCurrentPhotoIndex((prev) =>
-      prev === mockUserProfile.environmentPhotos.length - 1 ? 0 : prev + 1
+      prev === mockEnvironmentPhotos.length - 1 ? 0 : prev + 1
     );
   };
 
   const goToPhoto = (index: number) => {
     setCurrentPhotoIndex(index);
   };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="space-y-8 max-w-5xl mx-auto">
+        <div className="flex items-center justify-center h-64">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="w-8 h-8 text-primary animate-spin" />
+            <p className="text-text-light">Chargement du profil...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Si pas de données utilisateur
+  if (!userInfo) {
+    return (
+      <div className="space-y-8 max-w-5xl mx-auto">
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
+          <p className="text-red-700">Impossible de charger le profil. Veuillez vous reconnecter.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
@@ -465,83 +794,40 @@ export default function ProfilePage() {
         </motion.button>
       </motion.div>
 
-      {/* Profile Card - Header */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="bg-white rounded-3xl shadow-lg overflow-hidden"
-      >
-        {/* Cover gradient */}
-        <div className="h-32 bg-gradient-to-r from-primary to-secondary relative">
-          <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M10%200a2%202%200%20110%204%202%202%200%20010-4zm0%206a2%202%200%20110%204%202%202%200%20010-4zm0%206a2%202%200%20110%204%202%202%200%20010-4z%22%20fill%3D%22%23fff%22%20fill-opacity%3D%22.1%22%2F%3E%3C%2Fsvg%3E')] opacity-30" />
-        </div>
+      {/* Profile Completion Bar */}
+      <ProfileCompletionBar profileData={profileCompletionData} />
 
-        <div className="px-6 pb-6 -mt-16 relative">
-          {/* Profile image */}
-          <div className="flex flex-col md:flex-row md:items-end gap-4 mb-6">
-            <div className="relative">
-              <div className="w-32 h-32 rounded-2xl border-4 border-white shadow-lg overflow-hidden bg-white">
-                <Image
-                  src={mockUserProfile.profileImage}
-                  alt={`${mockUserProfile.firstName} ${mockUserProfile.lastName}`}
-                  width={128}
-                  height={128}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              {mockUserProfile.verified && (
-                <div className="absolute -bottom-2 -right-2 bg-secondary text-white p-2 rounded-full shadow-lg">
-                  <CheckCircle className="w-5 h-5" />
-                </div>
-              )}
-            </div>
+      {/* Profile Card */}
+      <ProfileCard
+        firstName={userInfo.firstName}
+        lastName={userInfo.lastName}
+        profileImage={profileImageUrl}
+        location={profile?.location}
+        city={profile?.city}
+        postalCode={profile?.postalCode}
+        region={profile?.region}
+        memberSince={user?.createdAt}
+        verified={user?.emailVerified || false}
+        rating={stats.averageRating}
+        reviewCount={stats.totalReviews}
+        responseRate={0}
+        responseTime={undefined}
+        description={profile?.description}
+        isEditable={true}
+        onUpdateDescription={handleUpdateDescription}
+        onUpdateLocation={handleUpdateLocation}
+        onUploadAvatar={handleUploadAvatar}
+        onRemoveAvatar={handleRemoveAvatar}
+      />
 
-            <div className="flex-1">
-              <h2 className="text-2xl font-bold text-foreground">
-                {mockUserProfile.firstName} {mockUserProfile.lastName}
-              </h2>
-              <p className="text-text-light flex items-center gap-2 mt-1">
-                <MapPin className="w-4 h-4" />
-                {mockUserProfile.location}
-              </p>
-              <p className="text-sm text-text-light mt-1">
-                Membre depuis {formatDate(mockUserProfile.memberSince)}
-              </p>
-            </div>
-
-            {/* Badges */}
-            <div className="flex flex-wrap gap-2">
-              {mockUserProfile.verified && (
-                <span className="px-3 py-1 bg-secondary/10 text-secondary rounded-full text-sm font-medium flex items-center gap-1">
-                  <Shield className="w-4 h-4" />
-                  Vérifié
-                </span>
-              )}
-              <span className="px-3 py-1 bg-accent/20 text-foreground rounded-full text-sm font-medium flex items-center gap-1">
-                <Star className="w-4 h-4 fill-accent text-accent" />
-                {stats.averageRating.toFixed(1)} ({stats.totalReviews} avis)
-              </span>
-              <span className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm font-medium flex items-center gap-1">
-                <MessageSquare className="w-4 h-4" />
-                {mockUserProfile.responseRate}% réponse
-              </span>
-              <span className="px-3 py-1 bg-purple/10 text-purple rounded-full text-sm font-medium flex items-center gap-1">
-                <Clock className="w-4 h-4" />
-                Répond en {mockUserProfile.responseTime}
-              </span>
-            </div>
-          </div>
-
-          {/* Description */}
-          <div className="bg-background rounded-2xl p-5">
-            <h3 className="font-semibold text-foreground mb-2">À propos de moi</h3>
-            <p className="text-text-light leading-relaxed">
-              {mockUserProfile.description}
-            </p>
-          </div>
-        </div>
-      </motion.div>
+      {/* Rayon d'intervention */}
+      <ProfileSettingsSection
+        radius={profile?.radius || 20}
+        onRadiusChange={handleRadiusChange}
+        acceptedAnimals={[]}
+        isEditable={true}
+        showOnlyRadius={true}
+      />
 
       {/* Availability & Pricing - Side by side */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -556,7 +842,7 @@ export default function ProfilePage() {
             <Calendar className="w-5 h-5 text-primary" />
             Mes disponibilités
           </h3>
-          <AvailabilityCalendar availability={mockUserProfile.availability} />
+          <AvailabilityCalendar availability={mockAvailability} />
         </motion.div>
 
         {/* Pricing Card */}
@@ -574,25 +860,25 @@ export default function ProfilePage() {
             <PricingCard
               icon={Clock}
               label="Heure"
-              pricing={mockUserProfile.pricing.hourly}
+              pricing={mockPricing.hourly}
               color="primary"
             />
             <PricingCard
               icon={Calendar}
               label="Jour"
-              pricing={mockUserProfile.pricing.daily}
+              pricing={mockPricing.daily}
               color="secondary"
             />
             <PricingCard
               icon={CalendarDays}
               label="Semaine"
-              pricing={mockUserProfile.pricing.weekly}
+              pricing={mockPricing.weekly}
               color="purple"
             />
             <PricingCard
               icon={CalendarRange}
               label="Mois"
-              pricing={mockUserProfile.pricing.monthly}
+              pricing={mockPricing.monthly}
               color="accent"
             />
           </div>
@@ -603,7 +889,7 @@ export default function ProfilePage() {
         </motion.div>
       </div>
 
-      {/* Accepted Animals & Capacity */}
+      {/* Accepted Animals & Capacity & Equipment */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -615,40 +901,116 @@ export default function ProfilePage() {
           Animaux acceptés
         </h3>
 
-        <div className="mb-4 p-4 bg-primary/5 rounded-xl inline-block">
-          <p className="text-sm text-text-light">Capacité maximale</p>
-          <p className="text-2xl font-bold text-primary">{mockUserProfile.maxAnimals} animaux</p>
+        {/* Capacité maximale */}
+        <div className="mb-6">
+          <p className="text-sm font-medium text-foreground mb-3">Capacité maximale</p>
+          <div className="flex flex-wrap gap-2">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+              <motion.button
+                key={num}
+                type="button"
+                onClick={() => handleMaxAnimalsChange(num)}
+                className={cn(
+                  "w-12 h-12 rounded-xl border-2 font-semibold text-lg transition-all",
+                  profile?.maxAnimalsPerSlot === num
+                    ? "border-primary bg-primary text-white"
+                    : "border-foreground/10 bg-white text-foreground hover:border-foreground/20"
+                )}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                {num}
+              </motion.button>
+            ))}
+          </div>
+          {!profile?.maxAnimalsPerSlot && (
+            <p className="text-xs text-amber-500 mt-2">
+              Sélectionnez une capacité maximale
+            </p>
+          )}
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {mockUserProfile.acceptedAnimalTypes.map((animal) => (
-            <div
-              key={animal.type}
+        {/* Types d'animaux */}
+        <div className="mb-6">
+          <p className="text-sm font-medium text-foreground mb-3">Types d&apos;animaux</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {mockAcceptedAnimalTypes.map((animal) => {
+              const isAccepted = profile?.acceptedAnimals?.includes(animal.type.toLowerCase()) ?? false;
+              return (
+                <motion.button
+                  key={animal.type}
+                  type="button"
+                  onClick={() => {
+                    const animalId = animal.type.toLowerCase();
+                    const currentAnimals = profile?.acceptedAnimals || [];
+                    if (isAccepted) {
+                      handleAcceptedAnimalsChange(currentAnimals.filter((a: string) => a !== animalId));
+                    } else {
+                      handleAcceptedAnimalsChange([...currentAnimals, animalId]);
+                    }
+                  }}
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-xl transition-all cursor-pointer",
+                    isAccepted
+                      ? "bg-green-50 border-2 border-green-300"
+                      : "bg-gray-50 border-2 border-gray-200 hover:border-gray-300"
+                  )}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <span className="text-2xl">{animal.emoji}</span>
+                  <span className={cn(
+                    "font-medium",
+                    isAccepted ? "text-green-700" : "text-gray-500"
+                  )}>
+                    {animal.type}
+                  </span>
+                  {isAccepted ? (
+                    <CheckCircle className="w-5 h-5 text-green-500 ml-auto" />
+                  ) : (
+                    <XCircle className="w-5 h-5 text-gray-300 ml-auto" />
+                  )}
+                </motion.button>
+              );
+            })}
+          </div>
+          {(!profile?.acceptedAnimals || profile.acceptedAnimals.length === 0) && (
+            <p className="text-xs text-amber-500 mt-2">
+              Sélectionnez au moins un type d&apos;animal
+            </p>
+          )}
+        </div>
+
+        {/* Équipements */}
+        <div>
+          <p className="text-sm font-medium text-foreground mb-3">Équipements</p>
+          <div className="flex flex-wrap gap-3">
+            <motion.button
+              type="button"
+              onClick={() => handleHasVehicleChange(!profile?.hasVehicle)}
               className={cn(
-                "flex items-center gap-3 p-3 rounded-xl",
-                animal.accepted
-                  ? "bg-green-50 border border-green-200"
-                  : "bg-gray-50 border border-gray-200 opacity-60"
+                "flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all",
+                profile?.hasVehicle
+                  ? "border-secondary bg-secondary/5 text-secondary"
+                  : "border-foreground/10 bg-white text-foreground hover:border-foreground/20"
               )}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
             >
-              <span className="text-2xl">{animal.emoji}</span>
-              <span className={cn(
-                "font-medium",
-                animal.accepted ? "text-green-700" : "text-gray-500"
+              <div className={cn(
+                "p-2 rounded-lg",
+                profile?.hasVehicle ? "bg-secondary/10" : "bg-foreground/5"
               )}>
-                {animal.type}
-              </span>
-              {animal.accepted ? (
-                <CheckCircle className="w-5 h-5 text-green-500 ml-auto" />
-              ) : (
-                <XCircle className="w-5 h-5 text-gray-400 ml-auto" />
-              )}
-            </div>
-          ))}
+                <Car className="w-5 h-5" />
+              </div>
+              <span className="font-medium">J&apos;ai un véhicule</span>
+              {profile?.hasVehicle && <CheckCircle className="w-5 h-5 ml-2" />}
+            </motion.button>
+          </div>
         </div>
       </motion.div>
 
-      {/* Housing Conditions */}
+      {/* Housing Conditions - Style Cards */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -660,129 +1022,301 @@ export default function ProfilePage() {
           Conditions de garde
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Housing type */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-4 p-4 bg-background rounded-xl">
-              <div className="p-3 bg-primary/10 rounded-xl">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Type de logement */}
+          <motion.button
+            type="button"
+            onClick={() => handleHousingTypeChange(profile?.housingType === "house" ? "apartment" : "house")}
+            className="group relative flex items-center gap-4 p-4 bg-background rounded-xl hover:bg-primary/5 transition-colors text-left"
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
+          >
+            <div className="absolute top-2 right-2 p-1.5 rounded-lg bg-foreground/5 group-hover:bg-primary/10 transition-colors">
+              <Edit className="w-3.5 h-3.5 text-foreground/40 group-hover:text-primary transition-colors" />
+            </div>
+            <div className={cn(
+              "p-3 rounded-xl",
+              profile?.housingType ? "bg-primary/10" : "bg-amber-100"
+            )}>
+              {profile?.housingType === "house" ? (
                 <Home className="w-6 h-6 text-primary" />
-              </div>
-              <div>
-                <p className="font-semibold text-foreground">
-                  {mockUserProfile.housing.type === "house" ? "Maison" : "Appartement"}
-                </p>
-                <p className="text-sm text-text-light">{mockUserProfile.housing.floorArea} m²</p>
-              </div>
+              ) : profile?.housingType === "apartment" ? (
+                <Building2 className="w-6 h-6 text-primary" />
+              ) : (
+                <Home className="w-6 h-6 text-amber-500" />
+              )}
             </div>
-
-            <div className="flex items-center gap-4 p-4 bg-background rounded-xl">
-              <div className={cn(
-                "p-3 rounded-xl",
-                mockUserProfile.housing.hasGarden ? "bg-green-100" : "bg-gray-100"
-              )}>
-                <TreeDeciduous className={cn(
-                  "w-6 h-6",
-                  mockUserProfile.housing.hasGarden ? "text-green-600" : "text-gray-400"
-                )} />
-              </div>
-              <div>
-                <p className="font-semibold text-foreground">
-                  {mockUserProfile.housing.hasGarden ? "Jardin" : "Pas de jardin"}
+            <div className="flex-1">
+              <p className="font-semibold text-foreground">
+                {profile?.housingType === "house" ? "🏠 Maison" : profile?.housingType === "apartment" ? "🏢 Appartement" : "Type de logement ?"}
+              </p>
+              {profile?.housingType ? (
+                <p className="text-sm text-text-light flex items-center gap-1">
+                  <input
+                    type="number"
+                    min="10"
+                    max="1000"
+                    value={profile?.housingSize || ""}
+                    placeholder="?"
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      if (val > 0) handleHousingSizeChange(val);
+                    }}
+                    className="w-12 px-1 py-0.5 text-sm text-center bg-transparent border-b border-dashed border-foreground/30 focus:border-primary focus:outline-none font-medium text-foreground"
+                  />
+                  m²
                 </p>
-                {mockUserProfile.housing.hasGarden && mockUserProfile.housing.gardenSize && (
-                  <p className="text-sm text-text-light">{mockUserProfile.housing.gardenSize}</p>
-                )}
-              </div>
+              ) : (
+                <p className="text-sm text-amber-600">À renseigner</p>
+              )}
             </div>
+          </motion.button>
 
-            <div className="flex items-center gap-4 p-4 bg-background rounded-xl">
-              <div className={cn(
-                "p-3 rounded-xl",
-                mockUserProfile.housing.isSmokeFree ? "bg-green-100" : "bg-orange-100"
-              )}>
-                <Ban className={cn(
-                  "w-6 h-6",
-                  mockUserProfile.housing.isSmokeFree ? "text-green-600" : "text-orange-600"
-                )} />
-              </div>
-              <div>
-                <p className="font-semibold text-foreground">
-                  {mockUserProfile.housing.isSmokeFree ? "Non-fumeur" : "Fumeur"}
+          {/* Jardin */}
+          <motion.button
+            type="button"
+            onClick={() => {
+              const sizes = [null, "petit", "moyen", "grand"];
+              const currentIdx = profile?.hasGarden ? sizes.indexOf(profile?.gardenSize || "petit") : 0;
+              const nextIdx = (currentIdx + 1) % sizes.length;
+              handleGardenSizeChange(sizes[nextIdx]);
+            }}
+            className="group relative flex items-center gap-4 p-4 bg-background rounded-xl hover:bg-green-50 transition-colors text-left"
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
+          >
+            <div className="absolute top-2 right-2 p-1.5 rounded-lg bg-foreground/5 group-hover:bg-green-100 transition-colors">
+              <Edit className="w-3.5 h-3.5 text-foreground/40 group-hover:text-green-600 transition-colors" />
+            </div>
+            <div className={cn(
+              "p-3 rounded-xl",
+              profile?.hasGarden ? "bg-green-100" : "bg-gray-100"
+            )}>
+              <TreeDeciduous className={cn(
+                "w-6 h-6",
+                profile?.hasGarden ? "text-green-600" : "text-gray-400"
+              )} />
+            </div>
+            <div>
+              <p className="font-semibold text-foreground">
+                {profile?.hasGarden
+                  ? `🌳 ${profile?.gardenSize === "petit" ? "Petit jardin" : profile?.gardenSize === "moyen" ? "Jardin moyen" : "Grand jardin"}`
+                  : "🚫 Pas de jardin"}
+              </p>
+            </div>
+          </motion.button>
+
+          {/* Fumeur */}
+          <motion.button
+            type="button"
+            onClick={() => handleIsSmokerChange(!(profile?.isSmoker ?? false))}
+            className="group relative flex items-center gap-4 p-4 bg-background rounded-xl hover:bg-green-50 transition-colors text-left"
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
+          >
+            <div className="absolute top-2 right-2 p-1.5 rounded-lg bg-foreground/5 group-hover:bg-green-100 transition-colors">
+              <Edit className="w-3.5 h-3.5 text-foreground/40 group-hover:text-green-600 transition-colors" />
+            </div>
+            <div className={cn(
+              "p-3 rounded-xl",
+              profile?.isSmoker === false ? "bg-green-100" : profile?.isSmoker === true ? "bg-orange-100" : "bg-amber-100"
+            )}>
+              {profile?.isSmoker === true ? (
+                <Cigarette className="w-6 h-6 text-orange-600" />
+              ) : profile?.isSmoker === false ? (
+                <CigaretteOff className="w-6 h-6 text-green-600" />
+              ) : (
+                <CigaretteOff className="w-6 h-6 text-amber-500" />
+              )}
+            </div>
+            <div>
+              <p className="font-semibold text-foreground">
+                {profile?.isSmoker === true ? "🚬 Fumeur" : profile?.isSmoker === false ? "🚭 Non-fumeur" : "Fumeur ?"}
+              </p>
+              {profile?.isSmoker === undefined && (
+                <p className="text-sm text-amber-600">À renseigner</p>
+              )}
+            </div>
+          </motion.button>
+
+          {/* Enfants */}
+          <motion.button
+            type="button"
+            onClick={() => handleHasChildrenChange(!(profile?.hasChildren ?? false), profile?.childrenAges || [])}
+            className="group relative flex items-center gap-4 p-4 bg-background rounded-xl hover:bg-secondary/5 transition-colors text-left"
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
+          >
+            <div className="absolute top-2 right-2 p-1.5 rounded-lg bg-foreground/5 group-hover:bg-secondary/10 transition-colors">
+              <Edit className="w-3.5 h-3.5 text-foreground/40 group-hover:text-secondary transition-colors" />
+            </div>
+            <div className={cn(
+              "p-3 rounded-xl",
+              profile?.hasChildren ? "bg-secondary/10" : profile?.hasChildren === false ? "bg-gray-100" : "bg-amber-100"
+            )}>
+              <Baby className={cn(
+                "w-6 h-6",
+                profile?.hasChildren ? "text-secondary" : profile?.hasChildren === false ? "text-gray-400" : "text-amber-500"
+              )} />
+            </div>
+            <div>
+              <p className="font-semibold text-foreground">
+                {profile?.hasChildren ? "👶 Enfants présents" : profile?.hasChildren === false ? "👤 Pas d'enfants" : "Enfants ?"}
+              </p>
+              {profile?.hasChildren && profile?.childrenAges && profile.childrenAges.length > 0 && (
+                <p className="text-sm text-text-light">
+                  {profile.childrenAges.map((a: string) => a === "0-3" ? "👶 0-3" : a === "4-10" ? "🧒 4-10" : "👦 11-17").join(", ")} ans
                 </p>
-              </div>
+              )}
+              {profile?.hasChildren === undefined && (
+                <p className="text-sm text-amber-600">À renseigner</p>
+              )}
+            </div>
+          </motion.button>
+
+          {/* Animaux de l'annonceur */}
+          <div className="flex items-center gap-4 p-4 bg-background rounded-xl text-left">
+            <div className={cn(
+              "p-3 rounded-xl",
+              profile?.ownedAnimals && profile.ownedAnimals.length > 0 ? "bg-primary/10" : "bg-gray-100"
+            )}>
+              <PawPrint className={cn(
+                "w-6 h-6",
+                profile?.ownedAnimals && profile.ownedAnimals.length > 0 ? "text-primary" : "text-gray-400"
+              )} />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-foreground">
+                {profile?.ownedAnimals && profile.ownedAnimals.length > 0
+                  ? `🐾 ${profile.ownedAnimals.length} animal${profile.ownedAnimals.length > 1 ? "x" : ""}`
+                  : "🐾 Mes animaux"}
+              </p>
+              {profile?.ownedAnimals && profile.ownedAnimals.length > 0 ? (
+                <p className="text-sm text-text-light">
+                  {profile.ownedAnimals.map((a: { name: string }) => a.name).join(", ")}
+                </p>
+              ) : (
+                <p className="text-sm text-text-light">Voir ci-dessous</p>
+              )}
             </div>
           </div>
 
-          {/* Presence */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-4 p-4 bg-background rounded-xl">
-              <div className={cn(
-                "p-3 rounded-xl",
-                mockUserProfile.hasChildren ? "bg-blue-100" : "bg-gray-100"
-              )}>
-                <Baby className={cn(
-                  "w-6 h-6",
-                  mockUserProfile.hasChildren ? "text-blue-600" : "text-gray-400"
-                )} />
-              </div>
-              <div>
-                <p className="font-semibold text-foreground">
-                  {mockUserProfile.hasChildren ? "Enfants présents" : "Pas d'enfants"}
-                </p>
-                {mockUserProfile.hasChildren && mockUserProfile.childrenDetails && (
-                  <p className="text-sm text-text-light">{mockUserProfile.childrenDetails}</p>
-                )}
-              </div>
+          {/* Alimentation */}
+          <motion.button
+            type="button"
+            onClick={() => handleProvidesFoodChange(!(profile?.providesFood ?? false))}
+            className="group relative flex items-center gap-4 p-4 bg-background rounded-xl hover:bg-orange-50 transition-colors text-left"
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
+          >
+            <div className="absolute top-2 right-2 p-1.5 rounded-lg bg-foreground/5 group-hover:bg-orange-100 transition-colors">
+              <Edit className="w-3.5 h-3.5 text-foreground/40 group-hover:text-orange-600 transition-colors" />
             </div>
-
-            <div className="flex items-center gap-4 p-4 bg-background rounded-xl">
-              <div className={cn(
-                "p-3 rounded-xl",
-                mockUserProfile.hasOwnAnimals ? "bg-primary/10" : "bg-gray-100"
-              )}>
-                <Heart className={cn(
-                  "w-6 h-6",
-                  mockUserProfile.hasOwnAnimals ? "text-primary" : "text-gray-400"
-                )} />
-              </div>
-              <div className="flex-1">
-                <p className="font-semibold text-foreground">
-                  {mockUserProfile.hasOwnAnimals ? "Animaux présents" : "Pas d'animaux"}
-                </p>
-                {mockUserProfile.hasOwnAnimals && mockUserProfile.ownAnimals.length > 0 && (
-                  <div className="mt-2 space-y-2">
-                    {mockUserProfile.ownAnimals.map((animal, index) => (
-                      <div key={index} className="flex items-center gap-2 text-sm text-text-light">
-                        <span>{animal.emoji}</span>
-                        <span className="font-medium text-foreground">{animal.name}</span>
-                        <span>({animal.type}, {animal.age})</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+            <div className={cn(
+              "p-3 rounded-xl",
+              profile?.providesFood === true ? "bg-green-100" : profile?.providesFood === false ? "bg-orange-100" : "bg-amber-100"
+            )}>
+              <Utensils className={cn(
+                "w-6 h-6",
+                profile?.providesFood === true ? "text-green-600" : profile?.providesFood === false ? "text-orange-600" : "text-amber-500"
+              )} />
             </div>
+            <div>
+              <p className="font-semibold text-foreground">
+                {profile?.providesFood === true ? "✅ Alimentation fournie" : profile?.providesFood === false ? "📦 À fournir" : "Alimentation ?"}
+              </p>
+              {profile?.providesFood === false && (
+                <p className="text-sm text-text-light">Le propriétaire fournit</p>
+              )}
+              {profile?.providesFood === undefined && (
+                <p className="text-sm text-amber-600">À renseigner</p>
+              )}
+            </div>
+          </motion.button>
+        </div>
 
-            <div className="flex items-center gap-4 p-4 bg-background rounded-xl">
-              <div className={cn(
-                "p-3 rounded-xl",
-                mockUserProfile.providesFood ? "bg-green-100" : "bg-orange-100"
-              )}>
-                <Utensils className={cn(
-                  "w-6 h-6",
-                  mockUserProfile.providesFood ? "text-green-600" : "text-orange-600"
-                )} />
-              </div>
-              <div>
-                <p className="font-semibold text-foreground">
-                  {mockUserProfile.providesFood ? "Alimentation fournie" : "Alimentation à fournir"}
-                </p>
-                {mockUserProfile.foodDetails && (
-                  <p className="text-sm text-text-light mt-1">{mockUserProfile.foodDetails}</p>
-                )}
-              </div>
+        {/* Section enfants - Âges (si enfants) */}
+        {profile?.hasChildren && (
+          <div className="mt-4 p-4 bg-secondary/5 rounded-xl">
+            <p className="text-sm font-medium text-foreground mb-2">Âge des enfants :</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: "0-3", label: "0-3 ans", emoji: "👶" },
+                { value: "4-10", label: "4-10 ans", emoji: "🧒" },
+                { value: "11-17", label: "11-17 ans", emoji: "👦" },
+              ].map((age) => {
+                const isSelected = profile?.childrenAges?.includes(age.value);
+                return (
+                  <motion.button
+                    key={age.value}
+                    type="button"
+                    onClick={() => {
+                      const currentAges = profile?.childrenAges || [];
+                      if (isSelected) {
+                        handleChildrenAgesChange(currentAges.filter((a: string) => a !== age.value));
+                      } else {
+                        handleChildrenAgesChange([...currentAges, age.value]);
+                      }
+                    }}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-sm",
+                      isSelected
+                        ? "bg-secondary text-white"
+                        : "bg-white text-foreground hover:bg-secondary/10"
+                    )}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <span>{age.emoji}</span>
+                    <span className="font-medium">{age.label}</span>
+                  </motion.button>
+                );
+              })}
             </div>
           </div>
+        )}
+
+        {/* Section animaux - Liste et ajout */}
+        <div className="mt-4 p-4 bg-primary/5 rounded-xl">
+          <p className="text-sm font-medium text-foreground mb-3">Mes animaux :</p>
+
+          {profile?.ownedAnimals && profile.ownedAnimals.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {profile.ownedAnimals.map((animal: { type: string; name: string; breed?: string; age?: number }, index: number) => (
+                <div
+                  key={index}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-white rounded-lg border border-primary/20"
+                >
+                  <span className="text-sm">
+                    {ANIMAL_TYPE_OPTIONS.find(o => o.value === animal.type)?.emoji || "🐾"}
+                  </span>
+                  <span className="font-medium text-sm">{animal.name}</span>
+                  {animal.age && <span className="text-xs text-text-light">({animal.age}a)</span>}
+                  <motion.button
+                    type="button"
+                    onClick={() => {
+                      const newAnimals = [...(profile?.ownedAnimals || [])];
+                      newAnimals.splice(index, 1);
+                      handleOwnedAnimalsChange(newAnimals);
+                    }}
+                    className="ml-1 text-red-400 hover:text-red-600"
+                    whileHover={{ scale: 1.2 }}
+                    whileTap={{ scale: 0.9 }}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </motion.button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <OwnedAnimalForm
+            onAdd={(animal) => {
+              const currentAnimals = profile?.ownedAnimals || [];
+              handleOwnedAnimalsChange([...currentAnimals, animal]);
+            }}
+          />
         </div>
       </motion.div>
 
@@ -799,7 +1333,7 @@ export default function ProfilePage() {
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {mockUserProfile.activities.map((activity) => (
+          {mockActivities.map((activity) => (
             <div
               key={activity.id}
               className="flex items-start gap-4 p-4 bg-background rounded-xl"
@@ -829,7 +1363,7 @@ export default function ProfilePage() {
         </h3>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {mockUserProfile.environmentPhotos.map((photo, index) => (
+          {mockEnvironmentPhotos.map((photo, index) => (
             <motion.div
               key={photo.id}
               className="relative aspect-[4/3] rounded-xl overflow-hidden group cursor-pointer"
@@ -863,7 +1397,7 @@ export default function ProfilePage() {
       <AnimatePresence>
         {galleryOpen && (
           <PhotoGallery
-            photos={mockUserProfile.environmentPhotos}
+            photos={mockEnvironmentPhotos}
             currentIndex={currentPhotoIndex}
             onClose={closeGallery}
             onPrev={prevPhoto}

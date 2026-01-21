@@ -92,6 +92,7 @@ export const searchAnnouncers = query({
   args: {
     // Filtres
     categorySlug: v.optional(v.string()),
+    excludeCategory: v.optional(v.string()), // Exclure une catégorie (ex: "garde" pour mode services)
     animalType: v.optional(v.string()),
 
     // Localisation
@@ -222,6 +223,12 @@ export const searchAnnouncers = query({
       let matchingServices = services;
       if (args.categorySlug) {
         matchingServices = services.filter((s) => s.category === args.categorySlug);
+        if (matchingServices.length === 0) continue;
+      }
+
+      // 5.1 Exclure une catégorie si spécifiée (mode services)
+      if (args.excludeCategory) {
+        matchingServices = matchingServices.filter((s) => s.category !== args.excludeCategory);
         if (matchingServices.length === 0) continue;
       }
 
