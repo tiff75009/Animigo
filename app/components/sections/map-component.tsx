@@ -286,7 +286,6 @@ function MapInner({
   onSitterSelect,
   searchCenter,
   searchRadius,
-  mapStyle,
   initialCenter,
   tileConfig,
 }: {
@@ -295,7 +294,6 @@ function MapInner({
   onSitterSelect: (sitter: SitterLocation) => void;
   searchCenter?: { lat: number; lng: number } | null;
   searchRadius?: number;
-  mapStyle: "default" | "plan";
   initialCenter: { lat: number; lng: number };
   tileConfig: { url: string; attribution: string };
 }) {
@@ -306,7 +304,6 @@ function MapInner({
       style={{ height: "100%", width: "100%" }}
     >
       <TileLayer
-        key={mapStyle}
         attribution={tileConfig.attribution}
         url={tileConfig.url}
       />

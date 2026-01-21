@@ -541,6 +541,8 @@ interface ServiceDetail {
   dayStartTime?: string;
   dayEndTime?: string;
   overnightPrice?: number;
+  // Service location
+  serviceLocation?: "announcer_home" | "client_home" | "both";
 }
 
 // Query pour obtenir les détails des services d'un annonceur
@@ -592,6 +594,8 @@ export const getAnnouncerServiceDetails = query({
         dayStartTime: service.dayStartTime,
         dayEndTime: service.dayEndTime,
         overnightPrice: service.overnightPrice,
+        // Service location
+        serviceLocation: service.serviceLocation as "announcer_home" | "client_home" | "both" | undefined,
         variants: variants.map((v) => ({
           id: v._id,
           name: v.name,

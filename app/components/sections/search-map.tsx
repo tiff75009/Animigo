@@ -1709,8 +1709,8 @@ function FormulasDropdownInline({
     { announcerId: announcerId as Id<"users"> }
   );
 
-  // Filter services by category if specified
-  const filteredServices = serviceDetails?.filter((service: {
+  // Type for service
+  type ServiceType = {
     id: string;
     category: string;
     categoryName: string;
@@ -1725,11 +1725,22 @@ function FormulasDropdownInline({
         daily?: number;
         weekly?: number;
         monthly?: number;
+        nightly?: number;
       };
       includedFeatures?: string[];
     }>;
     options: Array<{ id: string; name: string; price: number }>;
-  }) => {
+    // Overnight stay
+    allowOvernightStay?: boolean;
+    overnightPrice?: number;
+    dayStartTime?: string;
+    dayEndTime?: string;
+    // Service location
+    serviceLocation?: "announcer_home" | "client_home" | "both";
+  };
+
+  // Filter services by category if specified
+  const filteredServices = (serviceDetails as ServiceType[] | undefined)?.filter((service) => {
     if (!searchFilters?.category) return true;
     return service.category === searchFilters.category.slug;
   }) || [];
@@ -1745,17 +1756,33 @@ function FormulasDropdownInline({
     router.push(`/reserver/${announcerId}?${params.toString()}`);
   };
 
-  // Get display price for variant
-  const getVariantDisplayPrice = (variant: {
-    price: number;
-    priceUnit: string;
-    pricing?: {
-      hourly?: number;
-      daily?: number;
-      weekly?: number;
-      monthly?: number;
-    };
-  }) => {
+  // Get all pricing for variant
+  const getVariantPricing = (variant: ServiceType["variants"][0]) => {
+    const pricing = variant.pricing;
+    const prices: Array<{ price: number; unit: string; label: string }> = [];
+
+    if (pricing?.hourly) prices.push({ price: pricing.hourly, unit: "/h", label: "Heure" });
+    if (pricing?.daily) prices.push({ price: pricing.daily, unit: "/jour", label: "Jour" });
+    if (pricing?.weekly) prices.push({ price: pricing.weekly, unit: "/sem", label: "Semaine" });
+    if (pricing?.monthly) prices.push({ price: pricing.monthly, unit: "/mois", label: "Mois" });
+
+    // If no pricing object, use default price
+    if (prices.length === 0) {
+      const priceUnitLabels: Record<string, string> = {
+        hour: "/h",
+        day: "/jour",
+        week: "/sem",
+        month: "/mois",
+        flat: "",
+      };
+      prices.push({ price: variant.price, unit: priceUnitLabels[variant.priceUnit] || "", label: "" });
+    }
+
+    return prices;
+  };
+
+  // Get display price for variant (main price)
+  const getVariantDisplayPrice = (variant: ServiceType["variants"][0]) => {
     const pricing = variant.pricing;
     if (pricing?.daily) return { price: pricing.daily, unit: "/jour" };
     if (pricing?.hourly) return { price: pricing.hourly, unit: "/h" };
@@ -1769,6 +1796,26 @@ function FormulasDropdownInline({
       flat: "",
     };
     return { price: variant.price, unit: priceUnitLabels[variant.priceUnit] || "" };
+  };
+
+  // Get service location label
+  const getServiceLocationLabel = (location?: string) => {
+    switch (location) {
+      case "announcer_home": return "Chez le pet-sitter";
+      case "client_home": return "A domicile";
+      case "both": return "A domicile ou chez le pet-sitter";
+      default: return null;
+    }
+  };
+
+  // Get service location icon
+  const getServiceLocationIcon = (location?: string) => {
+    switch (location) {
+      case "announcer_home": return "🏠";
+      case "client_home": return "🚗";
+      case "both": return "🏠🚗";
+      default: return null;
+    }
   };
 
   // Format price
@@ -1802,78 +1849,94 @@ function FormulasDropdownInline({
 
         {/* Services List */}
         {filteredServices.length > 0 && (
-          <div className="p-4 space-y-3">
-            {filteredServices.map((service: {
-              id: string;
-              category: string;
-              categoryName: string;
-              categoryIcon?: string;
-              variants: Array<{
-                id: string;
-                name: string;
-                price: number;
-                priceUnit: string;
-                pricing?: {
-                  hourly?: number;
-                  daily?: number;
-                  weekly?: number;
-                  monthly?: number;
-                };
-                includedFeatures?: string[];
-              }>;
-              options: Array<{ id: string; name: string; price: number }>;
-            }) => (
-              <div key={service.id}>
+          <div className="p-4 space-y-4">
+            {filteredServices.map((service: ServiceType) => (
+              <div key={service.id} className="space-y-3">
                 {/* Service Header */}
-                <div className="flex items-center gap-2 mb-2">
-                  {service.categoryIcon && (
-                    <span className="text-base">{service.categoryIcon}</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {service.categoryIcon && (
+                      <span className="text-base">{service.categoryIcon}</span>
+                    )}
+                    <span className="text-sm font-semibold text-foreground">
+                      {service.categoryName}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Service Info Badges */}
+                <div className="flex flex-wrap gap-2">
+                  {/* Service Location */}
+                  {service.serviceLocation && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg">
+                      {getServiceLocationIcon(service.serviceLocation)}
+                      {getServiceLocationLabel(service.serviceLocation)}
+                    </span>
                   )}
-                  <span className="text-sm font-semibold text-foreground">
-                    {service.categoryName}
-                  </span>
+                  {/* Overnight Stay */}
+                  {service.allowOvernightStay && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-lg">
+                      🌙 Garde de nuit
+                      {service.overnightPrice && (
+                        <span className="font-bold ml-1">{formatPrice(service.overnightPrice)}/nuit</span>
+                      )}
+                    </span>
+                  )}
                 </div>
 
                 {/* Variants */}
                 <div className="space-y-2">
                   {service.variants.map((variant) => {
+                    const allPrices = getVariantPricing(variant);
                     const displayPrice = getVariantDisplayPrice(variant);
                     return (
                       <div
                         key={variant.id}
-                        className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100 hover:border-primary/30 transition-colors"
+                        className="p-3 bg-white rounded-xl border border-gray-100 hover:border-primary/30 transition-colors"
                       >
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground">
-                            {variant.name}
-                          </p>
-                          {variant.includedFeatures && variant.includedFeatures.length > 0 && (
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <Check className="w-3 h-3 text-secondary flex-shrink-0" />
-                              <span className="text-xs text-text-light truncate">
-                                {variant.includedFeatures[0]}
-                                {variant.includedFeatures.length > 1 && ` +${variant.includedFeatures.length - 1}`}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground">
+                              {variant.name}
+                            </p>
+                            {variant.includedFeatures && variant.includedFeatures.length > 0 && (
+                              <div className="flex items-center gap-1 mt-0.5">
+                                <Check className="w-3 h-3 text-secondary flex-shrink-0" />
+                                <span className="text-xs text-text-light truncate">
+                                  {variant.includedFeatures[0]}
+                                  {variant.includedFeatures.length > 1 && ` +${variant.includedFeatures.length - 1}`}
+                                </span>
+                              </div>
+                            )}
+                            {/* Multiple prices display */}
+                            {allPrices.length > 1 && (
+                              <div className="flex flex-wrap gap-2 mt-2">
+                                {allPrices.map((p, idx) => (
+                                  <span key={idx} className="text-xs bg-gray-100 px-2 py-0.5 rounded-md text-foreground">
+                                    {formatPrice(p.price)}{p.unit}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className="text-sm font-bold text-primary whitespace-nowrap">
+                              {formatPrice(displayPrice.price)}
+                              <span className="text-xs font-normal text-text-light">
+                                {displayPrice.unit}
                               </span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3 ml-2">
-                          <span className="text-sm font-bold text-primary whitespace-nowrap">
-                            {formatPrice(displayPrice.price)}
-                            <span className="text-xs font-normal text-text-light">
-                              {displayPrice.unit}
                             </span>
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleBookVariant(service.id, variant.id);
-                            }}
-                            className="px-3 py-1.5 bg-primary text-white text-xs font-medium rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-1"
-                          >
-                            Réserver
-                            <ChevronRight className="w-3 h-3" />
-                          </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleBookVariant(service.id, variant.id);
+                              }}
+                              className="px-3 py-1.5 bg-primary text-white text-xs font-medium rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-1"
+                            >
+                              Réserver
+                              <ChevronRight className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -1882,7 +1945,7 @@ function FormulasDropdownInline({
 
                 {/* Options preview */}
                 {service.options.length > 0 && (
-                  <p className="text-xs text-text-light mt-2">
+                  <p className="text-xs text-text-light">
                     +{service.options.length} option{service.options.length > 1 ? "s" : ""} disponible{service.options.length > 1 ? "s" : ""}
                   </p>
                 )}
