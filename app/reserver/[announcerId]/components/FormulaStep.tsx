@@ -56,7 +56,7 @@ export default function FormulaStep({
   return (
     <div className="bg-white rounded-2xl p-5 shadow-sm">
       <h2 className="text-lg font-bold text-foreground mb-4">
-        Choisissez une formule
+        Choisissez une prestation
       </h2>
       <div className="space-y-4">
         {services.map((service) => (

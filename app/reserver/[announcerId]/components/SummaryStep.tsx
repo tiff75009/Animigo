@@ -132,7 +132,7 @@ export default function SummaryStep({
           </span>
         </div>
         <div className="flex justify-between text-sm">
-          <span className="text-text-light">Formule</span>
+          <span className="text-text-light">Prestation</span>
           <span className="font-medium text-foreground">
             {selectedVariant.name}
           </span>

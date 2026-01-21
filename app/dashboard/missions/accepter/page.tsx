@@ -119,7 +119,7 @@ function AcceptModal({
                   </div>
                   {mission.variantName && (
                     <p className="text-sm text-text-light mb-2">
-                      Formule : <span className="font-medium text-foreground">{mission.variantName}</span>
+                      Prestation : <span className="font-medium text-foreground">{mission.variantName}</span>
                     </p>
                   )}
                 </div>

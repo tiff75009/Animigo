@@ -760,7 +760,7 @@ function FormulasModal({
                         <div className="flex items-center gap-3 mt-1">
                           <span className="flex items-center gap-1 text-sm text-primary font-medium">
                             <Layers className="w-4 h-4" />
-                            {totalVariants} formule{totalVariants > 1 ? "s" : ""}
+                            {totalVariants} prestation{totalVariants > 1 ? "s" : ""}
                           </span>
                           {totalOptions > 0 && (
                             <span className="flex items-center gap-1 text-sm text-amber-600 font-medium">
@@ -998,7 +998,7 @@ function FormulasModal({
                                       )}
                                       className="w-full mt-3 py-2 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors"
                                     >
-                                      Réserver cette formule
+                                      Réserver cette prestation
                                     </button>
                                   </div>
                                 ))}
@@ -1026,16 +1026,16 @@ function FormulasModal({
                           </div>
                         ))}
 
-                        {/* Message si aucune formule après filtrage */}
+                        {/* Message si aucune prestation après filtrage */}
                         {filteredServices.length === 0 && categoryFilter !== "all" && (
                           <div className="text-center py-6">
                             <div className="text-3xl mb-2">🔍</div>
-                            <p className="text-text-light text-sm">Aucune formule dans cette catégorie</p>
+                            <p className="text-text-light text-sm">Aucune prestation dans cette catégorie</p>
                             <button
                               onClick={() => setCategoryFilter("all")}
                               className="mt-2 text-primary text-sm font-medium hover:underline"
                             >
-                              Voir toutes les formules
+                              Voir toutes les prestations
                             </button>
                           </div>
                         )}
@@ -1043,7 +1043,7 @@ function FormulasModal({
                     ) : (
                       <div className="text-center py-10">
                         <div className="text-4xl mb-3">📭</div>
-                        <p className="text-text-light">Aucune formule disponible</p>
+                        <p className="text-text-light">Aucune prestation disponible</p>
                       </div>
                     )}
                   </>
@@ -1637,7 +1637,7 @@ function AnnouncerCard({
               </div>
               <div className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium text-primary bg-primary/10">
                 <Package className="w-3 h-3" />
-                {announcer.services.length} formule{announcer.services.length > 1 ? "s" : ""}
+                {announcer.services.length} prestation{announcer.services.length > 1 ? "s" : ""}
               </div>
             </div>
 
@@ -1655,7 +1655,7 @@ function AnnouncerCard({
                     : "text-primary/80 hover:text-primary"
                 )}
               >
-                {showFormulas ? "Masquer les formules" : "Voir les formules"}
+                {showFormulas ? "Masquer les prestations" : "Voir les prestations"}
                 {showFormulas ? (
                   <ChevronUp className="w-3.5 h-3.5" />
                 ) : (
@@ -1673,7 +1673,7 @@ function AnnouncerCard({
         </div>
       </motion.div>
 
-      {/* Dropdown des formules - Section séparée qui pousse le contenu vers le bas */}
+      {/* Dropdown des prestations - Section séparée qui pousse le contenu vers le bas */}
       <AnimatePresence>
         {showFormulas && (
           <FormulasDropdownInline
@@ -1836,14 +1836,14 @@ function FormulasDropdownInline({
         {!serviceDetails && (
           <div className="p-6 flex items-center justify-center">
             <div className="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full" />
-            <span className="ml-2 text-sm text-text-light">Chargement des formules...</span>
+            <span className="ml-2 text-sm text-text-light">Chargement des prestations...</span>
           </div>
         )}
 
         {/* No Services */}
         {serviceDetails && filteredServices.length === 0 && (
           <div className="p-4 text-center text-sm text-text-light">
-            Aucune formule disponible
+            Aucune prestation disponible
           </div>
         )}
 
@@ -1960,7 +1960,7 @@ function FormulasDropdownInline({
               }}
               className="w-full py-2.5 text-sm text-center text-white bg-primary font-medium rounded-xl hover:bg-primary/90 transition-colors"
             >
-              Voir toutes les formules et réserver
+              Voir toutes les prestations et réserver
             </button>
           </div>
         )}

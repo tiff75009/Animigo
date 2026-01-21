@@ -51,7 +51,7 @@ type FormStep = 1 | 2 | 3 | 4;
 const STEPS = [
   { id: 1, label: "Prestation", icon: Briefcase },
   { id: 2, label: "Animaux", icon: PawPrint },
-  { id: 3, label: "Formules", icon: Layers },
+  { id: 3, label: "Prestations", icon: Layers },
   { id: 4, label: "Options", icon: Zap },
 ] as const;
 
@@ -568,10 +568,10 @@ export default function ServiceForm({
             >
               <div>
                 <h4 className="font-medium text-foreground mb-1">
-                  Définissez vos formules
+                  Définissez vos prestations
                 </h4>
                 <p className="text-sm text-text-light">
-                  Créez au moins une formule avec son prix (ex: Standard, Premium...)
+                  Créez au moins une prestation avec son prix (ex: Standard, Premium...)
                 </p>
               </div>
 
@@ -589,7 +589,7 @@ export default function ServiceForm({
 
               {localVariants.length === 0 && (
                 <p className="text-xs text-amber-500">
-                  Ajoutez au moins une formule
+                  Ajoutez au moins une prestation
                 </p>
               )}
             </motion.div>

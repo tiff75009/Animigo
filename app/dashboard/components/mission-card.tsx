@@ -179,7 +179,7 @@ function extractCity(location?: string): string {
   return location;
 }
 
-// Calcul de distance avec la formule Haversine
+// Calcul de distance avec la prestation Haversine
 export function calculateDistance(
   coord1: { lat: number; lng: number },
   coord2: { lat: number; lng: number }
@@ -442,7 +442,7 @@ function MissionDetailsModal({
             </div>
           </div>
 
-          {/* Service et Formule */}
+          {/* Service et Prestation */}
           <div className="bg-slate-50 rounded-xl p-3">
             <div className="flex items-center gap-2 mb-2">
               <Package className="w-4 h-4 text-foreground" />
@@ -450,7 +450,7 @@ function MissionDetailsModal({
             </div>
             <p className="font-medium text-foreground">{mission.serviceName}</p>
             {mission.variantName && (
-              <p className="text-sm text-text-light mt-1">Formule : {mission.variantName}</p>
+              <p className="text-sm text-text-light mt-1">Prestation : {mission.variantName}</p>
             )}
             {hasOptions && (
               <div className="flex flex-wrap gap-1 mt-2">

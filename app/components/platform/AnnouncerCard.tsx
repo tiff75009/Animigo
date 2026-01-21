@@ -191,7 +191,7 @@ export function AnnouncerCardGrid({ announcer, onShowFormulas, index }: Announce
           whileTap={{ scale: 0.98 }}
           className="w-full py-3 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold rounded-xl shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 transition-all flex items-center justify-center gap-2"
         >
-          <span>Voir les formules</span>
+          <span>Voir les prestations</span>
           <ArrowRight className="w-4 h-4" />
         </motion.button>
       </div>
@@ -356,7 +356,7 @@ export function AnnouncerCardList({ announcer, onShowFormulas, index }: Announce
               whileTap={{ scale: 0.99 }}
               className="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold rounded-xl shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 transition-all flex items-center justify-center gap-2"
             >
-              <span>Voir les formules</span>
+              <span>Voir les prestations</span>
               <ArrowRight className="w-4 h-4" />
             </motion.button>
           </div>

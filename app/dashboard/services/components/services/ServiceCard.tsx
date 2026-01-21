@@ -254,7 +254,7 @@ export default function ServiceCard({
               <div className="flex items-center gap-2 text-xs text-text-light mt-0.5">
                 <span className="flex items-center gap-1">
                   <Layers className="w-3 h-3" />
-                  {variantsCount} formule{variantsCount > 1 ? "s" : ""}
+                  {variantsCount} prestation{variantsCount > 1 ? "s" : ""}
                 </span>
                 {optionsCount > 0 && (
                   <span className="flex items-center gap-1">
@@ -339,7 +339,7 @@ export default function ServiceCard({
               )}
             </div>
 
-            {/* Formules en ligne compacte */}
+            {/* Prestations en ligne compacte */}
             {activeVariants.length > 0 && (
               <div className="space-y-1.5 mb-2">
                 {activeVariants.slice(0, 2).map((variant) => {
@@ -372,7 +372,7 @@ export default function ServiceCard({
                 })}
                 {activeVariants.length > 2 && (
                   <div className="text-[10px] text-text-light text-center">
-                    +{activeVariants.length - 2} autre{activeVariants.length - 2 > 1 ? "s" : ""} formule{activeVariants.length - 2 > 1 ? "s" : ""}
+                    +{activeVariants.length - 2} autre{activeVariants.length - 2 > 1 ? "s" : ""} prestation{activeVariants.length - 2 > 1 ? "s" : ""}
                   </div>
                 )}
               </div>
@@ -525,7 +525,7 @@ export default function ServiceCard({
           setShowDeleteModal(false);
         }}
         title="Supprimer ce service"
-        message={`Êtes-vous sûr de vouloir supprimer le service "${categoryData?.name || service.category}" ? Cette action est irréversible et supprimera également toutes les formules et options associées.`}
+        message={`Êtes-vous sûr de vouloir supprimer le service "${categoryData?.name || service.category}" ? Cette action est irréversible et supprimera également toutes les prestations et options associées.`}
         confirmLabel="Supprimer"
         cancelLabel="Annuler"
         variant="danger"

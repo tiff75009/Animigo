@@ -143,7 +143,7 @@ export default function FormulasDropdown({
             : "text-primary/80 hover:text-primary"
         )}
       >
-        {isOpen ? "Masquer" : "Voir les formules"}
+        {isOpen ? "Masquer" : "Voir les prestations"}
         {isOpen ? (
           <ChevronUp className="w-3.5 h-3.5" />
         ) : (
@@ -174,7 +174,7 @@ export default function FormulasDropdown({
               {/* No Services */}
               {serviceDetails && filteredServices.length === 0 && (
                 <div className="p-4 text-center text-sm text-text-light">
-                  Aucune formule disponible
+                  Aucune prestation disponible
                 </div>
               )}
 
@@ -266,7 +266,7 @@ export default function FormulasDropdown({
                     }}
                     className="w-full py-2 text-xs text-center text-primary font-medium hover:underline"
                   >
-                    Voir toutes les formules et réserver
+                    Voir toutes les prestations et réserver
                   </button>
                 </div>
               )}

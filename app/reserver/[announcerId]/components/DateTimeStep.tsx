@@ -222,7 +222,7 @@ export default function DateTimeStep({
 
       {/* Selected Formula Recap */}
       <div className="mb-4 p-3 bg-primary/5 rounded-xl">
-        <p className="text-sm text-text-light">Formule sélectionnée</p>
+        <p className="text-sm text-text-light">Prestation sélectionnée</p>
         <p className="font-semibold text-foreground">
           {selectedService.categoryIcon} {selectedService.categoryName} -{" "}
           {selectedVariant.name}

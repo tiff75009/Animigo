@@ -42,7 +42,7 @@ interface BookingData {
 
 // Step labels
 const STEP_LABELS = [
-  "Choix de la formule",
+  "Choix de la prestation",
   "Dates et horaires",
   "Options",
   "Récapitulatif",

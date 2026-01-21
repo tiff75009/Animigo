@@ -300,7 +300,7 @@ export function FormulasModal({ isOpen, onClose, announcer, searchFilters }: For
                   </h3>
                   {step === "formulas" ? (
                     <p className="text-sm text-gray-500">
-                      {totalVariants} formule{totalVariants > 1 ? "s" : ""} disponible{totalVariants > 1 ? "s" : ""}
+                      {totalVariants} prestation{totalVariants > 1 ? "s" : ""} disponible{totalVariants > 1 ? "s" : ""}
                     </p>
                   ) : selection ? (
                     <p className="text-sm text-gray-500 truncate">
@@ -463,7 +463,7 @@ export function FormulasModal({ isOpen, onClose, announcer, searchFilters }: For
                     ) : (
                       <div className="text-center py-12">
                         <Package className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                        <p className="text-gray-500">Aucune formule disponible</p>
+                        <p className="text-gray-500">Aucune prestation disponible</p>
                       </div>
                     )}
                   </>

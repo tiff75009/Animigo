@@ -250,7 +250,7 @@ function SitterPopup({ sitter }: { sitter: SitterLocation }) {
           </span>
         </div>
         <button className="w-full py-2.5 bg-gradient-to-r from-primary to-secondary text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-all shadow-sm">
-          Voir les formules
+          Voir les prestations
         </button>
       </div>
     </div>

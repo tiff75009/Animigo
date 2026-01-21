@@ -45,8 +45,8 @@ interface CategoryFormData {
   defaultHourlyPrice: number; // Prix horaire par défaut en euros
   allowRangeBooking: boolean; // Permettre la réservation par plage
   allowedPriceUnits: PriceUnit[]; // Types de prix autorisés
-  defaultVariants: DefaultVariant[]; // Formules par défaut
-  allowCustomVariants: boolean; // Autoriser l'ajout de formules personnalisées
+  defaultVariants: DefaultVariant[]; // Prestations par défaut
+  allowCustomVariants: boolean; // Autoriser l'ajout de prestations personnalisées
   allowOvernightStay: boolean; // Autoriser la garde de nuit
 }
 
@@ -677,19 +677,19 @@ export default function ServiceCategoriesPage() {
               </div>
             </div>
 
-            {/* Formules par défaut */}
+            {/* Prestations par défaut */}
             <div className="mb-4 p-4 bg-slate-900/50 rounded-lg border border-slate-700">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <Package className="w-5 h-5 text-purple-400" />
-                  <span className="font-medium text-white">Formules par défaut</span>
+                  <span className="font-medium text-white">Prestations par défaut</span>
                 </div>
               </div>
               <p className="text-xs text-slate-400 mb-4">
-                Créez des modèles de formules que les annonceurs pourront utiliser. Ils n&apos;auront qu&apos;à ajouter leur prix.
+                Créez des modèles de prestations que les annonceurs pourront utiliser. Ils n&apos;auront qu&apos;à ajouter leur prix.
               </p>
 
-              {/* Option pour autoriser les formules personnalisées */}
+              {/* Option pour autoriser les prestations personnalisées */}
               <div className="mb-4 p-3 bg-slate-800/50 rounded-lg border border-slate-600">
                 <label className="flex items-start gap-3 cursor-pointer">
                   <input
@@ -699,16 +699,16 @@ export default function ServiceCategoriesPage() {
                     className="mt-1 w-5 h-5 rounded border-slate-600 bg-slate-800 text-purple-500 focus:ring-purple-500 focus:ring-offset-slate-900"
                   />
                   <div>
-                    <span className="font-medium text-white">Autoriser les formules personnalisées</span>
+                    <span className="font-medium text-white">Autoriser les prestations personnalisées</span>
                     <p className="text-xs text-slate-400 mt-1">
-                      Si activé, l&apos;annonceur peut créer ses propres formules en plus des formules par défaut.
-                      Si désactivé, il ne peut utiliser que les formules définies ci-dessous.
+                      Si activé, l&apos;annonceur peut créer ses propres prestations en plus des prestations par défaut.
+                      Si désactivé, il ne peut utiliser que les prestations définies ci-dessous.
                     </p>
                   </div>
                 </label>
               </div>
 
-              {/* Liste des formules existantes */}
+              {/* Liste des prestations existantes */}
               {formData.defaultVariants.length > 0 && (
                 <div className="space-y-2 mb-4">
                   {formData.defaultVariants.map((variant, index) => (
@@ -762,14 +762,14 @@ export default function ServiceCategoriesPage() {
                 </div>
               )}
 
-              {/* Formulaire d'ajout/modification de formule */}
+              {/* Formulaire d'ajout/modification de prestation */}
               <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
                 <p className="text-sm font-medium text-white mb-3">
-                  {editingVariantIndex !== null ? "Modifier la formule" : "Nouvelle formule"}
+                  {editingVariantIndex !== null ? "Modifier la prestation" : "Nouvelle prestation"}
                 </p>
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Nom de la formule *</label>
+                    <label className="block text-xs text-slate-400 mb-1">Nom de la prestation *</label>
                     <input
                       type="text"
                       value={variantForm.name}
@@ -860,7 +860,7 @@ export default function ServiceCategoriesPage() {
                   )}
                   <button
                     onClick={() => {
-                      console.log("Bouton Ajouter formule cliqué");
+                      console.log("Bouton Ajouter prestation cliqué");
                       if (editingVariantIndex !== null) {
                         updateVariant();
                       } else {
@@ -871,12 +871,12 @@ export default function ServiceCategoriesPage() {
                     className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     <Plus className="w-4 h-4" />
-                    {editingVariantIndex !== null ? "Mettre à jour la formule" : "➕ AJOUTER CETTE FORMULE À LA LISTE"}
+                    {editingVariantIndex !== null ? "Mettre à jour la prestation" : "➕ AJOUTER CETTE FORMULE À LA LISTE"}
                   </button>
                 </div>
                 {!variantForm.name.trim() && (
                   <p className="text-xs text-amber-400 mt-2 text-right">
-                    ⚠️ Remplissez le nom de la formule pour pouvoir l&apos;ajouter
+                    ⚠️ Remplissez le nom de la prestation pour pouvoir l&apos;ajouter
                   </p>
                 )}
               </div>
@@ -936,7 +936,7 @@ export default function ServiceCategoriesPage() {
                 Prix
               </th>
               <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                Formules
+                Prestations
               </th>
               <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
                 Statut
@@ -1085,7 +1085,7 @@ export default function ServiceCategoriesPage() {
                   <div className="flex flex-col gap-1">
                     {category.defaultVariants && category.defaultVariants.length > 0 ? (
                       <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-500/20 text-purple-400 w-fit">
-                        {category.defaultVariants.length} formule{category.defaultVariants.length > 1 ? "s" : ""}
+                        {category.defaultVariants.length} prestation{category.defaultVariants.length > 1 ? "s" : ""}
                       </span>
                     ) : (
                       <span className="text-slate-500 text-xs">Aucune</span>

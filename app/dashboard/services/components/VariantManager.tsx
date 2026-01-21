@@ -60,10 +60,10 @@ export interface LocalVariant {
   pricing?: Pricing; // Multi-tarification
   duration?: number;
   includedFeatures?: string[];
-  isFromDefault?: boolean; // Indique si c'est une formule par défaut
+  isFromDefault?: boolean; // Indique si c'est une prestation par défaut
 }
 
-// Formule par défaut définie par l'admin
+// Prestation par défaut définie par l'admin
 interface DefaultVariant {
   name: string;
   description?: string;
@@ -83,10 +83,10 @@ interface VariantManagerProps {
   localVariants?: LocalVariant[];
   onLocalChange?: (variants: LocalVariant[]) => void;
 
-  // Formules par défaut et restrictions
+  // Prestations par défaut et restrictions
   defaultVariants?: DefaultVariant[];
   allowedPriceUnits?: ("hour" | "day" | "week" | "month")[];
-  allowCustomVariants?: boolean; // Si false, ne peut utiliser que les formules par défaut
+  allowCustomVariants?: boolean; // Si false, ne peut utiliser que les prestations par défaut
 
   // Commun
   serviceName: string;
@@ -177,7 +177,7 @@ export default function VariantManager({
   const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string } | null>(null);
   const [showDefaultVariants, setShowDefaultVariants] = useState(true);
 
-  // Déterminer si on a des formules par défaut non encore ajoutées
+  // Déterminer si on a des prestations par défaut non encore ajoutées
   const hasDefaultVariants = defaultVariants.length > 0;
   const usedDefaultNames = localVariants.filter(v => v.isFromDefault).map(v => v.name);
   const availableDefaultVariants = defaultVariants.filter(dv => !usedDefaultNames.includes(dv.name));
@@ -455,7 +455,7 @@ export default function VariantManager({
     }
   };
 
-  // Ajouter une formule depuis les formules par défaut
+  // Ajouter une prestation depuis les prestations par défaut
   const addFromDefault = (defaultVariant: DefaultVariant) => {
     const newVariant: LocalVariant = {
       localId: generateLocalId(),
@@ -487,10 +487,10 @@ export default function VariantManager({
           </div>
           <div>
             <h3 className="font-semibold text-foreground">
-              {isCreateMode ? "Formules" : "Formules / Variantes"}
+              {isCreateMode ? "Prestations" : "Prestations / Variantes"}
             </h3>
             <p className="text-sm text-text-light">
-              {displayItems.length} formule{displayItems.length > 1 ? "s" : ""}
+              {displayItems.length} prestation{displayItems.length > 1 ? "s" : ""}
               {isCreateMode && displayItems.length === 0 && (
                 <span className="text-amber-600 ml-2">(au moins 1 requise)</span>
               )}
@@ -539,22 +539,22 @@ export default function VariantManager({
               </div>
             )}
 
-            {/* Section formules par défaut disponibles */}
+            {/* Section prestations par défaut disponibles */}
             {isCreateMode && hasDefaultVariants && availableDefaultVariants.length > 0 && (
               <div className="p-4 border-b border-gray-200 bg-purple-50/50">
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <h4 className="font-medium text-foreground flex items-center gap-2">
                       <Layers className="w-4 h-4 text-purple-500" />
-                      Formules suggérées
+                      Prestations suggérées
                     </h4>
                     <p className="text-sm text-text-light mt-1">
-                      Sélectionnez une formule et définissez votre tarif
+                      Sélectionnez une prestation et définissez votre tarif
                     </p>
                   </div>
                   {!canAddCustom && (
                     <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-full">
-                      Formules personnalisées non autorisées
+                      Prestations personnalisées non autorisées
                     </span>
                   )}
                 </div>
@@ -613,7 +613,7 @@ export default function VariantManager({
                 >
                   <div className="flex justify-between items-center mb-4">
                     <h4 className="font-medium text-foreground">
-                      {editingId ? "Modifier la formule" : "Nouvelle formule"}
+                      {editingId ? "Modifier la prestation" : "Nouvelle prestation"}
                     </h4>
                     <button
                       onClick={resetForm}
@@ -627,7 +627,7 @@ export default function VariantManager({
                     {/* Nom */}
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-1">
-                        Nom de la formule
+                        Nom de la prestation
                       </label>
                       <input
                         type="text"
@@ -934,11 +934,11 @@ export default function VariantManager({
               {displayItems.length === 0 ? (
                 <div className="p-8 text-center">
                   <Layers className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-text-light">Aucune formule</p>
+                  <p className="text-text-light">Aucune prestation</p>
                   <p className="text-sm text-text-light">
                     {isCreateMode
-                      ? "Ajoutez au moins une formule pour créer ce service"
-                      : "Ajoutez des formules pour proposer différents tarifs"}
+                      ? "Ajoutez au moins une prestation pour créer ce service"
+                      : "Ajoutez des prestations pour proposer différents tarifs"}
                   </p>
                 </div>
               ) : (
@@ -1040,7 +1040,7 @@ export default function VariantManager({
                         title={
                           isCreateMode || displayItems.length > 1
                             ? "Supprimer"
-                            : "Impossible de supprimer la dernière formule"
+                            : "Impossible de supprimer la dernière prestation"
                         }
                       >
                         <Trash2 className="w-4 h-4" />
@@ -1062,8 +1062,8 @@ export default function VariantManager({
           setItemToDelete(null);
         }}
         onConfirm={handleDelete}
-        title="Supprimer cette formule"
-        message={`Êtes-vous sûr de vouloir supprimer la formule "${itemToDelete?.name || ""}" ? Cette action est irréversible.`}
+        title="Supprimer cette prestation"
+        message={`Êtes-vous sûr de vouloir supprimer la prestation "${itemToDelete?.name || ""}" ? Cette action est irréversible.`}
         confirmLabel="Supprimer"
         cancelLabel="Annuler"
         variant="danger"
