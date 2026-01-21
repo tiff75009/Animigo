@@ -26,6 +26,8 @@ import {
   Euro,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   Calendar,
   Target,
   Moon,
@@ -38,7 +40,6 @@ import {
   DateSelector,
   LocationSearchBar,
   AnimalTypeDropdown,
-  FormulasDropdown,
 } from "@/app/components/search";
 
 // Helper function to extract city from location string
@@ -1549,110 +1550,357 @@ function AnnouncerCard({
   const AvailIcon = availInfo.icon;
 
   return (
-    <motion.div
-      className={cn(
-        "bg-white rounded-2xl p-4 shadow-md cursor-pointer transition-all",
-        isSelected
-          ? "ring-2 ring-primary shadow-lg"
-          : "hover:shadow-lg"
-      )}
-      onClick={onClick}
-      whileHover={{ y: -2 }}
-      layout
-    >
-      <div className="flex gap-4">
-        {/* Avatar */}
-        <div className="relative w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-gray-100">
-          {announcer.profileImage ? (
-            <Image
-              src={announcer.profileImage}
-              alt={`${announcer.firstName} ${announcer.lastName}`}
-              fill
-              className="object-cover"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-2xl">
-              👤
-            </div>
-          )}
-          {announcer.verified && (
-            <div className="absolute -bottom-1 -right-1 bg-secondary text-white p-1 rounded-full">
-              <CheckCircle className="w-3 h-3" />
-            </div>
-          )}
-        </div>
-
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-1">
-            <h4 className="font-semibold text-foreground truncate">
-              {announcer.firstName} {announcer.lastName.charAt(0)}.
-            </h4>
-            <div className="flex items-center gap-1 text-sm">
-              <Star className="w-4 h-4 fill-accent text-accent" />
-              <span className="font-semibold">{announcer.rating}</span>
-              <span className="text-text-light">({announcer.reviewCount})</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 mb-1">
-            <p className="text-sm text-text-light flex items-center gap-1">
-              <MapPin className="w-3 h-3" />
-              {extractCity(announcer.location)}
-              {announcer.distance !== undefined && (
-                <span className="ml-1">• {announcer.distance.toFixed(1)} km</span>
-              )}
-            </p>
-            {/* Badge statut */}
-            <span
-              className={cn(
-                "inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded-full",
-                announcer.statusType === "professionnel"
-                  ? "bg-blue-100 text-blue-700"
-                  : announcer.statusType === "micro_entrepreneur"
-                  ? "bg-purple-100 text-purple-700"
-                  : "bg-gray-100 text-gray-600"
-              )}
-            >
-              {announcer.statusType === "professionnel"
-                ? "Pro"
-                : announcer.statusType === "micro_entrepreneur"
-                ? "Micro-ent."
-                : "Particulier"}
-            </span>
-          </div>
-
-          {/* Availability badge + Formulas count */}
-          <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <div className={cn(
-              "inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium",
-              availInfo.color
-            )}>
-              <AvailIcon className="w-3 h-3" />
-              {availInfo.label}
-            </div>
-            <div className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium text-primary bg-primary/10">
-              <Package className="w-3 h-3" />
-              {announcer.services.length} formule{announcer.services.length > 1 ? "s" : ""}
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="flex items-center justify-between">
-            <FormulasDropdown
-              announcerId={announcer.id}
-              isOpen={showFormulas}
-              onToggle={() => setShowFormulas(!showFormulas)}
-              searchFilters={searchFilters}
-            />
-            {announcer.basePrice && (
-              <p className="font-bold text-primary">
-                {(announcer.basePrice / 100).toFixed(0)}€
-                <span className="font-normal text-text-light">/h</span>
-              </p>
+    <motion.div layout className="space-y-0">
+      {/* Card principale */}
+      <motion.div
+        className={cn(
+          "bg-white rounded-2xl p-4 shadow-md cursor-pointer transition-all",
+          isSelected
+            ? "ring-2 ring-primary shadow-lg"
+            : "hover:shadow-lg",
+          showFormulas && "rounded-b-none"
+        )}
+        onClick={onClick}
+        whileHover={{ y: showFormulas ? 0 : -2 }}
+        layout
+      >
+        <div className="flex gap-4">
+          {/* Avatar */}
+          <div className="relative w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-gray-100">
+            {announcer.profileImage ? (
+              <Image
+                src={announcer.profileImage}
+                alt={`${announcer.firstName} ${announcer.lastName}`}
+                fill
+                className="object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-2xl">
+                👤
+              </div>
+            )}
+            {announcer.verified && (
+              <div className="absolute -bottom-1 -right-1 bg-secondary text-white p-1 rounded-full">
+                <CheckCircle className="w-3 h-3" />
+              </div>
             )}
           </div>
+
+          {/* Info */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-1">
+              <h4 className="font-semibold text-foreground truncate">
+                {announcer.firstName} {announcer.lastName.charAt(0)}.
+              </h4>
+              <div className="flex items-center gap-1 text-sm">
+                <Star className="w-4 h-4 fill-accent text-accent" />
+                <span className="font-semibold">{announcer.rating}</span>
+                <span className="text-text-light">({announcer.reviewCount})</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 mb-1">
+              <p className="text-sm text-text-light flex items-center gap-1">
+                <MapPin className="w-3 h-3" />
+                {extractCity(announcer.location)}
+                {announcer.distance !== undefined && (
+                  <span className="ml-1">• {announcer.distance.toFixed(1)} km</span>
+                )}
+              </p>
+              {/* Badge statut */}
+              <span
+                className={cn(
+                  "inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded-full",
+                  announcer.statusType === "professionnel"
+                    ? "bg-blue-100 text-blue-700"
+                    : announcer.statusType === "micro_entrepreneur"
+                    ? "bg-purple-100 text-purple-700"
+                    : "bg-gray-100 text-gray-600"
+                )}
+              >
+                {announcer.statusType === "professionnel"
+                  ? "Pro"
+                  : announcer.statusType === "micro_entrepreneur"
+                  ? "Micro-ent."
+                  : "Particulier"}
+              </span>
+            </div>
+
+            {/* Availability badge + Formulas count */}
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <div className={cn(
+                "inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium",
+                availInfo.color
+              )}>
+                <AvailIcon className="w-3 h-3" />
+                {availInfo.label}
+              </div>
+              <div className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium text-primary bg-primary/10">
+                <Package className="w-3 h-3" />
+                {announcer.services.length} formule{announcer.services.length > 1 ? "s" : ""}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowFormulas(!showFormulas);
+                }}
+                className={cn(
+                  "flex items-center gap-1 text-xs font-medium transition-colors",
+                  showFormulas
+                    ? "text-primary"
+                    : "text-primary/80 hover:text-primary"
+                )}
+              >
+                {showFormulas ? "Masquer les formules" : "Voir les formules"}
+                {showFormulas ? (
+                  <ChevronUp className="w-3.5 h-3.5" />
+                ) : (
+                  <ChevronDown className="w-3.5 h-3.5" />
+                )}
+              </button>
+              {announcer.basePrice && (
+                <p className="font-bold text-primary">
+                  {(announcer.basePrice / 100).toFixed(0)}€
+                  <span className="font-normal text-text-light">/h</span>
+                </p>
+              )}
+            </div>
+          </div>
         </div>
+      </motion.div>
+
+      {/* Dropdown des formules - Section séparée qui pousse le contenu vers le bas */}
+      <AnimatePresence>
+        {showFormulas && (
+          <FormulasDropdownInline
+            announcerId={announcer.id}
+            searchFilters={searchFilters}
+            onClose={() => setShowFormulas(false)}
+          />
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// Composant dropdown inline (pousse le contenu vers le bas)
+function FormulasDropdownInline({
+  announcerId,
+  searchFilters,
+  onClose,
+}: {
+  announcerId: string;
+  searchFilters?: {
+    category?: { slug: string; name: string } | null;
+    date?: string | null;
+    endDate?: string | null;
+  };
+  onClose: () => void;
+}) {
+  const router = useRouter();
+
+  // Fetch services
+  const serviceDetails = useQuery(
+    api.public.search.getAnnouncerServiceDetails,
+    { announcerId: announcerId as Id<"users"> }
+  );
+
+  // Filter services by category if specified
+  const filteredServices = serviceDetails?.filter((service: {
+    id: string;
+    category: string;
+    categoryName: string;
+    categoryIcon?: string;
+    variants: Array<{
+      id: string;
+      name: string;
+      price: number;
+      priceUnit: string;
+      pricing?: {
+        hourly?: number;
+        daily?: number;
+        weekly?: number;
+        monthly?: number;
+      };
+      includedFeatures?: string[];
+    }>;
+    options: Array<{ id: string; name: string; price: number }>;
+  }) => {
+    if (!searchFilters?.category) return true;
+    return service.category === searchFilters.category.slug;
+  }) || [];
+
+  // Handle booking redirect
+  const handleBookVariant = (serviceId: string, variantId: string) => {
+    const params = new URLSearchParams();
+    params.set("service", serviceId);
+    params.set("variant", variantId);
+    if (searchFilters?.date) params.set("date", searchFilters.date);
+    if (searchFilters?.endDate) params.set("endDate", searchFilters.endDate);
+
+    router.push(`/reserver/${announcerId}?${params.toString()}`);
+  };
+
+  // Get display price for variant
+  const getVariantDisplayPrice = (variant: {
+    price: number;
+    priceUnit: string;
+    pricing?: {
+      hourly?: number;
+      daily?: number;
+      weekly?: number;
+      monthly?: number;
+    };
+  }) => {
+    const pricing = variant.pricing;
+    if (pricing?.daily) return { price: pricing.daily, unit: "/jour" };
+    if (pricing?.hourly) return { price: pricing.hourly, unit: "/h" };
+    if (pricing?.weekly) return { price: pricing.weekly, unit: "/sem" };
+    if (pricing?.monthly) return { price: pricing.monthly, unit: "/mois" };
+    const priceUnitLabels: Record<string, string> = {
+      hour: "/h",
+      day: "/jour",
+      week: "/sem",
+      month: "/mois",
+      flat: "",
+    };
+    return { price: variant.price, unit: priceUnitLabels[variant.priceUnit] || "" };
+  };
+
+  // Format price
+  const formatPrice = (cents: number): string => {
+    return (cents / 100).toFixed(0) + "€";
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: "auto" }}
+      exit={{ opacity: 0, height: 0 }}
+      transition={{ duration: 0.2 }}
+      className="overflow-hidden"
+    >
+      <div className="bg-gray-50 rounded-b-2xl border-t border-gray-200 shadow-md">
+        {/* Loading State */}
+        {!serviceDetails && (
+          <div className="p-6 flex items-center justify-center">
+            <div className="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full" />
+            <span className="ml-2 text-sm text-text-light">Chargement des formules...</span>
+          </div>
+        )}
+
+        {/* No Services */}
+        {serviceDetails && filteredServices.length === 0 && (
+          <div className="p-4 text-center text-sm text-text-light">
+            Aucune formule disponible
+          </div>
+        )}
+
+        {/* Services List */}
+        {filteredServices.length > 0 && (
+          <div className="p-4 space-y-3">
+            {filteredServices.map((service: {
+              id: string;
+              category: string;
+              categoryName: string;
+              categoryIcon?: string;
+              variants: Array<{
+                id: string;
+                name: string;
+                price: number;
+                priceUnit: string;
+                pricing?: {
+                  hourly?: number;
+                  daily?: number;
+                  weekly?: number;
+                  monthly?: number;
+                };
+                includedFeatures?: string[];
+              }>;
+              options: Array<{ id: string; name: string; price: number }>;
+            }) => (
+              <div key={service.id}>
+                {/* Service Header */}
+                <div className="flex items-center gap-2 mb-2">
+                  {service.categoryIcon && (
+                    <span className="text-base">{service.categoryIcon}</span>
+                  )}
+                  <span className="text-sm font-semibold text-foreground">
+                    {service.categoryName}
+                  </span>
+                </div>
+
+                {/* Variants */}
+                <div className="space-y-2">
+                  {service.variants.map((variant) => {
+                    const displayPrice = getVariantDisplayPrice(variant);
+                    return (
+                      <div
+                        key={variant.id}
+                        className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100 hover:border-primary/30 transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground">
+                            {variant.name}
+                          </p>
+                          {variant.includedFeatures && variant.includedFeatures.length > 0 && (
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <Check className="w-3 h-3 text-secondary flex-shrink-0" />
+                              <span className="text-xs text-text-light truncate">
+                                {variant.includedFeatures[0]}
+                                {variant.includedFeatures.length > 1 && ` +${variant.includedFeatures.length - 1}`}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 ml-2">
+                          <span className="text-sm font-bold text-primary whitespace-nowrap">
+                            {formatPrice(displayPrice.price)}
+                            <span className="text-xs font-normal text-text-light">
+                              {displayPrice.unit}
+                            </span>
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleBookVariant(service.id, variant.id);
+                            }}
+                            className="px-3 py-1.5 bg-primary text-white text-xs font-medium rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-1"
+                          >
+                            Réserver
+                            <ChevronRight className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Options preview */}
+                {service.options.length > 0 && (
+                  <p className="text-xs text-text-light mt-2">
+                    +{service.options.length} option{service.options.length > 1 ? "s" : ""} disponible{service.options.length > 1 ? "s" : ""}
+                  </p>
+                )}
+              </div>
+            ))}
+
+            {/* View All Link */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                router.push(`/reserver/${announcerId}`);
+              }}
+              className="w-full py-2.5 text-sm text-center text-white bg-primary font-medium rounded-xl hover:bg-primary/90 transition-colors"
+            >
+              Voir toutes les formules et réserver
+            </button>
+          </div>
+        )}
       </div>
     </motion.div>
   );
