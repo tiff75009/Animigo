@@ -431,6 +431,14 @@ Utilisation de Framer Motion avec des variants predefinies :
   - Affichage detaille du prix (heures partielles, jours complets, nuits)
   - Support creation de compte pour les nouveaux utilisateurs
 
+- **Espace client - Reservations ameliore** (`/client/reservations`)
+  - Nouvelle page de detail de reservation (`/client/reservations/[missionId]`)
+  - Cards ameliorees avec affichage clair des dates et heures de debut/fin
+  - Synthese de la duree de la mission
+  - Statut du paiement detaille (pre-autorisation, blocage, encaissement)
+  - Informations du pet-sitter avec contact direct
+  - Support de la garde de nuit avec affichage du nombre de nuits
+
 ### v0.7.1 - Gestion Admin Utilisateurs et Corrections Convex Self-Hosted
 - **Actions admin utilisateurs** (`/admin/utilisateurs`)
   - Bouton "Activer manuellement" : active un compte (emailVerified + isActive)

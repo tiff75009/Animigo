@@ -14,6 +14,8 @@ import {
   XCircle,
   AlertCircle,
   Loader2,
+  ArrowRight,
+  Moon,
 } from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -129,73 +131,105 @@ export default function ReservationsPage() {
             animal?: { name: string; emoji: string };
           }) => {
             const status = statusConfig[reservation.status] || statusConfig.pending_acceptance;
+            const duration = calculateDuration(reservation.startDate, reservation.endDate, reservation.startTime, reservation.endTime);
 
             return (
               <motion.div
                 key={reservation.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    {/* Service & Status */}
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-2xl">
-                        {reservation.animal?.emoji || "🐾"}
+                <Link href={`/client/reservations/${reservation.id}`} className="block">
+                  <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:shadow-md hover:border-primary/20 transition-all cursor-pointer">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      {/* Service & Status */}
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-2xl">
+                          {reservation.animal?.emoji || "🐾"}
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-foreground">{reservation.serviceName}</h3>
+                          <p className="text-sm text-gray-500">
+                            Pour {reservation.animal?.name || "votre animal"}
+                          </p>
+                        </div>
+                        <div className={cn(
+                          "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium",
+                          status.color
+                        )}>
+                          {status.icon}
+                          {status.label}
+                        </div>
                       </div>
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-foreground">{reservation.serviceName}</h3>
-                        <p className="text-sm text-gray-500">
-                          Pour {reservation.animal?.name || "votre animal"}
-                        </p>
-                      </div>
-                      <div className={cn(
-                        "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium",
-                        status.color
-                      )}>
-                        {status.icon}
-                        {status.label}
-                      </div>
-                    </div>
 
-                    {/* Details */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <User className="w-4 h-4 text-gray-400" />
-                        {reservation.announcerName}
+                      {/* Date & Time Details */}
+                      <div className="bg-gray-50 rounded-xl p-3 mb-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {/* Start */}
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                              <Calendar className="w-4 h-4 text-green-600" />
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500">Début</p>
+                              <p className="text-sm font-medium text-foreground">
+                                {formatDateShort(reservation.startDate)}
+                                {reservation.startTime && <span className="text-primary ml-1">{reservation.startTime}</span>}
+                              </p>
+                            </div>
+                          </div>
+                          {/* End */}
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
+                              <Moon className="w-4 h-4 text-red-600" />
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500">Fin</p>
+                              <p className="text-sm font-medium text-foreground">
+                                {formatDateShort(reservation.endDate)}
+                                {reservation.endTime && <span className="text-primary ml-1">{reservation.endTime}</span>}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        {/* Duration */}
+                        <div className="mt-2 pt-2 border-t border-gray-200 flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-primary" />
+                          <span className="text-sm font-medium text-primary">{duration}</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <Calendar className="w-4 h-4 text-gray-400" />
-                        {formatDateRange(reservation.startDate, reservation.endDate)}
-                      </div>
-                      {reservation.startTime && (
+
+                      {/* Announcer & Location */}
+                      <div className="flex flex-wrap gap-3 text-sm">
                         <div className="flex items-center gap-2 text-gray-600">
-                          <Clock className="w-4 h-4 text-gray-400" />
-                          {reservation.startTime}
-                          {reservation.endTime && ` - ${reservation.endTime}`}
+                          <User className="w-4 h-4 text-gray-400" />
+                          {reservation.announcerName}
                         </div>
-                      )}
-                      {reservation.location && (
-                        <div className="flex items-center gap-2 text-gray-600 sm:col-span-2">
-                          <MapPin className="w-4 h-4 text-gray-400" />
-                          {reservation.location}
-                        </div>
-                      )}
+                        {reservation.location && (
+                          <div className="flex items-center gap-2 text-gray-600">
+                            <MapPin className="w-4 h-4 text-gray-400" />
+                            {reservation.location.length > 30
+                              ? reservation.location.substring(0, 30) + "..."
+                              : reservation.location}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Price & Action */}
+                    <div className="text-right flex flex-col items-end justify-between h-full">
+                      <p className="text-lg font-bold text-foreground">
+                        {(reservation.amount / 100).toFixed(2).replace(".", ",")} €
+                      </p>
+                      <div className="mt-3 flex items-center gap-1 text-primary text-sm font-medium">
+                        Voir détails
+                        <ArrowRight className="w-4 h-4" />
+                      </div>
                     </div>
                   </div>
-
-                  {/* Price & Action */}
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-foreground">
-                      {(reservation.amount / 100).toFixed(2)} €
-                    </p>
-                    <button className="mt-2 flex items-center gap-1 text-primary text-sm font-medium hover:underline">
-                      Détails
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
                   </div>
-                </div>
+                </Link>
               </motion.div>
             );
           })}
@@ -233,18 +267,40 @@ export default function ReservationsPage() {
   );
 }
 
-function formatDateRange(startDate: string, endDate: string): string {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-
-  const formatOptions: Intl.DateTimeFormatOptions = {
+function formatDateShort(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString("fr-FR", {
     day: "numeric",
     month: "short",
-  };
+  });
+}
 
-  if (startDate === endDate) {
-    return start.toLocaleDateString("fr-FR", { ...formatOptions, year: "numeric" });
+function calculateDuration(
+  startDate: string,
+  endDate: string,
+  startTime?: string,
+  endTime?: string
+): string {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diffTime = Math.abs(end.getTime() - start.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+  // If same day with times, calculate hours
+  if (startDate === endDate && startTime && endTime) {
+    const [startH, startM] = startTime.split(":").map(Number);
+    const [endH, endM] = endTime.split(":").map(Number);
+    const hours = endH - startH + (endM - startM) / 60;
+
+    if (hours < 1) {
+      return `${Math.round(hours * 60)} minutes`;
+    }
+    return `${hours.toFixed(1).replace(".0", "")} heure${hours > 1 ? "s" : ""}`;
   }
 
-  return `${start.toLocaleDateString("fr-FR", formatOptions)} - ${end.toLocaleDateString("fr-FR", { ...formatOptions, year: "numeric" })}`;
+  // Multi-day
+  if (diffDays === 1) {
+    return "1 journée";
+  }
+  return `${diffDays} jours`;
 }

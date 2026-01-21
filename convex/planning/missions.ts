@@ -833,3 +833,108 @@ export const getClientMissions = query({
     return missionsWithDetails;
   },
 });
+
+/**
+ * Récupère le détail d'une mission pour un client
+ */
+export const getClientMissionById = query({
+  args: {
+    token: v.string(),
+    missionId: v.id("missions"),
+  },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+
+    if (!session || session.expiresAt < Date.now()) {
+      return null;
+    }
+
+    const mission = await ctx.db.get(args.missionId);
+    if (!mission) {
+      return null;
+    }
+
+    // Vérifier que l'utilisateur est bien le client
+    if (mission.clientId !== session.userId) {
+      return null;
+    }
+
+    // Récupérer les infos de l'annonceur
+    const announcer = await ctx.db.get(mission.announcerId);
+
+    // Récupérer le profil de l'annonceur pour la photo
+    let announcerPhotoUrl: string | null = null;
+    if (announcer) {
+      const profilePhoto = await ctx.db
+        .query("photos")
+        .withIndex("by_user", (q) => q.eq("userId", mission.announcerId))
+        .filter((q) => q.eq(q.field("isProfilePhoto"), true))
+        .first();
+
+      if (profilePhoto?.storageId) {
+        announcerPhotoUrl = await ctx.storage.getUrl(profilePhoto.storageId);
+      }
+    }
+
+    // Récupérer le service pour plus de détails
+    const service = mission.serviceId ? await ctx.db.get(mission.serviceId) : null;
+
+    // Récupérer les détails du paiement si existant
+    let paymentDetails = null;
+    if (mission.stripePaymentId) {
+      const payment = await ctx.db.get(mission.stripePaymentId);
+      if (payment) {
+        paymentDetails = {
+          status: payment.status,
+          amount: payment.amount,
+          platformFee: payment.platformFee,
+          paymentUrl: payment.paymentUrl,
+          expiresAt: payment.expiresAt,
+        };
+      }
+    }
+
+    return {
+      id: mission._id,
+      announcerId: mission.announcerId,
+      announcerName: announcer
+        ? `${announcer.firstName} ${announcer.lastName.charAt(0)}.`
+        : "Annonceur",
+      announcerFirstName: announcer?.firstName || "Annonceur",
+      announcerPhone: announcer?.phone,
+      announcerEmail: announcer?.email,
+      announcerPhotoUrl,
+      animal: mission.animal,
+      animalId: mission.animalId,
+      serviceName: mission.serviceName,
+      serviceCategory: mission.serviceCategory,
+      startDate: mission.startDate,
+      endDate: mission.endDate,
+      startTime: mission.startTime,
+      endTime: mission.endTime,
+      status: mission.status,
+      amount: mission.amount,
+      platformFee: mission.platformFee,
+      announcerEarnings: mission.announcerEarnings,
+      paymentStatus: mission.paymentStatus,
+      location: mission.location,
+      city: mission.city,
+      clientNotes: mission.clientNotes,
+      announcerNotes: mission.announcerNotes,
+      cancellationReason: mission.cancellationReason,
+      createdAt: mission.createdAt,
+      updatedAt: mission.updatedAt,
+      // Garde de nuit
+      includeOvernightStay: mission.includeOvernightStay,
+      overnightNights: mission.overnightNights,
+      overnightAmount: mission.overnightAmount,
+      dayStartTime: mission.dayStartTime || service?.dayStartTime,
+      dayEndTime: mission.dayEndTime || service?.dayEndTime,
+      // Paiement
+      paymentDetails,
+    };
+  },
+});
