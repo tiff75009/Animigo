@@ -53,7 +53,12 @@ export const createPendingBooking = mutation({
     startDate: v.string(),
     endDate: v.string(),
     startTime: v.optional(v.string()),
+    endTime: v.optional(v.string()), // Heure de fin (pour réservation par plage)
     calculatedAmount: v.number(),
+    // Garde de nuit
+    includeOvernightStay: v.optional(v.boolean()),
+    overnightNights: v.optional(v.number()),
+    overnightAmount: v.optional(v.number()),
     // Token optionnel (si utilisateur connecté)
     token: v.optional(v.string()),
   },
@@ -76,9 +81,9 @@ export const createPendingBooking = mutation({
     const variant = await ctx.db.get(args.variantId as Id<"serviceVariants">);
     const duration = variant?.duration || 60; // Par défaut 60 minutes
 
-    // Calculer endTime si startTime est fourni
-    let endTime: string | undefined;
-    if (args.startTime) {
+    // Utiliser endTime fourni OU calculer depuis startTime + duration
+    let endTime: string | undefined = args.endTime;
+    if (!endTime && args.startTime) {
       endTime = addMinutesToTime(args.startTime, duration);
     }
 
@@ -96,6 +101,10 @@ export const createPendingBooking = mutation({
       startTime: args.startTime,
       endTime,
       calculatedAmount: args.calculatedAmount,
+      // Garde de nuit
+      includeOvernightStay: args.includeOvernightStay,
+      overnightNights: args.overnightNights,
+      overnightAmount: args.overnightAmount,
       userId,
       expiresAt,
       createdAt: now,
@@ -226,6 +235,11 @@ export const getPendingBooking = query({
         category: service.category,
         categoryName: category?.name ?? service.category,
         categoryIcon: category?.icon,
+        // Garde de nuit: paramètres du service
+        allowOvernightStay: service.allowOvernightStay,
+        dayStartTime: service.dayStartTime,
+        dayEndTime: service.dayEndTime,
+        overnightPrice: service.overnightPrice,
       },
       variant: variant ? {
         id: variant._id,
@@ -233,6 +247,8 @@ export const getPendingBooking = query({
         price: variant.price,
         priceUnit: variant.priceUnit,
         duration: variant.duration,
+        // Pricing nightly si défini
+        pricing: variant.pricing,
       } : null,
       options: selectedOptions,
       availableOptions,
@@ -243,6 +259,12 @@ export const getPendingBooking = query({
         endTime: pendingBooking.endTime,
       },
       amount: pendingBooking.calculatedAmount,
+      // Garde de nuit: données de la réservation
+      overnight: {
+        includeOvernightStay: pendingBooking.includeOvernightStay,
+        overnightNights: pendingBooking.overnightNights,
+        overnightAmount: pendingBooking.overnightAmount,
+      },
       userId: pendingBooking.userId,
       expiresAt: pendingBooking.expiresAt,
     };
@@ -382,7 +404,39 @@ export const finalizeBooking = mutation({
     const now = Date.now();
 
     // Utiliser le montant mis à jour si fourni, sinon utiliser celui de la réservation
-    const finalAmount = args.updatedAmount ?? pendingBooking.calculatedAmount;
+    // Ce montant représente le prix du service (ce que l'annonceur recevra)
+    const serviceAmount = args.updatedAmount ?? pendingBooking.calculatedAmount;
+
+    // Récupérer l'annonceur pour déterminer le type de commission
+    const announcerForCommission = await ctx.db.get(pendingBooking.announcerId);
+    let commissionType: "particulier" | "micro_entrepreneur" | "professionnel" = "particulier";
+    if (announcerForCommission?.accountType === "annonceur_pro") {
+      if (announcerForCommission.companyType === "micro_enterprise") {
+        commissionType = "micro_entrepreneur";
+      } else {
+        commissionType = "professionnel";
+      }
+    }
+
+    // Récupérer le taux de commission depuis la config
+    const commissionConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", `commission_${commissionType}`))
+      .first();
+
+    // Taux par défaut si non configuré
+    const defaultRates = { particulier: 15, micro_entrepreneur: 12, professionnel: 10 };
+    const commissionRate = commissionConfig
+      ? parseFloat(commissionConfig.value)
+      : defaultRates[commissionType];
+
+    // Calculer les montants
+    // platformFee = commission (ce que la plateforme garde)
+    // announcerEarnings = serviceAmount (ce que l'annonceur reçoit)
+    // amount = serviceAmount + platformFee (ce que le client paie)
+    const platformFee = Math.round((serviceAmount * commissionRate) / 100);
+    const announcerEarnings = serviceAmount;
+    const totalAmount = serviceAmount + platformFee;
 
     // Créer la mission
     const missionId = await ctx.db.insert("missions", {
@@ -404,18 +458,76 @@ export const finalizeBooking = mutation({
       startTime: pendingBooking.startTime,
       endTime: pendingBooking.endTime,
       status: "pending_acceptance",
-      amount: finalAmount,
+      amount: totalAmount, // Montant total que le client paie (service + commission)
+      platformFee, // Commission de la plateforme
+      announcerEarnings, // Ce que l'annonceur reçoit (prix du service)
       paymentStatus: "not_due",
       location: args.location,
       city: args.city,
       clientCoordinates: args.coordinates,
       clientNotes: args.notes,
+      // Garde de nuit
+      includeOvernightStay: pendingBooking.includeOvernightStay,
+      overnightNights: pendingBooking.overnightNights,
+      overnightAmount: pendingBooking.overnightAmount,
+      dayStartTime: service.dayStartTime,
+      dayEndTime: service.dayEndTime,
       createdAt: now,
       updatedAt: now,
     });
 
     // Supprimer la réservation en attente
     await ctx.db.delete(args.bookingId);
+
+    // Envoyer l'email de notification à l'annonceur
+    const announcer = await ctx.db.get(pendingBooking.announcerId);
+    if (announcer) {
+      // Récupérer la config email depuis la DB
+      const apiKeyConfig = await ctx.db
+        .query("systemConfig")
+        .withIndex("by_key", (q) => q.eq("key", "resend_api_key"))
+        .first();
+      const fromEmailConfig = await ctx.db
+        .query("systemConfig")
+        .withIndex("by_key", (q) => q.eq("key", "resend_from_email"))
+        .first();
+      const fromNameConfig = await ctx.db
+        .query("systemConfig")
+        .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
+        .first();
+      const appUrlConfig = await ctx.db
+        .query("systemConfig")
+        .withIndex("by_key", (q) => q.eq("key", "app_url"))
+        .first();
+
+      // Trouver le type d'animal pour le nom
+      const animalTypeName = ANIMAL_TYPES.find((t) => t.id === animal.type);
+
+      await ctx.scheduler.runAfter(0, internal.api.email.sendNewReservationRequestEmail, {
+        announcerEmail: announcer.email,
+        announcerFirstName: announcer.firstName,
+        clientName: `${client.firstName} ${client.lastName}`,
+        reservation: {
+          serviceName: `${category?.name ?? service.category} - ${variant.name}`,
+          startDate: pendingBooking.startDate,
+          endDate: pendingBooking.endDate,
+          startTime: pendingBooking.startTime,
+          endTime: pendingBooking.endTime,
+          animalName: animal.name,
+          animalType: animalTypeName?.name ?? animal.type,
+          location: args.location,
+          includeOvernightStay: pendingBooking.includeOvernightStay,
+          overnightNights: pendingBooking.overnightNights,
+          totalAmount: totalAmount,
+        },
+        emailConfig: apiKeyConfig?.value ? {
+          apiKey: apiKeyConfig.value,
+          fromEmail: fromEmailConfig?.value,
+          fromName: fromNameConfig?.value,
+        } : undefined,
+        appUrl: appUrlConfig?.value || undefined,
+      });
+    }
 
     return {
       success: true,

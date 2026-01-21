@@ -191,8 +191,11 @@ const DEFAULT_TEMPLATES: Record<string, { subject: string; html: string }> = {
       <div style="margin: 20px 0; padding: 20px; background-color: #f0f9ff; border-radius: 12px; border-left: 4px solid #0ea5e9;">
         <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">📋 Détails de la demande</p>
         <p style="margin: 5px 0; color: #475569;"><strong>Service :</strong> {{serviceName}}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> {{dateRange}}</p>
+        {{timeRangeHtml}}
+        {{overnightHtml}}
         <p style="margin: 5px 0; color: #475569;"><strong>Animal :</strong> {{animalName}} ({{animalType}})</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Lieu :</strong> {{location}}</p>
         <p style="margin: 5px 0; color: #475569;"><strong>Montant :</strong> {{totalAmount}}</p>
       </div>
       <div style="text-align: center; margin: 30px 0;">
@@ -574,68 +577,123 @@ export const sendNewReservationRequestEmail = internalAction({
       serviceName: v.string(),
       startDate: v.string(),
       endDate: v.string(),
+      startTime: v.optional(v.string()),
+      endTime: v.optional(v.string()),
       animalName: v.optional(v.string()),
       animalType: v.optional(v.string()),
+      location: v.optional(v.string()),
+      includeOvernightStay: v.optional(v.boolean()),
+      overnightNights: v.optional(v.number()),
       totalAmount: v.number(),
     }),
+    // Config email passée depuis la mutation (contourne le bug ctx.runQuery sur self-hosted)
+    emailConfig: v.optional(v.object({
+      apiKey: v.string(),
+      fromEmail: v.optional(v.string()),
+      fromName: v.optional(v.string()),
+    })),
+    appUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const configs = await ctx.runQuery(internal.api.emailInternal.getEmailConfigs);
-
-    if (!configs.apiKey) {
-      return { success: false, error: "Email service not configured" };
-    }
-
-    // Note: Pour les tests, utilisez onboarding@resend.dev ou un domaine vérifié
-    const fromEmail = configs.fromEmail || "onboarding@resend.dev";
-    const fromName = configs.fromName || "Animigo";
-    const siteName = "Animigo";
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
-    const template = getTemplate("new_reservation_request");
-    if (!template) {
-      return { success: false, error: "Template not found" };
-    }
-
-    const variables = {
-      announcerFirstName: args.announcerFirstName,
-      siteName,
-      dashboardUrl: `${appUrl}/dashboard/missions`,
-      clientName: args.clientName,
-      serviceName: args.reservation.serviceName,
-      startDate: formatDate(args.reservation.startDate),
-      endDate: formatDate(args.reservation.endDate),
-      animalName: args.reservation.animalName || "Animal",
-      animalType: args.reservation.animalType || "",
-      totalAmount: formatPrice(args.reservation.totalAmount),
-    };
-
-    const subject = replaceVariables(template.subject, variables);
-    const html = replaceVariables(template.htmlContent, variables);
-
-    const resend = new Resend(configs.apiKey);
+    console.log("=== sendNewReservationRequestEmail START ===");
 
     try {
-      const result = await resend.emails.send({
-        from: `${fromName} <${fromEmail}>`,
-        to: args.announcerEmail,
-        subject,
-        html,
+      // Utiliser la config passée en argument, sinon fallback sur env vars
+      const apiKey = args.emailConfig?.apiKey || process.env.RESEND_API_KEY;
+      const fromEmail = args.emailConfig?.fromEmail || process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+      const fromName = args.emailConfig?.fromName || process.env.RESEND_FROM_NAME || "Animigo";
+
+      if (!apiKey) {
+        console.error("No API key configured");
+        return { success: false, error: "Email service not configured" };
+      }
+
+      if (!apiKey.startsWith("re_")) {
+        console.error("Invalid Resend API key format");
+        return { success: false, error: "Invalid API key format" };
+      }
+
+      const siteName = "Animigo";
+      const appUrl = args.appUrl || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+      const template = getTemplate("new_reservation_request");
+      if (!template) {
+        return { success: false, error: "Template not found" };
+      }
+
+      // Build date range string
+      const startDateFormatted = formatDate(args.reservation.startDate);
+      const endDateFormatted = formatDate(args.reservation.endDate);
+      const dateRange = args.reservation.startDate === args.reservation.endDate
+        ? `Le ${startDateFormatted}`
+        : `Du ${startDateFormatted} au ${endDateFormatted}`;
+
+      // Build time range HTML (conditionally)
+      let timeRangeHtml = "";
+      if (args.reservation.startTime) {
+        const timeText = args.reservation.endTime
+          ? `${args.reservation.startTime} → ${args.reservation.endTime}`
+          : `à partir de ${args.reservation.startTime}`;
+        timeRangeHtml = `<p style="margin: 5px 0; color: #475569;"><strong>Horaires :</strong> ${timeText}</p>`;
+      }
+
+      // Build overnight HTML (conditionally)
+      let overnightHtml = "";
+      if (args.reservation.includeOvernightStay && args.reservation.overnightNights && args.reservation.overnightNights > 0) {
+        const nightsText = args.reservation.overnightNights > 1
+          ? `${args.reservation.overnightNights} nuits`
+          : "1 nuit";
+        overnightHtml = `<p style="margin: 5px 0; color: #8B5CF6;"><strong>🌙 Garde de nuit incluse</strong> (${nightsText})</p>`;
+      }
+
+      const variables = {
+        announcerFirstName: args.announcerFirstName,
+        siteName,
+        dashboardUrl: `${appUrl}/dashboard/missions/accepter`,
+        clientName: args.clientName,
+        serviceName: args.reservation.serviceName,
+        dateRange,
+        timeRangeHtml,
+        overnightHtml,
+        animalName: args.reservation.animalName || "Animal",
+        animalType: args.reservation.animalType || "",
+        location: args.reservation.location || "Non précisé",
+        totalAmount: formatPrice(args.reservation.totalAmount),
+      };
+
+      const subject = replaceVariables(template.subject, variables);
+      const html = replaceVariables(template.htmlContent, variables);
+
+      console.log("Sending new reservation email to:", args.announcerEmail);
+
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: `${fromName} <${fromEmail}>`,
+          to: [args.announcerEmail],
+          subject,
+          html,
+        }),
       });
 
-      await ctx.runMutation(internal.api.emailInternal.logEmail, {
-        to: args.announcerEmail,
-        from: `${fromName} <${fromEmail}>`,
-        subject,
-        template: "new_reservation_request",
-        status: "sent",
-        resendId: result.data?.id,
-      });
+      const responseText = await response.text();
 
-      return { success: true, id: result.data?.id };
+      if (!response.ok) {
+        throw new Error(`Resend API error: ${response.status} - ${responseText}`);
+      }
+
+      const result = JSON.parse(responseText);
+      console.log("New reservation email sent successfully:", result);
+
+      return { success: true, id: result.id };
     } catch (error) {
       console.error("Failed to send new reservation request email:", error);
-      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      return { success: false, error: errorMessage };
     }
   },
 });

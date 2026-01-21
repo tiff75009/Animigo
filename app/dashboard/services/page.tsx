@@ -55,6 +55,7 @@ export default function ServicesPage() {
     hasGarden: false,
     hasVehicle: false,
     ownedAnimals: [],
+    maxAnimalsPerSlot: undefined,
   });
 
   // Initialize profile form when data loads
@@ -78,6 +79,7 @@ export default function ServicesPage() {
         hasGarden: profileData.profile.hasGarden || false,
         hasVehicle: profileData.profile.hasVehicle || false,
         ownedAnimals: profileData.profile.ownedAnimals || [],
+        maxAnimalsPerSlot: profileData.profile.maxAnimalsPerSlot,
       });
     }
   }, [profileData]);

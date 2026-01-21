@@ -13,6 +13,11 @@ import {
   PawPrint,
   Layers,
   Zap,
+  Home,
+  MapPin,
+  Moon,
+  Sun,
+  Clock,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import AnimalTypeSelector from "../shared/AnimalTypeSelector";
@@ -20,11 +25,25 @@ import VariantManager, { LocalVariant } from "../VariantManager";
 import OptionManager, { LocalOption } from "../OptionManager";
 import { cn } from "@/app/lib/utils";
 
+type ServiceLocation = "announcer_home" | "client_home" | "both";
+type PriceUnit = "hour" | "day" | "week" | "month";
+
+interface DefaultVariant {
+  name: string;
+  description?: string;
+  suggestedDuration?: number;
+  includedFeatures?: string[];
+}
+
 interface ServiceCategory {
   slug: string;
   name: string;
   icon?: string;
   billingType?: "hourly" | "daily" | "flexible";
+  allowedPriceUnits?: PriceUnit[];
+  defaultVariants?: DefaultVariant[];
+  allowCustomVariants?: boolean;
+  allowOvernightStay?: boolean;
 }
 
 type FormStep = 1 | 2 | 3 | 4;
@@ -42,11 +61,25 @@ interface ServiceFormProps {
   onSubmit: (data: {
     category: string;
     animalTypes: string[];
+    serviceLocation?: ServiceLocation;
+    // Garde de nuit
+    allowOvernightStay?: boolean;
+    dayStartTime?: string;
+    dayEndTime?: string;
+    overnightPrice?: number;
     initialVariants: Array<{
       name: string;
       description?: string;
       price: number;
       priceUnit: "hour" | "day" | "week" | "month" | "flat";
+      // Multi-tarification
+      pricing?: {
+        hourly?: number;
+        daily?: number;
+        weekly?: number;
+        monthly?: number;
+        nightly?: number;
+      };
       duration?: number;
       includedFeatures?: string[];
     }>;
@@ -74,9 +107,16 @@ export default function ServiceForm({
 }: ServiceFormProps) {
   const [currentStep, setCurrentStep] = useState<FormStep>(1);
   const [category, setCategory] = useState("");
+  const [serviceLocation, setServiceLocation] = useState<ServiceLocation | undefined>(undefined);
   const [animalTypes, setAnimalTypes] = useState<string[]>([]);
   const [localVariants, setLocalVariants] = useState<LocalVariant[]>([]);
   const [localOptions, setLocalOptions] = useState<LocalOption[]>([]);
+
+  // Garde de nuit
+  const [allowOvernightStay, setAllowOvernightStay] = useState(false);
+  const [dayStartTime, setDayStartTime] = useState("08:00");
+  const [dayEndTime, setDayEndTime] = useState("20:00");
+  const [overnightPrice, setOvernightPrice] = useState<number>(0); // En euros
 
   const selectedCategory = categories.find((c) => c.slug === category);
 
@@ -118,6 +158,7 @@ export default function ServiceForm({
       description: v.description,
       price: v.price,
       priceUnit: v.priceUnit,
+      pricing: v.pricing, // Multi-tarification
       duration: v.duration,
       includedFeatures: v.includedFeatures,
     }));
@@ -131,9 +172,21 @@ export default function ServiceForm({
       maxQuantity: o.maxQuantity,
     }));
 
+    // Préparer les données overnight si la catégorie le permet
+    const overnightData = selectedCategory?.allowOvernightStay
+      ? {
+          allowOvernightStay,
+          dayStartTime,
+          dayEndTime,
+          overnightPrice: allowOvernightStay ? Math.round(overnightPrice * 100) : undefined, // Convertir en centimes
+        }
+      : {};
+
     const success = await onSubmit({
       category,
       animalTypes,
+      serviceLocation,
+      ...overnightData,
       initialVariants,
       initialOptions: initialOptions.length > 0 ? initialOptions : undefined,
     });
@@ -279,6 +332,196 @@ export default function ServiceForm({
                   ))}
                 </div>
               )}
+
+              {/* Lieu de prestation */}
+              {category && (
+                <div className="mt-6 pt-6 border-t border-foreground/10">
+                  <h4 className="font-medium text-foreground mb-1">
+                    Où effectuez-vous cette prestation ?
+                  </h4>
+                  <p className="text-sm text-text-light mb-4">
+                    Le client pourra choisir selon vos disponibilités
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <motion.button
+                      type="button"
+                      onClick={() => setServiceLocation("announcer_home")}
+                      className={cn(
+                        "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
+                        serviceLocation === "announcer_home"
+                          ? "border-primary bg-primary/5"
+                          : "border-foreground/10 hover:border-foreground/20"
+                      )}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      <div className="p-3 rounded-full bg-primary/10">
+                        <Home className="w-6 h-6 text-primary" />
+                      </div>
+                      <span className="text-sm font-medium text-foreground">
+                        À mon domicile
+                      </span>
+                      <span className="text-xs text-text-light text-center">
+                        Le client vient chez vous
+                      </span>
+                    </motion.button>
+
+                    <motion.button
+                      type="button"
+                      onClick={() => setServiceLocation("client_home")}
+                      className={cn(
+                        "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
+                        serviceLocation === "client_home"
+                          ? "border-primary bg-primary/5"
+                          : "border-foreground/10 hover:border-foreground/20"
+                      )}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      <div className="p-3 rounded-full bg-secondary/10">
+                        <MapPin className="w-6 h-6 text-secondary" />
+                      </div>
+                      <span className="text-sm font-medium text-foreground">
+                        Chez le client
+                      </span>
+                      <span className="text-xs text-text-light text-center">
+                        Vous vous déplacez
+                      </span>
+                    </motion.button>
+
+                    <motion.button
+                      type="button"
+                      onClick={() => setServiceLocation("both")}
+                      className={cn(
+                        "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
+                        serviceLocation === "both"
+                          ? "border-primary bg-primary/5"
+                          : "border-foreground/10 hover:border-foreground/20"
+                      )}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      <div className="p-3 rounded-full bg-accent/20">
+                        <div className="flex -space-x-1">
+                          <Home className="w-5 h-5 text-accent" />
+                          <MapPin className="w-5 h-5 text-accent" />
+                        </div>
+                      </div>
+                      <span className="text-sm font-medium text-foreground">
+                        Les deux
+                      </span>
+                      <span className="text-xs text-text-light text-center">
+                        Le client choisit
+                      </span>
+                    </motion.button>
+                  </div>
+                </div>
+              )}
+
+              {/* Section Garde de nuit - seulement si la catégorie le permet */}
+              {category && selectedCategory?.allowOvernightStay && (
+                <div className="mt-6 pt-6 border-t border-foreground/10">
+                  <h4 className="font-medium text-foreground mb-1 flex items-center gap-2">
+                    <Moon className="w-5 h-5 text-indigo-500" />
+                    Horaires et garde de nuit
+                  </h4>
+                  <p className="text-sm text-text-light mb-4">
+                    Définissez vos horaires de journée et si vous acceptez la garde de nuit
+                  </p>
+
+                  {/* Horaires de journée */}
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2 flex items-center gap-2">
+                        <Sun className="w-4 h-4 text-amber-500" />
+                        Début de journée
+                      </label>
+                      <select
+                        value={dayStartTime}
+                        onChange={(e) => setDayStartTime(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-white border-2 border-foreground/10 rounded-xl text-foreground focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                      >
+                        {Array.from({ length: 24 }, (_, i) => {
+                          const hour = i.toString().padStart(2, "0");
+                          return (
+                            <option key={hour} value={`${hour}:00`}>
+                              {hour}:00
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2 flex items-center gap-2">
+                        <Moon className="w-4 h-4 text-indigo-500" />
+                        Fin de journée
+                      </label>
+                      <select
+                        value={dayEndTime}
+                        onChange={(e) => setDayEndTime(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-white border-2 border-foreground/10 rounded-xl text-foreground focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                      >
+                        {Array.from({ length: 24 }, (_, i) => {
+                          const hour = i.toString().padStart(2, "0");
+                          return (
+                            <option key={hour} value={`${hour}:00`}>
+                              {hour}:00
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Checkbox garde de nuit */}
+                  <label className="flex items-start gap-3 p-4 rounded-xl border-2 border-foreground/10 hover:border-indigo-300 cursor-pointer transition-all mb-4">
+                    <input
+                      type="checkbox"
+                      checked={allowOvernightStay}
+                      onChange={(e) => setAllowOvernightStay(e.target.checked)}
+                      className="mt-1 w-5 h-5 rounded border-foreground/20 text-indigo-500 focus:ring-indigo-500"
+                    />
+                    <div className="flex-1">
+                      <span className="font-medium text-foreground flex items-center gap-2">
+                        <Moon className="w-4 h-4 text-indigo-500" />
+                        J&apos;accepte la garde de nuit
+                      </span>
+                      <p className="text-xs text-text-light mt-1">
+                        L&apos;animal peut rester la nuit (de {dayEndTime} à {dayStartTime} le lendemain)
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Prix de la nuit - seulement si garde de nuit activée */}
+                  {allowOvernightStay && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                    >
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        Prix de la nuit
+                      </label>
+                      <div className="relative w-48">
+                        <input
+                          type="number"
+                          value={overnightPrice || ""}
+                          onChange={(e) => setOvernightPrice(parseFloat(e.target.value) || 0)}
+                          placeholder="20"
+                          step="0.50"
+                          min="0"
+                          className="w-full px-4 py-2.5 pr-12 bg-white border-2 border-foreground/10 rounded-xl text-foreground focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                        />
+                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-text-light">€</span>
+                      </div>
+                      <p className="text-xs text-text-light mt-2">
+                        Ce prix sera ajouté pour chaque nuit lors d&apos;une réservation multi-jours
+                      </p>
+                    </motion.div>
+                  )}
+                </div>
+              )}
             </motion.div>
           )}
 
@@ -339,6 +582,9 @@ export default function ServiceForm({
                 onLocalChange={setLocalVariants}
                 billingType={selectedCategory?.billingType}
                 category={category}
+                defaultVariants={selectedCategory?.defaultVariants}
+                allowedPriceUnits={selectedCategory?.allowedPriceUnits}
+                allowCustomVariants={selectedCategory?.allowCustomVariants}
               />
 
               {localVariants.length === 0 && (

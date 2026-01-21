@@ -71,6 +71,8 @@ export const upsertProfile = mutation({
       breed: v.optional(v.string()),
       age: v.optional(v.number()),
     })), v.null())),
+    // Nombre max d'animaux acceptés en même temps
+    maxAnimalsPerSlot: v.optional(v.union(v.number(), v.null())),
   },
   handler: async (ctx, args) => {
     // Vérifier la session
@@ -152,6 +154,7 @@ export const upsertProfile = mutation({
       hasGarden: nullToUndefined(args.hasGarden),
       hasVehicle: nullToUndefined(args.hasVehicle),
       ownedAnimals: nullToUndefined(args.ownedAnimals),
+      maxAnimalsPerSlot: nullToUndefined(args.maxAnimalsPerSlot),
       updatedAt: now,
     };
 

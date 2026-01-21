@@ -23,6 +23,8 @@ import {
   Check,
   Percent,
   Info,
+  Moon,
+  Sun,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -60,6 +62,11 @@ interface PendingBookingData {
     category: string;
     categoryName: string;
     categoryIcon?: string;
+    // Overnight settings from service
+    allowOvernightStay?: boolean;
+    dayStartTime?: string;
+    dayEndTime?: string;
+    overnightPrice?: number;
   };
   variant: {
     id: string;
@@ -67,6 +74,13 @@ interface PendingBookingData {
     price: number;
     priceUnit: string;
     duration?: number;
+    pricing?: {
+      hourly?: number;
+      daily?: number;
+      weekly?: number;
+      monthly?: number;
+      nightly?: number;
+    };
   } | null;
   options: Array<{ id: string; name: string; price: number }>;
   availableOptions: ServiceOption[];
@@ -76,6 +90,12 @@ interface PendingBookingData {
     startTime?: string;
   };
   amount: number;
+  // Overnight booking data
+  overnight?: {
+    includeOvernightStay?: boolean;
+    overnightNights?: number;
+    overnightAmount?: number;
+  };
   userId?: Id<"users">;
   expiresAt: number;
 }
@@ -87,6 +107,201 @@ interface GuestData {
   phone: string;
   password: string;
   confirmPassword: string;
+}
+
+// Smart price calculation result interface
+interface PriceCalculationResult {
+  firstDayAmount: number;
+  firstDayHours: number;
+  firstDayIsFullDay: boolean;
+  fullDays: number;
+  fullDaysAmount: number;
+  lastDayAmount: number;
+  lastDayHours: number;
+  lastDayIsFullDay: boolean;
+  nightsAmount: number;
+  nights: number;
+  optionsAmount: number;
+  totalAmount: number;
+  hourlyRate: number;
+  dailyRate: number;
+  nightlyRate: number;
+}
+
+// Helper: Parse time to minutes
+function parseTimeToMinutes(time: string): number {
+  const [hours, minutes] = time.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+// Helper: Calculate hours between two times
+function calculateHoursBetween(startTime: string, endTime: string): number {
+  const startMinutes = parseTimeToMinutes(startTime);
+  const endMinutes = parseTimeToMinutes(endTime);
+  const diff = endMinutes - startMinutes;
+  return Math.max(0, diff / 60);
+}
+
+// Helper: Calculate days between two dates
+function daysBetweenDates(startDate: string, endDate: string): number {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diffTime = end.getTime() - start.getTime();
+  return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+}
+
+// Calculate smart pricing with partial day support
+function calculateSmartPrice(params: {
+  startDate: string;
+  endDate: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  includeOvernightStay: boolean;
+  dayStartTime: string;
+  dayEndTime: string;
+  workdayHours: number;
+  pricing: {
+    hourly?: number;
+    daily?: number;
+    nightly?: number;
+  };
+  optionsTotal: number;
+}): PriceCalculationResult {
+  const {
+    startDate,
+    endDate,
+    startTime,
+    endTime,
+    includeOvernightStay,
+    dayStartTime,
+    dayEndTime,
+    workdayHours,
+    pricing,
+    optionsTotal,
+  } = params;
+
+  // Determine rates (derive missing rates from available ones)
+  const hourlyRate = pricing.hourly || (pricing.daily ? Math.round(pricing.daily / workdayHours) : 0);
+  const dailyRate = pricing.daily || (hourlyRate ? hourlyRate * workdayHours : 0);
+  const nightlyRate = pricing.nightly || 0;
+
+  // Calculate total days
+  const effectiveEndDate = endDate || startDate;
+  const totalDays = daysBetweenDates(startDate, effectiveEndDate) + 1;
+
+  // Single day booking
+  if (totalDays === 1) {
+    let firstDayHours: number;
+    let firstDayAmount: number;
+    let firstDayIsFullDay = false;
+
+    if (startTime && endTime) {
+      // Specific time range
+      firstDayHours = calculateHoursBetween(startTime, endTime);
+      if (firstDayHours >= workdayHours && dailyRate > 0) {
+        firstDayAmount = dailyRate;
+        firstDayIsFullDay = true;
+      } else {
+        firstDayAmount = Math.round(hourlyRate * firstDayHours);
+      }
+    } else {
+      // Full day
+      firstDayHours = workdayHours;
+      firstDayAmount = dailyRate || (hourlyRate * workdayHours);
+      firstDayIsFullDay = true;
+    }
+
+    return {
+      firstDayAmount,
+      firstDayHours,
+      firstDayIsFullDay,
+      fullDays: 0,
+      fullDaysAmount: 0,
+      lastDayAmount: 0,
+      lastDayHours: 0,
+      lastDayIsFullDay: false,
+      nightsAmount: 0,
+      nights: 0,
+      optionsAmount: optionsTotal,
+      totalAmount: firstDayAmount + optionsTotal,
+      hourlyRate,
+      dailyRate,
+      nightlyRate,
+    };
+  }
+
+  // Multi-day booking
+  // First day calculation
+  const effectiveStartTime = startTime || dayStartTime;
+  const firstDayEndTime = dayEndTime;
+  const firstDayHours = calculateHoursBetween(effectiveStartTime, firstDayEndTime);
+  let firstDayAmount: number;
+  let firstDayIsFullDay = false;
+
+  if (firstDayHours >= workdayHours && dailyRate > 0) {
+    firstDayAmount = dailyRate;
+    firstDayIsFullDay = true;
+  } else if (hourlyRate > 0) {
+    firstDayAmount = Math.round(hourlyRate * firstDayHours);
+  } else {
+    firstDayAmount = dailyRate;
+    firstDayIsFullDay = true;
+  }
+
+  // Last day calculation
+  const lastDayStartTime = dayStartTime;
+  const effectiveEndTime = endTime || dayEndTime;
+  const lastDayHours = calculateHoursBetween(lastDayStartTime, effectiveEndTime);
+  let lastDayAmount: number;
+  let lastDayIsFullDay = false;
+
+  if (lastDayHours >= workdayHours && dailyRate > 0) {
+    lastDayAmount = dailyRate;
+    lastDayIsFullDay = true;
+  } else if (hourlyRate > 0) {
+    lastDayAmount = Math.round(hourlyRate * lastDayHours);
+  } else {
+    lastDayAmount = dailyRate;
+    lastDayIsFullDay = true;
+  }
+
+  // Full days in between (excluding first and last)
+  const fullDays = Math.max(0, totalDays - 2);
+  const fullDaysAmount = fullDays * dailyRate;
+
+  // Nights
+  const nights = includeOvernightStay ? totalDays - 1 : 0;
+  const nightsAmount = nights * nightlyRate;
+
+  const totalAmount = firstDayAmount + fullDaysAmount + lastDayAmount + nightsAmount + optionsTotal;
+
+  return {
+    firstDayAmount,
+    firstDayHours,
+    firstDayIsFullDay,
+    fullDays,
+    fullDaysAmount,
+    lastDayAmount,
+    lastDayHours,
+    lastDayIsFullDay,
+    nightsAmount,
+    nights,
+    optionsAmount: optionsTotal,
+    totalAmount,
+    hourlyRate,
+    dailyRate,
+    nightlyRate,
+  };
+}
+
+// Format hours for display
+function formatHoursDisplay(hours: number): string {
+  if (hours === Math.floor(hours)) {
+    return `${hours}h`;
+  }
+  const wholeHours = Math.floor(hours);
+  const minutes = Math.round((hours - wholeHours) * 60);
+  return `${wholeHours}h${minutes.toString().padStart(2, "0")}`;
 }
 
 
@@ -219,6 +434,18 @@ export default function ReservationPage({
       : "skip"
   );
 
+  // Workday config from admin settings
+  const workdayConfig = useQuery(api.admin.config.getWorkdayConfig);
+  const workdayHours = workdayConfig?.workdayHours ?? 8;
+
+  // Announcer availability preferences
+  const announcerPreferences = useQuery(
+    api.public.search.getAnnouncerAvailabilityPreferences,
+    bookingData?.announcer?.id
+      ? { announcerId: bookingData.announcer.id }
+      : "skip"
+  );
+
   // Mutations
   const finalizeBooking = useMutation(api.public.booking.finalizeBooking);
   const finalizeAsGuest = useMutation(api.public.booking.finalizeBookingAsGuest);
@@ -234,41 +461,59 @@ export default function ReservationPage({
     }
   }, [bookingData?.options]);
 
-  // Calculer le prix de base du service (taux horaire × durée)
-  const getServiceBasePrice = () => {
-    if (!bookingData?.variant) return 0;
-    const { price, duration, priceUnit } = bookingData.variant;
-
-    // Si le service est facturé à l'heure et a une durée définie
-    if (priceUnit === "hour" && duration) {
-      return calculateServicePrice(price, duration);
-    }
-
-    // Sinon, utiliser le prix stocké (pour les services à la journée, etc.)
-    return price;
+  // Calculer le nombre de jours entre deux dates
+  const calculateDays = () => {
+    if (!bookingData) return 1;
+    const start = new Date(bookingData.dates.startDate);
+    const end = new Date(bookingData.dates.endDate);
+    return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
   };
 
-  const serviceBasePrice = getServiceBasePrice();
+  const daysCount = calculateDays();
 
-  // Calculer le prix total avec les options sélectionnées
-  const calculateTotalAmount = () => {
-    if (!bookingData) return 0;
+  // Calculer le total des options sélectionnées
+  const optionsTotal = selectedOptionIds.reduce((sum, optId) => {
+    const option = bookingData?.availableOptions?.find((o: ServiceOption) => o.id === optId);
+    return sum + (option?.price || 0);
+  }, 0);
 
-    // Commencer avec le prix du service calculé
-    let total = serviceBasePrice;
+  // Smart price calculation
+  const priceCalculation: PriceCalculationResult | null = (() => {
+    if (!bookingData?.variant) return null;
 
-    // Ajouter les options actuellement sélectionnées
-    for (const optId of selectedOptionIds) {
-      const option = bookingData.availableOptions?.find((o: ServiceOption) => o.id === optId);
-      if (option) {
-        total += option.price;
-      }
-    }
+    const pricing = bookingData.variant.pricing;
 
-    return total;
-  };
+    // Get announcer working hours
+    const dayStartTime = bookingData.service.dayStartTime ||
+                         announcerPreferences?.acceptReservationsFrom || "08:00";
+    const dayEndTime = bookingData.service.dayEndTime ||
+                       announcerPreferences?.acceptReservationsTo || "20:00";
 
-  const totalAmount = calculateTotalAmount();
+    return calculateSmartPrice({
+      startDate: bookingData.dates.startDate,
+      endDate: bookingData.dates.endDate,
+      startTime: bookingData.dates.startTime || null,
+      endTime: null, // End time not stored in pending booking yet
+      includeOvernightStay: bookingData.overnight?.includeOvernightStay || false,
+      dayStartTime,
+      dayEndTime,
+      workdayHours,
+      pricing: {
+        hourly: pricing?.hourly || bookingData.variant.price,
+        daily: pricing?.daily,
+        nightly: pricing?.nightly || bookingData.service.overnightPrice,
+      },
+      optionsTotal,
+    });
+  })();
+
+  // Extract values from price calculation
+  const serviceBasePrice = priceCalculation
+    ? priceCalculation.firstDayAmount + priceCalculation.fullDaysAmount + priceCalculation.lastDayAmount
+    : 0;
+  const overnightAmount = priceCalculation?.nightsAmount ?? 0;
+  const totalAmount = priceCalculation?.totalAmount ?? 0;
+  const isMultiDay = bookingData?.dates.endDate !== bookingData?.dates.startDate;
 
   // Calculer la commission
   const commissionRate = commissionData?.rate ?? 0;
@@ -1100,21 +1345,107 @@ export default function ReservationPage({
                   </div>
                 )}
 
-                {/* Prix */}
+                {/* Prix - Détail du calcul intelligent */}
                 <div className="pt-4">
-                  {bookingData.variant && (
-                    <div className="mb-2">
+                  {priceCalculation && (
+                    <div className="space-y-2 mb-2">
+                      {/* Premier jour (ou journée unique) */}
+                      {priceCalculation.firstDayHours > 0 && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-text-light flex items-center gap-1">
+                            {isMultiDay ? (
+                              <>
+                                <Sun className="w-3 h-3" />
+                                {formatDate(bookingData.dates.startDate).split(",")[0]}
+                                {priceCalculation.firstDayIsFullDay ? (
+                                  <span className="text-text-light"> (journée)</span>
+                                ) : (
+                                  <span className="text-primary"> ({formatHoursDisplay(priceCalculation.firstDayHours)})</span>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <Clock className="w-3 h-3" />
+                                {priceCalculation.firstDayIsFullDay
+                                  ? "Journée complète"
+                                  : `${formatHoursDisplay(priceCalculation.firstDayHours)} de prestation`}
+                              </>
+                            )}
+                          </span>
+                          <span className="text-foreground font-medium">
+                            {formatPrice(priceCalculation.firstDayAmount)}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Jours complets intermédiaires */}
+                      {priceCalculation.fullDays > 0 && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-text-light flex items-center gap-1">
+                            <Sun className="w-3 h-3" />
+                            {priceCalculation.fullDays} journée{priceCalculation.fullDays > 1 ? "s" : ""} complète{priceCalculation.fullDays > 1 ? "s" : ""}
+                          </span>
+                          <span className="text-foreground font-medium">
+                            {formatPrice(priceCalculation.fullDaysAmount)}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Dernier jour (multi-jours) */}
+                      {isMultiDay && priceCalculation.lastDayHours > 0 && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-text-light flex items-center gap-1">
+                            <Sun className="w-3 h-3" />
+                            {formatDate(bookingData.dates.endDate).split(",")[0]}
+                            {priceCalculation.lastDayIsFullDay ? (
+                              <span className="text-text-light"> (journée)</span>
+                            ) : (
+                              <span className="text-primary"> ({formatHoursDisplay(priceCalculation.lastDayHours)})</span>
+                            )}
+                          </span>
+                          <span className="text-foreground font-medium">
+                            {formatPrice(priceCalculation.lastDayAmount)}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Info tarifs */}
+                      {(priceCalculation.hourlyRate > 0 || priceCalculation.dailyRate > 0) && (
+                        <div className="text-xs text-text-light pt-1">
+                          {priceCalculation.hourlyRate > 0 && (
+                            <span>Tarif: {formatPrice(priceCalculation.hourlyRate)}/h</span>
+                          )}
+                          {priceCalculation.hourlyRate > 0 && priceCalculation.dailyRate > 0 && <span> • </span>}
+                          {priceCalculation.dailyRate > 0 && (
+                            <span>{formatPrice(priceCalculation.dailyRate)}/jour</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Affichage des nuits si garde de nuit incluse */}
+                  {bookingData.overnight?.includeOvernightStay && priceCalculation && priceCalculation.nights > 0 && (
+                    <div className="mb-2 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-text-light">{bookingData.variant.name}</span>
-                        <span className="text-foreground font-medium">
-                          {formatPrice(serviceBasePrice)}
+                        <span className="text-indigo-700 flex items-center gap-1.5">
+                          <Moon className="w-4 h-4" />
+                          Garde de nuit ({priceCalculation.nights} nuit{priceCalculation.nights > 1 ? "s" : ""})
+                        </span>
+                        <span className="text-indigo-700 font-medium">
+                          +{formatPrice(priceCalculation.nightsAmount)}
                         </span>
                       </div>
-                      {/* Détail du calcul si service horaire avec durée */}
-                      {bookingData.variant.priceUnit === "hour" && bookingData.variant.duration && (
-                        <p className="text-xs text-text-light mt-0.5">
-                          {formatPrice(bookingData.variant.price)}/h × {formatDuration(bookingData.variant.duration)}
-                        </p>
+                      {/* Détail du calcul des nuits */}
+                      <p className="text-xs text-indigo-500 mt-1">
+                        {formatPrice(priceCalculation.nightlyRate)}/nuit × {priceCalculation.nights} nuit{priceCalculation.nights > 1 ? "s" : ""}
+                      </p>
+                      {/* Horaires journée */}
+                      {bookingData.service.dayStartTime && bookingData.service.dayEndTime && (
+                        <div className="flex items-center gap-1.5 text-xs text-indigo-500 mt-2">
+                          <Sun className="w-3.5 h-3.5" />
+                          Journées: {bookingData.service.dayStartTime} - {bookingData.service.dayEndTime}
+                        </div>
                       )}
                     </div>
                   )}

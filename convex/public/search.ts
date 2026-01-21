@@ -506,6 +506,14 @@ interface ServiceVariant {
   duration?: number;
   includedFeatures?: string[];
   isActive: boolean;
+  // Multi-pricing support
+  pricing?: {
+    hourly?: number;
+    daily?: number;
+    weekly?: number;
+    monthly?: number;
+    nightly?: number;
+  };
 }
 
 interface ServiceOption {
@@ -528,6 +536,11 @@ interface ServiceDetail {
   animalTypes: string[];
   variants: ServiceVariant[];
   options: ServiceOption[];
+  // Overnight stay support
+  allowOvernightStay?: boolean;
+  dayStartTime?: string;
+  dayEndTime?: string;
+  overnightPrice?: number;
 }
 
 // Query pour obtenir les détails des services d'un annonceur
@@ -574,6 +587,11 @@ export const getAnnouncerServiceDetails = query({
         categoryIcon: categoryData?.icon,
         categoryDescription: categoryData?.description,
         animalTypes: service.animalTypes,
+        // Overnight fields from service
+        allowOvernightStay: service.allowOvernightStay,
+        dayStartTime: service.dayStartTime,
+        dayEndTime: service.dayEndTime,
+        overnightPrice: service.overnightPrice,
         variants: variants.map((v) => ({
           id: v._id,
           name: v.name,
@@ -583,6 +601,8 @@ export const getAnnouncerServiceDetails = query({
           duration: v.duration,
           includedFeatures: v.includedFeatures,
           isActive: v.isActive,
+          // Pricing object for multi-pricing support
+          pricing: v.pricing,
         })),
         options: options.map((o) => ({
           id: o._id,
@@ -598,6 +618,24 @@ export const getAnnouncerServiceDetails = query({
     }
 
     return results;
+  },
+});
+
+// Query pour obtenir les préférences de disponibilité d'un annonceur
+export const getAnnouncerAvailabilityPreferences = query({
+  args: {
+    announcerId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const preferences = await ctx.db
+      .query("userPreferences")
+      .withIndex("by_user", (q) => q.eq("userId", args.announcerId))
+      .first();
+
+    return {
+      acceptReservationsFrom: preferences?.acceptReservationsFrom ?? "08:00",
+      acceptReservationsTo: preferences?.acceptReservationsTo ?? "20:00",
+    };
   },
 });
 
@@ -818,6 +856,46 @@ export const getAnnouncerAvailabilityCalendar = query({
       calendar,
       bufferBefore,
       bufferAfter,
+    };
+  },
+});
+
+// Query pour obtenir les informations de base d'un annonceur
+export const getAnnouncerById = query({
+  args: {
+    announcerId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    // Récupérer l'annonceur
+    const announcer = await ctx.db.get(args.announcerId);
+    if (!announcer) {
+      return null;
+    }
+
+    // Récupérer le profil
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", args.announcerId))
+      .first();
+
+    // Récupérer la photo de profil
+    const profilePhoto = await ctx.db
+      .query("photos")
+      .withIndex("by_user", (q) => q.eq("userId", args.announcerId))
+      .filter((q) => q.eq(q.field("isProfilePhoto"), true))
+      .first();
+
+    let profileImageUrl: string | null = null;
+    if (profilePhoto?.storageId) {
+      profileImageUrl = await ctx.storage.getUrl(profilePhoto.storageId);
+    }
+
+    return {
+      id: announcer._id,
+      firstName: announcer.firstName,
+      lastName: announcer.lastName,
+      profileImage: profileImageUrl,
+      location: profile?.city ?? profile?.location ?? "",
     };
   },
 });

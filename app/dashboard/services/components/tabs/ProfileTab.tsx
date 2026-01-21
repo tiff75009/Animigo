@@ -26,6 +26,8 @@ export interface ProfileFormData {
   hasGarden: boolean;
   hasVehicle: boolean;
   ownedAnimals: OwnedAnimal[];
+  // Nombre max d'animaux acceptés en même temps
+  maxAnimalsPerSlot?: number;
 }
 
 interface ProfileTabProps {
@@ -106,9 +108,11 @@ export default function ProfileTab({
           acceptedAnimals={profileForm.acceptedAnimals}
           hasGarden={profileForm.hasGarden}
           hasVehicle={profileForm.hasVehicle}
+          maxAnimalsPerSlot={profileForm.maxAnimalsPerSlot}
           onAcceptedAnimalsChange={(acceptedAnimals) => onProfileChange({ acceptedAnimals })}
           onHasGardenChange={(hasGarden) => onProfileChange({ hasGarden })}
           onHasVehicleChange={(hasVehicle) => onProfileChange({ hasVehicle })}
+          onMaxAnimalsPerSlotChange={(maxAnimalsPerSlot) => onProfileChange({ maxAnimalsPerSlot })}
         />
       </motion.div>
 

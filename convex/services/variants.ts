@@ -121,6 +121,14 @@ export const addVariant = mutation({
       v.literal("month"),
       v.literal("flat")
     ),
+    // Multi-tarification par unité de temps
+    pricing: v.optional(v.object({
+      hourly: v.optional(v.number()),
+      daily: v.optional(v.number()),
+      weekly: v.optional(v.number()),
+      monthly: v.optional(v.number()),
+      nightly: v.optional(v.number()),
+    })),
     duration: v.optional(v.number()),
     includedFeatures: v.optional(v.array(v.string())),
   },
@@ -146,6 +154,7 @@ export const addVariant = mutation({
       description: args.description,
       price: args.price,
       priceUnit: args.priceUnit,
+      pricing: args.pricing,
       duration: args.duration,
       includedFeatures: args.includedFeatures,
       order: maxOrder + 1,
@@ -186,6 +195,14 @@ export const updateVariant = mutation({
         v.literal("flat")
       )
     ),
+    // Multi-tarification par unité de temps
+    pricing: v.optional(v.object({
+      hourly: v.optional(v.number()),
+      daily: v.optional(v.number()),
+      weekly: v.optional(v.number()),
+      monthly: v.optional(v.number()),
+      nightly: v.optional(v.number()),
+    })),
     duration: v.optional(v.number()),
     includedFeatures: v.optional(v.array(v.string())),
     isActive: v.optional(v.boolean()),
@@ -207,6 +224,7 @@ export const updateVariant = mutation({
     if (args.description !== undefined) updates.description = args.description;
     if (args.price !== undefined) updates.price = args.price;
     if (args.priceUnit !== undefined) updates.priceUnit = args.priceUnit;
+    if (args.pricing !== undefined) updates.pricing = args.pricing;
     if (args.duration !== undefined) updates.duration = args.duration;
     if (args.includedFeatures !== undefined)
       updates.includedFeatures = args.includedFeatures;

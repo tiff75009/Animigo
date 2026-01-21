@@ -1,6 +1,7 @@
 import { internalMutation, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
 import { Id } from "../_generated/dataModel";
+import { internal } from "../_generated/api";
 
 // Query interne pour récupérer les configs email
 export const getEmailConfigs = internalQuery({
@@ -215,6 +216,40 @@ export const verifyEmailToken = internalMutation({
           .filter((q) => q.eq(q.field("name"), pendingBooking.clientData?.animalName || ""))
           .first();
 
+        // Calculer la commission
+        // serviceAmount = pendingBooking.calculatedAmount (prix du service, ce que l'annonceur reçoit)
+        const serviceAmount = pendingBooking.calculatedAmount;
+
+        // Déterminer le type de commission basé sur le type d'annonceur
+        let commissionType: "particulier" | "micro_entrepreneur" | "professionnel" = "particulier";
+        if (announcer?.accountType === "annonceur_pro") {
+          if (announcer.companyType === "micro_enterprise") {
+            commissionType = "micro_entrepreneur";
+          } else {
+            commissionType = "professionnel";
+          }
+        }
+
+        // Récupérer le taux de commission depuis la config
+        const commissionConfig = await ctx.db
+          .query("systemConfig")
+          .withIndex("by_key", (q) => q.eq("key", `commission_${commissionType}`))
+          .first();
+
+        // Taux par défaut si non configuré
+        const defaultRates = { particulier: 15, micro_entrepreneur: 12, professionnel: 10 };
+        const commissionRate = commissionConfig
+          ? parseFloat(commissionConfig.value)
+          : defaultRates[commissionType];
+
+        // Calculer les montants
+        // platformFee = commission (ce que la plateforme garde)
+        // announcerEarnings = serviceAmount (ce que l'annonceur reçoit)
+        // totalAmount = serviceAmount + platformFee (ce que le client paie)
+        const platformFee = Math.round((serviceAmount * commissionRate) / 100);
+        const announcerEarnings = serviceAmount;
+        const totalAmount = serviceAmount + platformFee;
+
         // Créer la mission
         const missionId = await ctx.db.insert("missions", {
           announcerId: pendingBooking.announcerId,
@@ -235,10 +270,18 @@ export const verifyEmailToken = internalMutation({
           startTime: pendingBooking.startTime,
           endTime: pendingBooking.endTime,
           status: "pending_acceptance", // En attente d'acceptation par l'annonceur
-          amount: pendingBooking.calculatedAmount,
+          amount: totalAmount, // Montant total que le client paie (service + commission)
+          platformFee, // Commission de la plateforme
+          announcerEarnings, // Ce que l'annonceur reçoit (prix du service)
           paymentStatus: "not_due",
           location: pendingBooking.location || "",
           clientNotes: pendingBooking.clientData?.notes,
+          // Garde de nuit
+          includeOvernightStay: pendingBooking.includeOvernightStay,
+          overnightNights: pendingBooking.overnightNights,
+          overnightAmount: pendingBooking.overnightAmount,
+          dayStartTime: service?.dayStartTime,
+          dayEndTime: service?.dayEndTime,
           createdAt: Date.now(),
           updatedAt: Date.now(),
         });
@@ -247,6 +290,52 @@ export const verifyEmailToken = internalMutation({
         await ctx.db.patch(pendingBooking._id, {
           status: "completed",
         });
+
+        // Envoyer l'email de notification à l'annonceur
+        if (announcer) {
+          // Récupérer la config email depuis la DB
+          const apiKeyConfig = await ctx.db
+            .query("systemConfig")
+            .withIndex("by_key", (q) => q.eq("key", "resend_api_key"))
+            .first();
+          const fromEmailConfig = await ctx.db
+            .query("systemConfig")
+            .withIndex("by_key", (q) => q.eq("key", "resend_from_email"))
+            .first();
+          const fromNameConfig = await ctx.db
+            .query("systemConfig")
+            .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
+            .first();
+          const appUrlConfig = await ctx.db
+            .query("systemConfig")
+            .withIndex("by_key", (q) => q.eq("key", "app_url"))
+            .first();
+
+          await ctx.scheduler.runAfter(0, internal.api.email.sendNewReservationRequestEmail, {
+            announcerEmail: announcer.email,
+            announcerFirstName: announcer.firstName,
+            clientName: `${pendingBooking.clientData?.firstName || user.firstName} ${pendingBooking.clientData?.lastName || user.lastName}`,
+            reservation: {
+              serviceName,
+              startDate: pendingBooking.startDate,
+              endDate: pendingBooking.endDate,
+              startTime: pendingBooking.startTime,
+              endTime: pendingBooking.endTime,
+              animalName: pendingBooking.clientData?.animalName || "Animal",
+              animalType: pendingBooking.clientData?.animalType || "",
+              location: pendingBooking.location || "",
+              includeOvernightStay: pendingBooking.includeOvernightStay,
+              overnightNights: pendingBooking.overnightNights,
+              totalAmount: totalAmount,
+            },
+            emailConfig: apiKeyConfig?.value ? {
+              apiKey: apiKeyConfig.value,
+              fromEmail: fromEmailConfig?.value,
+              fromName: fromNameConfig?.value,
+            } : undefined,
+            appUrl: appUrlConfig?.value || undefined,
+          });
+        }
 
         // Préparer les données pour l'email de confirmation
         reservationData = {
@@ -261,7 +350,7 @@ export const verifyEmailToken = internalMutation({
           animalName: pendingBooking.clientData?.animalName,
           animalType: pendingBooking.clientData?.animalType,
           location: pendingBooking.location,
-          totalAmount: pendingBooking.calculatedAmount,
+          totalAmount: totalAmount,
         };
       }
     }

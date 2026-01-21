@@ -17,6 +17,8 @@ export interface ServiceCategory {
   icon?: string;
   imageUrl?: string | null;
   billingType?: "hourly" | "daily" | "flexible";
+  allowRangeBooking?: boolean;
+  allowOvernightStay?: boolean;
 }
 
 export interface Coordinates {
@@ -40,6 +42,8 @@ export interface SearchFilters {
   // Pour services daily
   startDate: string | null; // "YYYY-MM-DD"
   endDate: string | null; // "YYYY-MM-DD"
+  // Pour plage horaire (allowRangeBooking + même jour)
+  endTime: string | null; // "HH:MM"
   // Options
   includeUnavailable: boolean;
 }
@@ -77,6 +81,7 @@ const initialFilters: SearchFilters = {
   time: null,
   startDate: null,
   endDate: null,
+  endTime: null,
   includeUnavailable: false,
 };
 
@@ -186,6 +191,7 @@ export function useSearch() {
       time: null,
       startDate: null,
       endDate: null,
+      endTime: null,
     }));
   }, []);
 
@@ -207,6 +213,10 @@ export function useSearch() {
 
   const setTime = useCallback((time: string | null) => {
     setFilters((prev) => ({ ...prev, time }));
+  }, []);
+
+  const setEndTime = useCallback((endTime: string | null) => {
+    setFilters((prev) => ({ ...prev, endTime }));
   }, []);
 
   const setDateRange = useCallback(
@@ -252,6 +262,7 @@ export function useSearch() {
     setRadius,
     setDate,
     setTime,
+    setEndTime,
     setDateRange,
     setIncludeUnavailable,
     resetFilters,

@@ -34,6 +34,11 @@ export const listCategories = query({
           isActive: cat.isActive,
           billingType: cat.billingType,
           defaultHourlyPrice: cat.defaultHourlyPrice,
+          allowRangeBooking: cat.allowRangeBooking,
+          allowedPriceUnits: cat.allowedPriceUnits,
+          defaultVariants: cat.defaultVariants,
+          allowCustomVariants: cat.allowCustomVariants,
+          allowOvernightStay: cat.allowOvernightStay,
           createdAt: cat.createdAt,
           updatedAt: cat.updatedAt,
         };
@@ -71,6 +76,11 @@ export const getActiveCategories = query({
           icon: cat.icon,
           imageUrl,
           billingType: cat.billingType,
+          allowRangeBooking: cat.allowRangeBooking,
+          allowedPriceUnits: cat.allowedPriceUnits,
+          defaultVariants: cat.defaultVariants,
+          allowCustomVariants: cat.allowCustomVariants,
+          allowOvernightStay: cat.allowOvernightStay,
         };
       })
     );
@@ -103,6 +113,25 @@ export const createCategory = mutation({
       v.literal("flexible")
     )),
     defaultHourlyPrice: v.optional(v.number()), // Prix horaire conseillé par défaut (en centimes)
+    allowRangeBooking: v.optional(v.boolean()), // Permettre la réservation par plage
+    // Multi-pricing : types de prix autorisés
+    allowedPriceUnits: v.optional(v.array(v.union(
+      v.literal("hour"),
+      v.literal("day"),
+      v.literal("week"),
+      v.literal("month")
+    ))),
+    // Formules par défaut
+    defaultVariants: v.optional(v.array(v.object({
+      name: v.string(),
+      description: v.optional(v.string()),
+      suggestedDuration: v.optional(v.number()),
+      includedFeatures: v.optional(v.array(v.string())),
+    }))),
+    // Autoriser l'annonceur à créer ses propres formules
+    allowCustomVariants: v.optional(v.boolean()),
+    // Autoriser la garde de nuit pour cette catégorie
+    allowOvernightStay: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx, args.token);
@@ -131,6 +160,11 @@ export const createCategory = mutation({
       imageStorageId: args.imageStorageId,
       billingType: args.billingType,
       defaultHourlyPrice: args.defaultHourlyPrice,
+      allowRangeBooking: args.allowRangeBooking,
+      allowedPriceUnits: args.allowedPriceUnits,
+      defaultVariants: args.defaultVariants,
+      allowCustomVariants: args.allowCustomVariants,
+      allowOvernightStay: args.allowOvernightStay,
       order: maxOrder + 1,
       isActive: true,
       createdAt: now,
@@ -157,6 +191,25 @@ export const updateCategory = mutation({
       v.literal("flexible")
     )),
     defaultHourlyPrice: v.optional(v.number()), // Prix horaire conseillé par défaut (en centimes)
+    allowRangeBooking: v.optional(v.boolean()), // Permettre la réservation par plage
+    // Multi-pricing : types de prix autorisés
+    allowedPriceUnits: v.optional(v.array(v.union(
+      v.literal("hour"),
+      v.literal("day"),
+      v.literal("week"),
+      v.literal("month")
+    ))),
+    // Formules par défaut
+    defaultVariants: v.optional(v.array(v.object({
+      name: v.string(),
+      description: v.optional(v.string()),
+      suggestedDuration: v.optional(v.number()),
+      includedFeatures: v.optional(v.array(v.string())),
+    }))),
+    // Autoriser l'annonceur à créer ses propres formules
+    allowCustomVariants: v.optional(v.boolean()),
+    // Autoriser la garde de nuit pour cette catégorie
+    allowOvernightStay: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx, args.token);
@@ -174,6 +227,11 @@ export const updateCategory = mutation({
     if (args.isActive !== undefined) updates.isActive = args.isActive;
     if (args.billingType !== undefined) updates.billingType = args.billingType;
     if (args.defaultHourlyPrice !== undefined) updates.defaultHourlyPrice = args.defaultHourlyPrice;
+    if (args.allowRangeBooking !== undefined) updates.allowRangeBooking = args.allowRangeBooking;
+    if (args.allowedPriceUnits !== undefined) updates.allowedPriceUnits = args.allowedPriceUnits;
+    if (args.defaultVariants !== undefined) updates.defaultVariants = args.defaultVariants;
+    if (args.allowCustomVariants !== undefined) updates.allowCustomVariants = args.allowCustomVariants;
+    if (args.allowOvernightStay !== undefined) updates.allowOvernightStay = args.allowOvernightStay;
 
     await ctx.db.patch(args.categoryId, updates);
 
@@ -245,14 +303,16 @@ export const seedDefaultCategories = mutation({
       icon: string;
       description: string;
       billingType: "hourly" | "daily" | "flexible";
+      allowRangeBooking?: boolean;
+      allowOvernightStay?: boolean;
     }> = [
-      { slug: "garde", name: "Garde", icon: "🏠", description: "Garde à domicile ou en famille", billingType: "flexible" },
+      { slug: "garde", name: "Garde", icon: "🏠", description: "Garde à domicile ou en famille", billingType: "flexible", allowRangeBooking: true, allowOvernightStay: true },
       { slug: "promenade", name: "Promenade", icon: "🚶", description: "Balades et sorties", billingType: "hourly" },
       { slug: "toilettage", name: "Toilettage", icon: "🛁", description: "Soins et hygiène", billingType: "hourly" },
       { slug: "dressage", name: "Dressage", icon: "🎓", description: "Éducation et comportement", billingType: "hourly" },
       { slug: "agilite", name: "Agilité", icon: "🏃", description: "Sport et activités physiques", billingType: "hourly" },
       { slug: "transport", name: "Transport", icon: "🚗", description: "Accompagnement véhiculé", billingType: "hourly" },
-      { slug: "pension", name: "Pension", icon: "🏨", description: "Hébergement longue durée", billingType: "daily" },
+      { slug: "pension", name: "Pension", icon: "🏨", description: "Hébergement longue durée", billingType: "daily", allowRangeBooking: true, allowOvernightStay: true },
       { slug: "visite", name: "Visite", icon: "👋", description: "Visite à domicile", billingType: "hourly" },
       { slug: "medical", name: "Soins médicaux", icon: "💊", description: "Accompagnement vétérinaire", billingType: "hourly" },
     ];

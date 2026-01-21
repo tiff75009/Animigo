@@ -27,6 +27,15 @@ import ConfirmModal from "./shared/ConfirmModal";
 type PriceUnit = "hour" | "day" | "week" | "month" | "flat";
 type BillingType = "hourly" | "daily" | "flexible";
 
+// Multi-tarification par unité de temps
+interface Pricing {
+  hourly?: number;  // Prix à l'heure en centimes
+  daily?: number;   // Prix à la journée en centimes
+  weekly?: number;  // Prix à la semaine en centimes
+  monthly?: number; // Prix au mois en centimes
+  nightly?: number; // Prix de la nuit en centimes
+}
+
 // Variant pour le mode édition (avec ID backend)
 interface Variant {
   id: Id<"serviceVariants">;
@@ -34,6 +43,7 @@ interface Variant {
   description?: string;
   price: number;
   priceUnit: PriceUnit;
+  pricing?: Pricing;
   duration?: number;
   includedFeatures?: string[];
   order: number;
@@ -47,7 +57,17 @@ export interface LocalVariant {
   description?: string;
   price: number;
   priceUnit: PriceUnit;
+  pricing?: Pricing; // Multi-tarification
   duration?: number;
+  includedFeatures?: string[];
+  isFromDefault?: boolean; // Indique si c'est une formule par défaut
+}
+
+// Formule par défaut définie par l'admin
+interface DefaultVariant {
+  name: string;
+  description?: string;
+  suggestedDuration?: number;
   includedFeatures?: string[];
 }
 
@@ -62,6 +82,11 @@ interface VariantManagerProps {
   mode?: "edit" | "create";
   localVariants?: LocalVariant[];
   onLocalChange?: (variants: LocalVariant[]) => void;
+
+  // Formules par défaut et restrictions
+  defaultVariants?: DefaultVariant[];
+  allowedPriceUnits?: ("hour" | "day" | "week" | "month")[];
+  allowCustomVariants?: boolean; // Si false, ne peut utiliser que les formules par défaut
 
   // Commun
   serviceName: string;
@@ -82,24 +107,34 @@ const formatDuration = (minutes: number) => {
   return mins > 0 ? `${hours}h${mins}` : `${hours}h`;
 };
 
-// Helper pour obtenir les unités de prix autorisées selon le billingType
-const getAllowedPriceUnits = (billingType?: BillingType): { id: PriceUnit; label: string }[] => {
-  const allUnits = [
-    { id: "hour" as PriceUnit, label: "par heure" },
-    { id: "day" as PriceUnit, label: "par jour" },
-    { id: "week" as PriceUnit, label: "par semaine" },
-    { id: "month" as PriceUnit, label: "par mois" },
-    { id: "flat" as PriceUnit, label: "forfait" },
-  ];
+// Toutes les unités de prix disponibles
+const ALL_PRICE_UNITS: { id: PriceUnit; label: string; shortLabel: string }[] = [
+  { id: "hour", label: "par heure", shortLabel: "/h" },
+  { id: "day", label: "par jour", shortLabel: "/jour" },
+  { id: "week", label: "par semaine", shortLabel: "/sem" },
+  { id: "month", label: "par mois", shortLabel: "/mois" },
+  { id: "flat", label: "forfait", shortLabel: "forfait" },
+];
 
+// Helper pour obtenir les unités de prix autorisées selon la catégorie ou le billingType
+const getComputedPriceUnits = (
+  allowedPriceUnits?: ("hour" | "day" | "week" | "month")[],
+  billingType?: BillingType
+): { id: PriceUnit; label: string; shortLabel: string }[] => {
+  // Si allowedPriceUnits est défini par la catégorie admin, l'utiliser
+  if (allowedPriceUnits && allowedPriceUnits.length > 0) {
+    return ALL_PRICE_UNITS.filter((u) => allowedPriceUnits.includes(u.id as "hour" | "day" | "week" | "month"));
+  }
+
+  // Sinon, utiliser le billingType comme fallback
   switch (billingType) {
     case "hourly":
-      return allUnits.filter((u) => u.id === "hour" || u.id === "flat");
+      return ALL_PRICE_UNITS.filter((u) => u.id === "hour" || u.id === "flat");
     case "daily":
-      return allUnits.filter((u) => u.id !== "hour");
+      return ALL_PRICE_UNITS.filter((u) => u.id !== "hour");
     case "flexible":
     default:
-      return allUnits;
+      return ALL_PRICE_UNITS;
   }
 };
 
@@ -129,6 +164,9 @@ export default function VariantManager({
   mode = "edit",
   localVariants = [],
   onLocalChange,
+  defaultVariants = [],
+  allowedPriceUnits,
+  allowCustomVariants = true,
 }: VariantManagerProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -137,13 +175,28 @@ export default function VariantManager({
   const [error, setError] = useState<string | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [showDefaultVariants, setShowDefaultVariants] = useState(true);
 
-  // Form state
+  // Déterminer si on a des formules par défaut non encore ajoutées
+  const hasDefaultVariants = defaultVariants.length > 0;
+  const usedDefaultNames = localVariants.filter(v => v.isFromDefault).map(v => v.name);
+  const availableDefaultVariants = defaultVariants.filter(dv => !usedDefaultNames.includes(dv.name));
+  const canAddCustom = allowCustomVariants !== false;
+
+  // Form state avec multi-pricing
   const [formData, setFormData] = useState({
     name: "",
     description: "",
     price: 0,
     priceUnit: "flat" as PriceUnit,
+    // Multi-tarification: prix en euros (sera converti en centimes à la sauvegarde)
+    pricing: {
+      hourly: 0,
+      daily: 0,
+      weekly: 0,
+      monthly: 0,
+      nightly: 0,
+    },
     duration: 60,
     includedFeatures: [] as string[],
   });
@@ -154,7 +207,8 @@ export default function VariantManager({
   const updateVariantMutation = useMutation(api.services.variants.updateVariant);
   const deleteVariantMutation = useMutation(api.services.variants.deleteVariant);
 
-  const allowedPriceUnits = getAllowedPriceUnits(billingType);
+  const computedPriceUnits = getComputedPriceUnits(allowedPriceUnits, billingType);
+  const defaultPriceUnit = computedPriceUnits.length > 0 ? computedPriceUnits[0].id : "hour";
   const isCreateMode = mode === "create";
 
   // Déterminer les items à afficher selon le mode
@@ -165,9 +219,12 @@ export default function VariantManager({
         description: v.description,
         price: v.price,
         priceUnit: v.priceUnit,
+        pricing: v.pricing,
         duration: v.duration,
         includedFeatures: v.includedFeatures,
         isActive: true,
+        isFromDefault: v.isFromDefault,
+        needsPrice: !v.pricing || (!v.pricing.hourly && !v.pricing.daily && !v.pricing.weekly && !v.pricing.monthly),
       }))
     : variants.map((v) => ({
         id: v.id as string,
@@ -175,9 +232,12 @@ export default function VariantManager({
         description: v.description,
         price: v.price,
         priceUnit: v.priceUnit,
+        pricing: v.pricing,
         duration: v.duration,
         includedFeatures: v.includedFeatures,
         isActive: v.isActive,
+        isFromDefault: false,
+        needsPrice: false,
       }));
 
   const resetForm = () => {
@@ -185,7 +245,14 @@ export default function VariantManager({
       name: "",
       description: "",
       price: 0,
-      priceUnit: allowedPriceUnits[0]?.id || "flat",
+      priceUnit: defaultPriceUnit,
+      pricing: {
+        hourly: 0,
+        daily: 0,
+        weekly: 0,
+        monthly: 0,
+        nightly: 0,
+      },
       duration: 60,
       includedFeatures: [],
     });
@@ -201,6 +268,13 @@ export default function VariantManager({
       description: item.description || "",
       price: item.price / 100, // Convertir en euros pour l'édition
       priceUnit: item.priceUnit,
+      pricing: {
+        hourly: item.pricing?.hourly ? item.pricing.hourly / 100 : 0,
+        daily: item.pricing?.daily ? item.pricing.daily / 100 : 0,
+        weekly: item.pricing?.weekly ? item.pricing.weekly / 100 : 0,
+        monthly: item.pricing?.monthly ? item.pricing.monthly / 100 : 0,
+        nightly: item.pricing?.nightly ? item.pricing.nightly / 100 : 0,
+      },
       duration: item.duration || 60,
       includedFeatures: item.includedFeatures || [],
     });
@@ -227,12 +301,31 @@ export default function VariantManager({
   };
 
   const handleSave = async () => {
-    if (!formData.name || formData.price <= 0 || !formData.duration || formData.duration <= 0) return;
+    // Vérifier qu'au moins un prix est défini
+    const hasAtLeastOnePrice =
+      formData.pricing.hourly > 0 ||
+      formData.pricing.daily > 0 ||
+      formData.pricing.weekly > 0 ||
+      formData.pricing.monthly > 0;
+
+    if (!formData.name || !hasAtLeastOnePrice) return;
 
     setError(null);
 
-    // Prix horaire en centimes
-    const hourlyRateInCents = Math.round(formData.price * 100);
+    // Convertir les prix en centimes
+    const pricingInCents: Pricing = {};
+    if (formData.pricing.hourly > 0) pricingInCents.hourly = Math.round(formData.pricing.hourly * 100);
+    if (formData.pricing.daily > 0) pricingInCents.daily = Math.round(formData.pricing.daily * 100);
+    if (formData.pricing.weekly > 0) pricingInCents.weekly = Math.round(formData.pricing.weekly * 100);
+    if (formData.pricing.monthly > 0) pricingInCents.monthly = Math.round(formData.pricing.monthly * 100);
+    if (formData.pricing.nightly > 0) pricingInCents.nightly = Math.round(formData.pricing.nightly * 100);
+
+    // Prix principal = premier prix non-nul (pour rétrocompatibilité)
+    const mainPrice = pricingInCents.hourly || pricingInCents.daily || pricingInCents.weekly || pricingInCents.monthly || 0;
+    const mainPriceUnit: PriceUnit = pricingInCents.hourly ? "hour" :
+                                      pricingInCents.daily ? "day" :
+                                      pricingInCents.weekly ? "week" :
+                                      pricingInCents.monthly ? "month" : "hour";
 
     if (isCreateMode) {
       // Mode création: modifier les variantes locales
@@ -244,9 +337,10 @@ export default function VariantManager({
                 ...v,
                 name: formData.name,
                 description: formData.description || undefined,
-                price: hourlyRateInCents,
-                priceUnit: "hour" as PriceUnit,
-                duration: formData.duration,
+                price: mainPrice,
+                priceUnit: mainPriceUnit,
+                pricing: pricingInCents,
+                duration: formData.duration || undefined,
                 includedFeatures:
                   formData.includedFeatures.length > 0 ? formData.includedFeatures : undefined,
               }
@@ -259,9 +353,10 @@ export default function VariantManager({
           localId: generateLocalId(),
           name: formData.name,
           description: formData.description || undefined,
-          price: hourlyRateInCents,
-          priceUnit: "hour" as PriceUnit,
-          duration: formData.duration,
+          price: mainPrice,
+          priceUnit: mainPriceUnit,
+          pricing: pricingInCents,
+          duration: formData.duration || undefined,
           includedFeatures:
             formData.includedFeatures.length > 0 ? formData.includedFeatures : undefined,
         };
@@ -280,9 +375,10 @@ export default function VariantManager({
             variantId: editingId as Id<"serviceVariants">,
             name: formData.name,
             description: formData.description || undefined,
-            price: hourlyRateInCents,
-            priceUnit: "hour" as PriceUnit,
-            duration: formData.duration,
+            price: mainPrice,
+            priceUnit: mainPriceUnit,
+            pricing: pricingInCents,
+            duration: formData.duration || undefined,
             includedFeatures:
               formData.includedFeatures.length > 0 ? formData.includedFeatures : undefined,
           });
@@ -292,9 +388,10 @@ export default function VariantManager({
             serviceId,
             name: formData.name,
             description: formData.description || undefined,
-            price: hourlyRateInCents,
-            priceUnit: "hour" as PriceUnit,
-            duration: formData.duration,
+            price: mainPrice,
+            priceUnit: mainPriceUnit,
+            pricing: pricingInCents,
+            duration: formData.duration || undefined,
             includedFeatures:
               formData.includedFeatures.length > 0 ? formData.includedFeatures : undefined,
           });
@@ -358,6 +455,22 @@ export default function VariantManager({
     }
   };
 
+  // Ajouter une formule depuis les formules par défaut
+  const addFromDefault = (defaultVariant: DefaultVariant) => {
+    const newVariant: LocalVariant = {
+      localId: generateLocalId(),
+      name: defaultVariant.name,
+      description: defaultVariant.description || undefined,
+      price: 0, // L'utilisateur doit définir le prix
+      priceUnit: defaultPriceUnit, // Utiliser l'unité de prix par défaut de la catégorie
+      pricing: {}, // L'utilisateur doit définir les prix
+      duration: defaultVariant.suggestedDuration || undefined,
+      includedFeatures: defaultVariant.includedFeatures || undefined,
+      isFromDefault: true,
+    };
+    onLocalChange?.([...localVariants, newVariant]);
+  };
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       {/* Header */}
@@ -385,20 +498,23 @@ export default function VariantManager({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <motion.button
-            onClick={(e) => {
-              e.stopPropagation();
-              resetForm();
-              setIsAdding(true);
-              setIsExpanded(true);
-            }}
-            className="flex items-center gap-2 px-3 py-1.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            <Plus className="w-4 h-4" />
-            Ajouter
-          </motion.button>
+          {/* Bouton Ajouter uniquement si autorisé */}
+          {(canAddCustom || availableDefaultVariants.length === 0) && (
+            <motion.button
+              onClick={(e) => {
+                e.stopPropagation();
+                resetForm();
+                setIsAdding(true);
+                setIsExpanded(true);
+              }}
+              className="flex items-center gap-2 px-3 py-1.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <Plus className="w-4 h-4" />
+              Ajouter
+            </motion.button>
+          )}
           {isExpanded ? (
             <ChevronUp className="w-5 h-5 text-text-light" />
           ) : (
@@ -420,6 +536,69 @@ export default function VariantManager({
               <div className="mx-4 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-sm text-red-700">
                 <AlertTriangle className="w-4 h-4" />
                 {error}
+              </div>
+            )}
+
+            {/* Section formules par défaut disponibles */}
+            {isCreateMode && hasDefaultVariants && availableDefaultVariants.length > 0 && (
+              <div className="p-4 border-b border-gray-200 bg-purple-50/50">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h4 className="font-medium text-foreground flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-purple-500" />
+                      Formules suggérées
+                    </h4>
+                    <p className="text-sm text-text-light mt-1">
+                      Sélectionnez une formule et définissez votre tarif
+                    </p>
+                  </div>
+                  {!canAddCustom && (
+                    <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-full">
+                      Formules personnalisées non autorisées
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {availableDefaultVariants.map((dv, index) => (
+                    <motion.button
+                      key={index}
+                      onClick={() => addFromDefault(dv)}
+                      className="flex flex-col items-start p-4 bg-white border-2 border-purple-200 rounded-xl hover:border-purple-400 hover:bg-purple-50 transition-all text-left"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <Plus className="w-4 h-4 text-purple-500" />
+                        <span className="font-medium text-foreground">{dv.name}</span>
+                      </div>
+                      {dv.description && (
+                        <p className="text-sm text-text-light mb-2">{dv.description}</p>
+                      )}
+                      {dv.suggestedDuration && (
+                        <span className="text-xs text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full">
+                          Durée suggérée: {dv.suggestedDuration} min
+                        </span>
+                      )}
+                      {dv.includedFeatures && dv.includedFeatures.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {dv.includedFeatures.slice(0, 3).map((feature, idx) => (
+                            <span
+                              key={idx}
+                              className="px-2 py-0.5 bg-gray-100 text-xs text-text-light rounded-full"
+                            >
+                              {feature}
+                            </span>
+                          ))}
+                          {dv.includedFeatures.length > 3 && (
+                            <span className="px-2 py-0.5 bg-gray-100 text-xs text-text-light rounded-full">
+                              +{dv.includedFeatures.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </motion.button>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -473,31 +652,142 @@ export default function VariantManager({
                       />
                     </div>
 
-                    {/* Prix horaire */}
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-1">
-                        Prix horaire (€/h)
+                    {/* Multi-tarification - un prix par unité autorisée */}
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        Tarification
+                        <span className="text-text-light font-normal ml-2">(au moins un prix requis)</span>
                       </label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          value={formData.price || ""}
-                          onChange={(e) =>
-                            setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })
-                          }
-                          step="0.5"
-                          min="0"
-                          placeholder="25"
-                          className="w-full px-3 py-2 pr-12 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-text-light">€/h</span>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {/* Prix à l'heure */}
+                        {computedPriceUnits.some(u => u.id === "hour") && (
+                          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <label className="block text-xs text-text-light mb-1">Prix / heure</label>
+                            <div className="relative">
+                              <input
+                                type="number"
+                                value={formData.pricing.hourly || ""}
+                                onChange={(e) =>
+                                  setFormData({
+                                    ...formData,
+                                    pricing: { ...formData.pricing, hourly: parseFloat(e.target.value) || 0 }
+                                  })
+                                }
+                                step="0.5"
+                                min="0"
+                                placeholder="15"
+                                className="w-full px-3 py-2 pr-8 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                              />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-text-light">€</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Prix à la journée */}
+                        {computedPriceUnits.some(u => u.id === "day") && (
+                          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <label className="block text-xs text-text-light mb-1">Prix / jour</label>
+                            <div className="relative">
+                              <input
+                                type="number"
+                                value={formData.pricing.daily || ""}
+                                onChange={(e) =>
+                                  setFormData({
+                                    ...formData,
+                                    pricing: { ...formData.pricing, daily: parseFloat(e.target.value) || 0 }
+                                  })
+                                }
+                                step="1"
+                                min="0"
+                                placeholder="80"
+                                className="w-full px-3 py-2 pr-8 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                              />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-text-light">€</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Prix à la semaine */}
+                        {computedPriceUnits.some(u => u.id === "week") && (
+                          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <label className="block text-xs text-text-light mb-1">Prix / semaine</label>
+                            <div className="relative">
+                              <input
+                                type="number"
+                                value={formData.pricing.weekly || ""}
+                                onChange={(e) =>
+                                  setFormData({
+                                    ...formData,
+                                    pricing: { ...formData.pricing, weekly: parseFloat(e.target.value) || 0 }
+                                  })
+                                }
+                                step="1"
+                                min="0"
+                                placeholder="400"
+                                className="w-full px-3 py-2 pr-8 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                              />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-text-light">€</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Prix au mois */}
+                        {computedPriceUnits.some(u => u.id === "month") && (
+                          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <label className="block text-xs text-text-light mb-1">Prix / mois</label>
+                            <div className="relative">
+                              <input
+                                type="number"
+                                value={formData.pricing.monthly || ""}
+                                onChange={(e) =>
+                                  setFormData({
+                                    ...formData,
+                                    pricing: { ...formData.pricing, monthly: parseFloat(e.target.value) || 0 }
+                                  })
+                                }
+                                step="1"
+                                min="0"
+                                placeholder="1200"
+                                className="w-full px-3 py-2 pr-8 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                              />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-text-light">€</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Prix de la nuit (pour garde de nuit) */}
+                        {computedPriceUnits.some(u => u.id === "day") && (
+                          <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-200">
+                            <label className="block text-xs text-indigo-600 mb-1">Prix / nuit</label>
+                            <div className="relative">
+                              <input
+                                type="number"
+                                value={formData.pricing.nightly || ""}
+                                onChange={(e) =>
+                                  setFormData({
+                                    ...formData,
+                                    pricing: { ...formData.pricing, nightly: parseFloat(e.target.value) || 0 }
+                                  })
+                                }
+                                step="1"
+                                min="0"
+                                placeholder="20"
+                                className="w-full px-3 py-2 pr-8 bg-white border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm"
+                              />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-text-light">€</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
+                      <p className="text-xs text-text-light mt-2">
+                        Définissez vos tarifs pour chaque durée de réservation possible. Le prix approprié sera utilisé lors de la réservation.
+                      </p>
                     </div>
 
-                    {/* Durée */}
+                    {/* Durée (optionnel) */}
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-1">
-                        Durée (minutes)
+                        Durée estimée <span className="text-text-light font-normal">(optionnel)</span>
                       </label>
                       <div className="relative">
                         <input
@@ -515,18 +805,37 @@ export default function VariantManager({
                       </div>
                     </div>
 
-                    {/* Prix total calculé */}
-                    {formData.price > 0 && formData.duration > 0 && (
+                    {/* Récapitulatif des prix définis */}
+                    {(formData.pricing.hourly > 0 || formData.pricing.daily > 0 || formData.pricing.weekly > 0 || formData.pricing.monthly > 0 || formData.pricing.nightly > 0) && (
                       <div className="col-span-2 p-3 bg-primary/10 rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-foreground">Prix total de la prestation</span>
-                          <span className="text-xl font-bold text-primary">
-                            {((formData.price * formData.duration) / 60).toFixed(2).replace(".", ",")} €
-                          </span>
+                        <span className="text-sm font-medium text-foreground">Récapitulatif des tarifs</span>
+                        <div className="flex flex-wrap gap-3 mt-2">
+                          {formData.pricing.hourly > 0 && (
+                            <span className="px-3 py-1 bg-white rounded-full text-sm font-medium text-primary border border-primary/20">
+                              {formData.pricing.hourly.toFixed(2).replace(".", ",")} €/h
+                            </span>
+                          )}
+                          {formData.pricing.daily > 0 && (
+                            <span className="px-3 py-1 bg-white rounded-full text-sm font-medium text-primary border border-primary/20">
+                              {formData.pricing.daily.toFixed(2).replace(".", ",")} €/jour
+                            </span>
+                          )}
+                          {formData.pricing.weekly > 0 && (
+                            <span className="px-3 py-1 bg-white rounded-full text-sm font-medium text-primary border border-primary/20">
+                              {formData.pricing.weekly.toFixed(2).replace(".", ",")} €/sem
+                            </span>
+                          )}
+                          {formData.pricing.monthly > 0 && (
+                            <span className="px-3 py-1 bg-white rounded-full text-sm font-medium text-primary border border-primary/20">
+                              {formData.pricing.monthly.toFixed(2).replace(".", ",")} €/mois
+                            </span>
+                          )}
+                          {formData.pricing.nightly > 0 && (
+                            <span className="px-3 py-1 bg-white rounded-full text-sm font-medium text-indigo-600 border border-indigo-200">
+                              {formData.pricing.nightly.toFixed(2).replace(".", ",")} €/nuit
+                            </span>
+                          )}
                         </div>
-                        <p className="text-xs text-text-light mt-1">
-                          {formData.price.toFixed(2)} €/h × {formatDuration(formData.duration)} = {((formData.price * formData.duration) / 60).toFixed(2)} €
-                        </p>
                       </div>
                     )}
 
@@ -599,7 +908,11 @@ export default function VariantManager({
                     </button>
                     <motion.button
                       onClick={handleSave}
-                      disabled={!formData.name || formData.price <= 0 || !formData.duration || formData.duration <= 0 || saving}
+                      disabled={
+                        !formData.name ||
+                        !(formData.pricing.hourly > 0 || formData.pricing.daily > 0 || formData.pricing.weekly > 0 || formData.pricing.monthly > 0) ||
+                        saving
+                      }
                       className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg disabled:opacity-50"
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
@@ -651,18 +964,37 @@ export default function VariantManager({
                         )}
                       </div>
 
-                      <div className="flex items-center gap-3 text-sm text-text-light">
-                        {/* Prix total calculé */}
-                        {item.duration && item.duration > 0 ? (
-                          <span className="font-semibold text-primary">
-                            {((item.price / 100) * item.duration / 60).toFixed(2).replace(".", ",")} €
-                            <span className="font-normal text-text-light ml-1">
-                              ({formatPrice(item.price)}/h × {formatDuration(item.duration)})
-                            </span>
+                      <div className="flex flex-wrap items-center gap-2 text-sm">
+                        {/* Afficher tous les prix définis */}
+                        {item.pricing?.hourly && (
+                          <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">
+                            {formatPrice(item.pricing.hourly)}/h
                           </span>
-                        ) : (
-                          <span className="font-semibold text-primary">
-                            {formatPrice(item.price)}/h
+                        )}
+                        {item.pricing?.daily && (
+                          <span className="px-2 py-0.5 bg-secondary/10 text-secondary rounded-full text-xs font-medium">
+                            {formatPrice(item.pricing.daily)}/jour
+                          </span>
+                        )}
+                        {item.pricing?.weekly && (
+                          <span className="px-2 py-0.5 bg-purple-100 text-purple-600 rounded-full text-xs font-medium">
+                            {formatPrice(item.pricing.weekly)}/sem
+                          </span>
+                        )}
+                        {item.pricing?.monthly && (
+                          <span className="px-2 py-0.5 bg-amber-100 text-amber-600 rounded-full text-xs font-medium">
+                            {formatPrice(item.pricing.monthly)}/mois
+                          </span>
+                        )}
+                        {item.pricing?.nightly && (
+                          <span className="px-2 py-0.5 bg-indigo-100 text-indigo-600 rounded-full text-xs font-medium">
+                            {formatPrice(item.pricing.nightly)}/nuit
+                          </span>
+                        )}
+                        {/* Fallback: afficher l'ancien prix si pas de pricing */}
+                        {!item.pricing?.hourly && !item.pricing?.daily && !item.pricing?.weekly && !item.pricing?.monthly && !item.pricing?.nightly && item.price > 0 && (
+                          <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">
+                            {formatPrice(item.price)}{getPriceUnitLabel(item.priceUnit)}
                           </span>
                         )}
                       </div>

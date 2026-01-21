@@ -12,14 +12,25 @@ interface ServiceCategory {
   name: string;
   icon?: string;
   billingType?: "hourly" | "daily" | "flexible";
+  allowedPriceUnits?: ("hour" | "day" | "week" | "month")[];
+  defaultVariants?: Array<{
+    name: string;
+    description?: string;
+    suggestedDuration?: number;
+    includedFeatures?: string[];
+  }>;
+  allowCustomVariants?: boolean;
 }
 
 type PriceUnit = "hour" | "day" | "week" | "month" | "flat";
+
+type ServiceLocation = "announcer_home" | "client_home" | "both";
 
 interface Service {
   id: Id<"services">;
   category: string;
   animalTypes: string[];
+  serviceLocation?: ServiceLocation;
   isActive: boolean;
   basePrice?: number;
   moderationStatus?: string;
@@ -29,6 +40,13 @@ interface Service {
     description?: string;
     price: number;
     priceUnit: PriceUnit;
+    // Multi-tarification
+    pricing?: {
+      hourly?: number;
+      daily?: number;
+      weekly?: number;
+      monthly?: number;
+    };
     duration?: number;
     includedFeatures?: string[];
     order: number;
@@ -54,11 +72,19 @@ interface ServicesTabProps {
   onAddService: (data: {
     category: string;
     animalTypes: string[];
+    serviceLocation?: ServiceLocation;
     initialVariants: Array<{
       name: string;
       description?: string;
       price: number;
       priceUnit: "hour" | "day" | "week" | "month" | "flat";
+      // Multi-tarification
+      pricing?: {
+        hourly?: number;
+        daily?: number;
+        weekly?: number;
+        monthly?: number;
+      };
       duration?: number;
       includedFeatures?: string[];
     }>;

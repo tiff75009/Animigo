@@ -31,6 +31,8 @@ export interface ProfileFormData {
   hasGarden: boolean;
   hasVehicle: boolean;
   ownedAnimals: OwnedAnimal[];
+  // Nombre max d'animaux par créneau
+  maxAnimalsPerSlot?: number;
 }
 
 export interface ServiceFormData {
@@ -43,6 +45,16 @@ export interface ServiceCategory {
   name: string;
   icon?: string;
   billingType?: "hourly" | "daily" | "flexible";
+  allowedPriceUnits?: ("hour" | "day" | "week" | "month")[];
+  defaultVariants?: Array<{
+    name: string;
+    description?: string;
+    suggestedDuration?: number;
+    includedFeatures?: string[];
+  }>;
+  allowCustomVariants?: boolean;
+  allowRangeBooking?: boolean;
+  allowOvernightStay?: boolean;
 }
 
 const DEFAULT_CATEGORIES: ServiceCategory[] = [
@@ -108,11 +120,25 @@ export function useServicesPageData(token: string | undefined) {
   const addService = useCallback(async (data: {
     category: string;
     animalTypes: string[];
+    serviceLocation?: "announcer_home" | "client_home" | "both";
+    // Garde de nuit
+    allowOvernightStay?: boolean;
+    dayStartTime?: string;
+    dayEndTime?: string;
+    overnightPrice?: number;
     initialVariants: Array<{
       name: string;
       description?: string;
       price: number;
       priceUnit: "hour" | "day" | "week" | "month" | "flat";
+      // Multi-tarification
+      pricing?: {
+        hourly?: number;
+        daily?: number;
+        weekly?: number;
+        monthly?: number;
+        nightly?: number;
+      };
       duration?: number;
       includedFeatures?: string[];
     }>;
@@ -133,6 +159,11 @@ export function useServicesPageData(token: string | undefined) {
         token,
         category: data.category,
         animalTypes: data.animalTypes,
+        serviceLocation: data.serviceLocation,
+        allowOvernightStay: data.allowOvernightStay,
+        dayStartTime: data.dayStartTime,
+        dayEndTime: data.dayEndTime,
+        overnightPrice: data.overnightPrice,
         initialVariants: data.initialVariants,
         initialOptions: data.initialOptions?.length ? data.initialOptions : undefined,
       });

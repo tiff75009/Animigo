@@ -61,6 +61,8 @@ export default function CategorySelector({
         icon?: string;
         imageUrl?: string | null;
         billingType?: string;
+        allowRangeBooking?: boolean;
+        allowOvernightStay?: boolean;
       }) => {
         const isSelected = selectedCategory?.slug === category.slug;
 
@@ -79,6 +81,8 @@ export default function CategorySelector({
                       icon: category.icon,
                       imageUrl: category.imageUrl,
                       billingType: category.billingType as "hourly" | "daily" | "flexible" | undefined,
+                      allowRangeBooking: category.allowRangeBooking,
+                      allowOvernightStay: category.allowOvernightStay,
                     }
               )
             }

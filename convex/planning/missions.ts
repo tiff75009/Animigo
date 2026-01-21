@@ -136,9 +136,10 @@ export const getMissionStats = query({
       cancelled: monthMissions.filter(
         (m) => m.status === "cancelled" || m.status === "refused"
       ).length,
+      // Utiliser announcerEarnings pour les nouvelles missions, sinon amount pour les anciennes
       revenue: monthMissions
         .filter((m) => m.status === "completed" && m.paymentStatus === "paid")
-        .reduce((sum, m) => sum + m.amount, 0),
+        .reduce((sum, m) => sum + (m.announcerEarnings ?? m.amount), 0),
     };
 
     return stats;

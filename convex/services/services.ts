@@ -96,6 +96,11 @@ export const getMyServices = query({
           priceUnit: s.priceUnit,
           duration: s.duration,
           animalTypes: s.animalTypes,
+          serviceLocation: s.serviceLocation,
+          allowOvernightStay: s.allowOvernightStay,
+          dayStartTime: s.dayStartTime,
+          dayEndTime: s.dayEndTime,
+          overnightPrice: s.overnightPrice,
           isActive: s.isActive,
           hasVariants: s.hasVariants || false,
           basePrice: s.basePrice,
@@ -115,6 +120,7 @@ export const getMyServices = query({
               description: v.description,
               price: v.price,
               priceUnit: v.priceUnit,
+              pricing: v.pricing, // Multi-tarification
               duration: v.duration,
               includedFeatures: v.includedFeatures,
               order: v.order,
@@ -148,11 +154,22 @@ export const addService = mutation({
     token: v.string(),
     category: v.string(), // Slug de la prestation (ex: "toilettage")
     animalTypes: v.array(v.string()),
+    // Lieu de prestation
+    serviceLocation: v.optional(v.union(
+      v.literal("announcer_home"),
+      v.literal("client_home"),
+      v.literal("both")
+    )),
+    // Garde de nuit
+    allowOvernightStay: v.optional(v.boolean()),
+    dayStartTime: v.optional(v.string()),
+    dayEndTime: v.optional(v.string()),
+    overnightPrice: v.optional(v.number()),
     // Formule initiale obligatoire
     initialVariants: v.array(v.object({
       name: v.string(),
       description: v.optional(v.string()),
-      price: v.number(), // En centimes
+      price: v.number(), // En centimes (prix principal)
       priceUnit: v.union(
         v.literal("hour"),
         v.literal("day"),
@@ -160,6 +177,14 @@ export const addService = mutation({
         v.literal("month"),
         v.literal("flat")
       ),
+      // Multi-tarification par unité de temps
+      pricing: v.optional(v.object({
+        hourly: v.optional(v.number()),
+        daily: v.optional(v.number()),
+        weekly: v.optional(v.number()),
+        monthly: v.optional(v.number()),
+        nightly: v.optional(v.number()),
+      })),
       duration: v.optional(v.number()),
       includedFeatures: v.optional(v.array(v.string())),
     })),
@@ -234,6 +259,11 @@ export const addService = mutation({
       userId: session.userId,
       category: args.category,
       animalTypes: args.animalTypes,
+      serviceLocation: args.serviceLocation,
+      allowOvernightStay: args.allowOvernightStay,
+      dayStartTime: args.dayStartTime,
+      dayEndTime: args.dayEndTime,
+      overnightPrice: args.overnightPrice,
       isActive: true,
       basePrice: basePrice,
       moderationStatus: "approved", // Catégories gérées par admin = pas de modération
@@ -250,6 +280,7 @@ export const addService = mutation({
         description: variant.description,
         price: variant.price,
         priceUnit: variant.priceUnit,
+        pricing: variant.pricing,
         duration: variant.duration,
         includedFeatures: variant.includedFeatures,
         order: i,
@@ -293,6 +324,16 @@ export const updateService = mutation({
     serviceId: v.id("services"),
     category: v.optional(v.string()),
     animalTypes: v.optional(v.array(v.string())),
+    serviceLocation: v.optional(v.union(
+      v.literal("announcer_home"),
+      v.literal("client_home"),
+      v.literal("both")
+    )),
+    // Garde de nuit
+    allowOvernightStay: v.optional(v.boolean()),
+    dayStartTime: v.optional(v.string()),
+    dayEndTime: v.optional(v.string()),
+    overnightPrice: v.optional(v.number()),
     isActive: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
@@ -342,6 +383,11 @@ export const updateService = mutation({
     const updates: Record<string, unknown> = { updatedAt: Date.now() };
     if (args.category !== undefined) updates.category = args.category;
     if (args.animalTypes !== undefined) updates.animalTypes = args.animalTypes;
+    if (args.serviceLocation !== undefined) updates.serviceLocation = args.serviceLocation;
+    if (args.allowOvernightStay !== undefined) updates.allowOvernightStay = args.allowOvernightStay;
+    if (args.dayStartTime !== undefined) updates.dayStartTime = args.dayStartTime;
+    if (args.dayEndTime !== undefined) updates.dayEndTime = args.dayEndTime;
+    if (args.overnightPrice !== undefined) updates.overnightPrice = args.overnightPrice;
     if (args.isActive !== undefined) updates.isActive = args.isActive;
 
     await ctx.db.patch(args.serviceId, updates);

@@ -390,6 +390,47 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.8.0 - Nouveau Parcours de Reservation et Calcul Tarifaire Intelligent
+
+- **Nouveau parcours de reservation** (`/reserver/[announcerId]`)
+  - Interface mobile-first en 4 etapes fluides
+  - Etape 1 : Selection du service et de la formule
+  - Etape 2 : Choix des dates et horaires avec calendrier interactif
+  - Etape 3 : Informations client et animal
+  - Etape 4 : Recapitulatif et confirmation
+  - Support de la garde de nuit avec calcul automatique
+  - Options additionnelles selectionnables
+
+- **Calcul tarifaire intelligent avec journees partielles**
+  - Detection automatique des journees partielles vs completes
+  - Premier jour : calcul des heures entre l'heure de debut et la fin de journee
+  - Dernier jour : calcul des heures entre le debut de journee et l'heure de fin
+  - Jours intermediaires : facturation en journees completes
+  - Seuil configurable via `workdayHours` dans la config admin (defaut 8h)
+  - Affichage detaille du calcul dans le recapitulatif
+
+- **Correction du calcul des commissions**
+  - Stockage coherent des montants dans les missions :
+    - `amount` = montant total paye par le client (service + commission)
+    - `platformFee` = commission de la plateforme
+    - `announcerEarnings` = revenus de l'annonceur (prix du service)
+  - Commission variable selon le type d'annonceur :
+    - Particulier : 15%
+    - Micro-entrepreneur : 12%
+    - Professionnel : 10%
+  - Retrocompatibilite avec les anciennes missions
+
+- **Email de notification aux annonceurs**
+  - Nouveau template "Nouvelle demande de reservation"
+  - Inclut les plages horaires et dates
+  - Affichage de la garde de nuit si applicable
+  - Localisation de la prestation
+
+- **Page de finalisation amelioree** (`/reservation/[bookingId]`)
+  - Meme calcul tarifaire intelligent
+  - Affichage detaille du prix (heures partielles, jours complets, nuits)
+  - Support creation de compte pour les nouveaux utilisateurs
+
 ### v0.7.1 - Gestion Admin Utilisateurs et Corrections Convex Self-Hosted
 - **Actions admin utilisateurs** (`/admin/utilisateurs`)
   - Bouton "Activer manuellement" : active un compte (emailVerified + isActive)

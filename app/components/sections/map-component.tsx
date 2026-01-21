@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import Image from "next/image";
@@ -12,6 +12,9 @@ import "leaflet/dist/leaflet.css";
 if (typeof window !== "undefined") {
   delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
 }
+
+// Check if we're in browser environment
+const isBrowser = typeof window !== "undefined";
 
 // Obfuscate coordinates with ~100m random offset for privacy
 // Uses a seeded random based on sitter ID for consistency
@@ -347,18 +350,40 @@ export default function MapComponent({
 }: MapComponentProps) {
   const [mapKey, setMapKey] = useState(0);
   const [isReady, setIsReady] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   const tileConfig = TILE_LAYERS[mapStyle];
 
   // Utiliser le centre de recherche si disponible, sinon Paris par défaut
   const initialCenter = searchCenter ?? PARIS_CENTER;
 
-  // Attendre que le composant soit monté côté client
+  // Attendre que le composant soit monté côté client et que le container existe
   useEffect(() => {
-    // Petit délai pour s'assurer que le DOM est prêt
+    // Vérifier qu'on est côté client
+    if (!isBrowser) return;
+
+    // Utiliser requestAnimationFrame pour s'assurer que le DOM est peint
+    let mounted = true;
+    const checkReady = () => {
+      if (!mounted) return;
+
+      // Vérifier que le container existe et a des dimensions
+      if (containerRef.current && containerRef.current.offsetHeight > 0) {
+        setIsReady(true);
+      } else {
+        // Réessayer au prochain frame
+        requestAnimationFrame(checkReady);
+      }
+    };
+
+    // Attendre un tick avant de commencer à vérifier
     const timer = setTimeout(() => {
-      setIsReady(true);
-    }, 100);
-    return () => clearTimeout(timer);
+      requestAnimationFrame(checkReady);
+    }, 50);
+
+    return () => {
+      mounted = false;
+      clearTimeout(timer);
+    };
   }, []);
 
   // Regénérer la clé si le style change pour forcer un remontage propre
@@ -368,29 +393,29 @@ export default function MapComponent({
     }
   }, [mapStyle, isReady]);
 
-  if (!isReady) {
-    return (
-      <div className="w-full h-full bg-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-2" />
-          <p className="text-text-light text-sm">Chargement de la carte...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="w-full h-full" key={mapKey}>
-      <MapInner
-        sitters={sitters}
-        selectedSitter={selectedSitter}
-        onSitterSelect={onSitterSelect}
-        searchCenter={searchCenter}
-        searchRadius={searchRadius}
-        mapStyle={mapStyle}
-        initialCenter={initialCenter}
-        tileConfig={tileConfig}
-      />
+    <div ref={containerRef} className="w-full h-full" suppressHydrationWarning>
+      {!isReady ? (
+        <div className="w-full h-full bg-gray-100 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-2" />
+            <p className="text-text-light text-sm">Chargement de la carte...</p>
+          </div>
+        </div>
+      ) : (
+        <div className="w-full h-full" key={mapKey}>
+          <MapInner
+            sitters={sitters}
+            selectedSitter={selectedSitter}
+            onSitterSelect={onSitterSelect}
+            searchCenter={searchCenter}
+            searchRadius={searchRadius}
+            mapStyle={mapStyle}
+            initialCenter={initialCenter}
+            tileConfig={tileConfig}
+          />
+        </div>
+      )}
     </div>
   );
 }

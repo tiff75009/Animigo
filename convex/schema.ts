@@ -114,6 +114,8 @@ export default defineSchema({
     // Permet à l'annonceur de bloquer du temps avant/après chaque service
     bufferBefore: v.optional(v.number()), // Minutes à bloquer avant un service (0, 15, 30, 45, 60)
     bufferAfter: v.optional(v.number()),  // Minutes à bloquer après un service (0, 15, 30, 45, 60)
+    // Nombre max d'animaux acceptés en même temps sur un créneau
+    maxAnimalsPerSlot: v.optional(v.number()), // Ex: 3 = peut garder 3 animaux simultanément
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
@@ -141,6 +143,17 @@ export default defineSchema({
     )), // Ancien: unité de prix
     duration: v.optional(v.number()), // Ancien: durée en minutes
     hasVariants: v.optional(v.boolean()), // Legacy: toujours true maintenant
+    // Lieu de prestation
+    serviceLocation: v.optional(v.union(
+      v.literal("announcer_home"),  // Chez l'annonceur uniquement
+      v.literal("client_home"),     // Chez le client uniquement
+      v.literal("both")             // Les deux possibles (client choisit)
+    )),
+    // Garde de nuit
+    allowOvernightStay: v.optional(v.boolean()),  // L'annonceur accepte la garde de nuit
+    dayStartTime: v.optional(v.string()),          // Heure début journée "08:00"
+    dayEndTime: v.optional(v.string()),            // Heure fin journée "20:00"
+    overnightPrice: v.optional(v.number()),        // Prix de la nuit en centimes
     // Modération (simplifiée - catégories gérées par admin)
     moderationStatus: v.optional(v.union(
       v.literal("approved"),
@@ -162,7 +175,8 @@ export default defineSchema({
     serviceId: v.id("services"),
     name: v.string(), // "Toilettage Simple", "Toilettage Premium"
     description: v.optional(v.string()),
-    price: v.number(), // Prix en centimes
+    // Ancien système (rétrocompatibilité) - prix unique
+    price: v.number(), // Prix principal en centimes
     priceUnit: v.union(
       v.literal("hour"),
       v.literal("day"),
@@ -170,6 +184,15 @@ export default defineSchema({
       v.literal("month"),
       v.literal("flat")
     ),
+    // Nouveau système - multi-tarification par unité de temps
+    // Permet de définir un prix différent pour chaque unité (heure, jour, semaine, mois)
+    pricing: v.optional(v.object({
+      hourly: v.optional(v.number()),  // Prix à l'heure en centimes
+      daily: v.optional(v.number()),   // Prix à la journée en centimes
+      weekly: v.optional(v.number()),  // Prix à la semaine en centimes
+      monthly: v.optional(v.number()), // Prix au mois en centimes
+      nightly: v.optional(v.number()), // Prix de la nuit en centimes
+    })),
     duration: v.optional(v.number()), // Durée en minutes
     includedFeatures: v.optional(v.array(v.string())), // ["Brossage", "Lavage", "Séchage"]
     order: v.number(), // Ordre d'affichage
@@ -219,6 +242,32 @@ export default defineSchema({
     // Prix horaire conseillé par défaut (en centimes)
     // Utilisé quand pas assez de données pour calculer une moyenne
     defaultHourlyPrice: v.optional(v.number()),
+    // Permettre la réservation par plage (dates ou heures)
+    // true = le client peut sélectionner une plage de dates ou d'heures
+    allowRangeBooking: v.optional(v.boolean()),
+    // Multi-pricing : types de prix autorisés pour cette catégorie
+    // Si vide ou undefined, tous les types sont autorisés
+    allowedPriceUnits: v.optional(v.array(v.union(
+      v.literal("hour"),
+      v.literal("day"),
+      v.literal("week"),
+      v.literal("month")
+    ))),
+    // Formules par défaut pour cette catégorie
+    // L'annonceur peut les utiliser comme base et ajouter son prix
+    defaultVariants: v.optional(v.array(v.object({
+      name: v.string(),              // Nom de la formule (ex: "Garde Standard")
+      description: v.optional(v.string()), // Description par défaut
+      suggestedDuration: v.optional(v.number()), // Durée suggérée en minutes
+      includedFeatures: v.optional(v.array(v.string())), // Caractéristiques incluses
+    }))),
+    // Autoriser l'annonceur à créer ses propres formules
+    // true = peut ajouter des formules personnalisées en plus des défauts
+    // false = doit utiliser uniquement les formules par défaut
+    allowCustomVariants: v.optional(v.boolean()),
+    // Autoriser la garde de nuit pour cette catégorie
+    // true = les annonceurs peuvent proposer la garde de nuit
+    allowOvernightStay: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -277,6 +326,13 @@ export default defineSchema({
     endDate: v.string(), // "YYYY-MM-DD"
     startTime: v.optional(v.string()), // "HH:MM"
     endTime: v.optional(v.string()),
+
+    // Garde de nuit
+    includeOvernightStay: v.optional(v.boolean()), // Garde de nuit incluse
+    overnightNights: v.optional(v.number()),       // Nombre de nuits
+    overnightAmount: v.optional(v.number()),       // Montant des nuits en centimes
+    dayStartTime: v.optional(v.string()),          // Heure début journée "08:00"
+    dayEndTime: v.optional(v.string()),            // Heure fin journée "20:00"
 
     // Statut
     status: v.union(
@@ -440,6 +496,11 @@ export default defineSchema({
     endDate: v.string(),
     startTime: v.optional(v.string()),
     endTime: v.optional(v.string()), // Heure de fin calculée (startTime + durée)
+
+    // Garde de nuit
+    includeOvernightStay: v.optional(v.boolean()), // Le client souhaite la garde de nuit
+    overnightNights: v.optional(v.number()),       // Nombre de nuits
+    overnightAmount: v.optional(v.number()),       // Montant des nuits en centimes
 
     // Prix calculé
     calculatedAmount: v.number(),

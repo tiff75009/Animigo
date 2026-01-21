@@ -28,6 +28,8 @@ import {
   ChevronRight,
   Calendar,
   Target,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { useSearch, type AnnouncerResult } from "@/app/hooks/useSearch";
@@ -36,6 +38,7 @@ import {
   DateSelector,
   LocationSearchBar,
   AnimalTypeDropdown,
+  FormulasDropdown,
 } from "@/app/components/search";
 
 // Helper function to extract city from location string
@@ -115,6 +118,18 @@ interface BookingSelection {
   variantDuration?: number; // Durée en minutes
   optionIds: string[];
   serviceCategory: string;
+  // Garde de nuit
+  variantPricing?: {
+    hourly?: number;
+    daily?: number;
+    weekly?: number;
+    monthly?: number;
+    nightly?: number;
+  };
+  allowOvernightStay?: boolean;
+  dayStartTime?: string;
+  dayEndTime?: string;
+  overnightPrice?: number;
 }
 
 // Formulas Modal Component with Booking
@@ -128,9 +143,10 @@ function FormulasModal({
   onClose: () => void;
   announcer: AnnouncerResult;
   searchFilters?: {
-    category: { slug: string; name: string } | null;
+    category: { slug: string; name: string; allowRangeBooking?: boolean; allowOvernightStay?: boolean } | null;
     date: string | null;
     time: string | null;
+    endTime: string | null;
     startDate: string | null;
     endDate: string | null;
   };
@@ -148,6 +164,10 @@ function FormulasModal({
   const [selectedTime, setSelectedTime] = useState<string | null>(
     searchFilters?.time ?? null
   );
+  const [selectedEndTime, setSelectedEndTime] = useState<string | null>(
+    searchFilters?.endTime ?? null
+  );
+  const [includeOvernightStay, setIncludeOvernightStay] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(() => {
@@ -166,6 +186,12 @@ function FormulasModal({
   // Fetch detailed service data
   const serviceDetails = useQuery(
     api.public.search.getAnnouncerServiceDetails,
+    isOpen ? { announcerId: announcer.id as Id<"users"> } : "skip"
+  );
+
+  // Fetch announcer availability preferences (working hours)
+  const announcerPreferences = useQuery(
+    api.public.search.getAnnouncerAvailabilityPreferences,
     isOpen ? { announcerId: announcer.id as Id<"users"> } : "skip"
   );
 
@@ -200,6 +226,7 @@ function FormulasModal({
     setSelectedDate(searchFilters?.date ?? searchFilters?.startDate ?? null);
     setSelectedEndDate(searchFilters?.endDate ?? null);
     setSelectedTime(searchFilters?.time ?? null);
+    setIncludeOvernightStay(false);
     setBookingError(null);
     setCategoryFilter(searchFilters?.category?.slug ?? "all");
     onClose();
@@ -225,8 +252,27 @@ function FormulasModal({
   // Handle variant selection
   const handleSelectVariant = (
     serviceId: string,
-    variant: { id: string; name: string; price: number; priceUnit: string; duration?: number },
-    serviceCategory: string
+    variant: {
+      id: string;
+      name: string;
+      price: number;
+      priceUnit: string;
+      duration?: number;
+      pricing?: {
+        hourly?: number;
+        daily?: number;
+        weekly?: number;
+        monthly?: number;
+        nightly?: number;
+      };
+    },
+    serviceCategory: string,
+    serviceOvernightData?: {
+      allowOvernightStay?: boolean;
+      dayStartTime?: string;
+      dayEndTime?: string;
+      overnightPrice?: number;
+    }
   ) => {
     setSelection({
       serviceId,
@@ -235,10 +281,23 @@ function FormulasModal({
       variantPrice: variant.price,
       variantPriceUnit: variant.priceUnit,
       variantDuration: variant.duration,
+      variantPricing: variant.pricing,
       optionIds: [],
       serviceCategory,
+      // Overnight info from service
+      allowOvernightStay: serviceOvernightData?.allowOvernightStay,
+      dayStartTime: serviceOvernightData?.dayStartTime,
+      dayEndTime: serviceOvernightData?.dayEndTime,
+      overnightPrice: serviceOvernightData?.overnightPrice,
     });
+    setIncludeOvernightStay(false); // Reset overnight when changing variant
     setStep("booking");
+  };
+
+  // Helper pour parser "HH:MM" en minutes
+  const parseTimeToMinutes = (timeStr: string): number => {
+    const [hours, minutes] = timeStr.split(":").map(Number);
+    return hours * 60 + minutes;
   };
 
   // Calculer le montant total
@@ -246,17 +305,39 @@ function FormulasModal({
     if (!selection) return 0;
     let amount = selection.variantPrice;
 
-    // Si tarification horaire avec durée, calculer le prix total
-    if (selection.variantPriceUnit === "hour" && selection.variantDuration) {
+    // Mode plage horaire (même jour avec heure début et fin)
+    if (isSameDayRangeMode && selectedTime && selectedEndTime && selection.variantPriceUnit === "hour") {
+      const startMinutes = parseTimeToMinutes(selectedTime);
+      const endMinutes = parseTimeToMinutes(selectedEndTime);
+      const durationMinutes = endMinutes - startMinutes;
+      if (durationMinutes > 0) {
+        amount = Math.round((selection.variantPrice * durationMinutes) / 60);
+      }
+    }
+    // Si tarification horaire avec durée fixe (variant.duration)
+    else if (selection.variantPriceUnit === "hour" && selection.variantDuration) {
       // Prix = taux horaire × (durée en heures)
       amount = Math.round((selection.variantPrice * selection.variantDuration) / 60);
     }
-    // Si tarification journalière, multiplier par le nombre de jours
-    else if (selection.variantPriceUnit === "day" && selectedDate && selectedEndDate) {
+    // Si tarification journalière ou plage de dates (plusieurs jours)
+    else if ((selection.variantPriceUnit === "day" || isRangeMode) && selectedDate && selectedEndDate && selectedDate !== selectedEndDate) {
       const start = new Date(selectedDate);
       const end = new Date(selectedEndDate);
       const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-      amount = selection.variantPrice * days;
+      if (selection.variantPriceUnit === "day") {
+        amount = selection.variantPrice * days;
+      } else if (selection.variantPriceUnit === "hour") {
+        // Pour hourly billing sur plusieurs jours : prix horaire × 8h × jours
+        amount = selection.variantPrice * 8 * days;
+      }
+
+      // Ajouter le coût des nuits si activé
+      if (includeOvernightStay && days > 1) {
+        const nights = days - 1;
+        // Utiliser pricing.nightly du variant ou overnightPrice du service
+        const nightlyRate = selection.variantPricing?.nightly || selection.overnightPrice || 0;
+        amount += nightlyRate * nights;
+      }
     }
     return amount;
   };
@@ -264,24 +345,45 @@ function FormulasModal({
   // Handle booking continuation - create pending booking and redirect
   const handleContinueBooking = async () => {
     if (!selection || !selectedDate) {
-      setBookingError("Veuillez s\u00e9lectionner une date");
+      setBookingError("Veuillez sélectionner une date");
       return;
     }
 
-    // Pour les services horaires, v\u00e9rifier que l'heure est s\u00e9lectionn\u00e9e
-    if (selection.variantPriceUnit !== "day" && !selectedTime) {
-      setBookingError("Veuillez s\u00e9lectionner une heure");
-      return;
+    // Validation selon le mode
+    if (isSameDayRangeMode) {
+      // Mode plage horaire : besoin de startTime ET endTime
+      if (!selectedTime || !selectedEndTime) {
+        setBookingError("Veuillez sélectionner l'heure de début et de fin");
+        return;
+      }
+    } else if (selection.variantPriceUnit !== "day" && !isRangeMode) {
+      // Mode horaire standard : besoin de l'heure
+      if (!selectedTime) {
+        setBookingError("Veuillez sélectionner une heure");
+        return;
+      }
     }
 
     setIsSubmitting(true);
     setBookingError(null);
 
     try {
-      // R\u00e9cup\u00e9rer le token (optionnel)
+      // Récupérer le token (optionnel)
       const token = localStorage.getItem("auth_token") || undefined;
 
-      // Cr\u00e9er la r\u00e9servation en attente
+      // Calculer les nuits si applicable
+      let overnightNights = 0;
+      let overnightAmount = 0;
+      if (includeOvernightStay && selectedDate && selectedEndDate && selectedDate !== selectedEndDate) {
+        const start = new Date(selectedDate);
+        const end = new Date(selectedEndDate);
+        const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        overnightNights = Math.max(0, days - 1);
+        const nightlyRate = selection.variantPricing?.nightly || selection.overnightPrice || 0;
+        overnightAmount = nightlyRate * overnightNights;
+      }
+
+      // Créer la réservation en attente
       const result = await createPendingBooking({
         announcerId: announcer.id as Id<"users">,
         serviceId: selection.serviceId as Id<"services">,
@@ -290,7 +392,12 @@ function FormulasModal({
         startDate: selectedDate,
         endDate: selectedEndDate ?? selectedDate,
         startTime: selectedTime ?? undefined,
-        calculatedAmount: calculateAmount(),
+        endTime: selectedEndTime ?? undefined,
+        calculatedAmount: priceDetails?.total ?? 0,
+        // Garde de nuit
+        includeOvernightStay: includeOvernightStay && overnightNights > 0 ? true : undefined,
+        overnightNights: overnightNights > 0 ? overnightNights : undefined,
+        overnightAmount: overnightAmount > 0 ? overnightAmount : undefined,
         token,
       });
 
@@ -435,7 +542,166 @@ function FormulasModal({
     });
   };
 
-  const isRangeMode = selection?.variantPriceUnit === "day";
+  // Mode plage : daily billing OU allowRangeBooking activé
+  const isRangeMode = selection?.variantPriceUnit === "day" || searchFilters?.category?.allowRangeBooking;
+  // Mode plage horaire : allowRangeBooking ET même jour sélectionné
+  const isSameDayRangeMode = searchFilters?.category?.allowRangeBooking && selectedDate && selectedEndDate && selectedDate === selectedEndDate;
+
+  // Filtrer les créneaux selon les horaires de l'annonceur
+  const filteredTimeSlots = useMemo(() => {
+    if (!announcerPreferences) return bookingTimeSlots;
+    const { acceptReservationsFrom, acceptReservationsTo } = announcerPreferences;
+    return bookingTimeSlots.filter(
+      (slot) => slot >= acceptReservationsFrom && slot <= acceptReservationsTo
+    );
+  }, [announcerPreferences]);
+
+  // Calculer les détails du prix pour l'affichage
+  const priceDetails = useMemo(() => {
+    if (!selection || !selectedDate) return null;
+
+    const basePrice = selection.variantPrice; // Prix de base du variant
+    const pricing = selection.variantPricing; // Multi-tarification
+
+    // Mode plage horaire (même jour)
+    if (isSameDayRangeMode && selectedTime && selectedEndTime) {
+      const startMinutes = parseTimeToMinutes(selectedTime);
+      const endMinutes = parseTimeToMinutes(selectedEndTime);
+      const durationMinutes = endMinutes - startMinutes;
+      const durationHours = durationMinutes / 60;
+      // Utiliser le tarif horaire du pricing ou le prix de base
+      const hourlyRate = pricing?.hourly || basePrice;
+      const total = Math.round((hourlyRate * durationMinutes) / 60);
+
+      return {
+        type: "hourly_range" as const,
+        hourlyRate,
+        durationMinutes,
+        durationHours,
+        total,
+        dateLabel: new Date(selectedDate).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
+        timeRange: `${selectedTime} - ${selectedEndTime}`,
+      };
+    }
+
+    // Mode plage de dates (plusieurs jours)
+    if (isRangeMode && selectedEndDate && selectedDate !== selectedEndDate) {
+      const start = new Date(selectedDate);
+      const end = new Date(selectedEndDate);
+      const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+      let total = 0;
+      let dailyRate: number;
+      let weeklyRate: number | undefined;
+      let monthlyRate: number | undefined;
+      let hoursPerDay = 8; // Journée standard
+      let calcType: "daily" | "weekly" | "monthly" | "hourly" = "daily";
+
+      // Déterminer le tarif journalier - ordre de priorité
+      if (pricing?.daily && pricing.daily > 0) {
+        // 1. Multi-tarification avec prix journalier
+        dailyRate = pricing.daily;
+        weeklyRate = pricing.weekly;
+        monthlyRate = pricing.monthly;
+      } else if (selection.variantPriceUnit === "day" && basePrice > 0) {
+        // 2. Prix de base est journalier
+        dailyRate = basePrice;
+        weeklyRate = pricing?.weekly;
+        monthlyRate = pricing?.monthly;
+      } else if (pricing?.weekly && pricing.weekly > 0) {
+        // 3. Dériver du tarif hebdo
+        dailyRate = Math.round(pricing.weekly / 7);
+        weeklyRate = pricing.weekly;
+        monthlyRate = pricing.monthly;
+      } else if (pricing?.monthly && pricing.monthly > 0) {
+        // 4. Dériver du tarif mensuel
+        dailyRate = Math.round(pricing.monthly / 30);
+        monthlyRate = pricing.monthly;
+      } else if (pricing?.hourly && pricing.hourly > 0) {
+        // 5. Prix horaire - calculer le tarif journalier
+        dailyRate = pricing.hourly * hoursPerDay;
+        calcType = "hourly";
+      } else if (selection.variantPriceUnit === "hour" && basePrice > 0) {
+        // 6. Prix de base est horaire
+        dailyRate = basePrice * hoursPerDay;
+        calcType = "hourly";
+      } else if (basePrice > 0) {
+        // 7. Fallback: utiliser le prix de base
+        dailyRate = basePrice;
+      } else {
+        // 8. Dernier recours: 0 (ne devrait pas arriver)
+        dailyRate = 0;
+      }
+
+      // Appliquer le meilleur tarif selon la durée (si multi-tarif disponible)
+      if (calcType !== "hourly") {
+        if (days >= 30 && monthlyRate) {
+          const months = Math.floor(days / 30);
+          const remainingDays = days % 30;
+          total = (monthlyRate * months) + (dailyRate * remainingDays);
+          calcType = "monthly";
+        } else if (days >= 7 && weeklyRate) {
+          const weeks = Math.floor(days / 7);
+          const remainingDays = days % 7;
+          total = (weeklyRate * weeks) + (dailyRate * remainingDays);
+          calcType = "weekly";
+        } else {
+          total = dailyRate * days;
+          calcType = "daily";
+        }
+      } else {
+        // Mode horaire
+        total = dailyRate * days;
+      }
+
+      // Calculer les nuits si garde de nuit activée
+      const nights = includeOvernightStay && selection.allowOvernightStay && days > 1 ? days - 1 : 0;
+      const nightlyRate = pricing?.nightly || selection.overnightPrice || 0;
+      const overnightTotal = nights * nightlyRate;
+      total += overnightTotal;
+
+      return {
+        type: "daily_range" as const,
+        calcType,
+        dailyRate,
+        weeklyRate,
+        monthlyRate,
+        days,
+        hoursPerDay: calcType === "hourly" ? hoursPerDay : undefined,
+        total,
+        startDate: start.toLocaleDateString("fr-FR", { day: "numeric", month: "long" }),
+        endDate: end.toLocaleDateString("fr-FR", { day: "numeric", month: "long" }),
+        // Overnight info
+        includeOvernightStay: includeOvernightStay && selection.allowOvernightStay,
+        nights,
+        nightlyRate,
+        overnightTotal,
+        dayStartTime: selection.dayStartTime || "08:00",
+        dayEndTime: selection.dayEndTime || "20:00",
+      };
+    }
+
+    // Mode standard (date + heure + durée fixe)
+    if (selection.variantPriceUnit === "hour" && selection.variantDuration) {
+      const durationMinutes = selection.variantDuration;
+      const hourlyRate = pricing?.hourly || basePrice;
+      const total = Math.round((hourlyRate * durationMinutes) / 60);
+
+      return {
+        type: "fixed_duration" as const,
+        hourlyRate,
+        durationMinutes,
+        total,
+      };
+    }
+
+    // Mode simple (1 jour)
+    const dailyRate = pricing?.daily || basePrice;
+    return {
+      type: "simple" as const,
+      total: dailyRate,
+    };
+  }, [selection, selectedDate, selectedEndDate, selectedTime, selectedEndTime, isSameDayRangeMode, isRangeMode, includeOvernightStay]);
 
   return (
     <AnimatePresence>
@@ -513,7 +779,21 @@ function FormulasModal({
                                 : `${Math.floor(selection.variantDuration / 60)}h${selection.variantDuration % 60 > 0 ? selection.variantDuration % 60 : ""}`})
                             </span>
                           )}
-                          - {formatPrice(selection.variantPrice)}{priceUnitLabels[selection.variantPriceUnit]}
+                          {/* Afficher le prix depuis pricing ou fallback sur variantPrice */}
+                          {" - "}
+                          {selection.variantPricing?.daily ? (
+                            <>{formatPrice(selection.variantPricing.daily)}/jour</>
+                          ) : selection.variantPricing?.hourly ? (
+                            <>{formatPrice(selection.variantPricing.hourly)}/h</>
+                          ) : selection.variantPricing?.weekly ? (
+                            <>{formatPrice(selection.variantPricing.weekly)}/sem</>
+                          ) : selection.variantPricing?.monthly ? (
+                            <>{formatPrice(selection.variantPricing.monthly)}/mois</>
+                          ) : selection.variantPrice > 0 ? (
+                            <>{formatPrice(selection.variantPrice)}{priceUnitLabels[selection.variantPriceUnit]}</>
+                          ) : (
+                            <span className="text-amber-600">Tarif non configuré</span>
+                          )}
                         </p>
                       )}
                     </div>
@@ -585,8 +865,20 @@ function FormulasModal({
                             duration?: number;
                             description?: string;
                             includedFeatures?: string[];
+                            pricing?: {
+                              hourly?: number;
+                              daily?: number;
+                              weekly?: number;
+                              monthly?: number;
+                              nightly?: number;
+                            };
                           }>;
                           options: Array<{ id: string; name: string; price: number; priceType?: string }>;
+                          // Overnight
+                          allowOvernightStay?: boolean;
+                          dayStartTime?: string;
+                          dayEndTime?: string;
+                          overnightPrice?: number;
                         }) => (
                           <div key={service.id} className="space-y-4">
                             <div className="flex items-start gap-3">
@@ -612,6 +904,13 @@ function FormulasModal({
                                 duration?: number;
                                 description?: string;
                                 includedFeatures?: string[];
+                                pricing?: {
+                                  hourly?: number;
+                                  daily?: number;
+                                  weekly?: number;
+                                  monthly?: number;
+                                  nightly?: number;
+                                };
                               }) => (
                                   <div
                                     key={variant.id}
@@ -642,8 +941,30 @@ function FormulasModal({
                                         )}
                                       </div>
                                       <div className="text-right flex-shrink-0">
-                                        {/* Afficher le prix total calculé si service horaire avec durée */}
-                                        {variant.priceUnit === "hour" && variant.duration ? (
+                                        {/* Afficher les tarifs multi-pricing ou fallback sur le prix de base */}
+                                        {variant.pricing?.daily || variant.pricing?.hourly || variant.pricing?.weekly || variant.pricing?.monthly ? (
+                                          <div className="space-y-0.5">
+                                            {variant.pricing?.daily && (
+                                              <div className="text-xl font-bold text-primary">
+                                                {formatPrice(variant.pricing.daily)}<span className="text-sm font-normal text-text-light">/jour</span>
+                                              </div>
+                                            )}
+                                            {variant.pricing?.hourly && !variant.pricing?.daily && (
+                                              <div className="text-xl font-bold text-primary">
+                                                {formatPrice(variant.pricing.hourly)}<span className="text-sm font-normal text-text-light">/h</span>
+                                              </div>
+                                            )}
+                                            {/* Afficher tarifs supplémentaires en petit */}
+                                            <div className="flex flex-wrap gap-1 justify-end">
+                                              {variant.pricing?.weekly && (
+                                                <span className="text-xs text-text-light">{formatPrice(variant.pricing.weekly)}/sem</span>
+                                              )}
+                                              {variant.pricing?.monthly && (
+                                                <span className="text-xs text-text-light">{formatPrice(variant.pricing.monthly)}/mois</span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        ) : variant.priceUnit === "hour" && variant.duration ? (
                                           <>
                                             <div className="text-xl font-bold text-primary">
                                               {formatPrice(Math.round((variant.price * variant.duration) / 60))}
@@ -663,7 +984,17 @@ function FormulasModal({
                                       </div>
                                     </div>
                                     <button
-                                      onClick={() => handleSelectVariant(service.id, variant, service.category)}
+                                      onClick={() => handleSelectVariant(
+                                        service.id,
+                                        variant,
+                                        service.category,
+                                        {
+                                          allowOvernightStay: service.allowOvernightStay,
+                                          dayStartTime: service.dayStartTime,
+                                          dayEndTime: service.dayEndTime,
+                                          overnightPrice: service.overnightPrice,
+                                        }
+                                      )}
                                       className="w-full mt-3 py-2 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors"
                                     >
                                       Réserver cette formule
@@ -816,21 +1147,34 @@ function FormulasModal({
                       </div>
                     </div>
 
-                    {/* Time selection (for hourly) */}
-                    {!isRangeMode && selectedDate && (
+                    {/* Time selection (for hourly OR same-day range) */}
+                    {((!isRangeMode && selectedDate) || isSameDayRangeMode) && (
                       <div>
-                        <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-                          <Clock className="w-5 h-5 text-primary" />
-                          Sélectionnez une heure
-                        </h4>
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-semibold text-foreground flex items-center gap-2">
+                            <Clock className="w-5 h-5 text-primary" />
+                            {isSameDayRangeMode ? "Heure de début" : "Sélectionnez une heure"}
+                          </h4>
+                          {announcerPreferences && (
+                            <span className="text-xs text-foreground/60 bg-foreground/5 px-2 py-1 rounded-lg">
+                              Disponible : {announcerPreferences.acceptReservationsFrom} - {announcerPreferences.acceptReservationsTo}
+                            </span>
+                          )}
+                        </div>
                         <div className="grid grid-cols-5 gap-2">
-                          {bookingTimeSlots.map((time) => {
+                          {filteredTimeSlots.map((time) => {
                             const isBooked = isTimeSlotBooked(time);
                             return (
                               <button
                                 key={time}
                                 disabled={isBooked}
-                                onClick={() => setSelectedTime(time)}
+                                onClick={() => {
+                                  setSelectedTime(time);
+                                  // Reset end time si on change l'heure de début
+                                  if (isSameDayRangeMode && selectedEndTime && time >= selectedEndTime) {
+                                    setSelectedEndTime(null);
+                                  }
+                                }}
                                 className={cn(
                                   "py-2 text-sm font-medium rounded-lg transition-all",
                                   isBooked
@@ -846,6 +1190,56 @@ function FormulasModal({
                             );
                           })}
                         </div>
+
+                        {/* End time selection (for same-day range) */}
+                        {isSameDayRangeMode && selectedTime && (
+                          <div className="mt-4">
+                            <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                              <Clock className="w-5 h-5 text-primary" />
+                              Heure de fin
+                            </h4>
+                            <div className="grid grid-cols-5 gap-2">
+                              {filteredTimeSlots
+                                .filter(time => time > selectedTime)
+                                .map((time) => {
+                                  const isBooked = isTimeSlotBooked(time);
+                                  return (
+                                    <button
+                                      key={time}
+                                      disabled={isBooked}
+                                      onClick={() => setSelectedEndTime(time)}
+                                      className={cn(
+                                        "py-2 text-sm font-medium rounded-lg transition-all",
+                                        isBooked
+                                          ? "bg-red-100 text-red-400 cursor-not-allowed line-through"
+                                          : selectedEndTime === time
+                                          ? "bg-primary text-white"
+                                          : "bg-foreground/5 hover:bg-primary/10"
+                                      )}
+                                      title={isBooked ? "Ce créneau est déjà réservé" : undefined}
+                                    >
+                                      {time}
+                                    </button>
+                                  );
+                                })}
+                            </div>
+                            {selectedTime && selectedEndTime && (
+                              <p className="text-sm text-foreground/60 mt-2">
+                                Durée : {(() => {
+                                  const startMinutes = parseTimeToMinutes(selectedTime);
+                                  const endMinutes = parseTimeToMinutes(selectedEndTime);
+                                  const durationMinutes = endMinutes - startMinutes;
+                                  const hours = Math.floor(durationMinutes / 60);
+                                  const minutes = durationMinutes % 60;
+                                  return hours > 0
+                                    ? `${hours}h${minutes > 0 ? minutes : ""}`
+                                    : `${minutes} min`;
+                                })()}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
                         {getBookedSlotsForDate(selectedDate).length > 0 && (
                           <div className="mt-3 p-2 bg-red-50 rounded-lg border border-red-100">
                             <p className="text-xs font-medium text-red-700 mb-1">
@@ -876,28 +1270,196 @@ function FormulasModal({
                       </div>
                     )}
 
+                    {/* Option garde de nuit (pour plages multi-jours) */}
+                    {selection?.allowOvernightStay && selectedDate && selectedEndDate && selectedDate !== selectedEndDate && priceDetails?.type === "daily_range" && (priceDetails?.days ?? 0) >= 2 && (
+                      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-4 border border-indigo-200/50">
+                        <label className="flex items-center gap-3 cursor-pointer group">
+                          <div className="relative">
+                            <input
+                              type="checkbox"
+                              checked={includeOvernightStay}
+                              onChange={(e) => setIncludeOvernightStay(e.target.checked)}
+                              className="sr-only"
+                            />
+                            <div className={cn(
+                              "w-5 h-5 rounded border-2 transition-all flex items-center justify-center",
+                              includeOvernightStay
+                                ? "bg-indigo-600 border-indigo-600"
+                                : "border-foreground/20 group-hover:border-indigo-400"
+                            )}>
+                              {includeOvernightStay && (
+                                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <Moon className="w-4 h-4 text-indigo-600" />
+                              <span className="font-medium text-foreground">Garde de nuit incluse</span>
+                              {(selection.variantPricing?.nightly || selection.overnightPrice) ? (
+                                <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-medium">
+                                  +{formatPrice(selection.variantPricing?.nightly || selection.overnightPrice || 0)}/nuit
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="text-xs text-foreground/60 mt-0.5">
+                              L&apos;animal reste la nuit chez l&apos;annonceur
+                            </p>
+                          </div>
+                        </label>
+
+                        {/* Planning détaillé si nuit incluse */}
+                        {includeOvernightStay && priceDetails?.days > 1 && (
+                          <div className="mt-4 pt-4 border-t border-indigo-200/50">
+                            <p className="text-xs font-medium text-foreground/70 mb-2 flex items-center gap-1.5">
+                              <Calendar className="w-3.5 h-3.5" />
+                              Planning prévu
+                            </p>
+                            <div className="space-y-1.5 text-xs">
+                              {Array.from({ length: priceDetails.days }).map((_, index) => {
+                                const dayStart = selection.dayStartTime || "08:00";
+                                const dayEnd = selection.dayEndTime || "20:00";
+                                const isLastDay = index === priceDetails.days - 1;
+
+                                return (
+                                  <div key={index} className="space-y-1">
+                                    <div className="flex items-center gap-2 text-foreground/80">
+                                      <Sun className="w-3.5 h-3.5 text-amber-500" />
+                                      <span>Jour {index + 1}</span>
+                                      <span className="text-foreground/50">{dayStart} - {dayEnd}</span>
+                                    </div>
+                                    {!isLastDay && (
+                                      <div className="flex items-center gap-2 text-indigo-600 pl-5">
+                                        <Moon className="w-3.5 h-3.5" />
+                                        <span>Nuit {index + 1}</span>
+                                        <span className="text-indigo-400">{dayEnd} → {dayStart}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Récapitulatif du prix */}
-                    {selectedDate && (
-                      <div className="bg-primary/5 rounded-xl p-4 border border-primary/10">
-                        <div className="flex items-center justify-between">
-                          <span className="text-foreground/70">Total estimé</span>
-                          <span className="text-xl font-bold text-primary">
-                            {formatPrice(calculateAmount())}
+                    {selectedDate && priceDetails && (
+                      <div className="bg-primary/5 rounded-xl p-4 border border-primary/10 space-y-3">
+                        {/* Titre et horaires annonceur */}
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-foreground/60 flex items-center gap-1.5">
+                            <Clock className="w-4 h-4" />
+                            Horaires de l'annonceur
+                          </span>
+                          <span className="font-medium text-foreground/80">
+                            {announcerPreferences?.acceptReservationsFrom ?? "08:00"} - {announcerPreferences?.acceptReservationsTo ?? "20:00"}
                           </span>
                         </div>
-                        {/* Détail du calcul pour services horaires */}
-                        {selection?.variantPriceUnit === "hour" && selection?.variantDuration && (
-                          <p className="text-xs text-foreground/50 mt-1">
-                            {formatPrice(selection.variantPrice)}/h × {selection.variantDuration < 60
-                              ? `${selection.variantDuration} min`
-                              : `${Math.floor(selection.variantDuration / 60)}h${selection.variantDuration % 60 > 0 ? selection.variantDuration % 60 : ""}`}
-                          </p>
-                        )}
-                        {isRangeMode && selectedEndDate && (
-                          <p className="text-xs text-foreground/50 mt-1">
-                            Du {new Date(selectedDate).toLocaleDateString("fr-FR")} au {new Date(selectedEndDate).toLocaleDateString("fr-FR")}
-                          </p>
-                        )}
+
+                        {/* Détail du calcul selon le type */}
+                        <div className="border-t border-foreground/10 pt-3 space-y-2">
+                          {/* Plage horaire (même jour) */}
+                          {priceDetails.type === "hourly_range" && (
+                            <>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-foreground/60">Date</span>
+                                <span className="font-medium capitalize">{priceDetails.dateLabel}</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-foreground/60">Horaire</span>
+                                <span className="font-medium">{priceDetails.timeRange}</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-foreground/60">Durée</span>
+                                <span className="font-medium">
+                                  {priceDetails.durationHours >= 1
+                                    ? `${Math.floor(priceDetails.durationHours)}h${priceDetails.durationMinutes % 60 > 0 ? (priceDetails.durationMinutes % 60) + "min" : ""}`
+                                    : `${priceDetails.durationMinutes} min`}
+                                </span>
+                              </div>
+                              <div className="flex justify-between text-sm text-foreground/60">
+                                <span>Calcul</span>
+                                <span>{formatPrice(priceDetails.hourlyRate)}/h × {priceDetails.durationHours.toFixed(1)}h</span>
+                              </div>
+                            </>
+                          )}
+
+                          {/* Plage de dates (plusieurs jours) */}
+                          {priceDetails.type === "daily_range" && (
+                            <>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-foreground/60">Période</span>
+                                <span className="font-medium">Du {priceDetails.startDate} au {priceDetails.endDate}</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-foreground/60">Nombre de jours</span>
+                                <span className="font-medium">{priceDetails.days} jour{priceDetails.days > 1 ? "s" : ""}</span>
+                              </div>
+                              {/* Afficher le calcul selon le type de tarif */}
+                              <div className="flex justify-between text-sm text-foreground/60">
+                                <span>Calcul</span>
+                                <span>
+                                  {priceDetails.calcType === "monthly" && priceDetails.monthlyRate ? (
+                                    <>
+                                      {formatPrice(priceDetails.monthlyRate)}/mois × {Math.floor(priceDetails.days / 30)}m
+                                      {priceDetails.days % 30 > 0 && (
+                                        <> + {formatPrice(priceDetails.dailyRate)}/j × {priceDetails.days % 30}j</>
+                                      )}
+                                    </>
+                                  ) : priceDetails.calcType === "weekly" && priceDetails.weeklyRate ? (
+                                    <>
+                                      {formatPrice(priceDetails.weeklyRate)}/sem × {Math.floor(priceDetails.days / 7)}s
+                                      {priceDetails.days % 7 > 0 && (
+                                        <> + {formatPrice(priceDetails.dailyRate)}/j × {priceDetails.days % 7}j</>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <>
+                                      {formatPrice(priceDetails.dailyRate)}/jour × {priceDetails.days}j
+                                      {priceDetails.hoursPerDay && ` (${priceDetails.hoursPerDay}h/jour)`}
+                                    </>
+                                  )}
+                                </span>
+                              </div>
+                              {/* Afficher les nuits si garde de nuit incluse */}
+                              {priceDetails.includeOvernightStay && priceDetails.nights > 0 && (
+                                <div className="flex justify-between text-sm text-indigo-600">
+                                  <span className="flex items-center gap-1">
+                                    <Moon className="w-3.5 h-3.5" />
+                                    Nuits ({priceDetails.nights})
+                                  </span>
+                                  <span>
+                                    {formatPrice(priceDetails.nightlyRate)}/nuit × {priceDetails.nights}n = +{formatPrice(priceDetails.overnightTotal)}
+                                  </span>
+                                </div>
+                              )}
+                            </>
+                          )}
+
+                          {/* Durée fixe */}
+                          {priceDetails.type === "fixed_duration" && (
+                            <div className="flex justify-between text-sm text-foreground/60">
+                              <span>Calcul</span>
+                              <span>
+                                {formatPrice(priceDetails.hourlyRate)}/h × {priceDetails.durationMinutes < 60
+                                  ? `${priceDetails.durationMinutes} min`
+                                  : `${Math.floor(priceDetails.durationMinutes / 60)}h${priceDetails.durationMinutes % 60 > 0 ? priceDetails.durationMinutes % 60 : ""}`}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Total */}
+                        <div className="border-t border-foreground/10 pt-3 flex items-center justify-between">
+                          <span className="font-semibold text-foreground">Total estimé</span>
+                          <span className="text-xl font-bold text-primary">
+                            {formatPrice(priceDetails.total)}
+                          </span>
+                        </div>
                       </div>
                     )}
 
@@ -917,15 +1479,23 @@ function FormulasModal({
                 <div className="p-4 border-t border-foreground/10 bg-foreground/[0.02]">
                   <button
                     onClick={handleContinueBooking}
-                    disabled={isSubmitting || !selectedDate || (!isRangeMode && !selectedTime)}
+                    disabled={
+                      isSubmitting ||
+                      !selectedDate ||
+                      (isSameDayRangeMode && (!selectedTime || !selectedEndTime)) ||
+                      (!isRangeMode && !isSameDayRangeMode && !selectedTime)
+                    }
                     className={cn(
                       "w-full py-3 rounded-xl font-semibold transition-colors",
-                      isSubmitting || !selectedDate || (!isRangeMode && !selectedTime)
+                      isSubmitting ||
+                      !selectedDate ||
+                      (isSameDayRangeMode && (!selectedTime || !selectedEndTime)) ||
+                      (!isRangeMode && !isSameDayRangeMode && !selectedTime)
                         ? "bg-foreground/10 text-foreground/40 cursor-not-allowed"
                         : "bg-primary text-white hover:bg-primary/90"
                     )}
                   >
-                    {isSubmitting ? "Chargement..." : "Poursuivre la r\u00e9servation"}
+                    {isSubmitting ? "Chargement..." : "Poursuivre la réservation"}
                   </button>
                 </div>
               )}
@@ -942,13 +1512,19 @@ function AnnouncerCard({
   announcer,
   isSelected,
   onClick,
-  onShowFormulas,
+  searchFilters,
 }: {
   announcer: AnnouncerResult;
   isSelected: boolean;
   onClick: () => void;
-  onShowFormulas: () => void;
+  searchFilters?: {
+    category?: { slug: string; name: string } | null;
+    date?: string | null;
+    endDate?: string | null;
+  };
 }) {
+  const [showFormulas, setShowFormulas] = useState(false);
+
   const availabilityConfig = {
     available: {
       color: "text-green-600 bg-green-50",
@@ -1063,15 +1639,12 @@ function AnnouncerCard({
 
           {/* Footer */}
           <div className="flex items-center justify-between">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onShowFormulas();
-              }}
-              className="text-xs text-primary font-medium hover:underline"
-            >
-              Voir les formules
-            </button>
+            <FormulasDropdown
+              announcerId={announcer.id}
+              isOpen={showFormulas}
+              onToggle={() => setShowFormulas(!showFormulas)}
+              searchFilters={searchFilters}
+            />
             {announcer.basePrice && (
               <p className="font-bold text-primary">
                 {(announcer.basePrice / 100).toFixed(0)}€
@@ -1096,13 +1669,13 @@ export function SearchMapSection() {
     setRadius,
     setDate,
     setTime,
+    setEndTime,
     setDateRange,
     setIncludeUnavailable,
     resetFilters,
   } = useSearch();
 
   const [selectedAnnouncer, setSelectedAnnouncer] = useState<AnnouncerResult | null>(null);
-  const [formulasModalAnnouncer, setFormulasModalAnnouncer] = useState<AnnouncerResult | null>(null);
   const [mapStyle, setMapStyle] = useState<"default" | "plan">("default");
 
   // Convert results to map-compatible format (only those with coordinates)
@@ -1246,6 +1819,9 @@ export function SearchMapSection() {
               startDate={filters.startDate}
               endDate={filters.endDate}
               onDateRangeChange={setDateRange}
+              allowRangeBooking={filters.category.allowRangeBooking}
+              endTime={filters.endTime}
+              onEndTimeChange={setEndTime}
             />
           </motion.div>
         )}
@@ -1346,7 +1922,11 @@ export function SearchMapSection() {
                     announcer={announcer}
                     isSelected={selectedAnnouncer?.id === announcer.id}
                     onClick={() => setSelectedAnnouncer(announcer)}
-                    onShowFormulas={() => setFormulasModalAnnouncer(announcer)}
+                    searchFilters={{
+                      category: filters.category,
+                      date: filters.date,
+                      endDate: filters.endDate,
+                    }}
                   />
                 ))
               )}
@@ -1396,21 +1976,6 @@ export function SearchMapSection() {
         </motion.div>
       </div>
 
-      {/* Formulas Modal */}
-      {formulasModalAnnouncer && (
-        <FormulasModal
-          isOpen={!!formulasModalAnnouncer}
-          onClose={() => setFormulasModalAnnouncer(null)}
-          announcer={formulasModalAnnouncer}
-          searchFilters={{
-            category: filters.category ? { slug: filters.category.slug, name: filters.category.name } : null,
-            date: filters.date,
-            time: filters.time,
-            startDate: filters.startDate,
-            endDate: filters.endDate,
-          }}
-        />
-      )}
     </section>
   );
 }
