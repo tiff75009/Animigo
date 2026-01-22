@@ -91,11 +91,18 @@ bun run build
   - Detection automatique des contenus suspects (emails, telephones)
 
 - **Categories de services** (`/admin/services/categories`)
-  - CRUD complet des categories (prestations)
+  - **Structure hierarchique** : Categories parentes et sous-categories (2 niveaux max)
+  - CRUD complet avec formulaire modulaire
   - Personnalisation des icones et images
-  - Type de facturation (horaire, journalier, flexible)
-  - Prix horaire conseille par defaut (utilise quand pas assez de donnees marche)
-  - Ordre d'affichage drag & drop
+  - **Configuration d'affichage** pour les categories parentes :
+    - `hierarchy` : "Parent > Sous-categorie"
+    - `subcategory` : Nom de la sous-categorie seul (defaut)
+    - `badge` : Badge parent + nom sous-categorie
+  - Type de facturation par sous-categorie (horaire, journalier, flexible)
+  - Prestations par defaut configurables par sous-categorie
+  - Options de garde de nuit configurables
+  - Table avec expansion/collapse des sous-categories
+  - Ordre d'affichage
 
 - **Integrations API** (`/admin/integrations`)
   - Configuration API INSEE (SIRENE)
@@ -247,6 +254,13 @@ app/
     moderation/services/
     parametres/
     services/categories/
+      page.tsx           # Page principale orchestratrice
+      types.ts           # Types TypeScript centralises
+      hooks/
+        useCategoryPage.ts  # Hook donnees/mutations
+      _components/
+        CategoryForm/    # Formulaire modulaire
+        CategoryTable/   # Table avec expansion
     utilisateurs/
   recherche/           # Page de recherche avancée
     page.tsx           # Page principale avec filtres et carte
@@ -271,6 +285,9 @@ app/
     ui/                # Composants UI (input, checkbox, etc.)
     search/            # Composants de recherche
       FilterSidebar.tsx  # Sidebar filtres avancés dynamiques
+      CategorySelector.tsx  # Selecteur hierarchique de categories
+    shared/            # Composants partages entre pages
+      CategoryDisplay.tsx  # Affichage configurable des categories
   hooks/               # Hooks React personnalises
     useAuth.ts
     useAdminAuth.ts
@@ -389,6 +406,49 @@ Utilisation de Framer Motion avec des variants predefinies :
 ---
 
 ## Changelog recent
+
+### v0.9.0 - Structure Hierarchique des Categories
+
+- **Refonte complete de la gestion des categories** (`/admin/services/categories`)
+  - **Architecture modulaire** : Page refactorisee de 1433 lignes vers composants modulaires
+  - **Structure hierarchique** : Support des categories parentes et sous-categories (max 2 niveaux)
+  - **Nouveau hook `useCategoryPage`** : Centralise queries, mutations et state management
+  - **Composants modulaires** :
+    - `CategoryForm/` : Formulaire avec sections conditionnelles
+    - `CategoryTable/` : Table avec expansion/collapse des sous-categories
+    - `types.ts` : Types TypeScript centralises
+
+- **Configuration d'affichage des categories**
+  - Nouveau champ `displayFormat` dans le schema Convex
+  - 3 modes d'affichage configurables par categorie parente :
+    - `hierarchy` : "Parent > Sous-categorie"
+    - `subcategory` : Nom seul (defaut, retrocompatible)
+    - `badge` : [Parent] Sous-categorie
+  - Composant `CategoryDisplay` reutilisable
+
+- **Ameliorations du formulaire admin**
+  - Selection du type (categorie parente ou sous-categorie)
+  - Champs metier uniquement pour les sous-categories (facturation, prix, prestations)
+  - Format d'affichage uniquement pour les categories parentes
+  - Section prestations par defaut avec ajout/suppression
+
+- **Table des categories amelioree**
+  - Affichage hierarchique avec indentation visuelle
+  - Lignes parentes avec badge et compteur de sous-categories
+  - Bouton expansion/collapse pour voir les sous-categories
+  - Colonnes adaptees selon le type (parent vs sous-categorie)
+  - Section "Categories orphelines" pour les sous-categories sans parent
+
+- **Backend Convex mis a jour**
+  - `getActiveCategories` retourne maintenant une structure hierarchique
+  - Validation max 2 niveaux de profondeur
+  - Prevention des references circulaires
+  - Support du champ `displayFormat`
+
+- **Pages mises a jour**
+  - `/recherche` : Gestion de la nouvelle structure hierarchique
+  - `/dashboard/services` : Groupement des categories par parent
+  - `CategorySelector` : Affichage hierarchique avec headers de section
 
 ### v0.8.0 - Nouveau Parcours de Reservation et Calcul Tarifaire Intelligent
 

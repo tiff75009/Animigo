@@ -278,6 +278,10 @@ export default defineSchema({
     imageStorageId: v.optional(v.id("_storage")), // Image de la catégorie
     order: v.number(), // Ordre d'affichage
     isActive: v.boolean(),
+    // Référence vers la catégorie parente (hiérarchie à 2 niveaux max)
+    // undefined = catégorie parente (niveau racine)
+    // Id = sous-catégorie
+    parentCategoryId: v.optional(v.id("serviceCategories")),
     // Type de facturation pour cette catégorie
     billingType: v.optional(v.union(
       v.literal("hourly"),    // Facturation à l'heure (toilettage, promenade...)
@@ -313,12 +317,22 @@ export default defineSchema({
     // Autoriser la garde de nuit pour cette catégorie
     // true = les annonceurs peuvent proposer la garde de nuit
     allowOvernightStay: v.optional(v.boolean()),
+    // Format d'affichage des sous-catégories (uniquement pour les catégories parentes)
+    // hierarchy = "Garde > Garde standard"
+    // subcategory = "Garde standard" (défaut)
+    // badge = "[Garde] Garde standard"
+    displayFormat: v.optional(v.union(
+      v.literal("hierarchy"),
+      v.literal("subcategory"),
+      v.literal("badge")
+    )),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_slug", ["slug"])
     .index("by_order", ["order"])
-    .index("by_active", ["isActive"]),
+    .index("by_active", ["isActive"])
+    .index("by_parent", ["parentCategoryId"]),
 
   // Photos des prestations
   photos: defineTable({

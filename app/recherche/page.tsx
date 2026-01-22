@@ -33,6 +33,30 @@ interface ServiceCategory {
   imageUrl?: string;
   billingType?: "hourly" | "daily" | "flexible";
 }
+
+// Types pour la structure hiérarchique retournée par getActiveCategories
+interface SubcategoryData {
+  id: Id<"serviceCategories">;
+  slug: string;
+  name: string;
+  icon?: string;
+  imageUrl?: string | null;
+  billingType?: string;
+}
+
+interface ParentCategoryData {
+  id: Id<"serviceCategories">;
+  slug: string;
+  name: string;
+  icon?: string;
+  imageUrl?: string | null;
+  subcategories: SubcategoryData[];
+}
+
+interface CategoriesData {
+  parentCategories: ParentCategoryData[];
+  rootCategories: SubcategoryData[];
+}
 import { LocationSearchBar } from "@/app/components/search";
 import FilterSidebar from "@/app/components/search/FilterSidebar";
 import {
@@ -59,7 +83,7 @@ export default function RecherchePage() {
     resetAllFilters,
   } = useSearch();
 
-  const categories = useQuery(api.admin.serviceCategories.getActiveCategories);
+  const categoriesData = useQuery(api.admin.serviceCategories.getActiveCategories) as CategoriesData | undefined;
 
   const router = useRouter();
   const [showFilters, setShowFilters] = useState(false);
@@ -68,8 +92,42 @@ export default function RecherchePage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const filtersRef = useRef<HTMLDivElement>(null);
 
+  // Flatten categories from hierarchical structure
+  const flattenedCategories: ServiceCategory[] = (() => {
+    if (!categoriesData) return [];
+    const result: ServiceCategory[] = [];
+
+    // Add subcategories from each parent
+    categoriesData.parentCategories.forEach((parent) => {
+      parent.subcategories.forEach((sub) => {
+        result.push({
+          id: sub.id,
+          slug: sub.slug,
+          name: sub.name,
+          icon: sub.icon || "📋",
+          imageUrl: sub.imageUrl ?? undefined,
+          billingType: sub.billingType as "hourly" | "daily" | "flexible" | undefined,
+        });
+      });
+    });
+
+    // Add root categories
+    categoriesData.rootCategories.forEach((cat) => {
+      result.push({
+        id: cat.id,
+        slug: cat.slug,
+        name: cat.name,
+        icon: cat.icon || "📋",
+        imageUrl: cat.imageUrl ?? undefined,
+        billingType: cat.billingType as "hourly" | "daily" | "flexible" | undefined,
+      });
+    });
+
+    return result;
+  })();
+
   // Filter out "garde" category from services when in services mode
-  const filteredCategories = categories?.filter((cat: ServiceCategory) =>
+  const filteredCategories = flattenedCategories.filter((cat: ServiceCategory) =>
     filters.searchMode === "services" ? cat.slug !== "garde" : true
   );
 

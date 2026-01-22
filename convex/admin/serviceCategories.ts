@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { requireAdmin } from "./utils";
 import { ConvexError } from "convex/values";
 
-// Liste toutes les catégories (admin)
+// Liste toutes les catégories (admin) avec hiérarchie
 export const listCategories = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
@@ -13,16 +13,47 @@ export const listCategories = query({
       .query("serviceCategories")
       .collect();
 
-    // Trier par ordre
-    const sorted = categories.sort((a, b) => a.order - b.order);
+    // Créer un map pour lookup rapide des parents
+    const categoryMap = new Map(categories.map(c => [c._id, c]));
 
-    // Récupérer les URLs des images
+    // Trier : parents d'abord (par ordre), puis sous-catégories (par ordre)
+    const sorted = categories.sort((a, b) => {
+      // Si les deux sont des parents (pas de parentCategoryId)
+      if (!a.parentCategoryId && !b.parentCategoryId) {
+        return a.order - b.order;
+      }
+      // Si a est parent et b est sous-catégorie
+      if (!a.parentCategoryId && b.parentCategoryId) {
+        return -1;
+      }
+      // Si a est sous-catégorie et b est parent
+      if (a.parentCategoryId && !b.parentCategoryId) {
+        return 1;
+      }
+      // Les deux sont des sous-catégories - trier par parent puis par ordre
+      if (a.parentCategoryId !== b.parentCategoryId) {
+        const parentA = categoryMap.get(a.parentCategoryId!);
+        const parentB = categoryMap.get(b.parentCategoryId!);
+        return (parentA?.order ?? 0) - (parentB?.order ?? 0);
+      }
+      return a.order - b.order;
+    });
+
+    // Récupérer les URLs des images et ajouter parentName
     const categoriesWithUrls = await Promise.all(
       sorted.map(async (cat) => {
         let imageUrl = null;
         if (cat.imageStorageId) {
           imageUrl = await ctx.storage.getUrl(cat.imageStorageId);
         }
+
+        // Récupérer le nom du parent si existe
+        let parentName: string | undefined;
+        if (cat.parentCategoryId) {
+          const parent = categoryMap.get(cat.parentCategoryId);
+          parentName = parent?.name;
+        }
+
         return {
           id: cat._id,
           slug: cat.slug,
@@ -32,6 +63,9 @@ export const listCategories = query({
           imageUrl,
           order: cat.order,
           isActive: cat.isActive,
+          parentCategoryId: cat.parentCategoryId,
+          parentName,
+          isParent: !cat.parentCategoryId,
           billingType: cat.billingType,
           defaultHourlyPrice: cat.defaultHourlyPrice,
           allowRangeBooking: cat.allowRangeBooking,
@@ -39,6 +73,7 @@ export const listCategories = query({
           defaultVariants: cat.defaultVariants,
           allowCustomVariants: cat.allowCustomVariants,
           allowOvernightStay: cat.allowOvernightStay,
+          displayFormat: cat.displayFormat,
           createdAt: cat.createdAt,
           updatedAt: cat.updatedAt,
         };
@@ -49,7 +84,43 @@ export const listCategories = query({
   },
 });
 
-// Liste les catégories actives (pour le frontend public)
+// Liste des catégories parentes uniquement (pour dropdown)
+export const listParentCategories = query({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx, args.token);
+
+    const categories = await ctx.db
+      .query("serviceCategories")
+      .collect();
+
+    // Filtrer pour ne garder que les catégories sans parent
+    const parentCategories = categories
+      .filter(c => !c.parentCategoryId)
+      .sort((a, b) => a.order - b.order);
+
+    // Récupérer les URLs des images
+    const result = await Promise.all(
+      parentCategories.map(async (cat) => {
+        let imageUrl = null;
+        if (cat.imageStorageId) {
+          imageUrl = await ctx.storage.getUrl(cat.imageStorageId);
+        }
+        return {
+          id: cat._id,
+          slug: cat.slug,
+          name: cat.name,
+          icon: cat.icon,
+          imageUrl,
+        };
+      })
+    );
+
+    return result;
+  },
+});
+
+// Liste les catégories actives (pour le frontend public) - structure hiérarchique
 export const getActiveCategories = query({
   args: {},
   handler: async (ctx) => {
@@ -58,12 +129,71 @@ export const getActiveCategories = query({
       .withIndex("by_active", (q) => q.eq("isActive", true))
       .collect();
 
-    // Trier par ordre
-    const sorted = categories.sort((a, b) => a.order - b.order);
+    // Créer un map pour lookup rapide
+    const categoryMap = new Map(categories.map(c => [c._id, c]));
 
-    // Récupérer les URLs des images
-    const categoriesWithUrls = await Promise.all(
-      sorted.map(async (cat) => {
+    // Séparer parents et sous-catégories
+    const parentCategories = categories.filter(c => !c.parentCategoryId).sort((a, b) => a.order - b.order);
+    const subcategories = categories.filter(c => c.parentCategoryId).sort((a, b) => a.order - b.order);
+
+    // Catégories orphelines (ont un parent mais parent inactif ou inexistant)
+    const rootCategories = subcategories.filter(c => {
+      const parent = categoryMap.get(c.parentCategoryId!);
+      return !parent; // Parent n'existe pas ou inactif
+    });
+
+    // Construire la structure hiérarchique
+    const hierarchy = await Promise.all(
+      parentCategories.map(async (parent) => {
+        let imageUrl = null;
+        if (parent.imageStorageId) {
+          imageUrl = await ctx.storage.getUrl(parent.imageStorageId);
+        }
+
+        // Trouver les sous-catégories de ce parent
+        const children = subcategories.filter(c => c.parentCategoryId === parent._id);
+
+        const childrenWithUrls = await Promise.all(
+          children.map(async (child) => {
+            let childImageUrl = null;
+            if (child.imageStorageId) {
+              childImageUrl = await ctx.storage.getUrl(child.imageStorageId);
+            }
+            return {
+              id: child._id,
+              slug: child.slug,
+              name: child.name,
+              description: child.description,
+              icon: child.icon,
+              imageUrl: childImageUrl,
+              parentCategoryId: child.parentCategoryId,
+              billingType: child.billingType,
+              allowRangeBooking: child.allowRangeBooking,
+              allowedPriceUnits: child.allowedPriceUnits,
+              defaultVariants: child.defaultVariants,
+              allowCustomVariants: child.allowCustomVariants,
+              allowOvernightStay: child.allowOvernightStay,
+            };
+          })
+        );
+
+        return {
+          id: parent._id,
+          slug: parent.slug,
+          name: parent.name,
+          description: parent.description,
+          icon: parent.icon,
+          imageUrl,
+          isParent: true,
+          displayFormat: parent.displayFormat,
+          subcategories: childrenWithUrls,
+        };
+      })
+    );
+
+    // Catégories sans parent (rétrocompatibilité + orphelines)
+    const rootWithUrls = await Promise.all(
+      rootCategories.map(async (cat) => {
         let imageUrl = null;
         if (cat.imageStorageId) {
           imageUrl = await ctx.storage.getUrl(cat.imageStorageId);
@@ -85,7 +215,10 @@ export const getActiveCategories = query({
       })
     );
 
-    return categoriesWithUrls;
+    return {
+      parentCategories: hierarchy,
+      rootCategories: rootWithUrls,
+    };
   },
 });
 
@@ -98,7 +231,7 @@ export const generateUploadUrl = mutation({
   },
 });
 
-// Créer une catégorie
+// Créer une catégorie (parent ou sous-catégorie)
 export const createCategory = mutation({
   args: {
     token: v.string(),
@@ -107,31 +240,36 @@ export const createCategory = mutation({
     description: v.optional(v.string()),
     icon: v.optional(v.string()),
     imageStorageId: v.optional(v.id("_storage")),
+    // Référence vers la catégorie parente (undefined = catégorie parente)
+    parentCategoryId: v.optional(v.id("serviceCategories")),
+    // Champs métier (uniquement pour les sous-catégories)
     billingType: v.optional(v.union(
       v.literal("hourly"),
       v.literal("daily"),
       v.literal("flexible")
     )),
-    defaultHourlyPrice: v.optional(v.number()), // Prix horaire conseillé par défaut (en centimes)
-    allowRangeBooking: v.optional(v.boolean()), // Permettre la réservation par plage
-    // Multi-pricing : types de prix autorisés
+    defaultHourlyPrice: v.optional(v.number()),
+    allowRangeBooking: v.optional(v.boolean()),
     allowedPriceUnits: v.optional(v.array(v.union(
       v.literal("hour"),
       v.literal("day"),
       v.literal("week"),
       v.literal("month")
     ))),
-    // Formules par défaut
     defaultVariants: v.optional(v.array(v.object({
       name: v.string(),
       description: v.optional(v.string()),
       suggestedDuration: v.optional(v.number()),
       includedFeatures: v.optional(v.array(v.string())),
     }))),
-    // Autoriser l'annonceur à créer ses propres formules
     allowCustomVariants: v.optional(v.boolean()),
-    // Autoriser la garde de nuit pour cette catégorie
     allowOvernightStay: v.optional(v.boolean()),
+    // Format d'affichage (uniquement pour catégories parentes)
+    displayFormat: v.optional(v.union(
+      v.literal("hierarchy"),
+      v.literal("subcategory"),
+      v.literal("badge")
+    )),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx, args.token);
@@ -146,6 +284,17 @@ export const createCategory = mutation({
       throw new ConvexError("Une catégorie avec ce slug existe déjà");
     }
 
+    // Si parentCategoryId fourni, vérifier que le parent existe et n'a pas de parent (max 2 niveaux)
+    if (args.parentCategoryId) {
+      const parent = await ctx.db.get(args.parentCategoryId);
+      if (!parent) {
+        throw new ConvexError("Catégorie parente non trouvée");
+      }
+      if (parent.parentCategoryId) {
+        throw new ConvexError("Impossible de créer une sous-sous-catégorie (2 niveaux max)");
+      }
+    }
+
     // Trouver l'ordre max pour mettre la nouvelle catégorie à la fin
     const allCategories = await ctx.db.query("serviceCategories").collect();
     const maxOrder = allCategories.reduce((max, cat) => Math.max(max, cat.order), -1);
@@ -158,13 +307,17 @@ export const createCategory = mutation({
       description: args.description,
       icon: args.icon,
       imageStorageId: args.imageStorageId,
-      billingType: args.billingType,
-      defaultHourlyPrice: args.defaultHourlyPrice,
-      allowRangeBooking: args.allowRangeBooking,
-      allowedPriceUnits: args.allowedPriceUnits,
-      defaultVariants: args.defaultVariants,
-      allowCustomVariants: args.allowCustomVariants,
-      allowOvernightStay: args.allowOvernightStay,
+      parentCategoryId: args.parentCategoryId,
+      // Champs métier (ignorés pour les catégories parentes)
+      billingType: args.parentCategoryId ? args.billingType : undefined,
+      defaultHourlyPrice: args.parentCategoryId ? args.defaultHourlyPrice : undefined,
+      allowRangeBooking: args.parentCategoryId ? args.allowRangeBooking : undefined,
+      allowedPriceUnits: args.parentCategoryId ? args.allowedPriceUnits : undefined,
+      defaultVariants: args.parentCategoryId ? args.defaultVariants : undefined,
+      allowCustomVariants: args.parentCategoryId ? args.allowCustomVariants : undefined,
+      allowOvernightStay: args.parentCategoryId ? args.allowOvernightStay : undefined,
+      // Format d'affichage (uniquement pour les catégories parentes)
+      displayFormat: !args.parentCategoryId ? args.displayFormat : undefined,
       order: maxOrder + 1,
       isActive: true,
       createdAt: now,
@@ -185,31 +338,35 @@ export const updateCategory = mutation({
     icon: v.optional(v.string()),
     imageStorageId: v.optional(v.id("_storage")),
     isActive: v.optional(v.boolean()),
+    // Changer le parent (null = devient catégorie parente, Id = devient sous-catégorie)
+    parentCategoryId: v.optional(v.union(v.id("serviceCategories"), v.null())),
     billingType: v.optional(v.union(
       v.literal("hourly"),
       v.literal("daily"),
       v.literal("flexible")
     )),
-    defaultHourlyPrice: v.optional(v.number()), // Prix horaire conseillé par défaut (en centimes)
-    allowRangeBooking: v.optional(v.boolean()), // Permettre la réservation par plage
-    // Multi-pricing : types de prix autorisés
+    defaultHourlyPrice: v.optional(v.number()),
+    allowRangeBooking: v.optional(v.boolean()),
     allowedPriceUnits: v.optional(v.array(v.union(
       v.literal("hour"),
       v.literal("day"),
       v.literal("week"),
       v.literal("month")
     ))),
-    // Formules par défaut
     defaultVariants: v.optional(v.array(v.object({
       name: v.string(),
       description: v.optional(v.string()),
       suggestedDuration: v.optional(v.number()),
       includedFeatures: v.optional(v.array(v.string())),
     }))),
-    // Autoriser l'annonceur à créer ses propres formules
     allowCustomVariants: v.optional(v.boolean()),
-    // Autoriser la garde de nuit pour cette catégorie
     allowOvernightStay: v.optional(v.boolean()),
+    // Format d'affichage (uniquement pour catégories parentes)
+    displayFormat: v.optional(v.union(
+      v.literal("hierarchy"),
+      v.literal("subcategory"),
+      v.literal("badge")
+    )),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx, args.token);
@@ -219,12 +376,58 @@ export const updateCategory = mutation({
       throw new ConvexError("Catégorie non trouvée");
     }
 
-    const updates: Record<string, unknown> = { updatedAt: Date.now() };
+    // Si on essaie de changer le parentCategoryId
+    if (args.parentCategoryId !== undefined) {
+      const newParentId = args.parentCategoryId;
+
+      if (newParentId !== null) {
+        // Vérifier que le nouveau parent existe
+        const newParent = await ctx.db.get(newParentId);
+        if (!newParent) {
+          throw new ConvexError("Catégorie parente non trouvée");
+        }
+        // Vérifier que le parent n'a pas de parent (max 2 niveaux)
+        if (newParent.parentCategoryId) {
+          throw new ConvexError("Impossible d'assigner à une sous-catégorie (2 niveaux max)");
+        }
+        // Empêcher référence circulaire (ne peut pas être son propre parent)
+        if (newParentId === args.categoryId) {
+          throw new ConvexError("Une catégorie ne peut pas être son propre parent");
+        }
+      }
+
+      // Si cette catégorie a des sous-catégories, elle ne peut pas devenir une sous-catégorie
+      if (newParentId !== null) {
+        const hasChildren = await ctx.db
+          .query("serviceCategories")
+          .withIndex("by_parent", (q) => q.eq("parentCategoryId", args.categoryId))
+          .first();
+        if (hasChildren) {
+          throw new ConvexError("Cette catégorie a des sous-catégories et ne peut pas devenir une sous-catégorie");
+        }
+      }
+    }
+
+    // Construire les mises à jour
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updates: Record<string, any> = { updatedAt: Date.now() };
     if (args.name !== undefined) updates.name = args.name;
     if (args.description !== undefined) updates.description = args.description;
     if (args.icon !== undefined) updates.icon = args.icon;
     if (args.imageStorageId !== undefined) updates.imageStorageId = args.imageStorageId;
     if (args.isActive !== undefined) updates.isActive = args.isActive;
+
+    // Gérer parentCategoryId: null = supprimer le parent (devient catégorie parente)
+    if (args.parentCategoryId !== undefined) {
+      if (args.parentCategoryId === null) {
+        // Supprimer le champ parentCategoryId pour en faire une catégorie parente
+        // On doit patcher avec undefined pour supprimer le champ
+        updates.parentCategoryId = undefined;
+      } else {
+        updates.parentCategoryId = args.parentCategoryId;
+      }
+    }
+
     if (args.billingType !== undefined) updates.billingType = args.billingType;
     if (args.defaultHourlyPrice !== undefined) updates.defaultHourlyPrice = args.defaultHourlyPrice;
     if (args.allowRangeBooking !== undefined) updates.allowRangeBooking = args.allowRangeBooking;
@@ -232,6 +435,7 @@ export const updateCategory = mutation({
     if (args.defaultVariants !== undefined) updates.defaultVariants = args.defaultVariants;
     if (args.allowCustomVariants !== undefined) updates.allowCustomVariants = args.allowCustomVariants;
     if (args.allowOvernightStay !== undefined) updates.allowOvernightStay = args.allowOvernightStay;
+    if (args.displayFormat !== undefined) updates.displayFormat = args.displayFormat;
 
     await ctx.db.patch(args.categoryId, updates);
 
@@ -251,6 +455,16 @@ export const deleteCategory = mutation({
     const category = await ctx.db.get(args.categoryId);
     if (!category) {
       throw new ConvexError("Catégorie non trouvée");
+    }
+
+    // Vérifier si cette catégorie a des sous-catégories
+    const hasChildren = await ctx.db
+      .query("serviceCategories")
+      .withIndex("by_parent", (q) => q.eq("parentCategoryId", args.categoryId))
+      .first();
+
+    if (hasChildren) {
+      throw new ConvexError("Impossible de supprimer une catégorie parente qui a des sous-catégories. Supprimez d'abord les sous-catégories ou déplacez-les vers un autre parent.");
     }
 
     // Supprimer l'image si elle existe

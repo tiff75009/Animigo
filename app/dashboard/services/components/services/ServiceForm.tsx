@@ -39,6 +39,9 @@ interface ServiceCategory {
   slug: string;
   name: string;
   icon?: string;
+  parentCategoryId?: string;
+  parentName?: string;
+  isParent?: boolean;
   billingType?: "hourly" | "daily" | "flexible";
   allowedPriceUnits?: PriceUnit[];
   defaultVariants?: DefaultVariant[];
@@ -309,28 +312,85 @@ export default function ServiceForm({
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {availableCategories.map((cat) => (
-                    <motion.button
-                      key={cat.slug}
-                      type="button"
-                      onClick={() => setCategory(cat.slug)}
-                      className={cn(
-                        "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
-                        category === cat.slug
-                          ? "border-primary bg-primary/5"
-                          : "border-foreground/10 hover:border-foreground/20"
-                      )}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      <span className="text-3xl">{cat.icon || "✨"}</span>
-                      <span className="text-sm font-medium text-foreground">
-                        {cat.name}
-                      </span>
-                    </motion.button>
-                  ))}
-                </div>
+                (() => {
+                  // Grouper les catégories par parent
+                  const grouped = availableCategories.reduce((acc, cat) => {
+                    const parentKey = cat.parentName || "Autres";
+                    if (!acc[parentKey]) {
+                      acc[parentKey] = [];
+                    }
+                    acc[parentKey].push(cat);
+                    return acc;
+                  }, {} as Record<string, ServiceCategory[]>);
+
+                  const groupKeys = Object.keys(grouped);
+                  const hasGroups = groupKeys.length > 1 || (groupKeys.length === 1 && groupKeys[0] !== "Autres");
+
+                  if (!hasGroups) {
+                    // Affichage plat si pas de groupes
+                    return (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {availableCategories.map((cat) => (
+                          <motion.button
+                            key={cat.slug}
+                            type="button"
+                            onClick={() => setCategory(cat.slug)}
+                            className={cn(
+                              "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
+                              category === cat.slug
+                                ? "border-primary bg-primary/5"
+                                : "border-foreground/10 hover:border-foreground/20"
+                            )}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                          >
+                            <span className="text-3xl">{cat.icon || "✨"}</span>
+                            <span className="text-sm font-medium text-foreground">
+                              {cat.name}
+                            </span>
+                          </motion.button>
+                        ))}
+                      </div>
+                    );
+                  }
+
+                  // Affichage groupé par parent
+                  return (
+                    <div className="space-y-4">
+                      {groupKeys.map((parentName) => (
+                        <div key={parentName} className="space-y-2">
+                          <div className="flex items-center gap-2 px-2">
+                            <span className="text-xs font-semibold text-text-light uppercase tracking-wider">
+                              {parentName}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            {grouped[parentName].map((cat) => (
+                              <motion.button
+                                key={cat.slug}
+                                type="button"
+                                onClick={() => setCategory(cat.slug)}
+                                className={cn(
+                                  "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
+                                  category === cat.slug
+                                    ? "border-primary bg-primary/5"
+                                    : "border-foreground/10 hover:border-foreground/20"
+                                )}
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                              >
+                                <span className="text-3xl">{cat.icon || "✨"}</span>
+                                <span className="text-sm font-medium text-foreground">
+                                  {cat.name}
+                                </span>
+                              </motion.button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()
               )}
 
               {/* Lieu de prestation */}

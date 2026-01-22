@@ -44,6 +44,9 @@ export interface ServiceCategory {
   slug: string;
   name: string;
   icon?: string;
+  parentCategoryId?: Id<"serviceCategories">;
+  parentName?: string;
+  isParent?: boolean;
   billingType?: "hourly" | "daily" | "flexible";
   allowedPriceUnits?: ("hour" | "day" | "week" | "month")[];
   defaultVariants?: Array<{
@@ -55,6 +58,19 @@ export interface ServiceCategory {
   allowCustomVariants?: boolean;
   allowRangeBooking?: boolean;
   allowOvernightStay?: boolean;
+}
+
+// Structure hiérarchique retournée par getActiveCategories
+interface CategoriesData {
+  parentCategories: Array<{
+    id: Id<"serviceCategories">;
+    slug: string;
+    name: string;
+    icon?: string;
+    isParent: boolean;
+    subcategories: ServiceCategory[];
+  }>;
+  rootCategories: ServiceCategory[];
 }
 
 const DEFAULT_CATEGORIES: ServiceCategory[] = [
@@ -84,8 +100,34 @@ export function useServicesPageData(token: string | undefined) {
     token ? { token } : "skip"
   );
 
-  const categoriesData = useQuery(api.admin.serviceCategories.getActiveCategories, {});
-  const categories: ServiceCategory[] = categoriesData?.length ? categoriesData : DEFAULT_CATEGORIES;
+  const categoriesData = useQuery(api.admin.serviceCategories.getActiveCategories, {}) as CategoriesData | undefined;
+
+  // Extraire toutes les sous-catégories (les seules sélectionnables pour les services)
+  const categories: ServiceCategory[] = (() => {
+    if (!categoriesData) return DEFAULT_CATEGORIES;
+
+    const allCategories: ServiceCategory[] = [];
+
+    // Ajouter les sous-catégories de chaque parent
+    categoriesData.parentCategories.forEach((parent) => {
+      parent.subcategories.forEach((sub) => {
+        allCategories.push({
+          ...sub,
+          parentName: parent.name,
+        });
+      });
+    });
+
+    // Ajouter les catégories racine (sans parent)
+    categoriesData.rootCategories.forEach((cat) => {
+      allCategories.push(cat);
+    });
+
+    return allCategories.length > 0 ? allCategories : DEFAULT_CATEGORIES;
+  })();
+
+  // Données hiérarchiques pour l'affichage groupé
+  const categoriesHierarchy = categoriesData;
 
   // Mutations
   const upsertProfileMutation = useMutation(api.services.profile.upsertProfile);
@@ -261,6 +303,7 @@ export function useServicesPageData(token: string | undefined) {
     services,
     photos,
     categories,
+    categoriesHierarchy,
 
     // Loading states
     isLoading: !profileData && !services && !photos,

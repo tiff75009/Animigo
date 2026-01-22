@@ -16,9 +16,15 @@ export interface ServiceCategory {
   name: string;
   icon?: string;
   imageUrl?: string | null;
+  // Hiérarchie
+  parentCategoryId?: Id<"serviceCategories">;
+  parentName?: string;
+  isParent?: boolean;
+  // Métier (uniquement pour les sous-catégories)
   billingType?: "hourly" | "daily" | "flexible";
   allowRangeBooking?: boolean;
   allowOvernightStay?: boolean;
+  allowedPriceUnits?: ("hour" | "day" | "week" | "month")[];
 }
 
 export interface Coordinates {
