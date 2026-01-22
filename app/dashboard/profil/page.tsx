@@ -41,9 +41,13 @@ import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/app/hooks/useAuth";
 import { mockReviews, calculateStats, type PricingTier } from "@/app/lib/dashboard-data";
 import { cn } from "@/app/lib/utils";
-import ProfileCard from "../components/ProfileCard";
+import Link from "next/link";
+import ProfileHeader from "../components/ProfileHeader";
 import ProfileCompletionBar from "../components/ProfileCompletionBar";
 import ProfileSettingsSection from "../components/ProfileSettingsSection";
+import ActivitiesSection from "../components/ActivitiesSection";
+import EnvironmentPhotosSection from "../components/EnvironmentPhotosSection";
+import { Id } from "@/convex/_generated/dataModel";
 
 // Pricing Card Component
 interface PricingCardProps {
@@ -139,140 +143,6 @@ function PricingCard({ icon: Icon, label, pricing, color }: PricingCardProps) {
         </div>
       </div>
     </div>
-  );
-}
-
-// Photo Gallery Component
-interface PhotoGalleryProps {
-  photos: { id: string; url: string; caption: string }[];
-  currentIndex: number;
-  onClose: () => void;
-  onPrev: () => void;
-  onNext: () => void;
-  onGoTo?: (index: number) => void;
-}
-
-function PhotoGallery({ photos, currentIndex, onClose, onPrev, onNext, onGoTo }: PhotoGalleryProps) {
-  const currentPhoto = photos[currentIndex];
-
-  // Keyboard navigation
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      if (e.key === "ArrowLeft") onPrev();
-      if (e.key === "ArrowRight") onNext();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose, onPrev, onNext]);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
-      onClick={onClose}
-    >
-      {/* Close button */}
-      <motion.button
-        className="absolute top-4 right-4 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors z-10"
-        onClick={onClose}
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.9 }}
-      >
-        <X className="w-6 h-6" />
-      </motion.button>
-
-      {/* Counter */}
-      <div className="absolute top-4 left-4 px-4 py-2 bg-white/10 rounded-full text-white text-sm">
-        {currentIndex + 1} / {photos.length}
-      </div>
-
-      {/* Previous button */}
-      <motion.button
-        className="absolute left-4 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
-        onClick={(e) => {
-          e.stopPropagation();
-          onPrev();
-        }}
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.9 }}
-      >
-        <ChevronLeft className="w-8 h-8" />
-      </motion.button>
-
-      {/* Image container */}
-      <motion.div
-        key={currentPhoto.id}
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.9 }}
-        transition={{ type: "spring", damping: 25 }}
-        className="relative max-w-5xl max-h-[80vh] mx-16"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <Image
-          src={currentPhoto.url}
-          alt={currentPhoto.caption}
-          width={1200}
-          height={800}
-          className="rounded-2xl object-contain max-h-[80vh] w-auto"
-        />
-        {/* Caption */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent rounded-b-2xl"
-        >
-          <p className="text-white text-lg font-medium text-center">
-            {currentPhoto.caption}
-          </p>
-        </motion.div>
-      </motion.div>
-
-      {/* Next button */}
-      <motion.button
-        className="absolute right-4 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
-        onClick={(e) => {
-          e.stopPropagation();
-          onNext();
-        }}
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.9 }}
-      >
-        <ChevronRight className="w-8 h-8" />
-      </motion.button>
-
-      {/* Thumbnails */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-        {photos.map((photo, index) => (
-          <motion.button
-            key={photo.id}
-            className={cn(
-              "w-16 h-12 rounded-lg overflow-hidden border-2 transition-all",
-              index === currentIndex
-                ? "border-white opacity-100"
-                : "border-transparent opacity-50 hover:opacity-75"
-            )}
-            onClick={(e) => {
-              e.stopPropagation();
-              onGoTo?.(index);
-            }}
-            whileHover={{ scale: 1.05 }}
-          >
-            <Image
-              src={photo.url}
-              alt={photo.caption}
-              width={64}
-              height={48}
-              className="w-full h-full object-cover"
-            />
-          </motion.button>
-        ))}
-      </div>
-    </motion.div>
   );
 }
 
@@ -432,21 +302,7 @@ const mockAcceptedAnimalTypes = [
   { type: "Reptile", emoji: "🦎", accepted: false },
 ];
 
-const mockActivities = [
-  { id: "a1", name: "Promenades quotidiennes", emoji: "🚶", description: "2 à 3 promenades par jour dans les parcs du quartier" },
-  { id: "a2", name: "Jeux et stimulation", emoji: "🎾", description: "Sessions de jeu régulières pour garder votre animal actif" },
-  { id: "a3", name: "Câlins et attention", emoji: "🤗", description: "Beaucoup d'amour et de moments de complicité" },
-  { id: "a4", name: "Photos et nouvelles", emoji: "📸", description: "Envoi quotidien de photos et mises à jour" },
-];
-
-const mockEnvironmentPhotos = [
-  { id: "p1", url: "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=600&h=400&fit=crop", caption: "Salon lumineux" },
-  { id: "p2", url: "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=600&h=400&fit=crop", caption: "Espace détente" },
-  { id: "p3", url: "https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?w=600&h=400&fit=crop", caption: "Coin repos pour animaux" },
-  { id: "p4", url: "https://images.unsplash.com/photo-1523575708161-ad0fc2a9b951?w=600&h=400&fit=crop", caption: "Balcon ensoleillé" },
-];
-
-// Types d'animaux pour le formulaire
+// Types d'animaux pour l'affichage
 const ANIMAL_TYPE_OPTIONS = [
   { value: "chien", label: "Chien", emoji: "🐕" },
   { value: "chat", label: "Chat", emoji: "🐈" },
@@ -458,119 +314,9 @@ const ANIMAL_TYPE_OPTIONS = [
   { value: "autre", label: "Autre", emoji: "🐾" },
 ];
 
-// Formulaire compact pour ajouter un animal
-function OwnedAnimalForm({
-  onAdd,
-}: {
-  onAdd: (animal: { type: string; name: string; breed?: string; age?: number }) => void;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [animalType, setAnimalType] = useState("");
-  const [animalName, setAnimalName] = useState("");
-  const [animalAge, setAnimalAge] = useState("");
-
-  const handleSubmit = () => {
-    if (!animalType || !animalName.trim()) return;
-
-    onAdd({
-      type: animalType,
-      name: animalName.trim(),
-      age: animalAge ? parseInt(animalAge) : undefined,
-    });
-
-    // Reset form
-    setAnimalType("");
-    setAnimalName("");
-    setAnimalAge("");
-    setIsOpen(false);
-  };
-
-  if (!isOpen) {
-    return (
-      <motion.button
-        type="button"
-        onClick={() => setIsOpen(true)}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-primary hover:bg-primary/10 transition-all"
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-      >
-        <Plus className="w-4 h-4" />
-        <span className="font-medium">Ajouter</span>
-      </motion.button>
-    );
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex flex-wrap items-center gap-2 p-2 bg-white rounded-lg border border-primary/20"
-    >
-      <select
-        value={animalType}
-        onChange={(e) => setAnimalType(e.target.value)}
-        className="px-2 py-1.5 text-sm border border-foreground/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
-      >
-        <option value="">Type...</option>
-        {ANIMAL_TYPE_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.emoji} {opt.label}
-          </option>
-        ))}
-      </select>
-
-      <input
-        type="text"
-        value={animalName}
-        onChange={(e) => setAnimalName(e.target.value)}
-        placeholder="Nom"
-        className="w-24 px-2 py-1.5 text-sm border border-foreground/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-      />
-
-      <input
-        type="number"
-        min="0"
-        max="30"
-        value={animalAge}
-        onChange={(e) => setAnimalAge(e.target.value)}
-        placeholder="Âge"
-        className="w-16 px-2 py-1.5 text-sm border border-foreground/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-      />
-
-      <motion.button
-        type="button"
-        onClick={handleSubmit}
-        disabled={!animalType || !animalName.trim()}
-        className={cn(
-          "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
-          animalType && animalName.trim()
-            ? "bg-primary text-white hover:bg-primary/90"
-            : "bg-foreground/10 text-foreground/40 cursor-not-allowed"
-        )}
-        whileHover={animalType && animalName.trim() ? { scale: 1.02 } : undefined}
-        whileTap={animalType && animalName.trim() ? { scale: 0.98 } : undefined}
-      >
-        OK
-      </motion.button>
-
-      <motion.button
-        type="button"
-        onClick={() => setIsOpen(false)}
-        className="p-1.5 text-foreground/40 hover:text-foreground/60"
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.9 }}
-      >
-        <X className="w-4 h-4" />
-      </motion.button>
-    </motion.div>
-  );
-}
-
 export default function ProfilePage() {
   const { user, token, isLoading: authLoading } = useAuth();
   const stats = calculateStats();
-  const [galleryOpen, setGalleryOpen] = useState(false);
-  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
 
   // Récupérer le profil Convex
   const profileData = useQuery(
@@ -594,6 +340,7 @@ export default function ProfilePage() {
   // Calculer le pourcentage de complétion du profil
   const profileCompletionData = {
     hasProfilePhoto: !!profileImageUrl,
+    hasCoverPhoto: !!profile?.coverImageUrl,
     hasDescription: !!profile?.description && profile.description.trim().length > 0,
     hasLocation: !!profile?.city || !!profile?.location,
     hasRadius: !!profile?.radius && profile.radius > 0,
@@ -602,6 +349,7 @@ export default function ProfilePage() {
     hasMaxAnimals: !!profile?.maxAnimalsPerSlot && profile.maxAnimalsPerSlot > 0,
     hasServices: true, // TODO: vérifier les services
     hasAvailability: true, // TODO: vérifier les disponibilités
+    hasIcad: profile?.icadRegistered !== undefined && profile?.icadRegistered !== null,
   };
 
   // Handlers pour les modifications
@@ -640,6 +388,16 @@ export default function ProfilePage() {
   const handleRemoveAvatar = useCallback(async () => {
     if (!token) throw new Error("Non authentifié");
     await upsertProfile({ token, profileImageUrl: null });
+  }, [token, upsertProfile]);
+
+  const handleUploadCover = useCallback(async (cloudinaryUrl: string) => {
+    if (!token) throw new Error("Non authentifié");
+    await upsertProfile({ token, coverImageUrl: cloudinaryUrl });
+  }, [token, upsertProfile]);
+
+  const handleRemoveCover = useCallback(async () => {
+    if (!token) throw new Error("Non authentifié");
+    await upsertProfile({ token, coverImageUrl: null });
   }, [token, upsertProfile]);
 
   // Handlers pour les paramètres du profil
@@ -717,31 +475,20 @@ export default function ProfilePage() {
     await upsertProfile({ token, ownedAnimals: ownedAnimals.length > 0 ? ownedAnimals : null });
   }, [token, upsertProfile]);
 
-  // Gallery handlers
-  const openGallery = (index: number) => {
-    setCurrentPhotoIndex(index);
-    setGalleryOpen(true);
-  };
+  const handleSelectedActivitiesChange = useCallback(async (selectedActivities: Array<{ activityId: Id<"activities">; customDescription?: string }>) => {
+    if (!token) throw new Error("Non authentifié");
+    await upsertProfile({ token, selectedActivities: selectedActivities.length > 0 ? selectedActivities : null });
+  }, [token, upsertProfile]);
 
-  const closeGallery = () => {
-    setGalleryOpen(false);
-  };
+  const handleEnvironmentPhotosChange = useCallback(async (environmentPhotos: Array<{ id: string; url: string; caption?: string }>) => {
+    if (!token) throw new Error("Non authentifié");
+    await upsertProfile({ token, environmentPhotos: environmentPhotos.length > 0 ? environmentPhotos : null });
+  }, [token, upsertProfile]);
 
-  const prevPhoto = () => {
-    setCurrentPhotoIndex((prev) =>
-      prev === 0 ? mockEnvironmentPhotos.length - 1 : prev - 1
-    );
-  };
-
-  const nextPhoto = () => {
-    setCurrentPhotoIndex((prev) =>
-      prev === mockEnvironmentPhotos.length - 1 ? 0 : prev + 1
-    );
-  };
-
-  const goToPhoto = (index: number) => {
-    setCurrentPhotoIndex(index);
-  };
+  const handleUpdateIcad = useCallback(async (icadRegistered: boolean) => {
+    if (!token) throw new Error("Non authentifié");
+    await upsertProfile({ token, icadRegistered });
+  }, [token, upsertProfile]);
 
   // Loading state
   if (isLoading) {
@@ -770,38 +517,28 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
-      {/* Header with edit button */}
+      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between"
       >
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-            Ma fiche
-          </h1>
-          <p className="text-text-light mt-1">
-            Votre annonce visible par les propriétaires d&apos;animaux
-          </p>
-        </div>
-        <motion.button
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl font-semibold"
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          <Edit className="w-4 h-4" />
-          Modifier
-        </motion.button>
+        <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+          Ma fiche
+        </h1>
+        <p className="text-text-light mt-1">
+          Votre annonce visible par les propriétaires d&apos;animaux
+        </p>
       </motion.div>
 
       {/* Profile Completion Bar */}
       <ProfileCompletionBar profileData={profileCompletionData} />
 
-      {/* Profile Card */}
-      <ProfileCard
+      {/* Profile Header avec bannière */}
+      <ProfileHeader
         firstName={userInfo.firstName}
         lastName={userInfo.lastName}
         profileImage={profileImageUrl}
+        coverImage={profile?.coverImageUrl}
         location={profile?.location}
         city={profile?.city}
         postalCode={profile?.postalCode}
@@ -813,11 +550,15 @@ export default function ProfilePage() {
         responseRate={0}
         responseTime={undefined}
         description={profile?.description}
+        icadRegistered={profile?.icadRegistered}
         isEditable={true}
         onUpdateDescription={handleUpdateDescription}
         onUpdateLocation={handleUpdateLocation}
+        onUpdateIcad={handleUpdateIcad}
         onUploadAvatar={handleUploadAvatar}
         onRemoveAvatar={handleRemoveAvatar}
+        onUploadCover={handleUploadCover}
+        onRemoveCover={handleRemoveCover}
       />
 
       {/* Rayon d'intervention */}
@@ -1283,129 +1024,76 @@ export default function ProfilePage() {
 
           {profile?.ownedAnimals && profile.ownedAnimals.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-3">
-              {profile.ownedAnimals.map((animal: { type: string; name: string; breed?: string; age?: number }, index: number) => (
+              {profile.ownedAnimals.map((animal: { id?: string; type: string; name: string; breed?: string; age?: number; profilePhoto?: string }, index: number) => (
                 <div
-                  key={index}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-white rounded-lg border border-primary/20"
+                  key={animal.id || index}
+                  className="group flex items-center gap-2 px-3 py-1.5 bg-white rounded-lg border border-primary/20 hover:border-primary/40 transition-colors"
                 >
-                  <span className="text-sm">
-                    {ANIMAL_TYPE_OPTIONS.find(o => o.value === animal.type)?.emoji || "🐾"}
-                  </span>
+                  {animal.profilePhoto ? (
+                    <img src={animal.profilePhoto} alt={animal.name} className="w-6 h-6 rounded-full object-cover" />
+                  ) : (
+                    <span className="text-sm">
+                      {ANIMAL_TYPE_OPTIONS.find(o => o.value === animal.type)?.emoji || "🐾"}
+                    </span>
+                  )}
                   <span className="font-medium text-sm">{animal.name}</span>
-                  {animal.age && <span className="text-xs text-text-light">({animal.age}a)</span>}
-                  <motion.button
-                    type="button"
-                    onClick={() => {
-                      const newAnimals = [...(profile?.ownedAnimals || [])];
-                      newAnimals.splice(index, 1);
-                      handleOwnedAnimalsChange(newAnimals);
-                    }}
-                    className="ml-1 text-red-400 hover:text-red-600"
-                    whileHover={{ scale: 1.2 }}
-                    whileTap={{ scale: 0.9 }}
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </motion.button>
+                  {animal.age !== undefined && <span className="text-xs text-text-light">({animal.age}a)</span>}
+
+                  {/* Boutons édition/suppression */}
+                  <div className="flex items-center gap-1 ml-1">
+                    <Link href={`/dashboard/mes-animaux/${animal.id || `index-${index}`}/modifier`}>
+                      <motion.div
+                        className="text-foreground/40 hover:text-primary p-0.5"
+                        whileHover={{ scale: 1.2 }}
+                        whileTap={{ scale: 0.9 }}
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                      </motion.div>
+                    </Link>
+                    <motion.button
+                      type="button"
+                      onClick={() => {
+                        const newAnimals = [...(profile?.ownedAnimals || [])];
+                        newAnimals.splice(index, 1);
+                        handleOwnedAnimalsChange(newAnimals);
+                      }}
+                      className="text-foreground/40 hover:text-red-600 p-0.5"
+                      whileHover={{ scale: 1.2 }}
+                      whileTap={{ scale: 0.9 }}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </motion.button>
+                  </div>
                 </div>
               ))}
             </div>
           )}
 
-          <OwnedAnimalForm
-            onAdd={(animal) => {
-              const currentAnimals = profile?.ownedAnimals || [];
-              handleOwnedAnimalsChange([...currentAnimals, animal]);
-            }}
-          />
+          <Link href="/dashboard/mes-animaux/nouveau">
+            <motion.div
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white font-medium hover:bg-primary/90 transition-colors cursor-pointer"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <Plus className="w-4 h-4" />
+              <span>Ajouter un animal</span>
+            </motion.div>
+          </Link>
         </div>
       </motion.div>
 
       {/* Activities */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="bg-white rounded-3xl shadow-lg p-6"
-      >
-        <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-          <span className="text-xl">🎯</span>
-          Activités proposées
-        </h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {mockActivities.map((activity) => (
-            <div
-              key={activity.id}
-              className="flex items-start gap-4 p-4 bg-background rounded-xl"
-            >
-              <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-2xl flex-shrink-0">
-                {activity.emoji}
-              </div>
-              <div>
-                <p className="font-semibold text-foreground">{activity.name}</p>
-                <p className="text-sm text-text-light">{activity.description}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </motion.div>
+      <ActivitiesSection
+        token={token}
+        selectedActivities={profile?.selectedActivities as Array<{ activityId: Id<"activities">; customDescription?: string }> | undefined}
+        onUpdate={handleSelectedActivitiesChange}
+      />
 
       {/* Environment Photos */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.35 }}
-        className="bg-white rounded-3xl shadow-lg p-6"
-      >
-        <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-          <span className="text-xl">📸</span>
-          Photos de l&apos;environnement
-        </h3>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {mockEnvironmentPhotos.map((photo, index) => (
-            <motion.div
-              key={photo.id}
-              className="relative aspect-[4/3] rounded-xl overflow-hidden group cursor-pointer"
-              whileHover={{ scale: 1.02 }}
-              onClick={() => openGallery(index)}
-            >
-              <Image
-                src={photo.url}
-                alt={photo.caption}
-                fill
-                className="object-cover transition-transform group-hover:scale-110"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-              <p className="absolute bottom-0 left-0 right-0 p-3 text-white text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-                {photo.caption}
-              </p>
-              {/* Zoom icon on hover */}
-              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="p-3 bg-white/20 backdrop-blur-sm rounded-full">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
-                  </svg>
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </motion.div>
-
-      {/* Photo Gallery Modal */}
-      <AnimatePresence>
-        {galleryOpen && (
-          <PhotoGallery
-            photos={mockEnvironmentPhotos}
-            currentIndex={currentPhotoIndex}
-            onClose={closeGallery}
-            onPrev={prevPhoto}
-            onNext={nextPhoto}
-            onGoTo={goToPhoto}
-          />
-        )}
-      </AnimatePresence>
+      <EnvironmentPhotosSection
+        photos={profile?.environmentPhotos || []}
+        onUpdate={handleEnvironmentPhotosChange}
+      />
 
       {/* Recent Reviews Preview */}
       <motion.div

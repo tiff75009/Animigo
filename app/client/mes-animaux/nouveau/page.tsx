@@ -37,10 +37,10 @@ const ANIMAL_TYPES = [
 
 // Tailles
 const SIZES = [
-  { id: "petit", name: "Petit", description: "Moins de 10kg" },
-  { id: "moyen", name: "Moyen", description: "10-25kg" },
-  { id: "grand", name: "Grand", description: "25-45kg" },
-  { id: "tres_grand", name: "Très grand", description: "Plus de 45kg" },
+  { id: "petit", name: "Petit", description: "Moins de 10 kg" },
+  { id: "moyen", name: "Moyen", description: "10 - 25 kg" },
+  { id: "grand", name: "Grand", description: "25 - 45 kg" },
+  { id: "tres_grand", name: "Très grand", description: "Plus de 45 kg" },
 ];
 
 // Traits de comportement

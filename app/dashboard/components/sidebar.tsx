@@ -3,6 +3,7 @@
 import { cn } from "@/app/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
@@ -26,6 +27,8 @@ import {
   ClipboardList,
 } from "lucide-react";
 import { useState, memo } from "react";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { getUnreadMessagesCount } from "@/app/lib/dashboard-data";
 import { useAuth } from "@/app/hooks/useAuth";
 
@@ -116,7 +119,7 @@ const UserInfo = memo(function UserInfo({
   user,
   isLoading
 }: {
-  user: { firstName: string; lastName: string; avatar: string; verified: boolean } | null;
+  user: { firstName: string; lastName: string; profileImage?: string | null; verified: boolean } | null;
   isLoading: boolean;
 }) {
   // Afficher skeleton pendant le chargement
@@ -127,8 +130,19 @@ const UserInfo = memo(function UserInfo({
   return (
     <div className="p-4 border-b border-foreground/10">
       <div className="flex items-center gap-3 p-3 bg-primary/5 rounded-xl">
-        <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center text-2xl">
-          {user.avatar}
+        <div className="relative w-12 h-12 rounded-xl overflow-hidden ring-2 ring-white shadow-md bg-gray-100 flex-shrink-0">
+          {user.profileImage ? (
+            <Image
+              src={user.profileImage}
+              alt={`${user.firstName} ${user.lastName}`}
+              fill
+              className="object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20">
+              <User className="w-6 h-6 text-gray-400" />
+            </div>
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-foreground truncate">{user.firstName} {user.lastName}</p>
@@ -282,7 +296,13 @@ export function Sidebar({ className }: SidebarProps) {
   const pathname = usePathname();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const unreadCount = getUnreadMessagesCount();
-  const { user, logout, isLoading } = useAuth();
+  const { user, token, logout, isLoading } = useAuth();
+
+  // Récupérer le profil pour l'avatar
+  const profileData = useQuery(
+    api.services.profile.getProfile,
+    token ? { token } : "skip"
+  );
 
   const closeMobile = () => setIsMobileOpen(false);
 
@@ -291,7 +311,7 @@ export function Sidebar({ className }: SidebarProps) {
     ? {
         firstName: user.firstName,
         lastName: user.lastName,
-        avatar: "👤",
+        profileImage: profileData?.profile?.profileImageUrl || null,
         verified: user.accountType === "annonceur_pro",
       }
     : null;

@@ -54,7 +54,8 @@ export interface AnnouncerResult {
   id: Id<"users">;
   firstName: string;
   lastName: string;
-  profileImage?: string | null;
+  profileImage?: string | null; // Avatar
+  coverImage?: string | null; // Photo de couverture
   location: string;
   coordinates?: Coordinates;
   distance?: number;

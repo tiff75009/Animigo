@@ -83,6 +83,7 @@ export default defineSchema({
   profiles: defineTable({
     userId: v.id("users"),
     profileImageUrl: v.optional(v.string()), // URL Cloudinary de la photo de profil
+    coverImageUrl: v.optional(v.string()), // URL Cloudinary de la photo de couverture/bannière
     bio: v.optional(v.string()), // Description courte
     description: v.optional(v.string()), // Description détaillée
     experience: v.optional(v.string()), // Années d'expérience, formations
@@ -123,10 +124,33 @@ export default defineSchema({
     hasVehicle: v.optional(v.boolean()),
     // Animaux de l'annonceur
     ownedAnimals: v.optional(v.array(v.object({
+      id: v.optional(v.string()), // ID unique pour l'édition
       type: v.string(), // "chien", "chat", etc.
       name: v.string(),
       breed: v.optional(v.string()), // Race
       age: v.optional(v.number()), // Âge en années
+      gender: v.optional(v.string()), // "male", "female", "unknown"
+      profilePhoto: v.optional(v.string()), // URL Cloudinary
+      galleryPhotos: v.optional(v.array(v.string())), // URLs Cloudinary
+      weight: v.optional(v.number()), // Poids en kg
+      size: v.optional(v.string()), // "petit", "moyen", "grand", "tres_grand"
+      description: v.optional(v.string()),
+      goodWithChildren: v.optional(v.boolean()),
+      goodWithDogs: v.optional(v.boolean()),
+      goodWithCats: v.optional(v.boolean()),
+      goodWithOtherAnimals: v.optional(v.boolean()),
+      behaviorTraits: v.optional(v.array(v.string())),
+    }))),
+    // Activités proposées par l'annonceur
+    selectedActivities: v.optional(v.array(v.object({
+      activityId: v.id("activities"), // Référence à l'activité du catalogue
+      customDescription: v.optional(v.string()), // Description personnalisée par l'annonceur
+    }))),
+    // Photos de l'environnement (URLs Cloudinary)
+    environmentPhotos: v.optional(v.array(v.object({
+      id: v.string(), // ID unique pour le drag & drop
+      url: v.string(), // URL Cloudinary
+      caption: v.optional(v.string()), // Légende optionnelle
     }))),
     // Buffers de temps autour des services (en minutes)
     // Permet à l'annonceur de bloquer du temps avant/après chaque service
@@ -134,6 +158,9 @@ export default defineSchema({
     bufferAfter: v.optional(v.number()),  // Minutes à bloquer après un service (0, 15, 30, 45, 60)
     // Nombre max d'animaux acceptés en même temps sur un créneau
     maxAnimalsPerSlot: v.optional(v.number()), // Ex: 3 = peut garder 3 animaux simultanément
+    // I-CAD (Identification des Carnivores Domestiques)
+    // true = inscrit I-CAD, false = non inscrit, undefined = pas encore renseigné
+    icadRegistered: v.optional(v.boolean()),
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
@@ -747,6 +774,19 @@ export default defineSchema({
     .index("by_token", ["token"])
     .index("by_status", ["status"])
     .index("by_created_by", ["createdBy"]),
+
+  // Activités proposables par les annonceurs (catalogue admin)
+  activities: defineTable({
+    name: v.string(), // "Promenades quotidiennes", "Jeux et stimulation"
+    emoji: v.string(), // "🚶", "🎾"
+    description: v.optional(v.string()), // Description par défaut
+    order: v.number(), // Ordre d'affichage
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_order", ["order"])
+    .index("by_active", ["isActive"]),
 
   // Paiements Stripe (pré-autorisations et captures)
   stripePayments: defineTable({

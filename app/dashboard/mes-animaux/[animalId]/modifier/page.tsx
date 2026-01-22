@@ -5,7 +5,6 @@ import { useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/app/hooks/useAuth";
 import { useCloudinary } from "@/app/hooks/useCloudinary";
 import {
@@ -62,14 +61,32 @@ const STEPS = [
   { id: 1, title: "Identité", description: "Informations de base" },
   { id: 2, title: "Apparence", description: "Photos et caractéristiques" },
   { id: 3, title: "Personnalité", description: "Comportement et compatibilité" },
-  { id: 4, title: "Santé", description: "Informations médicales" },
 ];
+
+interface OwnedAnimal {
+  id?: string;
+  type: string;
+  name: string;
+  breed?: string;
+  age?: number;
+  gender?: string;
+  profilePhoto?: string;
+  galleryPhotos?: string[];
+  weight?: number;
+  size?: string;
+  description?: string;
+  goodWithChildren?: boolean;
+  goodWithDogs?: boolean;
+  goodWithCats?: boolean;
+  goodWithOtherAnimals?: boolean;
+  behaviorTraits?: string[];
+}
 
 interface FormData {
   name: string;
   type: string;
   gender: "male" | "female" | "unknown";
-  birthDate: string;
+  age: string;
   breed: string;
   weight: string;
   size: string;
@@ -81,27 +98,21 @@ interface FormData {
   goodWithCats: boolean | null;
   goodWithOtherAnimals: boolean | null;
   behaviorTraits: string[];
-  hasAllergies: boolean;
-  allergiesDetails: string;
-  medicalConditions: string;
-  specialNeeds: string;
 }
 
-export default function EditAnimalPage() {
+export default function EditOwnedAnimalPage() {
   const router = useRouter();
   const params = useParams();
   const animalId = params.animalId as string;
-  const { user } = useAuth();
-  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const { token } = useAuth();
   const { isConfigured, uploadState, uploadImage, uploadImages } = useCloudinary();
+  const upsertProfile = useMutation(api.services.profile.upsertProfile);
 
-  const animal = useQuery(
-    api.animals.getAnimal,
-    token && animalId ? { token, animalId: animalId as Id<"animals"> } : "skip"
+  // Récupérer le profil actuel
+  const profileData = useQuery(
+    api.services.profile.getProfile,
+    token ? { token } : "skip"
   );
-
-  const updateAnimal = useMutation(api.animals.updateAnimal);
-  const deleteAnimalMutation = useMutation(api.animals.deleteAnimal);
 
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -117,7 +128,7 @@ export default function EditAnimalPage() {
     name: "",
     type: "",
     gender: "unknown",
-    birthDate: "",
+    age: "",
     breed: "",
     weight: "",
     size: "",
@@ -129,11 +140,21 @@ export default function EditAnimalPage() {
     goodWithCats: null,
     goodWithOtherAnimals: null,
     behaviorTraits: [],
-    hasAllergies: false,
-    allergiesDetails: "",
-    medicalConditions: "",
-    specialNeeds: "",
   });
+
+  // Déterminer si l'ID est un index (format "index-X")
+  const isIndexBased = animalId.startsWith("index-");
+  const animalIndex = isIndexBased ? parseInt(animalId.replace("index-", ""), 10) : -1;
+
+  // Trouver l'animal dans le profil
+  const animal = profileData?.profile?.ownedAnimals?.find(
+    (a: OwnedAnimal, idx: number) => {
+      if (isIndexBased) {
+        return idx === animalIndex;
+      }
+      return a.id === animalId;
+    }
+  );
 
   // Charger les données de l'animal
   useEffect(() => {
@@ -141,50 +162,25 @@ export default function EditAnimalPage() {
       setFormData({
         name: animal.name || "",
         type: animal.type || "",
-        gender: animal.gender || "unknown",
-        birthDate: animal.birthDate || "",
+        gender: (animal.gender as "male" | "female" | "unknown") || "unknown",
+        age: animal.age?.toString() || "",
         breed: animal.breed || "",
         weight: animal.weight?.toString() || "",
         size: animal.size || "",
         description: animal.description || "",
-        profilePhoto: animal.profilePhoto || animal.primaryPhotoUrl || "",
+        profilePhoto: animal.profilePhoto || "",
         galleryPhotos: animal.galleryPhotos || [],
         goodWithChildren: animal.goodWithChildren ?? null,
         goodWithDogs: animal.goodWithDogs ?? null,
         goodWithCats: animal.goodWithCats ?? null,
         goodWithOtherAnimals: animal.goodWithOtherAnimals ?? null,
         behaviorTraits: animal.behaviorTraits || [],
-        hasAllergies: animal.hasAllergies || false,
-        allergiesDetails: animal.allergiesDetails || "",
-        medicalConditions: animal.medicalConditions || "",
-        specialNeeds: animal.specialNeeds || "",
       });
       setIsLoaded(true);
     }
   }, [animal, isLoaded]);
 
-  // Calculer l'âge
-  const calculateAge = (birthDate: string): string => {
-    if (!birthDate) return "";
-    const birth = new Date(birthDate);
-    const now = new Date();
-    const years = now.getFullYear() - birth.getFullYear();
-    const months = now.getMonth() - birth.getMonth();
-
-    if (years === 0) {
-      if (months <= 0) return "Moins d'un mois";
-      return `${months} mois`;
-    }
-    if (years === 1 && months < 0) {
-      return `${12 + months} mois`;
-    }
-    if (years < 2) {
-      return `${years} an${months > 0 ? ` et ${months} mois` : ""}`;
-    }
-    return `${years} ans`;
-  };
-
-  // Upload de photo de profil
+  // Gestion de l'upload de photo de profil
   const handleProfilePhotoUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -203,7 +199,7 @@ export default function EditAnimalPage() {
     [isConfigured, uploadImage]
   );
 
-  // Upload de galerie
+  // Gestion de l'upload de galerie
   const handleGalleryUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files || []);
@@ -233,7 +229,7 @@ export default function EditAnimalPage() {
     }));
   };
 
-  // Toggle un trait
+  // Toggle un trait de comportement
   const toggleBehaviorTrait = (trait: string) => {
     setFormData((prev) => ({
       ...prev,
@@ -287,31 +283,46 @@ export default function EditAnimalPage() {
     setError(null);
 
     try {
-      await updateAnimal({
-        token,
-        animalId: animalId as Id<"animals">,
-        name: formData.name.trim(),
-        type: formData.type,
-        gender: formData.gender,
-        birthDate: formData.birthDate || undefined,
-        breed: formData.breed.trim() || undefined,
-        weight: formData.weight ? parseFloat(formData.weight) : undefined,
-        size: formData.size || undefined,
-        description: formData.description.trim() || undefined,
-        profilePhoto: formData.profilePhoto || undefined,
-        galleryPhotos: formData.galleryPhotos.length > 0 ? formData.galleryPhotos : undefined,
-        goodWithChildren: formData.goodWithChildren ?? undefined,
-        goodWithDogs: formData.goodWithDogs ?? undefined,
-        goodWithCats: formData.goodWithCats ?? undefined,
-        goodWithOtherAnimals: formData.goodWithOtherAnimals ?? undefined,
-        behaviorTraits: formData.behaviorTraits.length > 0 ? formData.behaviorTraits : undefined,
-        hasAllergies: formData.hasAllergies || undefined,
-        allergiesDetails: formData.allergiesDetails.trim() || undefined,
-        medicalConditions: formData.medicalConditions.trim() || undefined,
-        specialNeeds: formData.specialNeeds.trim() || undefined,
+      // Récupérer les animaux existants
+      const existingAnimals = profileData?.profile?.ownedAnimals || [];
+
+      // Générer un nouvel ID si l'animal n'en a pas
+      const newId = isIndexBased
+        ? `animal_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        : animalId;
+
+      // Mettre à jour l'animal
+      const updatedAnimals = existingAnimals.map((a: OwnedAnimal, idx: number) => {
+        const isTargetAnimal = isIndexBased ? idx === animalIndex : a.id === animalId;
+        if (isTargetAnimal) {
+          return {
+            id: newId,
+            type: formData.type,
+            name: formData.name.trim(),
+            breed: formData.breed.trim() || undefined,
+            age: formData.age ? parseInt(formData.age) : undefined,
+            gender: formData.gender,
+            profilePhoto: formData.profilePhoto || undefined,
+            galleryPhotos: formData.galleryPhotos.length > 0 ? formData.galleryPhotos : undefined,
+            weight: formData.weight ? parseFloat(formData.weight) : undefined,
+            size: formData.size || undefined,
+            description: formData.description.trim() || undefined,
+            goodWithChildren: formData.goodWithChildren ?? undefined,
+            goodWithDogs: formData.goodWithDogs ?? undefined,
+            goodWithCats: formData.goodWithCats ?? undefined,
+            goodWithOtherAnimals: formData.goodWithOtherAnimals ?? undefined,
+            behaviorTraits: formData.behaviorTraits.length > 0 ? formData.behaviorTraits : undefined,
+          };
+        }
+        return a;
       });
 
-      router.push("/client/mes-animaux?success=updated");
+      await upsertProfile({
+        token,
+        ownedAnimals: updatedAnimals,
+      });
+
+      router.push("/dashboard/profil?success=animal_updated");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Une erreur est survenue");
     } finally {
@@ -326,12 +337,20 @@ export default function EditAnimalPage() {
     setIsDeleting(true);
 
     try {
-      await deleteAnimalMutation({
-        token,
-        animalId: animalId as Id<"animals">,
+      const existingAnimals = profileData?.profile?.ownedAnimals || [];
+      const updatedAnimals = existingAnimals.filter((a: OwnedAnimal, idx: number) => {
+        if (isIndexBased) {
+          return idx !== animalIndex;
+        }
+        return a.id !== animalId;
       });
 
-      router.push("/client/mes-animaux?success=deleted");
+      await upsertProfile({
+        token,
+        ownedAnimals: updatedAnimals.length > 0 ? updatedAnimals : null,
+      });
+
+      router.push("/dashboard/profil?success=animal_deleted");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur lors de la suppression");
       setIsDeleting(false);
@@ -374,7 +393,7 @@ export default function EditAnimalPage() {
   );
 
   // Chargement
-  if (!animal && token && animalId) {
+  if (profileData === undefined) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -382,28 +401,29 @@ export default function EditAnimalPage() {
     );
   }
 
-  if (!animal) {
+  // Animal non trouvé
+  if (profileData && !animal) {
     return (
-      <div className="flex flex-col items-center justify-center py-12">
+      <div className="flex flex-col items-center justify-center py-12 max-w-md mx-auto">
         <PawPrint className="w-16 h-16 text-gray-300 mb-4" />
         <h1 className="text-xl font-bold text-gray-900 mb-2">Animal introuvable</h1>
-        <p className="text-gray-500 mb-6">Cet animal n'existe pas ou vous n'avez pas les droits pour le modifier.</p>
+        <p className="text-gray-500 mb-6 text-center">Cet animal n&apos;existe pas ou a été supprimé.</p>
         <Link
-          href="/client/mes-animaux"
+          href="/dashboard/profil"
           className="px-6 py-3 bg-primary text-white rounded-xl font-medium"
         >
-          Retour à mes animaux
+          Retour au profil
         </Link>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 pb-8">
+    <div className="space-y-6 pb-8 max-w-2xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
         <Link
-          href="/client/mes-animaux"
+          href="/dashboard/profil"
           className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
@@ -442,7 +462,7 @@ export default function EditAnimalPage() {
                 {step.id}
               </motion.button>
               {index < STEPS.length - 1 && (
-                <div className="w-8 sm:w-16 h-1 mx-1 bg-gray-200">
+                <div className="w-12 sm:w-24 h-1 mx-1 bg-gray-200">
                   <motion.div
                     initial={false}
                     animate={{ scaleX: currentStep > step.id ? 1 : 0 }}
@@ -488,7 +508,7 @@ export default function EditAnimalPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Type d'animal <span className="text-red-500">*</span>
+                    Type d&apos;animal <span className="text-red-500">*</span>
                   </label>
                   <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
                     {ANIMAL_TYPES.map((type) => (
@@ -542,18 +562,15 @@ export default function EditAnimalPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Date de naissance
-                    {formData.birthDate && (
-                      <span className="ml-2 text-primary font-normal">
-                        ({calculateAge(formData.birthDate)})
-                      </span>
-                    )}
+                    Âge (années)
                   </label>
                   <input
-                    type="date"
-                    value={formData.birthDate}
-                    onChange={(e) => setFormData({ ...formData, birthDate: e.target.value })}
-                    max={new Date().toISOString().split("T")[0]}
+                    type="number"
+                    min="0"
+                    max="30"
+                    value={formData.age}
+                    onChange={(e) => setFormData({ ...formData, age: e.target.value })}
+                    placeholder="Ex: 3"
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                   />
                 </div>
@@ -785,82 +802,6 @@ export default function EditAnimalPage() {
                 </div>
               </div>
             )}
-
-            {/* Step 4: Santé */}
-            {currentStep === 4 && (
-              <div className="space-y-6">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium text-gray-700">
-                      Votre animal a-t-il des allergies ?
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setFormData({
-                          ...formData,
-                          hasAllergies: !formData.hasAllergies,
-                          allergiesDetails: formData.hasAllergies ? "" : formData.allergiesDetails,
-                        })
-                      }
-                      className={`relative w-12 h-6 rounded-full transition-colors ${
-                        formData.hasAllergies ? "bg-primary" : "bg-gray-300"
-                      }`}
-                    >
-                      <motion.div
-                        initial={false}
-                        animate={{ x: formData.hasAllergies ? 24 : 0 }}
-                        className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow"
-                      />
-                    </button>
-                  </div>
-                  {formData.hasAllergies && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                    >
-                      <textarea
-                        value={formData.allergiesDetails}
-                        onChange={(e) =>
-                          setFormData({ ...formData, allergiesDetails: e.target.value })
-                        }
-                        placeholder="Décrivez les allergies..."
-                        rows={2}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none"
-                      />
-                    </motion.div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Conditions médicales
-                  </label>
-                  <textarea
-                    value={formData.medicalConditions}
-                    onChange={(e) =>
-                      setFormData({ ...formData, medicalConditions: e.target.value })
-                    }
-                    placeholder="Maladies chroniques, traitements..."
-                    rows={3}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Besoins particuliers
-                  </label>
-                  <textarea
-                    value={formData.specialNeeds}
-                    onChange={(e) => setFormData({ ...formData, specialNeeds: e.target.value })}
-                    placeholder="Régime alimentaire spécial..."
-                    rows={3}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none"
-                  />
-                </div>
-              </div>
-            )}
           </motion.div>
         </AnimatePresence>
 
@@ -947,7 +888,7 @@ export default function EditAnimalPage() {
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-2">Supprimer {formData.name} ?</h3>
                 <p className="text-gray-500 mb-6">
-                  Cette action est irréversible. Toutes les données de cet animal seront supprimées.
+                  Cette action est irréversible.
                 </p>
                 <div className="flex gap-3">
                   <button

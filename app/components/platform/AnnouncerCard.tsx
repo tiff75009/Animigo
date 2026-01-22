@@ -46,9 +46,19 @@ export function AnnouncerCardGrid({ announcer, onShowFormulas, index }: Announce
       onMouseLeave={() => setIsHovered(false)}
       className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 hover:border-gray-200"
     >
-      {/* Image Section */}
+      {/* Image Section - Cover Image */}
       <div className="relative aspect-[4/3] bg-gradient-to-br from-gray-100 to-gray-50 overflow-hidden">
-        {announcer.profileImage ? (
+        {announcer.coverImage ? (
+          <Image
+            src={announcer.coverImage}
+            alt={`Couverture de ${announcer.firstName}`}
+            fill
+            className={cn(
+              "object-cover transition-transform duration-500",
+              isHovered && "scale-105"
+            )}
+          />
+        ) : announcer.profileImage ? (
           <Image
             src={announcer.profileImage}
             alt={announcer.firstName}
@@ -59,15 +69,13 @@ export function AnnouncerCardGrid({ announcer, onShowFormulas, index }: Announce
             )}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <div className="w-20 h-20 bg-gradient-to-br from-primary/20 to-secondary/20 rounded-full flex items-center justify-center">
-              <span className="text-4xl">👤</span>
-            </div>
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10">
+            <span className="text-5xl">🐾</span>
           </div>
         )}
 
         {/* Overlay gradient */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
 
         {/* Top badges */}
         <div className="absolute top-3 left-3 right-3 flex items-start justify-between">
@@ -101,6 +109,25 @@ export function AnnouncerCardGrid({ announcer, onShowFormulas, index }: Announce
           >
             <Heart className={cn("w-4 h-4", isFavorite && "fill-current")} />
           </motion.button>
+        </div>
+
+        {/* Avatar overlay - bottom left */}
+        <div className="absolute bottom-3 left-3">
+          <div className="w-14 h-14 rounded-xl overflow-hidden ring-2 ring-white shadow-lg bg-white">
+            {announcer.profileImage ? (
+              <Image
+                src={announcer.profileImage}
+                alt={announcer.firstName}
+                width={56}
+                height={56}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20">
+                <span className="text-2xl">👤</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Price badge */}
@@ -215,9 +242,16 @@ export function AnnouncerCardList({ announcer, onShowFormulas, index }: Announce
       className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-gray-200"
     >
       <div className="flex flex-col sm:flex-row">
-        {/* Image Section */}
+        {/* Image Section - Cover Image */}
         <div className="relative w-full sm:w-48 md:w-56 h-48 sm:h-auto bg-gradient-to-br from-gray-100 to-gray-50 flex-shrink-0">
-          {announcer.profileImage ? (
+          {announcer.coverImage ? (
+            <Image
+              src={announcer.coverImage}
+              alt={`Couverture de ${announcer.firstName}`}
+              fill
+              className="object-cover group-hover:scale-105 transition-transform duration-500"
+            />
+          ) : announcer.profileImage ? (
             <Image
               src={announcer.profileImage}
               alt={announcer.firstName}
@@ -225,12 +259,13 @@ export function AnnouncerCardList({ announcer, onShowFormulas, index }: Announce
               className="object-cover group-hover:scale-105 transition-transform duration-500"
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <div className="w-16 h-16 bg-gradient-to-br from-primary/20 to-secondary/20 rounded-full flex items-center justify-center">
-                <span className="text-3xl">👤</span>
-              </div>
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10">
+              <span className="text-4xl">🐾</span>
             </div>
           )}
+
+          {/* Overlay gradient */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
 
           {/* Badges on image */}
           <div className="absolute top-3 left-3 flex flex-col gap-1.5">
@@ -240,6 +275,25 @@ export function AnnouncerCardList({ announcer, onShowFormulas, index }: Announce
                 <span className="text-[10px] font-medium text-gray-700">Vérifié</span>
               </div>
             )}
+          </div>
+
+          {/* Avatar overlay - bottom left */}
+          <div className="absolute bottom-3 left-3">
+            <div className="w-12 h-12 rounded-xl overflow-hidden ring-2 ring-white shadow-lg bg-white">
+              {announcer.profileImage ? (
+                <Image
+                  src={announcer.profileImage}
+                  alt={announcer.firstName}
+                  width={48}
+                  height={48}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20">
+                  <span className="text-xl">👤</span>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Favorite button */}

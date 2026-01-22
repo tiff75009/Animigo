@@ -23,6 +23,7 @@ import {
   Percent,
   Mail,
   CalendarCheck,
+  Sparkles,
 } from "lucide-react";
 
 interface NavItem {
@@ -102,6 +103,11 @@ export function AdminSidebar() {
           label: "Catégories",
           href: "/admin/services/categories",
           icon: Tag,
+        },
+        {
+          label: "Activités",
+          href: "/admin/activites",
+          icon: Sparkles,
         },
       ],
     },

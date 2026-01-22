@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useState, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/app/hooks/useAuth";
 import { useCloudinary } from "@/app/hooks/useCloudinary";
 import {
@@ -20,7 +19,6 @@ import {
   Sparkles,
   AlertCircle,
   Plus,
-  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -59,10 +57,9 @@ const BEHAVIOR_TRAITS = [
 
 // Étapes du formulaire
 const STEPS = [
-  { id: 1, title: "Identité", description: "Informations de base" },
-  { id: 2, title: "Apparence", description: "Photos et caractéristiques" },
-  { id: 3, title: "Personnalité", description: "Comportement et compatibilité" },
-  { id: 4, title: "Santé", description: "Informations médicales" },
+  { id: 1, title: "Identité", description: "Qui est votre compagnon ?" },
+  { id: 2, title: "Apparence", description: "À quoi ressemble-t-il ?" },
+  { id: 3, title: "Personnalité", description: "Comment se comporte-t-il ?" },
 ];
 
 interface FormData {
@@ -81,34 +78,23 @@ interface FormData {
   goodWithCats: boolean | null;
   goodWithOtherAnimals: boolean | null;
   behaviorTraits: string[];
-  hasAllergies: boolean;
-  allergiesDetails: string;
-  medicalConditions: string;
-  specialNeeds: string;
 }
 
-export default function EditAnimalPage() {
+export default function NewOwnedAnimalPage() {
   const router = useRouter();
-  const params = useParams();
-  const animalId = params.animalId as string;
-  const { user } = useAuth();
-  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const { token } = useAuth();
   const { isConfigured, uploadState, uploadImage, uploadImages } = useCloudinary();
+  const upsertProfile = useMutation(api.services.profile.upsertProfile);
 
-  const animal = useQuery(
-    api.animals.getAnimal,
-    token && animalId ? { token, animalId: animalId as Id<"animals"> } : "skip"
+  // Récupérer le profil actuel pour ajouter aux animaux existants
+  const profileData = useQuery(
+    api.services.profile.getProfile,
+    token ? { token } : "skip"
   );
-
-  const updateAnimal = useMutation(api.animals.updateAnimal);
-  const deleteAnimalMutation = useMutation(api.animals.deleteAnimal);
 
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isLoaded, setIsLoaded] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -129,41 +115,9 @@ export default function EditAnimalPage() {
     goodWithCats: null,
     goodWithOtherAnimals: null,
     behaviorTraits: [],
-    hasAllergies: false,
-    allergiesDetails: "",
-    medicalConditions: "",
-    specialNeeds: "",
   });
 
-  // Charger les données de l'animal
-  useEffect(() => {
-    if (animal && !isLoaded) {
-      setFormData({
-        name: animal.name || "",
-        type: animal.type || "",
-        gender: animal.gender || "unknown",
-        birthDate: animal.birthDate || "",
-        breed: animal.breed || "",
-        weight: animal.weight?.toString() || "",
-        size: animal.size || "",
-        description: animal.description || "",
-        profilePhoto: animal.profilePhoto || animal.primaryPhotoUrl || "",
-        galleryPhotos: animal.galleryPhotos || [],
-        goodWithChildren: animal.goodWithChildren ?? null,
-        goodWithDogs: animal.goodWithDogs ?? null,
-        goodWithCats: animal.goodWithCats ?? null,
-        goodWithOtherAnimals: animal.goodWithOtherAnimals ?? null,
-        behaviorTraits: animal.behaviorTraits || [],
-        hasAllergies: animal.hasAllergies || false,
-        allergiesDetails: animal.allergiesDetails || "",
-        medicalConditions: animal.medicalConditions || "",
-        specialNeeds: animal.specialNeeds || "",
-      });
-      setIsLoaded(true);
-    }
-  }, [animal, isLoaded]);
-
-  // Calculer l'âge
+  // Calculer l'âge à partir de la date de naissance
   const calculateAge = (birthDate: string): string => {
     if (!birthDate) return "";
     const birth = new Date(birthDate);
@@ -184,14 +138,25 @@ export default function EditAnimalPage() {
     return `${years} ans`;
   };
 
-  // Upload de photo de profil
+  // Calculer l'âge en années
+  const calculateAgeInYears = (birthDate: string): number | undefined => {
+    if (!birthDate) return undefined;
+    const birth = new Date(birthDate);
+    const now = new Date();
+    const years = now.getFullYear() - birth.getFullYear();
+    const months = now.getMonth() - birth.getMonth();
+    if (months < 0) return years - 1;
+    return years;
+  };
+
+  // Gestion de l'upload de photo de profil
   const handleProfilePhotoUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
 
       if (!isConfigured) {
-        setError("Cloudinary n'est pas configuré.");
+        setError("Cloudinary n'est pas configuré. Contactez l'administrateur.");
         return;
       }
 
@@ -203,14 +168,14 @@ export default function EditAnimalPage() {
     [isConfigured, uploadImage]
   );
 
-  // Upload de galerie
+  // Gestion de l'upload de galerie
   const handleGalleryUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files || []);
       if (files.length === 0) return;
 
       if (!isConfigured) {
-        setError("Cloudinary n'est pas configuré.");
+        setError("Cloudinary n'est pas configuré. Contactez l'administrateur.");
         return;
       }
 
@@ -233,7 +198,7 @@ export default function EditAnimalPage() {
     }));
   };
 
-  // Toggle un trait
+  // Toggle un trait de comportement
   const toggleBehaviorTrait = (trait: string) => {
     setFormData((prev) => ({
       ...prev,
@@ -243,7 +208,7 @@ export default function EditAnimalPage() {
     }));
   };
 
-  // Validation
+  // Validation de l'étape courante
   const validateCurrentStep = (): boolean => {
     setError(null);
 
@@ -254,6 +219,10 @@ export default function EditAnimalPage() {
       }
       if (!formData.type) {
         setError("Veuillez sélectionner le type d'animal");
+        return false;
+      }
+      if (!formData.gender) {
+        setError("Veuillez indiquer le sexe de votre animal");
         return false;
       }
     }
@@ -274,10 +243,10 @@ export default function EditAnimalPage() {
     }
   };
 
-  // Soumission
+  // Soumission du formulaire
   const handleSubmit = async () => {
-    if (!token || !animalId) {
-      setError("Session invalide");
+    if (!token) {
+      setError("Vous devez être connecté");
       return;
     }
 
@@ -287,31 +256,38 @@ export default function EditAnimalPage() {
     setError(null);
 
     try {
-      await updateAnimal({
-        token,
-        animalId: animalId as Id<"animals">,
-        name: formData.name.trim(),
+      // Récupérer les animaux existants
+      const existingAnimals = profileData?.profile?.ownedAnimals || [];
+
+      // Générer un ID unique pour l'animal
+      const animalId = `animal_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // Ajouter le nouvel animal avec toutes les infos
+      const newAnimal = {
+        id: animalId,
         type: formData.type,
-        gender: formData.gender,
-        birthDate: formData.birthDate || undefined,
+        name: formData.name.trim(),
         breed: formData.breed.trim() || undefined,
+        age: calculateAgeInYears(formData.birthDate),
+        gender: formData.gender,
+        profilePhoto: formData.profilePhoto || undefined,
+        galleryPhotos: formData.galleryPhotos.length > 0 ? formData.galleryPhotos : undefined,
         weight: formData.weight ? parseFloat(formData.weight) : undefined,
         size: formData.size || undefined,
         description: formData.description.trim() || undefined,
-        profilePhoto: formData.profilePhoto || undefined,
-        galleryPhotos: formData.galleryPhotos.length > 0 ? formData.galleryPhotos : undefined,
         goodWithChildren: formData.goodWithChildren ?? undefined,
         goodWithDogs: formData.goodWithDogs ?? undefined,
         goodWithCats: formData.goodWithCats ?? undefined,
         goodWithOtherAnimals: formData.goodWithOtherAnimals ?? undefined,
         behaviorTraits: formData.behaviorTraits.length > 0 ? formData.behaviorTraits : undefined,
-        hasAllergies: formData.hasAllergies || undefined,
-        allergiesDetails: formData.allergiesDetails.trim() || undefined,
-        medicalConditions: formData.medicalConditions.trim() || undefined,
-        specialNeeds: formData.specialNeeds.trim() || undefined,
+      };
+
+      await upsertProfile({
+        token,
+        ownedAnimals: [...existingAnimals, newAnimal],
       });
 
-      router.push("/client/mes-animaux?success=updated");
+      router.push("/dashboard/profil?success=animal_added");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Une erreur est survenue");
     } finally {
@@ -319,26 +295,7 @@ export default function EditAnimalPage() {
     }
   };
 
-  // Suppression
-  const handleDelete = async () => {
-    if (!token || !animalId) return;
-
-    setIsDeleting(true);
-
-    try {
-      await deleteAnimalMutation({
-        token,
-        animalId: animalId as Id<"animals">,
-      });
-
-      router.push("/client/mes-animaux?success=deleted");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur lors de la suppression");
-      setIsDeleting(false);
-    }
-  };
-
-  // Composant Oui/Non
+  // Composant de sélection Oui/Non/Inconnu
   const YesNoSelect = ({
     value,
     onChange,
@@ -373,37 +330,12 @@ export default function EditAnimalPage() {
     </div>
   );
 
-  // Chargement
-  if (!animal && token && animalId) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (!animal) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12">
-        <PawPrint className="w-16 h-16 text-gray-300 mb-4" />
-        <h1 className="text-xl font-bold text-gray-900 mb-2">Animal introuvable</h1>
-        <p className="text-gray-500 mb-6">Cet animal n'existe pas ou vous n'avez pas les droits pour le modifier.</p>
-        <Link
-          href="/client/mes-animaux"
-          className="px-6 py-3 bg-primary text-white rounded-xl font-medium"
-        >
-          Retour à mes animaux
-        </Link>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6 pb-8">
+    <div className="space-y-6 pb-8 max-w-2xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
         <Link
-          href="/client/mes-animaux"
+          href="/dashboard/profil"
           className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
@@ -412,15 +344,10 @@ export default function EditAnimalPage() {
 
         <div className="flex items-center gap-2">
           <PawPrint className="w-5 h-5 text-primary" />
-          <span className="font-semibold text-gray-900">Modifier {formData.name}</span>
+          <span className="font-semibold text-gray-900">Mon compagnon</span>
         </div>
 
-        <button
-          onClick={() => setShowDeleteConfirm(true)}
-          className="text-red-500 hover:text-red-600 p-2"
-        >
-          <Trash2 className="w-5 h-5" />
-        </button>
+        <div className="w-20" />
       </div>
 
       {/* Progress Bar */}
@@ -428,8 +355,7 @@ export default function EditAnimalPage() {
         <div className="flex items-center justify-between mb-2">
           {STEPS.map((step, index) => (
             <div key={step.id} className="flex items-center">
-              <motion.button
-                onClick={() => setCurrentStep(step.id)}
+              <motion.div
                 initial={false}
                 animate={{
                   backgroundColor: currentStep >= step.id ? "#FF6B6B" : "#E5E7EB",
@@ -439,15 +365,19 @@ export default function EditAnimalPage() {
                   currentStep >= step.id ? "text-white" : "text-gray-400"
                 }`}
               >
-                {step.id}
-              </motion.button>
+                {currentStep > step.id ? <Check className="w-5 h-5" /> : step.id}
+              </motion.div>
               {index < STEPS.length - 1 && (
-                <div className="w-8 sm:w-16 h-1 mx-1 bg-gray-200">
+                <div className="w-12 sm:w-24 h-1 mx-1">
                   <motion.div
                     initial={false}
-                    animate={{ scaleX: currentStep > step.id ? 1 : 0 }}
+                    animate={{
+                      scaleX: currentStep > step.id ? 1 : 0,
+                    }}
                     className="h-full bg-primary origin-left"
+                    style={{ transformOrigin: "left" }}
                   />
+                  <div className="h-full bg-gray-200 -mt-1" />
                 </div>
               )}
             </div>
@@ -473,22 +403,25 @@ export default function EditAnimalPage() {
             {/* Step 1: Identité */}
             {currentStep === 1 && (
               <div className="space-y-6">
+                {/* Nom */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Nom <span className="text-red-500">*</span>
+                    Comment s&apos;appelle-t-il ? <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="Ex: Max, Luna, Félix..."
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all text-lg"
                     maxLength={50}
                   />
                 </div>
 
+                {/* Type d'animal */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Type d'animal <span className="text-red-500">*</span>
+                    Quel type d&apos;animal ? <span className="text-red-500">*</span>
                   </label>
                   <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
                     {ANIMAL_TYPES.map((type) => (
@@ -511,8 +444,11 @@ export default function EditAnimalPage() {
                   </div>
                 </div>
 
+                {/* Sexe */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">Sexe</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Sexe <span className="text-red-500">*</span>
+                  </label>
                   <div className="flex gap-3">
                     {[
                       { id: "male", label: "Mâle", icon: "♂️" },
@@ -540,6 +476,7 @@ export default function EditAnimalPage() {
                   </div>
                 </div>
 
+                {/* Date de naissance */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Date de naissance
@@ -558,13 +495,16 @@ export default function EditAnimalPage() {
                   />
                 </div>
 
+                {/* Race */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Race / Espèce</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Race / Espèce
+                  </label>
                   <input
                     type="text"
                     value={formData.breed}
                     onChange={(e) => setFormData({ ...formData, breed: e.target.value })}
-                    placeholder="Ex: Labrador, Persan..."
+                    placeholder="Ex: Labrador, Persan, Canari..."
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                   />
                 </div>
@@ -574,8 +514,11 @@ export default function EditAnimalPage() {
             {/* Step 2: Apparence */}
             {currentStep === 2 && (
               <div className="space-y-6">
+                {/* Photo de profil */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">Photo de profil</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Photo de profil
+                  </label>
                   <div className="flex flex-col items-center">
                     <motion.div
                       whileHover={{ scale: 1.02 }}
@@ -625,9 +568,12 @@ export default function EditAnimalPage() {
                   </div>
                 </div>
 
+                {/* Poids et Taille */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Poids (kg)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Poids (kg)
+                    </label>
                     <input
                       type="number"
                       step="0.1"
@@ -639,7 +585,9 @@ export default function EditAnimalPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Taille</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Taille
+                    </label>
                     <select
                       value={formData.size}
                       onChange={(e) => setFormData({ ...formData, size: e.target.value })}
@@ -655,20 +603,24 @@ export default function EditAnimalPage() {
                   </div>
                 </div>
 
+                {/* Description */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Description
+                  </label>
                   <textarea
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Décrivez votre animal..."
+                    placeholder="Décrivez votre animal en quelques mots..."
                     rows={4}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none"
                   />
                 </div>
 
+                {/* Galerie photos */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Galerie photos
+                    Galerie photos <span className="text-gray-400">(optionnel)</span>
                   </label>
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                     {formData.galleryPhotos.map((photo, index) => (
@@ -724,6 +676,7 @@ export default function EditAnimalPage() {
             {/* Step 3: Personnalité */}
             {currentStep === 3 && (
               <div className="space-y-6">
+                {/* Compatibilité */}
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 text-lg font-semibold text-gray-900">
                     <Heart className="w-5 h-5 text-primary" />
@@ -759,11 +712,15 @@ export default function EditAnimalPage() {
                   />
                 </div>
 
+                {/* Traits de caractère */}
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-lg font-semibold text-gray-900">
                     <Sparkles className="w-5 h-5 text-secondary" />
                     <span>Caractère</span>
                   </div>
+                  <p className="text-sm text-gray-500">
+                    Sélectionnez les traits qui correspondent à votre animal
+                  </p>
                   <div className="flex flex-wrap gap-2">
                     {BEHAVIOR_TRAITS.map((trait) => (
                       <motion.button
@@ -783,82 +740,38 @@ export default function EditAnimalPage() {
                     ))}
                   </div>
                 </div>
-              </div>
-            )}
 
-            {/* Step 4: Santé */}
-            {currentStep === 4 && (
-              <div className="space-y-6">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium text-gray-700">
-                      Votre animal a-t-il des allergies ?
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setFormData({
-                          ...formData,
-                          hasAllergies: !formData.hasAllergies,
-                          allergiesDetails: formData.hasAllergies ? "" : formData.allergiesDetails,
-                        })
-                      }
-                      className={`relative w-12 h-6 rounded-full transition-colors ${
-                        formData.hasAllergies ? "bg-primary" : "bg-gray-300"
-                      }`}
-                    >
-                      <motion.div
-                        initial={false}
-                        animate={{ x: formData.hasAllergies ? 24 : 0 }}
-                        className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow"
+                {/* Récapitulatif */}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-2xl p-6"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    {formData.profilePhoto ? (
+                      <img
+                        src={formData.profilePhoto}
+                        alt={formData.name}
+                        className="w-16 h-16 rounded-full object-cover border-4 border-white shadow-lg"
                       />
-                    </button>
+                    ) : (
+                      <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-3xl shadow-lg">
+                        {ANIMAL_TYPES.find((t) => t.id === formData.type)?.emoji || "🐾"}
+                      </div>
+                    )}
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900">{formData.name || "Votre animal"}</h3>
+                      <p className="text-sm text-gray-600">
+                        {ANIMAL_TYPES.find((t) => t.id === formData.type)?.name}
+                        {formData.breed && ` • ${formData.breed}`}
+                        {formData.birthDate && ` • ${calculateAge(formData.birthDate)}`}
+                      </p>
+                    </div>
                   </div>
-                  {formData.hasAllergies && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                    >
-                      <textarea
-                        value={formData.allergiesDetails}
-                        onChange={(e) =>
-                          setFormData({ ...formData, allergiesDetails: e.target.value })
-                        }
-                        placeholder="Décrivez les allergies..."
-                        rows={2}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none"
-                      />
-                    </motion.div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Conditions médicales
-                  </label>
-                  <textarea
-                    value={formData.medicalConditions}
-                    onChange={(e) =>
-                      setFormData({ ...formData, medicalConditions: e.target.value })
-                    }
-                    placeholder="Maladies chroniques, traitements..."
-                    rows={3}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Besoins particuliers
-                  </label>
-                  <textarea
-                    value={formData.specialNeeds}
-                    onChange={(e) => setFormData({ ...formData, specialNeeds: e.target.value })}
-                    placeholder="Régime alimentaire spécial..."
-                    rows={3}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none"
-                  />
-                </div>
+                  <p className="text-sm text-gray-600">
+                    Vérifiez les informations et cliquez sur &quot;Ajouter&quot; pour enregistrer votre compagnon !
+                  </p>
+                </motion.div>
               </div>
             )}
           </motion.div>
@@ -873,6 +786,20 @@ export default function EditAnimalPage() {
           >
             <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
             <p className="text-red-700 text-sm">{error}</p>
+          </motion.div>
+        )}
+
+        {/* Cloudinary non configuré */}
+        {!isConfigured && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-xl flex items-center gap-3"
+          >
+            <AlertCircle className="w-5 h-5 text-yellow-500 flex-shrink-0" />
+            <p className="text-yellow-700 text-sm">
+              L&apos;upload de photos n&apos;est pas disponible. Contactez l&apos;administrateur pour configurer Cloudinary.
+            </p>
           </motion.div>
         )}
       </div>
@@ -912,70 +839,17 @@ export default function EditAnimalPage() {
             {isSubmitting ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                Enregistrement...
+                Ajout...
               </>
             ) : (
               <>
                 <Check className="w-5 h-5" />
-                Enregistrer
+                Ajouter
               </>
             )}
           </motion.button>
         )}
       </div>
-
-      {/* Modal de confirmation de suppression */}
-      <AnimatePresence>
-        {showDeleteConfirm && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-            onClick={() => setShowDeleteConfirm(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="text-center">
-                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Trash2 className="w-8 h-8 text-red-500" />
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">Supprimer {formData.name} ?</h3>
-                <p className="text-gray-500 mb-6">
-                  Cette action est irréversible. Toutes les données de cet animal seront supprimées.
-                </p>
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setShowDeleteConfirm(false)}
-                    className="flex-1 py-3 px-4 rounded-xl border-2 border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-colors"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    onClick={handleDelete}
-                    disabled={isDeleting}
-                    className="flex-1 py-3 px-4 rounded-xl bg-red-500 text-white font-semibold hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {isDeleting ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <>
-                        <Trash2 className="w-5 h-5" />
-                        Supprimer
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

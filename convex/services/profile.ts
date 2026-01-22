@@ -26,6 +26,20 @@ export const getProfile = query({
       .withIndex("by_user", (q) => q.eq("userId", session.userId))
       .first();
 
+    // Récupérer la photo de profil depuis la table photos comme fallback
+    let profilePhotoUrl: string | null = null;
+    if (!profile?.profileImageUrl) {
+      const profilePhoto = await ctx.db
+        .query("photos")
+        .withIndex("by_user", (q) => q.eq("userId", session.userId))
+        .filter((q) => q.eq(q.field("isProfilePhoto"), true))
+        .first();
+
+      if (profilePhoto?.storageId) {
+        profilePhotoUrl = await ctx.storage.getUrl(profilePhoto.storageId);
+      }
+    }
+
     return {
       user: {
         id: user._id,
@@ -37,7 +51,11 @@ export const getProfile = query({
         companyName: user.companyName,
         siret: user.siret,
       },
-      profile: profile || null,
+      profile: profile ? {
+        ...profile,
+        // Utiliser profileImageUrl du profil ou fallback vers photos table
+        profileImageUrl: profile.profileImageUrl ?? profilePhotoUrl,
+      } : null,
     };
   },
 });
@@ -47,6 +65,7 @@ export const upsertProfile = mutation({
   args: {
     token: v.string(),
     profileImageUrl: v.optional(v.union(v.string(), v.null())),
+    coverImageUrl: v.optional(v.union(v.string(), v.null())),
     bio: v.optional(v.union(v.string(), v.null())),
     description: v.optional(v.union(v.string(), v.null())),
     experience: v.optional(v.union(v.string(), v.null())),
@@ -77,13 +96,38 @@ export const upsertProfile = mutation({
     providesFood: v.optional(v.union(v.boolean(), v.null())),
     hasVehicle: v.optional(v.union(v.boolean(), v.null())),
     ownedAnimals: v.optional(v.union(v.array(v.object({
+      id: v.optional(v.string()),
       type: v.string(),
       name: v.string(),
       breed: v.optional(v.string()),
       age: v.optional(v.number()),
+      gender: v.optional(v.string()),
+      profilePhoto: v.optional(v.string()),
+      galleryPhotos: v.optional(v.array(v.string())),
+      weight: v.optional(v.number()),
+      size: v.optional(v.string()),
+      description: v.optional(v.string()),
+      goodWithChildren: v.optional(v.boolean()),
+      goodWithDogs: v.optional(v.boolean()),
+      goodWithCats: v.optional(v.boolean()),
+      goodWithOtherAnimals: v.optional(v.boolean()),
+      behaviorTraits: v.optional(v.array(v.string())),
     })), v.null())),
     // Nombre max d'animaux acceptés en même temps
     maxAnimalsPerSlot: v.optional(v.union(v.number(), v.null())),
+    // Activités proposées
+    selectedActivities: v.optional(v.union(v.array(v.object({
+      activityId: v.id("activities"),
+      customDescription: v.optional(v.string()),
+    })), v.null())),
+    // Photos d'environnement
+    environmentPhotos: v.optional(v.union(v.array(v.object({
+      id: v.string(),
+      url: v.string(),
+      caption: v.optional(v.string()),
+    })), v.null())),
+    // I-CAD (Identification des Carnivores Domestiques)
+    icadRegistered: v.optional(v.union(v.boolean(), v.null())),
   },
   handler: async (ctx, args) => {
     // Vérifier la session
@@ -127,6 +171,7 @@ export const upsertProfile = mutation({
 
     // Champs simples
     addIfDefined(profileData, "profileImageUrl", args.profileImageUrl);
+    addIfDefined(profileData, "coverImageUrl", args.coverImageUrl);
     addIfDefined(profileData, "bio", args.bio);
     addIfDefined(profileData, "description", args.description);
     addIfDefined(profileData, "experience", args.experience);
@@ -147,6 +192,9 @@ export const upsertProfile = mutation({
     addIfDefined(profileData, "hasVehicle", args.hasVehicle);
     addIfDefined(profileData, "ownedAnimals", args.ownedAnimals);
     addIfDefined(profileData, "maxAnimalsPerSlot", args.maxAnimalsPerSlot);
+    addIfDefined(profileData, "selectedActivities", args.selectedActivities);
+    addIfDefined(profileData, "environmentPhotos", args.environmentPhotos);
+    addIfDefined(profileData, "icadRegistered", args.icadRegistered);
 
     // Localisation - traiter ensemble car ils sont liés
     if (args.location !== undefined || args.coordinates !== undefined || args.googlePlaceId !== undefined) {
@@ -192,6 +240,7 @@ export const upsertProfile = mutation({
         userId: typeof session.userId;
         updatedAt: number;
         profileImageUrl?: string;
+        coverImageUrl?: string;
         bio?: string;
         description?: string;
         experience?: string;
@@ -215,8 +264,29 @@ export const upsertProfile = mutation({
         childrenAges?: string[];
         providesFood?: boolean;
         hasVehicle?: boolean;
-        ownedAnimals?: Array<{ type: string; name: string; breed?: string; age?: number }>;
+        ownedAnimals?: Array<{
+          id?: string;
+          type: string;
+          name: string;
+          breed?: string;
+          age?: number;
+          gender?: string;
+          profilePhoto?: string;
+          galleryPhotos?: string[];
+          weight?: number;
+          size?: string;
+          description?: string;
+          goodWithChildren?: boolean;
+          goodWithDogs?: boolean;
+          goodWithCats?: boolean;
+          goodWithOtherAnimals?: boolean;
+          behaviorTraits?: string[];
+        }>;
         maxAnimalsPerSlot?: number;
+        selectedActivities?: Array<{
+          activityId: import("../_generated/dataModel").Id<"activities">;
+          customDescription?: string;
+        }>;
       } = {
         userId: session.userId,
         updatedAt: now,
@@ -224,6 +294,7 @@ export const upsertProfile = mutation({
 
       // Copier les valeurs définies
       if (profileData.profileImageUrl !== undefined) newProfile.profileImageUrl = profileData.profileImageUrl as string | undefined;
+      if (profileData.coverImageUrl !== undefined) newProfile.coverImageUrl = profileData.coverImageUrl as string | undefined;
       if (profileData.bio !== undefined) newProfile.bio = profileData.bio as string | undefined;
       if (profileData.description !== undefined) newProfile.description = profileData.description as string | undefined;
       if (profileData.experience !== undefined) newProfile.experience = profileData.experience as string | undefined;
@@ -247,8 +318,29 @@ export const upsertProfile = mutation({
       if (profileData.childrenAges !== undefined) newProfile.childrenAges = profileData.childrenAges as string[] | undefined;
       if (profileData.providesFood !== undefined) newProfile.providesFood = profileData.providesFood as boolean | undefined;
       if (profileData.hasVehicle !== undefined) newProfile.hasVehicle = profileData.hasVehicle as boolean | undefined;
-      if (profileData.ownedAnimals !== undefined) newProfile.ownedAnimals = profileData.ownedAnimals as Array<{ type: string; name: string; breed?: string; age?: number }> | undefined;
+      if (profileData.ownedAnimals !== undefined) newProfile.ownedAnimals = profileData.ownedAnimals as Array<{
+        id?: string;
+        type: string;
+        name: string;
+        breed?: string;
+        age?: number;
+        gender?: string;
+        profilePhoto?: string;
+        galleryPhotos?: string[];
+        weight?: number;
+        size?: string;
+        description?: string;
+        goodWithChildren?: boolean;
+        goodWithDogs?: boolean;
+        goodWithCats?: boolean;
+        goodWithOtherAnimals?: boolean;
+        behaviorTraits?: string[];
+      }> | undefined;
       if (profileData.maxAnimalsPerSlot !== undefined) newProfile.maxAnimalsPerSlot = profileData.maxAnimalsPerSlot as number | undefined;
+      if (profileData.selectedActivities !== undefined) newProfile.selectedActivities = profileData.selectedActivities as Array<{
+        activityId: import("../_generated/dataModel").Id<"activities">;
+        customDescription?: string;
+      }> | undefined;
 
       const profileId = await ctx.db.insert("profiles", newProfile);
       return { success: true, profileId };

@@ -71,7 +71,8 @@ interface AnnouncerResult {
   id: Id<"users">;
   firstName: string;
   lastName: string;
-  profileImage?: string | null;
+  profileImage?: string | null; // Avatar
+  coverImage?: string | null; // Photo de couverture
   location: string;
   coordinates?: { lat: number; lng: number };
   distance?: number;
@@ -426,7 +427,8 @@ export const searchAnnouncers = query({
         id: announcer._id,
         firstName: announcer.firstName,
         lastName: announcer.lastName,
-        profileImage: profileImageUrl,
+        profileImage: profile.profileImageUrl ?? profileImageUrl,
+        coverImage: profile.coverImageUrl ?? null,
         location: profile.city ?? profile.location ?? "",
         coordinates: profile.coordinates,
         distance,
