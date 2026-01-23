@@ -63,7 +63,7 @@ function getBaseUrl(request: NextRequest): string {
   return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // 0. Bypass en développement local si configuré
@@ -127,7 +127,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(maintenanceUrl);
   } catch (error) {
     // En cas d'erreur, fail-open (éviter blocage total du site)
-    console.error("Middleware error:", error);
+    console.error("Proxy error:", error);
     return NextResponse.next();
   }
 }
