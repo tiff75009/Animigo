@@ -46,13 +46,11 @@ export function extractCity(location: string): string {
 export function formatDistance(distance: number | undefined): string | null {
   if (distance === undefined || distance === null) return null;
 
+  // Pour la vie privée, ne pas afficher les distances précises en dessous de 1 km
   if (distance < 1) {
-    const meters = Math.round(distance * 1000);
-    return `à ${meters} m`;
-  } else if (distance < 10) {
-    return `à ${distance.toFixed(1).replace(".", ",")} km`;
+    return "à moins d'1 km";
   } else {
-    return `à ${Math.round(distance)} km`;
+    return `à environ ${Math.round(distance)} km`;
   }
 }
 

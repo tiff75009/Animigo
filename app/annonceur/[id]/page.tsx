@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQueryState } from "nuqs";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
+import { useAuth } from "@/app/hooks/useAuth";
 
 import {
-  AnnouncerHeader,
   AnnouncerHero,
   AnnouncerGallery,
   AnnouncerAbout,
@@ -21,10 +21,32 @@ import {
   type TabType,
   type AnnouncerData,
 } from "./components";
+import { SearchHeader } from "@/app/components/platform";
+
+// Calcul de distance avec la formule de Haversine (en km)
+function calculateDistance(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number
+): number {
+  const R = 6371; // Rayon de la Terre en km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 
 export default function AnnouncerProfilePage() {
   const params = useParams();
   const router = useRouter();
+  const { token } = useAuth();
   const [isFavorite, setIsFavorite] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("services");
 
@@ -39,6 +61,26 @@ export default function AnnouncerProfilePage() {
     api.public.announcer.getAnnouncerBySlug,
     { slug: announcerSlug }
   );
+
+  // Récupérer les coordonnées du client connecté (pour calculer la distance)
+  const clientLocation = useQuery(
+    api.client.profile.getClientCoordinates,
+    token ? { token } : "skip"
+  );
+
+  // Calculer la distance entre le client et l'annonceur
+  // (doit être avant les early returns pour respecter les règles des hooks)
+  const distance = useMemo(() => {
+    if (!clientLocation?.coordinates || !announcerData?.coordinates) {
+      return undefined;
+    }
+    return calculateDistance(
+      clientLocation.coordinates.lat,
+      clientLocation.coordinates.lng,
+      announcerData.coordinates.lat,
+      announcerData.coordinates.lng
+    );
+  }, [clientLocation?.coordinates, announcerData?.coordinates]);
 
   // État de chargement
   if (announcerData === undefined) {
@@ -137,16 +179,19 @@ export default function AnnouncerProfilePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header fixe */}
-      <AnnouncerHeader
-        isFavorite={isFavorite}
-        onToggleFavorite={() => setIsFavorite(!isFavorite)}
+      {/* Header fixe avec recherche */}
+      <SearchHeader
+        onLocationClick={() => router.push("/recherche")}
+        locationText={clientLocation?.city || clientLocation?.location || undefined}
       />
 
-      {/* Hero Section avec Cover */}
+      {/* Hero Section avec Cover et Action Bar */}
       <AnnouncerHero
         announcer={announcer}
         selectedServiceAnimals={selectedService?.animalTypes}
+        distance={distance}
+        isFavorite={isFavorite}
+        onToggleFavorite={() => setIsFavorite(!isFavorite)}
       />
 
       {/* Navigation Tabs - Mobile */}

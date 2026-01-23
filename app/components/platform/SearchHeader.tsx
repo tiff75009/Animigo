@@ -110,42 +110,55 @@ export function SearchHeader({ onLocationClick, locationText }: SearchHeaderProp
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-100">
-      <div className="max-w-7xl mx-auto h-16 px-4 sm:px-6 lg:px-8 flex items-center gap-4">
-        {/* Logo */}
-        <Link href="/" className="flex items-center gap-2.5 shrink-0">
-          <motion.div
-            className="relative w-9 h-9 lg:w-10 lg:h-10 bg-gradient-to-br from-primary via-primary to-secondary rounded-xl flex items-center justify-center shadow-md shadow-primary/25"
-            whileHover={{ scale: 1.05, rotate: -3 }}
-            transition={{ type: "spring", stiffness: 400 }}
-          >
-            <span className="text-base lg:text-lg">🐾</span>
-          </motion.div>
-          <div className="hidden sm:flex flex-col">
-            <span className="text-lg lg:text-xl font-bold text-gray-900 leading-none">
-              Anim<span className="text-primary">igo</span>
-            </span>
-            <span className="text-[9px] lg:text-[10px] text-gray-500 font-medium">
-              Le bonheur de vos animaux
-            </span>
-          </div>
-        </Link>
+      <div className="h-16 px-4 sm:px-6 flex items-center">
+        {/* Left Section - Logo */}
+        <div className="flex items-center gap-2 shrink-0 w-auto sm:w-48">
+          <Link href="/" className="flex items-center gap-2.5">
+            <motion.div
+              className="relative w-9 h-9 lg:w-10 lg:h-10 bg-gradient-to-br from-primary via-primary to-secondary rounded-xl flex items-center justify-center shadow-md shadow-primary/25"
+              whileHover={{ scale: 1.05, rotate: -3 }}
+              transition={{ type: "spring", stiffness: 400 }}
+            >
+              <span className="text-base lg:text-lg">🐾</span>
+            </motion.div>
+            <div className="hidden sm:flex flex-col">
+              <span className="text-lg lg:text-xl font-bold text-gray-900 leading-none">
+                Anim<span className="text-primary">igo</span>
+              </span>
+              <span className="text-[9px] lg:text-[10px] text-gray-500 font-medium">
+                Le bonheur de vos animaux
+              </span>
+            </div>
+          </Link>
 
-        {/* Search Bar - Center */}
-        <div className="flex-1 flex justify-center max-w-xl mx-4">
+          {/* Search Icon - Mobile (à côté du logo) */}
           <button
             onClick={onLocationClick}
-            className="w-full flex items-center gap-3 h-11 px-4 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-200 transition-all hover:border-gray-300"
+            className="sm:hidden p-2.5 rounded-xl bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 transition-colors"
           >
-            <MapPin className="w-4 h-4 text-primary" />
-            <span className="flex-1 text-sm text-left truncate text-gray-600">
-              {locationText || "Rechercher une ville..."}
-            </span>
-            <Search className="w-4 h-4 text-gray-400" />
+            <Search className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Right Actions */}
-        <div className="flex items-center gap-2 shrink-0 ml-auto">
+        {/* Center Section - Search Bar (Desktop) */}
+        <div className="hidden sm:flex flex-1 justify-center px-4">
+          <button
+            onClick={onLocationClick}
+            className="w-full max-w-xl flex items-center gap-3 h-11 px-4 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-200 transition-all hover:border-gray-300"
+          >
+            <MapPin className="w-4 h-4 text-primary shrink-0" />
+            <span className="flex-1 text-sm text-left truncate text-gray-600">
+              {locationText || "Rechercher une ville..."}
+            </span>
+            <Search className="w-4 h-4 text-gray-400 shrink-0" />
+          </button>
+        </div>
+
+        {/* Spacer - Mobile */}
+        <div className="flex-1 sm:hidden" />
+
+        {/* Right Section - Actions */}
+        <div className="flex items-center gap-2 shrink-0 sm:w-48 sm:justify-end">
           {/* Messages Button - Only show when authenticated */}
           {isAuthenticated && (
             <Link
@@ -189,7 +202,7 @@ export function SearchHeader({ onLocationClick, locationText }: SearchHeaderProp
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
                   transition={{ duration: 0.2 }}
-                  className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-[200]"
+                  className="fixed sm:absolute right-4 sm:right-0 left-4 sm:left-auto top-16 sm:top-full sm:mt-2 w-auto sm:w-96 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-[200]"
                 >
                   {/* Header */}
                   <div className="p-4 bg-gradient-to-r from-primary/5 via-secondary/5 to-purple/5 border-b border-gray-100">

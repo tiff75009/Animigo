@@ -1,5 +1,6 @@
 export { default as AnnouncerHeader } from "./AnnouncerHeader";
 export { default as AnnouncerHero } from "./AnnouncerHero";
+export { default as AnnouncerActionBar } from "./AnnouncerActionBar";
 export { default as AnnouncerGallery } from "./AnnouncerGallery";
 export { default as AnnouncerAbout } from "./AnnouncerAbout";
 export { default as AnnouncerServices } from "./AnnouncerServices";

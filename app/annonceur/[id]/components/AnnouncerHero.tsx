@@ -4,17 +4,31 @@ import Image from "next/image";
 import { MapPin, Star, Clock, Calendar, User } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { AnnouncerData, animalEmojis } from "./types";
+import { formatDistance } from "@/app/components/platform/helpers";
+import AnnouncerActionBar from "./AnnouncerActionBar";
 
 interface AnnouncerHeroProps {
   announcer: AnnouncerData;
   selectedServiceAnimals?: string[];
+  distance?: number;
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
 }
 
-export default function AnnouncerHero({ announcer, selectedServiceAnimals }: AnnouncerHeroProps) {
+export default function AnnouncerHero({
+  announcer,
+  selectedServiceAnimals,
+  distance,
+  isFavorite = false,
+  onToggleFavorite,
+}: AnnouncerHeroProps) {
   // Utiliser les animaux du service sélectionné si disponible, sinon ceux de l'annonceur
   const displayedAnimals = selectedServiceAnimals && selectedServiceAnimals.length > 0
     ? selectedServiceAnimals
     : announcer.acceptedAnimals;
+
+  // Formater la distance
+  const formattedDistance = formatDistance(distance);
 
   const getStatusLabel = () => {
     switch (announcer.statusType) {
@@ -52,6 +66,13 @@ export default function AnnouncerHero({ announcer, selectedServiceAnimals }: Ann
           />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+
+        {/* Action Bar - Boutons retour, favoris, partage */}
+        <AnnouncerActionBar
+          announcerName={`${announcer.firstName} ${announcer.lastName.charAt(0)}.`}
+          isFavorite={isFavorite}
+          onToggleFavorite={onToggleFavorite || (() => {})}
+        />
       </div>
 
       {/* Profile Info Card */}
@@ -87,7 +108,12 @@ export default function AnnouncerHero({ announcer, selectedServiceAnimals }: Ann
                   {announcer.location && (
                     <div className="flex items-center justify-center sm:justify-start gap-2 mt-1 text-gray-600">
                       <MapPin className="w-4 h-4 text-primary" />
-                      <span>{announcer.location}</span>
+                      <span>
+                        {announcer.location}
+                        {formattedDistance && (
+                          <span className="text-gray-400"> · {formattedDistance}</span>
+                        )}
+                      </span>
                     </div>
                   )}
                 </div>
