@@ -5,6 +5,7 @@ import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { ConvexClientProvider } from "./providers/ConvexClientProvider";
 import { ToastProvider } from "./components/ui/toast";
 import { DevPresenceBeacon } from "./components/dev-presence-beacon";
+import MaintenanceGuard from "./components/MaintenanceGuard";
 
 const nunito = Nunito({
   variable: "--font-nunito",
@@ -36,7 +37,9 @@ export default function RootLayout({
         <NuqsAdapter>
           <ConvexClientProvider>
             <ToastProvider>
-              {children}
+              <MaintenanceGuard>
+                {children}
+              </MaintenanceGuard>
               <DevPresenceBeacon />
             </ToastProvider>
           </ConvexClientProvider>
