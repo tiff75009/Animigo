@@ -171,6 +171,27 @@ export default defineSchema({
     .index("by_department", ["department"])
     .index("by_postal_code", ["postalCode"]),
 
+  // Profil client (propriétaires d'animaux)
+  clientProfiles: defineTable({
+    userId: v.id("users"),
+    // Photo
+    profileImageUrl: v.optional(v.string()),
+    // Bio
+    description: v.optional(v.string()),
+    // Localisation
+    location: v.optional(v.string()),        // Adresse complète
+    city: v.optional(v.string()),
+    postalCode: v.optional(v.string()),
+    coordinates: v.optional(v.object({
+      lat: v.number(),
+      lng: v.number(),
+    })),
+    googlePlaceId: v.optional(v.string()),
+    // Metadata
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"]),
+
   // Services proposés par les annonceurs
   // Structure simplifiée: category (prestation) + animalTypes + formules (variants)
   services: defineTable({

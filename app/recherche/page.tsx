@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { useServiceSearch, type ServiceResult } from "@/app/hooks/useSearch";
+import { useAuth } from "@/app/hooks/useAuth";
 import { Id } from "@/convex/_generated/dataModel";
 
 // Type for main search mode
@@ -68,29 +69,38 @@ import {
 } from "@/app/components/platform";
 
 export default function RecherchePage() {
+  // Get auth token for client location
+  const { token } = useAuth();
+
   const {
     filters,
     advancedFilters,
     results,
     isLoading,
+    clientLocation,
     setCategory,
     setAnimalType,
     setLocation,
     setRadius,
     setSearchMode,
+    setDate,
+    setDateRange,
+    resetDateFilters,
     updateAdvancedFilters,
     resetAdvancedFilters,
     resetAllFilters,
-  } = useServiceSearch();
+  } = useServiceSearch(token);
 
   const categoriesData = useQuery(api.admin.serviceCategories.getActiveCategories) as CategoriesData | undefined;
 
   const router = useRouter();
   const [showFilters, setShowFilters] = useState(false);
   const [showLocationModal, setShowLocationModal] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const filtersRef = useRef<HTMLDivElement>(null);
+  const datePickerRef = useRef<HTMLDivElement>(null);
 
   // Flatten categories from hierarchical structure
   const flattenedCategories: ServiceCategory[] = (() => {
@@ -136,6 +146,9 @@ export default function RecherchePage() {
       if (filtersRef.current && !filtersRef.current.contains(e.target as Node)) {
         setOpenDropdown(null);
       }
+      if (datePickerRef.current && !datePickerRef.current.contains(e.target as Node)) {
+        setShowDatePicker(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -177,7 +190,7 @@ export default function RecherchePage() {
       {/* Header */}
       <SearchHeader
         onLocationClick={() => setShowLocationModal(true)}
-        locationText={filters.location.text || undefined}
+        locationText={filters.location.text || clientLocation?.city || undefined}
       />
 
       {/* Hero Section with Mode Toggle */}
@@ -438,23 +451,66 @@ export default function RecherchePage() {
             </FilterDropdown>
 
             {/* Date Filter */}
-            <button
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all",
-                filters.date || filters.startDate
-                  ? filters.searchMode === "garde" ? "bg-primary text-white" : "bg-secondary text-white"
-                  : "bg-gray-100 text-gray-700"
-              )}
-            >
-              <Calendar className="w-3.5 h-3.5" />
-              <span>
-                {filters.date
-                  ? new Date(filters.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
-                  : filters.startDate && filters.endDate
-                  ? `${new Date(filters.startDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}`
-                  : "Dates"}
-              </span>
-            </button>
+            <div className="relative" ref={datePickerRef}>
+              <button
+                onClick={() => setShowDatePicker(!showDatePicker)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all",
+                  filters.date || filters.startDate
+                    ? filters.searchMode === "garde" ? "bg-primary text-white" : "bg-secondary text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                )}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>
+                  {filters.date
+                    ? new Date(filters.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
+                    : filters.startDate && filters.endDate
+                    ? `${new Date(filters.startDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} - ${new Date(filters.endDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}`
+                    : "Dates"}
+                </span>
+                {(filters.date || filters.startDate) && (
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      resetDateFilters();
+                    }}
+                    className="ml-1 p-0.5 hover:bg-white/20 rounded-full cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                  </span>
+                )}
+                <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", showDatePicker && "rotate-180")} />
+              </button>
+
+              <AnimatePresence>
+                {showDatePicker && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 4 }}
+                    className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-[100]"
+                  >
+                    <DatePickerDropdown
+                      mode={filters.searchMode === "garde" ? "range" : "single"}
+                      selectedDate={filters.date}
+                      startDate={filters.startDate}
+                      endDate={filters.endDate}
+                      onDateSelect={(date) => {
+                        setDate(date);
+                        setShowDatePicker(false);
+                      }}
+                      onRangeSelect={(start, end) => {
+                        setDateRange(start, end);
+                        setShowDatePicker(false);
+                      }}
+                      onClose={() => setShowDatePicker(false)}
+                      accentColor={filters.searchMode === "garde" ? "primary" : "secondary"}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
             {/* Main Filters Button - Opens drawer */}
             <button
@@ -900,5 +956,274 @@ function EmptyState({ onReset }: { onReset: () => void }) {
         </motion.button>
       </div>
     </motion.div>
+  );
+}
+
+// Date Picker Dropdown Component
+function DatePickerDropdown({
+  mode,
+  selectedDate,
+  startDate,
+  endDate,
+  onDateSelect,
+  onRangeSelect,
+  onClose,
+  accentColor = "primary",
+}: {
+  mode: "single" | "range";
+  selectedDate: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  onDateSelect: (date: string) => void;
+  onRangeSelect: (start: string, end: string) => void;
+  onClose: () => void;
+  accentColor?: "primary" | "secondary";
+}) {
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [rangeStart, setRangeStart] = useState<string | null>(startDate);
+  const [rangeEnd, setRangeEnd] = useState<string | null>(endDate);
+  const [selectingEnd, setSelectingEnd] = useState(false);
+
+  const monthNames = [
+    "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+    "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
+  ];
+  const dayNames = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const days: (Date | null)[] = [];
+
+    // Get the day of week (0 = Sunday, adjust for Monday start)
+    let startDay = firstDay.getDay() - 1;
+    if (startDay < 0) startDay = 6;
+
+    // Add empty slots for days before the first of the month
+    for (let i = 0; i < startDay; i++) {
+      days.push(null);
+    }
+
+    // Add all days of the month
+    for (let i = 1; i <= lastDay.getDate(); i++) {
+      days.push(new Date(year, month, i));
+    }
+
+    return days;
+  };
+
+  const formatDate = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const isToday = (date: Date): boolean => {
+    const today = new Date();
+    return date.toDateString() === today.toDateString();
+  };
+
+  const isPast = (date: Date): boolean => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return date < today;
+  };
+
+  const isSelected = (date: Date): boolean => {
+    const dateStr = formatDate(date);
+    if (mode === "single") {
+      return dateStr === selectedDate;
+    }
+    return dateStr === rangeStart || dateStr === rangeEnd;
+  };
+
+  const isInRange = (date: Date): boolean => {
+    if (mode !== "range" || !rangeStart || !rangeEnd) return false;
+    const dateStr = formatDate(date);
+    return dateStr > rangeStart && dateStr < rangeEnd;
+  };
+
+  const handleDayClick = (date: Date) => {
+    if (isPast(date)) return;
+
+    const dateStr = formatDate(date);
+
+    if (mode === "single") {
+      onDateSelect(dateStr);
+    } else {
+      // Range mode
+      if (!rangeStart || selectingEnd === false) {
+        setRangeStart(dateStr);
+        setRangeEnd(null);
+        setSelectingEnd(true);
+      } else {
+        if (dateStr < rangeStart) {
+          // If clicked date is before start, swap
+          setRangeEnd(rangeStart);
+          setRangeStart(dateStr);
+        } else {
+          setRangeEnd(dateStr);
+        }
+        // Submit the range
+        const finalStart = dateStr < rangeStart ? dateStr : rangeStart;
+        const finalEnd = dateStr < rangeStart ? rangeStart : dateStr;
+        onRangeSelect(finalStart, finalEnd);
+      }
+    }
+  };
+
+  const prevMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
+  };
+
+  const nextMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+  };
+
+  const days = getDaysInMonth(currentMonth);
+  const accentClasses = accentColor === "primary"
+    ? "bg-primary text-white"
+    : "bg-secondary text-white";
+  const rangeClasses = accentColor === "primary"
+    ? "bg-primary/10"
+    : "bg-secondary/10";
+
+  return (
+    <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-4 w-80">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <button
+          onClick={prevMonth}
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+        >
+          <ChevronDown className="w-5 h-5 rotate-90" />
+        </button>
+        <span className="font-semibold text-gray-900">
+          {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+        </span>
+        <button
+          onClick={nextMonth}
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+        >
+          <ChevronDown className="w-5 h-5 -rotate-90" />
+        </button>
+      </div>
+
+      {/* Day names */}
+      <div className="grid grid-cols-7 gap-1 mb-2">
+        {dayNames.map((day) => (
+          <div key={day} className="text-center text-xs font-medium text-gray-500 py-1">
+            {day}
+          </div>
+        ))}
+      </div>
+
+      {/* Days grid */}
+      <div className="grid grid-cols-7 gap-1">
+        {days.map((date, index) => {
+          if (!date) {
+            return <div key={`empty-${index}`} className="aspect-square" />;
+          }
+
+          const past = isPast(date);
+          const today = isToday(date);
+          const selected = isSelected(date);
+          const inRange = isInRange(date);
+
+          return (
+            <button
+              key={formatDate(date)}
+              onClick={() => handleDayClick(date)}
+              disabled={past}
+              className={cn(
+                "aspect-square flex items-center justify-center text-sm rounded-lg transition-all",
+                past && "text-gray-300 cursor-not-allowed",
+                !past && !selected && !inRange && "hover:bg-gray-100",
+                today && !selected && "ring-1 ring-gray-300",
+                selected && accentClasses,
+                inRange && rangeClasses
+              )}
+            >
+              {date.getDate()}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Range mode hint */}
+      {mode === "range" && (
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          <p className="text-xs text-gray-500 text-center">
+            {!rangeStart
+              ? "Sélectionnez la date de début"
+              : !rangeEnd
+              ? "Sélectionnez la date de fin"
+              : "Plage sélectionnée"}
+          </p>
+          {rangeStart && rangeEnd && (
+            <p className="text-sm font-medium text-center mt-1 text-gray-700">
+              {new Date(rangeStart).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+              {" → "}
+              {new Date(rangeEnd).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Quick actions */}
+      <div className="mt-3 pt-3 border-t border-gray-100 flex gap-2">
+        <button
+          onClick={() => {
+            const today = new Date();
+            const dateStr = formatDate(today);
+            if (mode === "single") {
+              onDateSelect(dateStr);
+            } else {
+              setRangeStart(dateStr);
+              setSelectingEnd(true);
+            }
+          }}
+          className="flex-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+        >
+          Aujourd&apos;hui
+        </button>
+        <button
+          onClick={() => {
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const dateStr = formatDate(tomorrow);
+            if (mode === "single") {
+              onDateSelect(dateStr);
+            } else {
+              setRangeStart(dateStr);
+              setSelectingEnd(true);
+            }
+          }}
+          className="flex-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+        >
+          Demain
+        </button>
+        {mode === "range" && (
+          <button
+            onClick={() => {
+              const start = new Date();
+              start.setDate(start.getDate() + 1);
+              const end = new Date();
+              end.setDate(end.getDate() + 7);
+              onRangeSelect(formatDate(start), formatDate(end));
+            }}
+            className="flex-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+          >
+            Semaine
+          </button>
+        )}
+      </div>
+    </div>
   );
 }

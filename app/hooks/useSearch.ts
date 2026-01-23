@@ -40,6 +40,13 @@ export interface ServiceResult {
     status: "available" | "partial" | "unavailable";
     nextAvailable?: string;
   };
+  // Capacity info for garde categories (when dates are selected)
+  capacityInfo?: {
+    isCapacityBased: boolean;
+    currentCount: number;
+    maxCapacity: number;
+    remainingCapacity: number;
+  };
 }
 
 // Types
@@ -341,9 +348,15 @@ export function useSearch() {
 }
 
 // Hook pour la recherche par service (1 carte par service)
-export function useServiceSearch() {
+export function useServiceSearch(token?: string | null) {
   const [filters, setFilters] = useState<SearchFilters>(initialFilters);
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>(defaultAdvancedFilters);
+
+  // Récupérer les coordonnées du profil client (si connecté)
+  const clientLocation = useQuery(
+    api.client.profile.getClientCoordinates,
+    token ? { token } : "skip"
+  );
 
   // Préparer les arguments pour la query
   const queryArgs = useMemo(() => {
@@ -387,8 +400,13 @@ export function useServiceSearch() {
       args.animalType = filters.animalType;
     }
 
+    // Utiliser les coordonnées manuelles OU celles du profil client
     if (filters.location.coordinates) {
       args.coordinates = filters.location.coordinates;
+      args.radiusKm = filters.radius;
+    } else if (clientLocation?.coordinates) {
+      // Fallback: utiliser les coordonnées du profil client
+      args.coordinates = clientLocation.coordinates;
       args.radiusKm = filters.radius;
     }
 
@@ -439,7 +457,7 @@ export function useServiceSearch() {
     }
 
     return args;
-  }, [filters, advancedFilters]);
+  }, [filters, advancedFilters, clientLocation]);
 
   // Query Convex - utiliser searchServices au lieu de searchAnnouncers
   const results = useQuery(api.public.search.searchServices, queryArgs);
@@ -517,11 +535,25 @@ export function useServiceSearch() {
     setAdvancedFilters(defaultAdvancedFilters);
   }, []);
 
+  // Reset date filters
+  const resetDateFilters = useCallback(() => {
+    setFilters((prev) => ({
+      ...prev,
+      date: null,
+      time: null,
+      startDate: null,
+      endDate: null,
+      endTime: null,
+    }));
+  }, []);
+
   return {
     filters,
     advancedFilters,
     results: (results ?? []) as ServiceResult[],
     isLoading: results === undefined,
+    // Coordonnées client (pour afficher l'adresse par défaut)
+    clientLocation: clientLocation ?? null,
     setCategory,
     setAnimalType,
     setLocation,
@@ -533,6 +565,7 @@ export function useServiceSearch() {
     setIncludeUnavailable,
     setSearchMode,
     resetFilters,
+    resetDateFilters,
     updateAdvancedFilters,
     resetAdvancedFilters,
     resetAllFilters,

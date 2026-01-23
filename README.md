@@ -262,6 +262,13 @@ app/
         CategoryForm/    # Formulaire modulaire
         CategoryTable/   # Table avec expansion
     utilisateurs/
+  client/              # Espace client
+    profil/            # Page profil client
+      page.tsx         # Page principale
+      hooks/           # useClientProfile
+      components/      # ClientProfileHeader, ClientBioSection, ClientLocationSection
+    mes-animaux/       # Gestion des animaux
+    reservations/      # Historique des reservations
   recherche/           # Page de recherche avancée
     page.tsx           # Page principale avec filtres et carte
   dashboard/           # Dashboard annonceur
@@ -305,6 +312,8 @@ convex/
     login.ts
     register.ts
     session.ts
+  client/              # Fonctions client
+    profile.ts            # CRUD profil client
   planning/            # Planning et missions
     missions.ts
     availability.ts
@@ -328,6 +337,7 @@ convex/
 - `users` - Utilisateurs (tous types)
 - `sessions` - Sessions d'authentification
 - `profiles` - Profils des annonceurs (localisation, animaux acceptes, etc.)
+- `clientProfiles` - Profils des clients (adresse, bio, coordonnees GPS)
 - `services` - Services/Prestations proposes (lie a une categorie)
 - `serviceVariants` - Formules de service (prix horaire, duree, fonctionnalites)
 - `serviceOptions` - Options additionnelles (supplements)
@@ -406,6 +416,48 @@ Utilisation de Framer Motion avec des variants predefinies :
 ---
 
 ## Changelog recent
+
+### v0.11.0 - Profil Client avec Adresse et Coordonnees
+
+- **Nouvelle page Profil Client** (`/client/profil`)
+  - Photo de profil avec initiales par defaut
+  - Section "A propos de moi" editable (bio/description)
+  - Section adresse avec autocomplete Google Maps
+  - Sauvegarde des coordonnees GPS pour la recherche
+
+- **Enregistrement automatique de l'adresse lors des reservations**
+  - Creation automatique du profil client a la premiere reservation
+  - Sauvegarde de l'adresse et des coordonnees
+  - Fonctionne pour les utilisateurs connectes et les invites (guest checkout)
+
+- **Distance automatique dans les resultats de recherche**
+  - Utilisation des coordonnees du profil client si pas de localisation manuelle
+  - Affichage de la ville du client dans le header de recherche
+  - Calcul de distance base sur l'adresse enregistree
+
+- **Nouvelle table `clientProfiles`**
+  - Stockage separe du profil utilisateur (users) et profil client
+  - Champs : profileImageUrl, description, location, city, postalCode, coordinates, googlePlaceId
+  - Index par userId pour requetes rapides
+
+- **Backend Convex** (`convex/client/profile.ts`)
+  - `getClientProfile` : Recupere le profil client complet
+  - `getClientCoordinates` : Recupere uniquement les coordonnees (optimise pour la recherche)
+  - `upsertClientProfile` : Cree ou met a jour le profil
+  - `updateLocation` : Met a jour uniquement la localisation
+
+- **Hook React** (`app/client/profil/hooks/useClientProfile.ts`)
+  - Gestion des queries et mutations
+  - Etats de chargement et erreurs
+  - Fonctions updateProfile et updateLocation
+
+- **Composants modulaires**
+  - `ClientProfileHeader` : Photo + infos de base + date d'inscription
+  - `ClientBioSection` : Textarea editable avec compteur de caracteres
+  - `ClientLocationSection` : Autocomplete adresse avec sauvegarde
+
+- **Navigation client amelioree**
+  - Ajout du lien "Mon profil" dans la sidebar client
 
 ### v0.10.0 - Systeme de Capacite pour Categories de Garde
 

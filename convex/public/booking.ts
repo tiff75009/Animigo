@@ -479,6 +479,31 @@ export const finalizeBooking = mutation({
     // Supprimer la réservation en attente
     await ctx.db.delete(args.bookingId);
 
+    // Sauvegarder/mettre à jour profil client avec localisation
+    const existingClientProfile = await ctx.db
+      .query("clientProfiles")
+      .withIndex("by_user", (q) => q.eq("userId", session.userId))
+      .first();
+
+    if (!existingClientProfile) {
+      // Créer un nouveau profil client avec la localisation
+      await ctx.db.insert("clientProfiles", {
+        userId: session.userId,
+        location: args.location,
+        city: args.city,
+        coordinates: args.coordinates,
+        updatedAt: now,
+      });
+    } else if (!existingClientProfile.coordinates && args.coordinates) {
+      // Mettre à jour la localisation si pas encore définie
+      await ctx.db.patch(existingClientProfile._id, {
+        location: args.location,
+        city: args.city,
+        coordinates: args.coordinates,
+        updatedAt: now,
+      });
+    }
+
     // Envoyer l'email de notification à l'annonceur
     const announcer = await ctx.db.get(pendingBooking.announcerId);
     if (announcer) {
@@ -692,7 +717,16 @@ export const finalizeBookingAsGuest = mutation({
       isActive: false,
     });
 
-    // 2. Créer la fiche animal
+    // 2. Créer le profil client avec localisation
+    await ctx.db.insert("clientProfiles", {
+      userId,
+      location: args.location,
+      city: args.city,
+      coordinates: args.coordinates,
+      updatedAt: now,
+    });
+
+    // 3. Créer la fiche animal
     const animalType = ANIMAL_TYPES.find((t) => t.id === args.animalData.type);
 
     await ctx.db.insert("animals", {
@@ -714,7 +748,7 @@ export const finalizeBookingAsGuest = mutation({
       updatedAt: now,
     });
 
-    // 3. Mettre à jour la pending booking avec le statut et les données client
+    // 4. Mettre à jour la pending booking avec le statut et les données client
     // NE PAS supprimer la pending booking - elle sera convertie en mission après vérification email
     await ctx.db.patch(args.bookingId, {
       userId,
@@ -734,7 +768,7 @@ export const finalizeBookingAsGuest = mutation({
       },
     });
 
-    // 4. Créer une session pour l'utilisateur
+    // 5. Créer une session pour l'utilisateur
     const token = generateToken();
     const sessionExpiresAt = now + 7 * 24 * 60 * 60 * 1000; // 7 jours
 
@@ -745,7 +779,7 @@ export const finalizeBookingAsGuest = mutation({
       createdAt: now,
     });
 
-    // 5. Créer un token de vérification email avec contexte "reservation"
+    // 6. Créer un token de vérification email avec contexte "reservation"
     const verificationToken = await ctx.runMutation(internal.api.emailInternal.createVerificationToken, {
       userId,
       email: args.userData.email.toLowerCase(),
@@ -753,14 +787,14 @@ export const finalizeBookingAsGuest = mutation({
       pendingBookingId: args.bookingId,
     });
 
-    // 6. Récupérer les détails de la réservation pour l'email
+    // 7. Récupérer les détails de la réservation pour l'email
     const announcer = await ctx.db.get(pendingBooking.announcerId);
     const category = await ctx.db
       .query("serviceCategories")
       .withIndex("by_slug", (q) => q.eq("slug", service.category))
       .first();
 
-    // 6bis. Récupérer la config email depuis la DB (pour passer à l'action)
+    // 7bis. Récupérer la config email depuis la DB (pour passer à l'action)
     const apiKeyConfig = await ctx.db
       .query("systemConfig")
       .withIndex("by_key", (q) => q.eq("key", "resend_api_key"))
@@ -774,13 +808,13 @@ export const finalizeBookingAsGuest = mutation({
       .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
       .first();
 
-    // 6ter. Récupérer l'URL de l'application depuis la DB
+    // 7ter. Récupérer l'URL de l'application depuis la DB
     const appUrlConfig = await ctx.db
       .query("systemConfig")
       .withIndex("by_key", (q) => q.eq("key", "app_url"))
       .first();
 
-    // 7. Envoyer l'email de vérification avec contexte réservation
+    // 8. Envoyer l'email de vérification avec contexte réservation
     await ctx.scheduler.runAfter(0, internal.api.email.sendVerificationEmail, {
       userId,
       email: args.userData.email.toLowerCase(),
