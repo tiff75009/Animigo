@@ -24,6 +24,7 @@ import {
   Mail,
   CalendarCheck,
   Sparkles,
+  FlaskConical,
 } from "lucide-react";
 
 interface NavItem {
@@ -143,6 +144,11 @@ export function AdminSidebar() {
           label: "Paramètres",
           href: "/admin/parametres",
           icon: Settings,
+        },
+        {
+          label: "Dev Test",
+          href: "/admin/dev-test",
+          icon: FlaskConical,
         },
       ],
     },

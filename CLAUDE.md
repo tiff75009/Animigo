@@ -1,82 +1,87 @@
-# CLAUDE.md
+# Animigo - Claude Code Config
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Marketplace de services animaliers. Next.js 16 + Convex Self-Hosted + Tailwind v4 + ShadCN.
 
-## Project Overview
+## Commandes Agents
 
-Animigo is a French pet-sitting platform connecting pet owners with trusted animal caretakers. Built with Next.js 16, React 19, TypeScript, and Convex (self-hosted) as the backend.
+| Commande | Usage |
+|----------|-------|
+| `/convex` | Backend Convex (schema, mutations, queries) |
+| `/ui` | Frontend (Tailwind, ShadCN, Framer Motion) |
+| `/orchestrator` | Coordination et planning |
+| `/fullstack` | Feature complète (backend + frontend) |
 
-## Development Commands
+## Dev Commands
 
 ```bash
-bun install              # Install dependencies
-bun run dev              # Start Next.js dev server (localhost:3000)
-bun run build            # Production build
-bun run lint             # Run ESLint
-bunx convex dev          # Start Convex backend (separate terminal)
+bun run dev          # Next.js :3000
+bunx convex dev      # Backend Convex
 ```
 
-## Tech Stack
+## Règles critiques
 
-- **Frontend**: Next.js 16, React 19, TypeScript 5
-- **Backend**: Convex 1.31.5 (self-hosted deployment)
-- **Styling**: Tailwind CSS 4 with custom theme
-- **Animations**: Framer Motion
-- **Maps**: Leaflet + React-Leaflet
-- **UI Primitives**: Radix UI
-- **Package Manager**: Bun
+### "use client" obligatoire si :
+- useState/useEffect/useRef
+- onClick/onChange/onSubmit
+- useQuery/useMutation (Convex)
 
-## Architecture
+### Convex - toujours :
+```typescript
+// 1. Typer les args
+args: { sessionToken: v.string(), id: v.id("missions") }
+// 2. Valider session en premier
+const session = await validateSession(ctx, args.sessionToken);
+// 3. Utiliser les indexes
+.withIndex("by_user", (q) => q.eq("userId", userId))
+```
 
-### Directory Structure
+### Accessibilité :
+- `<button>` pour les actions (pas `<div onClick>`)
+- Labels sur tous les inputs
+
+## Structure
 
 ```
 app/
-├── components/
-│   ├── ui/           # Reusable UI (button, card, badge)
-│   ├── sections/     # Landing page sections (hero, services, FAQ, etc.)
-│   ├── navbar.tsx
-│   └── footer.tsx
-├── dashboard/        # Protected dashboard with nested routes
-│   ├── components/   # Dashboard-specific components
-│   ├── missions/     # Mission management (accepter, en-cours, etc.)
-│   ├── planning/     # Calendar view
-│   ├── messagerie/   # Messaging system
-│   └── ...
-├── lib/              # Utilities and data
-│   ├── utils.ts      # cn() helper for Tailwind classes
-│   ├── constants.ts  # Navigation, services, FAQs
-│   ├── animations.ts # Framer Motion variants
-│   └── *-data.ts     # Mock data files
-├── providers/
-│   └── ConvexClientProvider.tsx
-└── globals.css       # Theme variables and custom animations
+├── dashboard/      # Annonceur (14 pages)
+├── client/         # Client
+├── admin/          # Admin (10+ pages)
+├── components/ui/  # ShadCN
+└── hooks/          # useAuth, useConvexAction...
+
 convex/
-└── _generated/       # Auto-generated Convex types
+├── schema.ts       # 23 tables
+├── auth/           # Sessions (7j user, 2h admin)
+└── api/            # Stripe, Resend, Maps
 ```
 
-### Key Patterns
+## Design tokens (globals.css)
 
-1. **Convex Self-Hosted**: Backend uses Convex in self-hosted mode. The `ConvexClientProvider` wraps the app and requires `NEXT_PUBLIC_CONVEX_URL` environment variable.
+- Primary: `#FF6B6B` | Secondary: `#4ECDC4` | Background: `#FFF9F0`
+- Fonts: Nunito (headings), Inter (body)
+- Radius: `rounded-2xl` (cards), `rounded-full` (buttons)
 
-2. **Animation System**: Predefined Framer Motion variants in `lib/animations.ts` (containerVariants, itemVariants, fadeInUp, scaleIn, etc.). Use these for consistent animations.
+## Workflows
 
-3. **Styling**: Custom color palette defined in `globals.css`:
-   - Primary: #FF6B6B (red)
-   - Secondary: #4ECDC4 (teal)
-   - Accent: #FFE66D (yellow)
-   - Purple: #9B5DE5
+**Mission**: pending_acceptance → pending_confirmation → upcoming → in_progress → completed
 
-4. **Maps**: Leaflet components use `next/dynamic` with `ssr: false` to avoid hydration issues.
+**Paiement**: PaymentIntent → authorized → auto-capture 48h après completion
 
-5. **Component Pattern**: Interactive components use `"use client"` directive. Most UI components combine Radix primitives with Framer Motion.
+## MCP Tools
 
-## Language
+| Tool | Quand l'utiliser |
+|------|------------------|
+| `jina_read_url` | Lire le contenu d'une URL (docs, articles, pages web) |
+| `jina_search` | Rechercher sur le web (docs récentes, solutions, exemples) |
+| `context7_resolve` | Trouver la doc officielle d'une librairie (Next.js, Convex, Tailwind...) |
+| `context7_get_library_docs` | Récupérer la documentation complète d'une lib |
 
-All UI text is in French. Maintain French language for user-facing content.
+**Utiliser MCP quand :**
+- Besoin de docs récentes (après knowledge cutoff)
+- Chercher des exemples d'implémentation
+- Vérifier la syntaxe/API d'une librairie
+- Lire un lien fourni par l'utilisateur
 
-## Environment Variables
+## Langue
 
-```
-NEXT_PUBLIC_CONVEX_URL=<your-convex-self-hosted-url>
-```
+Interface en français.

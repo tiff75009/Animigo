@@ -183,3 +183,51 @@ export const testStripeConnection = action({
     return result;
   },
 });
+
+// Action: Tester la connexion QStash
+export const testQStashConnection = action({
+  args: {
+    token: v.string(),
+    qstashToken: v.string(),
+  },
+  handler: async (ctx, args): Promise<{
+    success: boolean;
+    message?: string;
+    messageId?: string;
+    error?: string;
+  }> => {
+    await requireAdminAction(ctx, args.token);
+
+    try {
+      // Test: vérifier que le token est valide en appelant l'API QStash
+      const response = await fetch("https://qstash.upstash.io/v2/publish/https://httpstat.us/200", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${args.qstashToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ test: true }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          success: false,
+          error: `Erreur API (${response.status}): ${errorText}`,
+        };
+      }
+
+      const data = await response.json();
+      return {
+        success: true,
+        message: "Connexion QStash OK",
+        messageId: data.messageId,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Erreur inconnue",
+      };
+    }
+  },
+});

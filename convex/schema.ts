@@ -861,4 +861,70 @@ export default defineSchema({
     .index("by_payment_intent", ["paymentIntentId"])
     .index("by_status", ["status"])
     .index("by_expires", ["expiresAt"]),
+
+  // Notifications in-app
+  notifications: defineTable({
+    // Destinataire
+    userId: v.id("users"),
+
+    // Type de notification
+    type: v.union(
+      // Missions
+      v.literal("new_mission"),           // Annonceur: nouvelle demande reçue
+      v.literal("mission_accepted"),      // Client: demande acceptée
+      v.literal("mission_refused"),       // Client: demande refusée
+      v.literal("mission_confirmed"),     // Annonceur: client a confirmé
+      v.literal("mission_started"),       // Les deux: mission démarrée
+      v.literal("mission_completed"),     // Les deux: mission terminée
+      v.literal("mission_cancelled"),     // Les deux: annulation
+
+      // Paiements
+      v.literal("payment_authorized"),    // Client: paiement pré-autorisé
+      v.literal("payment_captured"),      // Annonceur: paiement capturé
+      v.literal("payout_sent"),           // Annonceur: virement envoyé
+
+      // Avis
+      v.literal("review_received"),       // Annonceur: nouvel avis
+
+      // Messages (futur)
+      v.literal("new_message"),           // Nouveau message reçu
+
+      // Système
+      v.literal("welcome"),               // Nouveau compte créé
+      v.literal("reminder"),              // Rappel (ex: mission demain)
+      v.literal("system")                 // Notification système générique
+    ),
+
+    // Contenu
+    title: v.string(),
+    message: v.string(),
+
+    // Lien contextuel
+    linkType: v.optional(v.union(
+      v.literal("mission"),
+      v.literal("payment"),
+      v.literal("profile"),
+      v.literal("review"),
+      v.literal("message"),
+      v.literal("settings")
+    )),
+    linkId: v.optional(v.string()),
+    linkUrl: v.optional(v.string()),
+
+    // Statut
+    isRead: v.boolean(),
+    readAt: v.optional(v.number()),
+
+    // Metadata flexible
+    metadata: v.optional(v.any()),
+
+    // Timestamps
+    createdAt: v.number(),
+    expiresAt: v.number(),  // Auto-delete après 30 jours
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_unread", ["userId", "isRead"])
+    .index("by_user_created", ["userId", "createdAt"])
+    .index("by_user_type", ["userId", "type"])
+    .index("by_expires", ["expiresAt"]),
 });

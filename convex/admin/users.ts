@@ -177,6 +177,41 @@ export const deleteUser = mutation({
   },
 });
 
+// Query: Recherche rapide d'utilisateurs (pour autocomplete)
+export const searchUsers = query({
+  args: {
+    token: v.string(),
+    query: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx, args.token);
+
+    if (args.query.length < 2) {
+      return [];
+    }
+
+    const searchLower = args.query.toLowerCase();
+    const users = await ctx.db.query("users").collect();
+
+    return users
+      .filter(
+        (u) =>
+          u.email.toLowerCase().includes(searchLower) ||
+          u.firstName.toLowerCase().includes(searchLower) ||
+          u.lastName.toLowerCase().includes(searchLower) ||
+          (u.companyName && u.companyName.toLowerCase().includes(searchLower))
+      )
+      .slice(0, 10)
+      .map((u) => ({
+        _id: u._id,
+        email: u.email,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        accountType: u.accountType,
+      }));
+  },
+});
+
 // Query: Détails d'un utilisateur
 export const getUserDetails = query({
   args: {

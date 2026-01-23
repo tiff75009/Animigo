@@ -27,4 +27,15 @@ crons.interval(
   internal.api.stripeInternal.cleanupExpiredSessions
 );
 
+/**
+ * Nettoyage des notifications expirées
+ * Exécuté tous les jours à 3h du matin (UTC) pour supprimer
+ * les notifications de plus de 30 jours
+ */
+crons.daily(
+  "cleanup-expired-notifications",
+  { hourUTC: 3, minuteUTC: 0 },
+  internal.notifications.mutations.cleanupExpired
+);
+
 export default crons;

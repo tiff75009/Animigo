@@ -26,6 +26,7 @@ import {
   XCircle,
   Database,
   Cloud,
+  Bell,
 } from "lucide-react";
 
 interface ConfigItem {
@@ -272,6 +273,37 @@ const integrations: IntegrationSection[] = [
       },
     ],
   },
+  {
+    id: "qstash",
+    name: "Upstash QStash",
+    description: "File de messages pour notifications asynchrones et tâches en arrière-plan",
+    icon: Bell,
+    color: "bg-emerald-500",
+    docsUrl: "https://console.upstash.com/qstash",
+    fields: [
+      {
+        key: "qstash_token",
+        label: "Token QStash",
+        description: "Token d'authentification QStash (QSTASH_TOKEN)",
+        isSecret: true,
+        placeholder: "eyJVc2VySUQi...",
+      },
+      {
+        key: "qstash_current_signing_key",
+        label: "Signing Key (Current)",
+        description: "Clé de signature actuelle pour valider les webhooks entrants",
+        isSecret: true,
+        placeholder: "sig_...",
+      },
+      {
+        key: "qstash_next_signing_key",
+        label: "Signing Key (Next)",
+        description: "Prochaine clé de signature (pour la rotation des clés)",
+        isSecret: true,
+        placeholder: "sig_...",
+      },
+    ],
+  },
 ];
 
 export default function IntegrationsPage() {
@@ -291,6 +323,13 @@ export default function IntegrationsPage() {
     livemode?: boolean;
     error?: string;
   } | null>(null);
+  const [testingQStash, setTestingQStash] = useState(false);
+  const [qstashTestResult, setQStashTestResult] = useState<{
+    success: boolean;
+    message?: string;
+    messageId?: string;
+    error?: string;
+  } | null>(null);
 
   const configs = useQuery(
     api.admin.config.getAllConfigs,
@@ -299,6 +338,7 @@ export default function IntegrationsPage() {
 
   const updateConfig = useMutation(api.admin.config.updateConfig);
   const testStripeConnection = useAction(api.admin.config.testStripeConnection);
+  const testQStashConnection = useAction(api.admin.config.testQStashConnection);
 
   const getConfigValue = (key: string) => {
     if (values[key] !== undefined) return values[key];
@@ -350,6 +390,35 @@ export default function IntegrationsPage() {
       });
     } finally {
       setTestingStripe(false);
+    }
+  };
+
+  const handleTestQStash = async () => {
+    if (!token) return;
+
+    const qstashToken = getConfigValue("qstash_token");
+
+    if (!qstashToken) {
+      setQStashTestResult({
+        success: false,
+        error: "Veuillez d'abord entrer et sauvegarder votre token QStash.",
+      });
+      return;
+    }
+
+    setTestingQStash(true);
+    setQStashTestResult(null);
+
+    try {
+      const result = await testQStashConnection({ token, qstashToken });
+      setQStashTestResult(result);
+    } catch (error) {
+      setQStashTestResult({
+        success: false,
+        error: error instanceof Error ? error.message : "Erreur inconnue",
+      });
+    } finally {
+      setTestingQStash(false);
     }
   };
 
@@ -582,6 +651,84 @@ export default function IntegrationsPage() {
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Test Connection Section - QStash */}
+            {integration.id === "qstash" && (
+              <div className="p-6 border-t border-slate-800">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-emerald-400" />
+                    <h3 className="text-lg font-semibold text-white">Tester la connexion</h3>
+                  </div>
+                  <button
+                    onClick={handleTestQStash}
+                    disabled={testingQStash}
+                    className="px-4 py-2 rounded-lg font-medium flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-50"
+                  >
+                    {testingQStash ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Test en cours...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4" />
+                        Tester l&apos;API
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {qstashTestResult && (
+                  <div className={`mt-4 p-4 rounded-lg border ${
+                    qstashTestResult.success
+                      ? "bg-green-500/10 border-green-500/30"
+                      : "bg-red-500/10 border-red-500/30"
+                  }`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      {qstashTestResult.success ? (
+                        <>
+                          <CheckCircle className="w-5 h-5 text-green-400" />
+                          <span className="text-green-400 font-medium">Connexion réussie</span>
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="w-5 h-5 text-red-400" />
+                          <span className="text-red-400 font-medium">Erreur de connexion</span>
+                        </>
+                      )}
+                    </div>
+                    {qstashTestResult.success ? (
+                      <div className="text-sm text-slate-300 space-y-1">
+                        <p><strong>Statut :</strong> {qstashTestResult.message}</p>
+                        <p><strong>Message ID :</strong> <code className="text-emerald-400">{qstashTestResult.messageId}</code></p>
+                        <p className="text-slate-400 text-xs mt-2">
+                          Un message de test a ete envoye avec succes via QStash.
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-red-300">{qstashTestResult.error}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Info box */}
+                <div className="mt-4 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <Info className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm">
+                      <p className="text-emerald-300 font-medium mb-2">Configuration des cles :</p>
+                      <ol className="text-emerald-300/80 space-y-1 list-decimal list-inside">
+                        <li>Allez sur <a href="https://console.upstash.com/qstash" target="_blank" rel="noopener noreferrer" className="underline hover:text-emerald-200">Upstash Console → QStash</a></li>
+                        <li>Copiez le &quot;QSTASH_TOKEN&quot; et collez-le ci-dessus</li>
+                        <li>Dans l&apos;onglet &quot;Signing Keys&quot;, copiez les 2 cles de signature</li>
+                        <li>Ces cles permettent de valider les webhooks entrants</li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
