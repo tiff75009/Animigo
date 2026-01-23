@@ -133,6 +133,11 @@ interface BookingSelection {
   overnightPrice?: number;
 }
 
+// Type helper for service details from Convex query
+type ServiceDetailsResult = Awaited<ReturnType<typeof api.public.search.getAnnouncerServiceDetails._returnType>>;
+type ServiceDetailType = NonNullable<ServiceDetailsResult>[number];
+type ServiceVariantType = ServiceDetailType["variants"][number];
+
 // Formulas Modal Component with Booking
 function FormulasModal({
   isOpen,
@@ -234,16 +239,16 @@ function FormulasModal({
   };
 
   // Filtrer les services par catégorie
-  const filteredServices = useMemo(() => {
+  const filteredServices = useMemo((): ServiceDetailType[] => {
     if (!serviceDetails) return [];
     if (categoryFilter === "all") return serviceDetails;
-    return serviceDetails.filter((service: { category: string }) => service.category === categoryFilter);
+    return serviceDetails.filter((service: ServiceDetailType) => service.category === categoryFilter);
   }, [serviceDetails, categoryFilter]);
 
   // Obtenir les catégories disponibles pour le filtre
   const availableCategories = useMemo(() => {
     if (!serviceDetails) return [];
-    return serviceDetails.map((service: { category: string; categoryName: string; categoryIcon?: string }) => ({
+    return serviceDetails.map((service: ServiceDetailType) => ({
       slug: service.category,
       name: service.categoryName,
       icon: service.categoryIcon,
@@ -851,36 +856,7 @@ function FormulasModal({
                           </div>
                         )}
 
-                        {filteredServices.map((service: {
-                          id: string;
-                          category: string;
-                          categoryName: string;
-                          categoryIcon?: string;
-                          categoryDescription?: string;
-                          animalTypes: string[];
-                          variants: Array<{
-                            id: string;
-                            name: string;
-                            price: number;
-                            priceUnit: string;
-                            duration?: number;
-                            description?: string;
-                            includedFeatures?: string[];
-                            pricing?: {
-                              hourly?: number;
-                              daily?: number;
-                              weekly?: number;
-                              monthly?: number;
-                              nightly?: number;
-                            };
-                          }>;
-                          options: Array<{ id: string; name: string; price: number; priceType?: string }>;
-                          // Overnight
-                          allowOvernightStay?: boolean;
-                          dayStartTime?: string;
-                          dayEndTime?: string;
-                          overnightPrice?: number;
-                        }) => (
+                        {filteredServices.map((service: ServiceDetailType) => (
                           <div key={service.id} className="space-y-4">
                             <div className="flex items-start gap-3">
                               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-xl flex-shrink-0">
@@ -897,22 +873,7 @@ function FormulasModal({
 
                             {service.variants.length > 0 && (
                               <div className="space-y-2">
-                                {service.variants.map((variant: {
-                                id: string;
-                                name: string;
-                                price: number;
-                                priceUnit: string;
-                                duration?: number;
-                                description?: string;
-                                includedFeatures?: string[];
-                                pricing?: {
-                                  hourly?: number;
-                                  daily?: number;
-                                  weekly?: number;
-                                  monthly?: number;
-                                  nightly?: number;
-                                };
-                              }) => (
+                                {service.variants.map((variant: ServiceVariantType) => (
                                   <div
                                     key={variant.id}
                                     className="p-4 bg-primary/5 rounded-xl border border-primary/10 hover:border-primary/30 transition-colors"

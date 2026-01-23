@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import Image from "next/image";
-import { X, ChevronLeft, ChevronRight, PawPrint, ImageIcon } from "lucide-react";
+import { PawPrint, ImageIcon } from "lucide-react";
 import { cn } from "@/app/lib/utils";
+import ImageLightbox from "@/app/components/ui/ImageLightbox";
 
 interface AnnouncerGalleryProps {
   gallery: string[];
@@ -76,66 +77,14 @@ export default function AnnouncerGallery({
       </section>
 
       {/* Lightbox */}
-      <AnimatePresence>
-        {lightboxIndex !== null && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
-            onClick={() => setLightboxIndex(null)}
-          >
-            <button
-              onClick={() => setLightboxIndex(null)}
-              className="absolute top-4 right-4 p-2 text-white/80 hover:text-white transition-colors"
-            >
-              <X className="w-8 h-8" />
-            </button>
-
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setLightboxIndex(Math.max(0, lightboxIndex - 1));
-              }}
-              className="absolute left-4 p-2 text-white/80 hover:text-white transition-colors disabled:opacity-30"
-              disabled={lightboxIndex === 0}
-            >
-              <ChevronLeft className="w-8 h-8" />
-            </button>
-
-            <motion.div
-              key={lightboxIndex}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="relative w-full max-w-4xl aspect-video mx-4"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Image
-                src={gallery[lightboxIndex]}
-                alt={`Photo ${lightboxIndex + 1}`}
-                fill
-                className="object-contain"
-              />
-            </motion.div>
-
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setLightboxIndex(Math.min(gallery.length - 1, lightboxIndex + 1));
-              }}
-              className="absolute right-4 p-2 text-white/80 hover:text-white transition-colors disabled:opacity-30"
-              disabled={lightboxIndex === gallery.length - 1}
-            >
-              <ChevronRight className="w-8 h-8" />
-            </button>
-
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/80 text-sm">
-              {lightboxIndex + 1} / {gallery.length}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <ImageLightbox
+        images={gallery}
+        currentIndex={lightboxIndex ?? 0}
+        isOpen={lightboxIndex !== null}
+        onClose={() => setLightboxIndex(null)}
+        onNavigate={setLightboxIndex}
+        altPrefix={`Photo de ${firstName}`}
+      />
     </>
   );
 }

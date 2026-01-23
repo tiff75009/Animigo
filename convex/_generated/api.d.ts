@@ -14,6 +14,7 @@ import type * as admin_devPresence from "../admin/devPresence.js";
 import type * as admin_emailTemplates from "../admin/emailTemplates.js";
 import type * as admin_invitations from "../admin/invitations.js";
 import type * as admin_login from "../admin/login.js";
+import type * as admin_maintenance from "../admin/maintenance.js";
 import type * as admin_moderation from "../admin/moderation.js";
 import type * as admin_reservations from "../admin/reservations.js";
 import type * as admin_seed from "../admin/seed.js";
@@ -69,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   "admin/emailTemplates": typeof admin_emailTemplates;
   "admin/invitations": typeof admin_invitations;
   "admin/login": typeof admin_login;
+  "admin/maintenance": typeof admin_maintenance;
   "admin/moderation": typeof admin_moderation;
   "admin/reservations": typeof admin_reservations;
   "admin/seed": typeof admin_seed;

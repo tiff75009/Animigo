@@ -31,6 +31,7 @@ interface ServiceVariant {
     nightly?: number;
   };
   includedFeatures?: string[];
+  isActive?: boolean;
 }
 
 interface ServiceDetail {
@@ -38,13 +39,15 @@ interface ServiceDetail {
   category: string;
   categoryName: string;
   categoryIcon?: string;
+  categoryDescription?: string;
   animalTypes: string[];
   allowOvernightStay?: boolean;
   dayStartTime?: string;
   dayEndTime?: string;
   overnightPrice?: number;
+  serviceLocation?: "announcer_home" | "client_home" | "both";
   variants: ServiceVariant[];
-  options: Array<{ id: string; name: string; price: number }>;
+  options: Array<{ id: string; name: string; price: number; priceType?: string; isActive?: boolean }>;
 }
 
 interface FormulasDropdownProps {

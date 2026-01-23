@@ -2,6 +2,7 @@
 export { PlatformTopbar } from "./PlatformTopbar";
 export { SearchHeader } from "./SearchHeader";
 export { AnnouncerCardGrid, AnnouncerCardList } from "./AnnouncerCard";
+export { ServiceCardGrid, ServiceCardList, type ServiceSearchResult } from "./ServiceCard";
 export { FormulasModal } from "./FormulasModal";
 
 // Helpers

@@ -29,6 +29,7 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
 // Types pour les missions Convex
+// Accepte à la fois Id<"missions"> (Convex) et string (données de test)
 export interface ConvexMission {
   id: Id<"missions"> | string;
   clientId: Id<"users"> | string;
@@ -576,7 +577,7 @@ function AnimalDetailsModal({
 }: AnimalDetailsModalProps) {
   const animalData = useQuery(
     api.planning.missions.getMissionAnimalDetails,
-    { token, missionId }
+    { token, missionId: missionId as Id<"missions"> }
   );
 
   // Helper pour calculer l'âge

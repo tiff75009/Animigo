@@ -2,6 +2,7 @@
 import { mutation, query } from "../_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
+import { hashPassword, verifyPassword } from "./utils";
 
 // Vérifier une session et retourner l'utilisateur
 export const getSession = query({
@@ -117,5 +118,52 @@ export const refreshSession = mutation({
     });
 
     return { success: true, expiresAt: newExpiresAt };
+  },
+});
+
+// Changer le mot de passe
+export const changePassword = mutation({
+  args: {
+    token: v.string(),
+    currentPassword: v.string(),
+    newPassword: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Vérifier la session
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+
+    if (!session || session.expiresAt < Date.now()) {
+      throw new ConvexError("Session invalide ou expirée");
+    }
+
+    // Récupérer l'utilisateur
+    const user = await ctx.db.get(session.userId);
+    if (!user) {
+      throw new ConvexError("Utilisateur non trouvé");
+    }
+
+    // Vérifier le mot de passe actuel
+    const isValidPassword = await verifyPassword(args.currentPassword, user.passwordHash);
+    if (!isValidPassword) {
+      throw new ConvexError("Mot de passe actuel incorrect");
+    }
+
+    // Valider le nouveau mot de passe
+    if (args.newPassword.length < 8) {
+      throw new ConvexError("Le nouveau mot de passe doit contenir au moins 8 caractères");
+    }
+
+    // Hasher et enregistrer le nouveau mot de passe
+    const newPasswordHash = await hashPassword(args.newPassword);
+
+    await ctx.db.patch(user._id, {
+      passwordHash: newPasswordHash,
+      updatedAt: Date.now(),
+    });
+
+    return { success: true };
   },
 });

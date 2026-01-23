@@ -182,20 +182,17 @@ function SecuriteTab({ token }: { token: string | null }) {
     setMessage(null);
 
     try {
-      const result = await changePassword({
+      await changePassword({
         token,
         currentPassword: passwords.current,
         newPassword: passwords.new,
       });
 
-      if (result.success) {
-        setMessage({ type: "success", text: "Mot de passe modifié avec succès" });
-        setPasswords({ current: "", new: "", confirm: "" });
-      } else {
-        setMessage({ type: "error", text: result.error || "Une erreur est survenue" });
-      }
-    } catch (error) {
-      setMessage({ type: "error", text: "Une erreur est survenue" });
+      setMessage({ type: "success", text: "Mot de passe modifié avec succès" });
+      setPasswords({ current: "", new: "", confirm: "" });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Une erreur est survenue";
+      setMessage({ type: "error", text: errorMessage });
     } finally {
       setIsSubmitting(false);
     }

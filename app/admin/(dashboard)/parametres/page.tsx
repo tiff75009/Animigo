@@ -21,6 +21,8 @@ import {
   Copy,
   Eye,
   EyeOff,
+  Wrench,
+  Users,
 } from "lucide-react";
 
 // Fonction pour générer un secret aléatoire
@@ -58,6 +60,15 @@ export default function ParametresPage() {
   const [envCopied, setEnvCopied] = useState(false);
   const [isGeneratingSecret, setIsGeneratingSecret] = useState(false);
 
+  // États pour la régénération de slugs
+  const [isRegeneratingSlugs, setIsRegeneratingSlugs] = useState(false);
+  const [slugResult, setSlugResult] = useState<{
+    total: number;
+    updated: number;
+    unchanged: number;
+    errors: number;
+  } | null>(null);
+
   // Query pour récupérer toutes les configs
   const allConfigs = useQuery(
     api.admin.config.getAllConfigs,
@@ -70,6 +81,7 @@ export default function ParametresPage() {
   // Mutations
   const toggleModeration = useMutation(api.admin.config.toggleServiceModeration);
   const updateConfig = useMutation(api.admin.config.updateConfig);
+  const regenerateAllSlugs = useMutation(api.admin.maintenance.regenerateAllSlugs);
 
   // Charger les configs existantes
   useEffect(() => {
@@ -162,6 +174,25 @@ export default function ParametresPage() {
       setTimeout(() => setEnvCopied(false), 2000);
     } catch (error) {
       console.error("Erreur lors de la copie:", error);
+    }
+  };
+
+  const handleRegenerateSlugs = async () => {
+    if (!token) return;
+    setIsRegeneratingSlugs(true);
+    setSlugResult(null);
+    try {
+      const result = await regenerateAllSlugs({ token });
+      setSlugResult({
+        total: result.total,
+        updated: result.updated,
+        unchanged: result.unchanged,
+        errors: result.errors,
+      });
+    } catch (error) {
+      console.error("Erreur lors de la régénération des slugs:", error);
+    } finally {
+      setIsRegeneratingSlugs(false);
     }
   };
 
@@ -606,6 +637,73 @@ export default function ParametresPage() {
             <span>Modifications enregistrées</span>
           </motion.div>
         )}
+      </motion.div>
+
+      {/* Maintenance */}
+      <motion.div
+        className="mt-8 bg-slate-900 rounded-xl p-6 border border-slate-800"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.55 }}
+      >
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2 bg-cyan-500/20 rounded-lg">
+            <Wrench className="w-5 h-5 text-cyan-400" />
+          </div>
+          <h2 className="text-lg font-semibold text-white">Maintenance</h2>
+          <span className="px-2 py-0.5 text-xs bg-amber-500/20 text-amber-400 rounded-full">
+            Temporaire
+          </span>
+        </div>
+
+        <div className="space-y-4">
+          {/* Régénération des slugs */}
+          <div className="p-4 bg-slate-800 rounded-lg">
+            <div className="flex items-start gap-3">
+              <Users className="w-5 h-5 text-cyan-400 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="text-white font-medium">Régénérer les slugs utilisateurs</h3>
+                <p className="text-sm text-slate-400 mt-1">
+                  Régénère les slugs URL au format <code className="bg-slate-700 px-1 rounded">prenom-ville</code> (ex: marie-paris, jean-lyon-2).
+                  Les slugs seront mis à jour pour tous les utilisateurs avec leur ville de profil.
+                </p>
+
+                {slugResult && (
+                  <div className={`mt-3 p-3 rounded-lg ${
+                    slugResult.errors > 0
+                      ? "bg-amber-500/10 border border-amber-500/30"
+                      : "bg-green-500/10 border border-green-500/30"
+                  }`}>
+                    <p className={slugResult.errors > 0 ? "text-amber-300" : "text-green-300"}>
+                      <strong>{slugResult.updated}</strong> slugs mis à jour, <strong>{slugResult.unchanged}</strong> inchangés sur <strong>{slugResult.total}</strong> utilisateurs.
+                      {slugResult.errors > 0 && (
+                        <span className="text-amber-400"> ({slugResult.errors} erreurs)</span>
+                      )}
+                    </p>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleRegenerateSlugs}
+                  disabled={isRegeneratingSlugs}
+                  className="mt-3 flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {isRegeneratingSlugs ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Régénération en cours...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4" />
+                      Régénérer tous les slugs
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </motion.div>
 
       {/* Coming Soon */}

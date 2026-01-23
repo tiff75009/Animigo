@@ -9,6 +9,39 @@ import {
   defaultAdvancedFilters,
 } from "@/app/components/search/FilterSidebar";
 
+// Type pour les résultats de recherche par service
+export interface ServiceResult {
+  serviceId: Id<"services">;
+  announcerId: Id<"users">;
+  announcerSlug: string;
+  firstName: string;
+  lastName: string;
+  profileImage: string | null;
+  coverImage: string | null;
+  location: string;
+  distance?: number;
+  rating: number;
+  reviewCount: number;
+  verified: boolean;
+  statusType: "particulier" | "micro_entrepreneur" | "professionnel";
+  categorySlug: string;
+  categoryName: string;
+  categoryIcon: string;
+  basePrice: number;
+  basePriceUnit: "hour" | "day" | "week" | "month" | "flat";
+  animalTypes: string[];
+  variants: Array<{
+    id: string;
+    name: string;
+    price: number;
+    unit: string;
+  }>;
+  availability: {
+    status: "available" | "partial" | "unavailable";
+    nextAvailable?: string;
+  };
+}
+
 // Types
 export interface ServiceCategory {
   id: Id<"serviceCategories">;
@@ -301,6 +334,205 @@ export function useSearch() {
     resetFilters,
 
     // Actions filtres avancés
+    updateAdvancedFilters,
+    resetAdvancedFilters,
+    resetAllFilters,
+  };
+}
+
+// Hook pour la recherche par service (1 carte par service)
+export function useServiceSearch() {
+  const [filters, setFilters] = useState<SearchFilters>(initialFilters);
+  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>(defaultAdvancedFilters);
+
+  // Préparer les arguments pour la query
+  const queryArgs = useMemo(() => {
+    const args: {
+      categorySlug?: string;
+      excludeCategory?: string;
+      animalType?: string;
+      coordinates?: Coordinates;
+      radiusKm?: number;
+      date?: string;
+      time?: string;
+      startDate?: string;
+      endDate?: string;
+      includeUnavailable?: boolean;
+      accountTypes?: string[];
+      verifiedOnly?: boolean;
+      withPhotoOnly?: boolean;
+      hasGarden?: boolean;
+      hasVehicle?: boolean;
+      ownsAnimals?: string[];
+      noAnimals?: boolean;
+      priceMin?: number;
+      priceMax?: number;
+      sortBy?: string;
+    } = {};
+
+    // Appliquer le mode de recherche
+    if (filters.searchMode === "garde") {
+      args.categorySlug = "garde";
+    } else if (filters.searchMode === "services") {
+      if (filters.category) {
+        args.categorySlug = filters.category.slug;
+      } else {
+        args.excludeCategory = "garde";
+      }
+    } else if (filters.category) {
+      args.categorySlug = filters.category.slug;
+    }
+
+    if (filters.animalType) {
+      args.animalType = filters.animalType;
+    }
+
+    if (filters.location.coordinates) {
+      args.coordinates = filters.location.coordinates;
+      args.radiusKm = filters.radius;
+    }
+
+    if (filters.date) {
+      args.date = filters.date;
+      if (filters.time) {
+        args.time = filters.time;
+      }
+    }
+
+    if (filters.startDate && filters.endDate) {
+      args.startDate = filters.startDate;
+      args.endDate = filters.endDate;
+    }
+
+    args.includeUnavailable = filters.includeUnavailable;
+
+    // Filtres avancés
+    if (advancedFilters.accountTypes.length > 0) {
+      args.accountTypes = advancedFilters.accountTypes;
+    }
+    if (advancedFilters.verifiedOnly) {
+      args.verifiedOnly = true;
+    }
+    if (advancedFilters.withPhotoOnly) {
+      args.withPhotoOnly = true;
+    }
+    if (advancedFilters.hasGarden !== null) {
+      args.hasGarden = advancedFilters.hasGarden;
+    }
+    if (advancedFilters.hasVehicle !== null) {
+      args.hasVehicle = advancedFilters.hasVehicle;
+    }
+    if (advancedFilters.ownsAnimals.length > 0) {
+      args.ownsAnimals = advancedFilters.ownsAnimals;
+    }
+    if (advancedFilters.noAnimals) {
+      args.noAnimals = true;
+    }
+    if (advancedFilters.priceRange.min !== null) {
+      args.priceMin = advancedFilters.priceRange.min;
+    }
+    if (advancedFilters.priceRange.max !== null) {
+      args.priceMax = advancedFilters.priceRange.max;
+    }
+    if (advancedFilters.sortBy !== "relevance") {
+      args.sortBy = advancedFilters.sortBy;
+    }
+
+    return args;
+  }, [filters, advancedFilters]);
+
+  // Query Convex - utiliser searchServices au lieu de searchAnnouncers
+  const results = useQuery(api.public.search.searchServices, queryArgs);
+
+  // Actions
+  const setCategory = useCallback((category: ServiceCategory | null) => {
+    setFilters((prev) => ({
+      ...prev,
+      category,
+      date: null,
+      time: null,
+      startDate: null,
+      endDate: null,
+      endTime: null,
+    }));
+  }, []);
+
+  const setAnimalType = useCallback((animalType: string | null) => {
+    setFilters((prev) => ({ ...prev, animalType }));
+  }, []);
+
+  const setLocation = useCallback((location: LocationData) => {
+    setFilters((prev) => ({ ...prev, location }));
+  }, []);
+
+  const setRadius = useCallback((radius: number) => {
+    setFilters((prev) => ({ ...prev, radius }));
+  }, []);
+
+  const setDate = useCallback((date: string | null) => {
+    setFilters((prev) => ({ ...prev, date }));
+  }, []);
+
+  const setTime = useCallback((time: string | null) => {
+    setFilters((prev) => ({ ...prev, time }));
+  }, []);
+
+  const setEndTime = useCallback((endTime: string | null) => {
+    setFilters((prev) => ({ ...prev, endTime }));
+  }, []);
+
+  const setDateRange = useCallback(
+    (startDate: string | null, endDate: string | null) => {
+      setFilters((prev) => ({ ...prev, startDate, endDate }));
+    },
+    []
+  );
+
+  const setIncludeUnavailable = useCallback((include: boolean) => {
+    setFilters((prev) => ({ ...prev, includeUnavailable: include }));
+  }, []);
+
+  const setSearchMode = useCallback((mode: "garde" | "services" | null) => {
+    setFilters((prev) => ({
+      ...prev,
+      searchMode: mode,
+      category: null,
+    }));
+  }, []);
+
+  const resetFilters = useCallback(() => {
+    setFilters(initialFilters);
+  }, []);
+
+  const updateAdvancedFilters = useCallback((newFilters: AdvancedFilters) => {
+    setAdvancedFilters(newFilters);
+  }, []);
+
+  const resetAdvancedFilters = useCallback(() => {
+    setAdvancedFilters(defaultAdvancedFilters);
+  }, []);
+
+  const resetAllFilters = useCallback(() => {
+    setFilters(initialFilters);
+    setAdvancedFilters(defaultAdvancedFilters);
+  }, []);
+
+  return {
+    filters,
+    advancedFilters,
+    results: (results ?? []) as ServiceResult[],
+    isLoading: results === undefined,
+    setCategory,
+    setAnimalType,
+    setLocation,
+    setRadius,
+    setDate,
+    setTime,
+    setEndTime,
+    setDateRange,
+    setIncludeUnavailable,
+    setSearchMode,
+    resetFilters,
     updateAdvancedFilters,
     resetAdvancedFilters,
     resetAllFilters,

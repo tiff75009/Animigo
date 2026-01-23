@@ -135,3 +135,66 @@ export function validatePassword(password: string): {
 
   return { valid: errors.length === 0, errors };
 }
+
+// Normaliser une chaîne pour créer un slug
+// Supprime les accents, met en minuscule, remplace les espaces par des tirets
+function normalizeForSlug(str: string): string {
+  return str
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // Supprimer les accents
+    .replace(/[^a-z0-9\s-]/g, "") // Garder seulement lettres, chiffres, espaces, tirets
+    .replace(/\s+/g, "-") // Remplacer espaces par tirets
+    .replace(/-+/g, "-") // Supprimer tirets multiples
+    .replace(/^-|-$/g, ""); // Supprimer tirets début/fin
+}
+
+// Générer un slug unique pour un utilisateur
+// Format: "prenom-ville" ou "prenom-ville-2" si déjà pris
+// Si pas de ville: "prenom" ou "prenom-2"
+export async function generateUniqueSlug(
+  db: any,
+  firstName: string,
+  city?: string | null,
+  excludeUserId?: string
+): Promise<string> {
+  // Construire le slug de base: prenom-ville ou juste prenom
+  const parts = [firstName];
+  if (city && city.trim()) {
+    parts.push(city.trim());
+  }
+  const baseSlug = normalizeForSlug(parts.join(" "));
+
+  // Vérifier si le slug de base est disponible
+  const existingBase = await db
+    .query("users")
+    .withIndex("by_slug", (q: any) => q.eq("slug", baseSlug))
+    .first();
+
+  // Si pas d'existant, ou si c'est le même utilisateur (mise à jour)
+  if (!existingBase || (excludeUserId && existingBase._id === excludeUserId)) {
+    return baseSlug;
+  }
+
+  // Sinon, chercher le prochain numéro disponible
+  let counter = 2;
+  while (true) {
+    const candidateSlug = `${baseSlug}-${counter}`;
+    const existing = await db
+      .query("users")
+      .withIndex("by_slug", (q: any) => q.eq("slug", candidateSlug))
+      .first();
+
+    // Disponible si pas d'existant ou si c'est le même utilisateur
+    if (!existing || (excludeUserId && existing._id === excludeUserId)) {
+      return candidateSlug;
+    }
+    counter++;
+
+    // Sécurité : éviter boucle infinie (très improbable)
+    if (counter > 1000) {
+      // Fallback avec timestamp
+      return `${baseSlug}-${Date.now()}`;
+    }
+  }
+}

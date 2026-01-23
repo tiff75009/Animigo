@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { mutation } from "../_generated/server";
 import { v } from "convex/values";
-import { verifyPassword, generateSessionToken } from "./utils";
+import { verifyPassword, generateSessionToken, generateUniqueSlug } from "./utils";
 
 // Types pour les réponses standardisées
 export type LoginResult =
@@ -60,6 +60,18 @@ export const login = mutation({
     }
 
     const now = Date.now();
+
+    // Migration auto : générer un slug si l'utilisateur n'en a pas
+    if (!user.slug) {
+      // Récupérer le profil pour avoir la ville
+      const profile = await ctx.db
+        .query("profiles")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .first();
+      const city = profile?.city || null;
+      const slug = await generateUniqueSlug(ctx.db, user.firstName, city);
+      await ctx.db.patch(user._id, { slug, updatedAt: now });
+    }
 
     // Créer une nouvelle session
     const token = generateSessionToken();

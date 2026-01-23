@@ -34,11 +34,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Appeler la mutation Convex
-    const result = await convex.mutation(api.api.stripeInternal.updatePaymentIntentDetailsPublic, {
+    const result = await convex.mutation(api.api.stripeInternal.updatePaymentIntentDetailsDirect, {
       missionId: missionId as Id<"missions">,
       paymentIntentId,
       clientSecret,
-      internalSecret,
     });
 
     return NextResponse.json(result);

@@ -7,6 +7,9 @@ export default defineSchema({
     email: v.string(),
     passwordHash: v.string(),
 
+    // Slug pour URLs propres (ex: "marie-dupont", "marie-dupont-2")
+    slug: v.optional(v.string()),
+
     // Type de compte
     accountType: v.union(
       v.literal("annonceur_pro"),
@@ -50,6 +53,7 @@ export default defineSchema({
     stripeAccountUpdatedAt: v.optional(v.number()), // Dernière mise à jour
   })
     .index("by_email", ["email"])
+    .index("by_slug", ["slug"])
     .index("by_account_type", ["accountType"])
     .index("by_siret", ["siret"])
     .index("by_role", ["role"])

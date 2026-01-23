@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useQueryState } from "nuqs";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Id } from "@/convex/_generated/dataModel";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 
@@ -28,13 +28,16 @@ export default function AnnouncerProfilePage() {
   const [isFavorite, setIsFavorite] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("services");
 
-  // Récupérer l'ID de l'annonceur depuis l'URL
-  const announcerId = params.id as Id<"users">;
+  // Récupérer le slug de l'annonceur depuis l'URL
+  const announcerSlug = params.id as string;
 
-  // Récupérer les données de l'annonceur depuis Convex
+  // Gérer le service sélectionné avec nuqs (categorySlug, synchronisé avec l'URL)
+  const [selectedServiceSlug, setSelectedServiceSlug] = useQueryState("service");
+
+  // Récupérer les données de l'annonceur par son slug
   const announcerData = useQuery(
-    api.public.announcer.getAnnouncerProfile,
-    { userId: announcerId }
+    api.public.announcer.getAnnouncerBySlug,
+    { slug: announcerSlug }
   );
 
   // État de chargement
@@ -101,86 +104,10 @@ export default function AnnouncerProfilePage() {
       childrenAges: announcerData.equipment.childrenAges,
       providesFood: announcerData.equipment.providesFood,
     },
-    ownAnimals: (announcerData.ownAnimals || []).map((a: {
-      id?: string;
-      type: string;
-      name: string;
-      breed?: string | null;
-      age?: number | null;
-      gender?: "male" | "female" | "unknown" | null;
-      weight?: number | null;
-      size?: string | null;
-      description?: string | null;
-      profilePhoto?: string | null;
-      galleryPhotos?: string[];
-      goodWithChildren?: boolean | null;
-      goodWithDogs?: boolean | null;
-      goodWithCats?: boolean | null;
-      goodWithOtherAnimals?: boolean | null;
-      behaviorTraits?: string[];
-    }) => ({
-      id: a.id,
-      type: a.type,
-      name: a.name,
-      breed: a.breed,
-      age: a.age,
-      gender: a.gender,
-      weight: a.weight,
-      size: a.size,
-      description: a.description,
-      profilePhoto: a.profilePhoto,
-      galleryPhotos: a.galleryPhotos || [],
-      goodWithChildren: a.goodWithChildren,
-      goodWithDogs: a.goodWithDogs,
-      goodWithCats: a.goodWithCats,
-      goodWithOtherAnimals: a.goodWithOtherAnimals,
-      behaviorTraits: a.behaviorTraits || [],
-    })),
+    ownAnimals: announcerData.ownAnimals || [],
     icadRegistered: announcerData.icadRegistered,
     gallery: announcerData.gallery,
-    services: announcerData.services.map((s: {
-      id: string;
-      categoryId: string;
-      categoryName: string;
-      categoryIcon: string;
-      description: string;
-      animalTypes: string[];
-      formules: Array<{
-        id: string;
-        name: string;
-        description: string;
-        price: number;
-        duration: number;
-        unit: string;
-      }>;
-      options: Array<{
-        id: string;
-        name: string;
-        description: string;
-        price: number;
-      }>;
-    }) => ({
-      id: s.id,
-      categoryId: s.categoryId,
-      categoryName: s.categoryName,
-      categoryIcon: s.categoryIcon,
-      description: s.description,
-      animalTypes: s.animalTypes,
-      formules: s.formules.map((f) => ({
-        id: f.id,
-        name: f.name,
-        description: f.description,
-        price: f.price,
-        duration: f.duration,
-        unit: f.unit,
-      })),
-      options: s.options.map((o) => ({
-        id: o.id,
-        name: o.name,
-        description: o.description,
-        price: o.price,
-      })),
-    })),
+    services: announcerData.services,
     activities: announcerData.activities,
     reviews: announcerData.reviews,
     availability: {
@@ -189,17 +116,23 @@ export default function AnnouncerProfilePage() {
     radius: announcerData.radius,
   };
 
-  const handleBook = (serviceId?: string, variantId?: string) => {
+  // Trouver le service sélectionné par son categorySlug
+  const selectedService = selectedServiceSlug
+    ? announcer.services.find((s) => s.categorySlug === selectedServiceSlug || s.categoryId === selectedServiceSlug)
+    : null;
+
+  const handleBook = (serviceIdOrSlug?: string, variantId?: string) => {
     const params = new URLSearchParams();
-    if (serviceId) params.set("service", serviceId);
+    if (serviceIdOrSlug) params.set("service", serviceIdOrSlug);
     if (variantId) params.set("variant", variantId);
     const queryString = params.toString();
-    router.push(`/reserver/${announcerId}${queryString ? `?${queryString}` : ""}`);
+    // Utiliser l'ID de l'annonceur pour la réservation (backend a besoin de l'ID)
+    router.push(`/reserver/${announcerData.id}${queryString ? `?${queryString}` : ""}`);
   };
 
   const handleContact = () => {
     // TODO: Ouvrir la messagerie
-    router.push(`/client/messagerie?annonceur=${announcerId}`);
+    router.push(`/client/messagerie?annonceur=${announcerData.id}`);
   };
 
   return (
@@ -237,6 +170,7 @@ export default function AnnouncerProfilePage() {
             {/* Services Section */}
             <AnnouncerServices
               services={announcer.services}
+              initialExpandedService={selectedService?.id ?? null}
               className={cn(activeTab !== "services" && "hidden md:block")}
             />
 
@@ -256,6 +190,12 @@ export default function AnnouncerProfilePage() {
               responseRate={announcer.responseRate}
               responseTime={announcer.responseTime}
               nextAvailable={announcer.availability.nextAvailable}
+              selectedServiceId={selectedService?.id ?? null}
+              onServiceChange={(serviceId) => {
+                // Trouver le categorySlug du service sélectionné et mettre à jour l'URL
+                const service = announcer.services.find((s) => s.id === serviceId);
+                setSelectedServiceSlug(service?.categorySlug ?? service?.categoryId ?? null);
+              }}
               onBook={handleBook}
               onContact={handleContact}
             />

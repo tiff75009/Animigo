@@ -1,7 +1,7 @@
 import { query, mutation } from "../_generated/server";
 import { v } from "convex/values";
 import { checkAdmin } from "./utils";
-import { hashPassword, validatePassword, validateEmail } from "../auth/utils";
+import { hashPassword, validatePassword, validateEmail, generateUniqueSlug } from "../auth/utils";
 
 // Types de réponse
 type InvitationResult =
@@ -177,10 +177,14 @@ export const registerWithInvitation = mutation({
     // Hasher le mot de passe
     const passwordHash = await hashPassword(args.password);
 
+    // Générer un slug unique
+    const slug = await generateUniqueSlug(ctx.db, args.firstName);
+
     // Créer l'utilisateur admin
     const userId = await ctx.db.insert("users", {
       email: args.email.toLowerCase(),
       passwordHash,
+      slug,
       accountType: "utilisateur",
       firstName: args.firstName,
       lastName: args.lastName,

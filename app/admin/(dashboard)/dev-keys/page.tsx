@@ -5,15 +5,16 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAdminAuth } from "@/app/hooks/useAdminAuth";
 import { motion } from "framer-motion";
-import { Key, Plus, Trash2, Copy, Check, Circle, Code } from "lucide-react";
+import { Key, Plus, Trash2, Copy, Check, Circle, Code, Eye, EyeOff } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 
 interface DevKey {
   id: Id<"devKeys">;
   name: string;
+  key: string;
   isActive: boolean;
   createdAt: number;
-  revokedAt: number | null;
+  revokedAt?: number | null;
   isOnline: boolean;
   onlineSince: number | null;
   lastSeen: number | null;
@@ -49,7 +50,9 @@ export default function DevKeysPage() {
   const [newDevName, setNewDevName] = useState("");
   const [newKey, setNewKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
 
   const devKeys = useQuery(
     api.admin.devPresence.getAllDevKeys,
@@ -86,6 +89,27 @@ export default function DevKeysPage() {
       await revokeKey({ token, devKeyId });
     }
   };
+
+  const toggleKeyVisibility = (keyId: Id<"devKeys">) => {
+    const id = String(keyId);
+    setVisibleKeys((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const handleCopyExistingKey = async (key: string, keyId: Id<"devKeys">) => {
+    await navigator.clipboard.writeText(`NEXT_PUBLIC_DEV_KEY=${key}`);
+    setCopiedKeyId(String(keyId));
+    setTimeout(() => setCopiedKeyId(null), 2000);
+  };
+
+  const isKeyVisible = (keyId: Id<"devKeys">) => visibleKeys.has(String(keyId));
 
   const onlineCount = devKeys?.filter((dk: DevKey) => dk.isOnline).length ?? 0;
   const activeCount = devKeys?.filter((dk: DevKey) => dk.isActive).length ?? 0;
@@ -175,7 +199,7 @@ export default function DevKeysPage() {
             animate={{ opacity: 1, height: "auto" }}
           >
             <p className="text-emerald-400 text-sm mb-2 font-medium">
-              Clé créée ! Copiez-la maintenant, elle ne sera plus affichée :
+              Clé créée ! Copiez-la pour la partager au développeur :
             </p>
             <div className="flex items-center gap-2">
               <code className="flex-1 p-3 bg-slate-800 rounded-lg text-sm text-white font-mono break-all border border-slate-700">
@@ -221,6 +245,9 @@ export default function DevKeysPage() {
                   Développeur
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
+                  Clé
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
                   Créée le
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
@@ -234,7 +261,7 @@ export default function DevKeysPage() {
             <tbody className="divide-y divide-slate-800">
               {devKeys?.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
+                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
                     Aucune clé créée. Générez une première clé pour commencer.
                   </td>
                 </tr>
@@ -270,6 +297,35 @@ export default function DevKeysPage() {
                   </td>
                   <td className="px-6 py-4">
                     <span className="text-white font-medium">{dk.name}</span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <code className="text-xs text-slate-400 font-mono bg-slate-800 px-2 py-1 rounded max-w-[200px] truncate">
+                        {isKeyVisible(dk.id) ? (dk.key || "Clé non disponible") : "••••••••••••••••"}
+                      </code>
+                      <button
+                        onClick={() => toggleKeyVisibility(dk.id)}
+                        className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded transition-colors"
+                        title={isKeyVisible(dk.id) ? "Masquer la clé" : "Afficher la clé"}
+                      >
+                        {isKeyVisible(dk.id) ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => handleCopyExistingKey(dk.key, dk.id)}
+                        className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-400/10 rounded transition-colors"
+                        title="Copier la clé"
+                      >
+                        {copiedKeyId === String(dk.id) ? (
+                          <Check className="w-4 h-4 text-emerald-400" />
+                        ) : (
+                          <Copy className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-slate-400 text-sm">
                     {new Date(dk.createdAt).toLocaleDateString("fr-FR", {

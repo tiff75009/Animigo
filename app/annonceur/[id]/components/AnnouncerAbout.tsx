@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -19,15 +19,14 @@ import {
   Cake,
   Scale,
   Ruler,
-  X,
   Heart,
   Sparkles,
   Check,
   X as XIcon,
-  HelpCircle,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
-import { AnnouncerData, OwnAnimalData, animalEmojis } from "./types";
+import { AnnouncerData, animalEmojis } from "./types";
+import ImageLightbox from "@/app/components/ui/ImageLightbox";
 
 interface AnnouncerAboutProps {
   announcer: AnnouncerData;
@@ -52,10 +51,41 @@ const sizeLabels: Record<string, string> = {
 export default function AnnouncerAbout({ announcer, className }: AnnouncerAboutProps) {
   const { equipment } = announcer;
   const [expandedAnimalId, setExpandedAnimalId] = useState<string | null>(null);
-  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  // Lightbox state: track which animal and which image index
+  const [lightboxAnimalId, setLightboxAnimalId] = useState<string | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number>(0);
 
   const toggleAnimal = (animalId: string) => {
     setExpandedAnimalId(expandedAnimalId === animalId ? null : animalId);
+  };
+
+  // Get all photos for an animal
+  const getAnimalPhotos = (animal: typeof announcer.ownAnimals[0]) => {
+    const photos: string[] = [];
+    if (animal.profilePhoto) photos.push(animal.profilePhoto);
+    if (animal.galleryPhotos) photos.push(...animal.galleryPhotos);
+    return photos;
+  };
+
+  // Current animal being viewed in lightbox
+  const currentAnimal = useMemo(() => {
+    if (!lightboxAnimalId) return null;
+    return announcer.ownAnimals.find((a, i) => (a.id || `animal-${i}`) === lightboxAnimalId);
+  }, [lightboxAnimalId, announcer.ownAnimals]);
+
+  const currentAnimalPhotos = useMemo(() => {
+    if (!currentAnimal) return [];
+    return getAnimalPhotos(currentAnimal);
+  }, [currentAnimal]);
+
+  const openLightbox = (animalId: string, photoIndex: number) => {
+    setLightboxAnimalId(animalId);
+    setLightboxIndex(photoIndex);
+  };
+
+  const closeLightbox = () => {
+    setLightboxAnimalId(null);
+    setLightboxIndex(0);
   };
 
   return (
@@ -464,7 +494,7 @@ export default function AnnouncerAbout({ announcer, className }: AnnouncerAboutP
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setLightboxImage(animal.profilePhoto!);
+                                        openLightbox(animalId, 0);
                                       }}
                                       className="relative flex-shrink-0 w-24 h-24 rounded-xl overflow-hidden shadow-md hover:shadow-lg hover:scale-105 transition-all ring-2 ring-white"
                                     >
@@ -481,7 +511,9 @@ export default function AnnouncerAbout({ announcer, className }: AnnouncerAboutP
                                       key={photoIndex}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setLightboxImage(photo);
+                                        // Index is +1 if there's a profile photo, otherwise just photoIndex
+                                        const idx = animal.profilePhoto ? photoIndex + 1 : photoIndex;
+                                        openLightbox(animalId, idx);
                                       }}
                                       className="relative flex-shrink-0 w-24 h-24 rounded-xl overflow-hidden shadow-md hover:shadow-lg hover:scale-105 transition-all ring-2 ring-white"
                                     >
@@ -523,38 +555,14 @@ export default function AnnouncerAbout({ announcer, className }: AnnouncerAboutP
       </div>
 
       {/* Lightbox pour les photos */}
-      <AnimatePresence>
-        {lightboxImage && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-4"
-            onClick={() => setLightboxImage(null)}
-          >
-            <button
-              onClick={() => setLightboxImage(null)}
-              className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
-            >
-              <X className="w-6 h-6 text-white" />
-            </button>
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="relative max-w-4xl max-h-[80vh] w-full h-full"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Image
-                src={lightboxImage}
-                alt="Photo agrandie"
-                fill
-                className="object-contain"
-              />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <ImageLightbox
+        images={currentAnimalPhotos}
+        currentIndex={lightboxIndex}
+        isOpen={lightboxAnimalId !== null}
+        onClose={closeLightbox}
+        onNavigate={setLightboxIndex}
+        altPrefix={currentAnimal ? `Photo de ${currentAnimal.name}` : "Photo"}
+      />
     </section>
   );
 }

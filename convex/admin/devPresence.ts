@@ -99,6 +99,7 @@ export const getAllDevKeys = query({
       return {
         id: dk._id,
         name: dk.name,
+        key: dk.key,
         isActive: dk.isActive,
         createdAt: dk.createdAt,
         revokedAt: dk.revokedAt,

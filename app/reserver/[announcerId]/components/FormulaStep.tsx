@@ -4,7 +4,7 @@ import { Check } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 
 // Types
-interface ServiceVariant {
+export interface ServiceVariant {
   id: string;
   name: string;
   description?: string;
@@ -19,20 +19,23 @@ interface ServiceVariant {
     nightly?: number;
   };
   includedFeatures?: string[];
+  isActive?: boolean;
 }
 
-interface ServiceDetail {
+export interface ServiceDetail {
   id: string;
   category: string;
   categoryName: string;
   categoryIcon?: string;
+  categoryDescription?: string;
   animalTypes: string[];
   allowOvernightStay?: boolean;
   dayStartTime?: string;
   dayEndTime?: string;
   overnightPrice?: number;
+  serviceLocation?: "announcer_home" | "client_home" | "both";
   variants: ServiceVariant[];
-  options: Array<{ id: string; name: string; price: number }>;
+  options: Array<{ id: string; name: string; price: number; priceType?: string; isActive?: boolean }>;
 }
 
 interface FormulaStepProps {
@@ -151,5 +154,3 @@ export default function FormulaStep({
     </div>
   );
 }
-
-export type { ServiceDetail, ServiceVariant };

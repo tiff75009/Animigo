@@ -20,7 +20,7 @@ import { api } from "@/convex/_generated/api";
 
 // Types
 interface Animal {
-  _id: string;
+  id: string;
   name: string;
   type: string;
   breed?: string;
@@ -215,7 +215,7 @@ export default function ClientDashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {(animals as Animal[]).slice(0, 3).map((animal, index) => (
               <motion.div
-                key={animal._id || `animal-${index}`}
+                key={animal.id || `animal-${index}`}
                 whileHover={{ y: -2 }}
                 className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl"
               >

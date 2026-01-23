@@ -1,5 +1,5 @@
 import { mutation } from "../_generated/server";
-import { hashPassword } from "../auth/utils";
+import { hashPassword, generateUniqueSlug } from "../auth/utils";
 
 // À exécuter UNE SEULE FOIS pour créer l'admin par défaut
 export const createDefaultAdmin = mutation({
@@ -22,10 +22,12 @@ export const createDefaultAdmin = mutation({
 
     const now = Date.now();
     const passwordHash = await hashPassword("password");
+    const slug = await generateUniqueSlug(ctx.db, "Admin");
 
     await ctx.db.insert("users", {
       email: "admin@admin.com",
       passwordHash,
+      slug,
       accountType: "utilisateur",
       firstName: "Admin",
       lastName: "Animigo",

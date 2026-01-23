@@ -404,7 +404,7 @@ export default function MissionsAccepterPage() {
     if (selectedMission && token) {
       await acceptMissionMutation({
         token,
-        missionId: selectedMission.id,
+        missionId: selectedMission.id as Id<"missions">,
       });
     }
   };
@@ -413,7 +413,7 @@ export default function MissionsAccepterPage() {
     if (selectedMission && token) {
       await refuseMissionMutation({
         token,
-        missionId: selectedMission.id,
+        missionId: selectedMission.id as Id<"missions">,
         reason: reason || undefined,
       });
     }

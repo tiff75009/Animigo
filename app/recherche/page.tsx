@@ -19,7 +19,7 @@ import {
   Scissors,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
-import { useSearch, type AnnouncerResult } from "@/app/hooks/useSearch";
+import { useServiceSearch, type ServiceResult } from "@/app/hooks/useSearch";
 import { Id } from "@/convex/_generated/dataModel";
 
 // Type for main search mode
@@ -61,8 +61,8 @@ import { LocationSearchBar } from "@/app/components/search";
 import FilterSidebar from "@/app/components/search/FilterSidebar";
 import {
   SearchHeader,
-  AnnouncerCardGrid,
-  AnnouncerCardList,
+  ServiceCardGrid,
+  ServiceCardList,
   ANIMAL_TYPES,
   radiusOptions,
 } from "@/app/components/platform";
@@ -81,7 +81,7 @@ export default function RecherchePage() {
     updateAdvancedFilters,
     resetAdvancedFilters,
     resetAllFilters,
-  } = useSearch();
+  } = useServiceSearch();
 
   const categoriesData = useQuery(api.admin.serviceCategories.getActiveCategories) as CategoriesData | undefined;
 
@@ -514,17 +514,17 @@ export default function RecherchePage() {
                     </span>
                   ) : (
                     <>
-                      <span className="sm:hidden">{results.length} résultat{results.length > 1 ? "s" : ""}</span>
+                      <span className="sm:hidden">{results.length} prestation{results.length > 1 ? "s" : ""}</span>
                       <span className="hidden sm:inline">
-                        {results.length} prestataire{results.length > 1 ? "s" : ""}
-                        <span className="text-gray-400 font-normal"> trouvé{results.length > 1 ? "s" : ""}</span>
+                        {results.length} prestation{results.length > 1 ? "s" : ""}
+                        <span className="text-gray-400 font-normal"> disponible{results.length > 1 ? "s" : ""}</span>
                       </span>
                     </>
                   )}
                 </h2>
                 {!isLoading && results.length > 0 && (
                   <p className="hidden sm:block text-sm text-gray-500 mt-0.5">
-                    Professionnels disponibles dans votre zone
+                    Services disponibles dans votre zone
                   </p>
                 )}
               </div>
@@ -548,12 +548,14 @@ export default function RecherchePage() {
               transition={{ duration: 0.3 }}
               className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
             >
-              {results.map((announcer: AnnouncerResult, index: number) => (
-                <AnnouncerCardGrid
-                  key={announcer.id}
-                  announcer={announcer}
+              {results.map((service: ServiceResult, index: number) => (
+                <ServiceCardGrid
+                  key={`${service.announcerSlug}-${service.categorySlug}`}
+                  service={service}
                   index={index}
-                  onShowFormulas={() => router.push(`/annonceur/${announcer.id}`)}
+                  onViewService={(announcerSlug, categorySlug) =>
+                    router.push(`/annonceur/${announcerSlug}?service=${categorySlug}`)
+                  }
                 />
               ))}
             </motion.div>
@@ -564,12 +566,14 @@ export default function RecherchePage() {
               transition={{ duration: 0.3 }}
               className="space-y-4"
             >
-              {results.map((announcer: AnnouncerResult, index: number) => (
-                <AnnouncerCardList
-                  key={announcer.id}
-                  announcer={announcer}
+              {results.map((service: ServiceResult, index: number) => (
+                <ServiceCardList
+                  key={`${service.announcerSlug}-${service.categorySlug}`}
+                  service={service}
                   index={index}
-                  onShowFormulas={() => router.push(`/annonceur/${announcer.id}`)}
+                  onViewService={(announcerSlug, categorySlug) =>
+                    router.push(`/annonceur/${announcerSlug}?service=${categorySlug}`)
+                  }
                 />
               ))}
             </motion.div>

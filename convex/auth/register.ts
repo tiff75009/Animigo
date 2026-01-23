@@ -9,6 +9,7 @@ import {
   validatePhone,
   validatePassword,
   validateSiret,
+  generateUniqueSlug,
 } from "./utils";
 
 // Types pour les réponses standardisées
@@ -95,10 +96,14 @@ export const registerPro = mutation({
     const now = Date.now();
     const passwordHash = await hashPassword(args.password);
 
+    // Générer un slug unique (prenom seulement, ville sera ajoutée plus tard)
+    const slug = await generateUniqueSlug(ctx.db, args.firstName.trim());
+
     // Créer l'utilisateur
     const userId = await ctx.db.insert("users", {
       email: args.email.toLowerCase(),
       passwordHash,
+      slug,
       accountType: "annonceur_pro",
       firstName: args.firstName.trim(),
       lastName: args.lastName.trim(),
@@ -193,9 +198,13 @@ export const registerParticulier = mutation({
     const now = Date.now();
     const passwordHash = await hashPassword(args.password);
 
+    // Générer un slug unique (prenom seulement, ville sera ajoutée plus tard)
+    const slug = await generateUniqueSlug(ctx.db, args.firstName.trim());
+
     const userId = await ctx.db.insert("users", {
       email: args.email.toLowerCase(),
       passwordHash,
+      slug,
       accountType: "annonceur_particulier",
       firstName: args.firstName.trim(),
       lastName: args.lastName.trim(),
@@ -282,9 +291,13 @@ export const registerUtilisateur = mutation({
     const now = Date.now();
     const passwordHash = await hashPassword(args.password);
 
+    // Générer un slug unique (prenom seulement, ville sera ajoutée plus tard)
+    const slug = await generateUniqueSlug(ctx.db, args.firstName.trim());
+
     const userId = await ctx.db.insert("users", {
       email: args.email.toLowerCase(),
       passwordHash,
+      slug,
       accountType: "utilisateur",
       firstName: args.firstName.trim(),
       lastName: args.lastName.trim(),

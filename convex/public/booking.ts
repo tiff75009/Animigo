@@ -5,7 +5,7 @@ import { ConvexError } from "convex/values";
 import { ANIMAL_TYPES } from "../animals";
 import { internal } from "../_generated/api";
 import { missionsOverlap, addMinutesToTime } from "../lib/timeUtils";
-import { hashPassword } from "../auth/utils";
+import { hashPassword, generateUniqueSlug } from "../auth/utils";
 
 // Générer toutes les dates entre deux dates (YYYY-MM-DD)
 // Utilise une approche sans conversion UTC pour éviter les décalages de fuseau horaire
@@ -672,12 +672,16 @@ export const finalizeBookingAsGuest = mutation({
     // Hash du mot de passe avec bcrypt (comme dans register.ts)
     const passwordHash = await hashPassword(args.userData.password);
 
+    // Générer un slug unique (prenom seulement, ville sera ajoutée plus tard)
+    const slug = await generateUniqueSlug(ctx.db, args.userData.firstName.trim());
+
     // 1. Créer le compte utilisateur (email NON vérifié, compte INACTIF jusqu'à vérification)
     // L'utilisateur reçoit un token de session pour cette réservation
     // Après vérification email, isActive passe à true et il pourra se connecter normalement
     const userId = await ctx.db.insert("users", {
       email: args.userData.email.toLowerCase(),
       passwordHash,
+      slug,
       accountType: "utilisateur",
       firstName: args.userData.firstName.trim(),
       lastName: args.userData.lastName.trim(),

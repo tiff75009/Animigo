@@ -41,8 +41,9 @@ export interface AnnouncerData {
 }
 
 export interface ServiceData {
-  id: Id<"services">;
-  categoryId: Id<"serviceCategories"> | null;
+  id: Id<"services"> | string;
+  categoryId: Id<"serviceCategories"> | string;
+  categorySlug?: string;
   categoryName: string;
   categoryIcon: string;
   description: string;
@@ -52,28 +53,34 @@ export interface ServiceData {
 }
 
 export interface FormuleData {
-  id: Id<"serviceVariants">;
+  id: Id<"serviceVariants"> | string;
   name: string;
   description?: string;
   price: number; // en centimes
   duration?: number;
   unit?: string;
+  pricing?: {
+    hourly?: number;  // Prix à l'heure en centimes
+    daily?: number;   // Prix à la journée en centimes
+    weekly?: number;  // Prix à la semaine en centimes
+    monthly?: number; // Prix au mois en centimes
+  } | null;
 }
 
 export interface OptionData {
-  id: Id<"serviceOptions">;
+  id: Id<"serviceOptions"> | string;
   name: string;
   description?: string;
   price: number; // en centimes
 }
 
 export interface OwnAnimalData {
-  id?: string;
+  id?: string | null;
   type: string;
   name: string;
-  breed?: string;
-  age?: number;
-  gender?: "male" | "female" | "unknown" | null;
+  breed?: string | null;
+  age?: number | null;
+  gender?: "male" | "female" | "unknown" | string | null;
   weight?: number | null;
   size?: string | null;
   description?: string | null;

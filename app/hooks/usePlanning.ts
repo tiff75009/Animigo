@@ -40,7 +40,7 @@ export interface Mission {
     | "refused"
     | "cancelled";
   amount: number;
-  paymentStatus: "not_due" | "pending" | "paid";
+  paymentStatus: "not_due" | "pending" | "paid" | "refunded";
   location: string;
   clientNotes?: string;
   announcerNotes?: string;
