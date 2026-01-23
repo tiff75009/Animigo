@@ -7,9 +7,15 @@ import { AnnouncerData, animalEmojis } from "./types";
 
 interface AnnouncerHeroProps {
   announcer: AnnouncerData;
+  selectedServiceAnimals?: string[];
 }
 
-export default function AnnouncerHero({ announcer }: AnnouncerHeroProps) {
+export default function AnnouncerHero({ announcer, selectedServiceAnimals }: AnnouncerHeroProps) {
+  // Utiliser les animaux du service sélectionné si disponible, sinon ceux de l'annonceur
+  const displayedAnimals = selectedServiceAnimals && selectedServiceAnimals.length > 0
+    ? selectedServiceAnimals
+    : announcer.acceptedAnimals;
+
   const getStatusLabel = () => {
     switch (announcer.statusType) {
       case "professionnel":
@@ -134,10 +140,10 @@ export default function AnnouncerHero({ announcer }: AnnouncerHeroProps) {
               </div>
 
               {/* Accepted animals */}
-              {announcer.acceptedAnimals.length > 0 && (
+              {displayedAnimals.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-gray-100">
                   <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                    {announcer.acceptedAnimals.map((animal) => (
+                    {displayedAnimals.map((animal) => (
                       <div
                         key={animal}
                         className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-primary/5 to-secondary/5 border border-primary/10 rounded-full"

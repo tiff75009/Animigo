@@ -144,7 +144,10 @@ export default function AnnouncerProfilePage() {
       />
 
       {/* Hero Section avec Cover */}
-      <AnnouncerHero announcer={announcer} />
+      <AnnouncerHero
+        announcer={announcer}
+        selectedServiceAnimals={selectedService?.animalTypes}
+      />
 
       {/* Navigation Tabs - Mobile */}
       <AnnouncerTabs activeTab={activeTab} onTabChange={setActiveTab} />
