@@ -927,4 +927,22 @@ export default defineSchema({
     .index("by_user_created", ["userId", "createdAt"])
     .index("by_user_type", ["userId", "type"])
     .index("by_expires", ["expiresAt"]),
+
+  // Demandes de visite (mode maintenance)
+  visitRequests: defineTable({
+    name: v.string(),
+    ipAddress: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("rejected")
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    reviewedAt: v.optional(v.number()),
+    reviewedBy: v.optional(v.id("users")),
+  })
+    .index("by_ip", ["ipAddress"])
+    .index("by_status", ["status"])
+    .index("by_ip_status", ["ipAddress", "status"]),
 });

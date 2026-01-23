@@ -231,3 +231,56 @@ export const testQStashConnection = action({
     }
   },
 });
+
+// ==========================================
+// MODE MAINTENANCE
+// ==========================================
+
+// Query publique: Vérifier si le mode maintenance est activé
+export const isMaintenanceModeEnabled = query({
+  args: {},
+  handler: async (ctx) => {
+    const config = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "maintenance_mode_enabled"))
+      .first();
+
+    // Par défaut, le mode maintenance est désactivé
+    return config?.value === "true";
+  },
+});
+
+// Mutation admin: Toggle le mode maintenance
+export const toggleMaintenanceMode = mutation({
+  args: {
+    token: v.string(),
+    enabled: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireAdmin(ctx, args.token);
+
+    const existing = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "maintenance_mode_enabled"))
+      .first();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        value: args.enabled ? "true" : "false",
+        updatedAt: Date.now(),
+        updatedBy: user._id,
+      });
+    } else {
+      await ctx.db.insert("systemConfig", {
+        key: "maintenance_mode_enabled",
+        value: args.enabled ? "true" : "false",
+        isSecret: false,
+        environment: "production",
+        updatedAt: Date.now(),
+        updatedBy: user._id,
+      });
+    }
+
+    return { success: true, enabled: args.enabled };
+  },
+});
