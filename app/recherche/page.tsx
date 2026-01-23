@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "convex/react";
+import { useQueryStates, parseAsString, parseAsInteger, parseAsStringLiteral } from "nuqs";
 import { api } from "@/convex/_generated/api";
 import {
   Search,
@@ -19,7 +20,7 @@ import {
   Scissors,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
-import { useServiceSearch, type ServiceResult } from "@/app/hooks/useSearch";
+import { useServiceSearchWithParams, type ServiceResult } from "@/app/hooks/useSearch";
 import { useAuth } from "@/app/hooks/useAuth";
 import { Id } from "@/convex/_generated/dataModel";
 
@@ -68,28 +69,100 @@ import {
   radiusOptions,
 } from "@/app/components/platform";
 
+// Nuqs parsers for URL state
+const searchParamsParsers = {
+  mode: parseAsStringLiteral(["garde", "services"] as const).withDefault("garde"),
+  animal: parseAsString,
+  category: parseAsString,
+  radius: parseAsInteger.withDefault(10),
+  date: parseAsString,
+  startDate: parseAsString,
+  endDate: parseAsString,
+  view: parseAsStringLiteral(["grid", "list"] as const).withDefault("grid"),
+};
+
 export default function RecherchePage() {
   // Get auth token for client location
   const { token } = useAuth();
 
+  // URL state with nuqs
+  const [urlParams, setUrlParams] = useQueryStates(searchParamsParsers, {
+    history: "push",
+    shallow: false,
+  });
+
+  // Convert nuqs state to hook params
   const {
     filters,
     advancedFilters,
     results,
     isLoading,
     clientLocation,
-    setCategory,
-    setAnimalType,
     setLocation,
-    setRadius,
-    setSearchMode,
-    setDate,
-    setDateRange,
-    resetDateFilters,
     updateAdvancedFilters,
     resetAdvancedFilters,
-    resetAllFilters,
-  } = useServiceSearch(token);
+  } = useServiceSearchWithParams(token, {
+    searchMode: urlParams.mode,
+    animalType: urlParams.animal,
+    categorySlug: urlParams.category,
+    radius: urlParams.radius,
+    date: urlParams.date,
+    startDate: urlParams.startDate,
+    endDate: urlParams.endDate,
+  });
+
+  // URL setters
+  const setSearchMode = useCallback((mode: "garde" | "services") => {
+    setUrlParams({ mode, category: null }); // Reset category when changing mode
+  }, [setUrlParams]);
+
+  const setAnimalType = useCallback((animal: string | null) => {
+    setUrlParams({ animal });
+  }, [setUrlParams]);
+
+  const setCategory = useCallback((category: ServiceCategory | null) => {
+    setUrlParams({
+      category: category?.slug ?? null,
+      date: null,
+      startDate: null,
+      endDate: null,
+    });
+  }, [setUrlParams]);
+
+  const setRadius = useCallback((radius: number) => {
+    setUrlParams({ radius });
+  }, [setUrlParams]);
+
+  const setDate = useCallback((date: string | null) => {
+    setUrlParams({ date, startDate: null, endDate: null });
+  }, [setUrlParams]);
+
+  const setDateRange = useCallback((start: string | null, end: string | null) => {
+    setUrlParams({ startDate: start, endDate: end, date: null });
+  }, [setUrlParams]);
+
+  const resetDateFilters = useCallback(() => {
+    setUrlParams({ date: null, startDate: null, endDate: null });
+  }, [setUrlParams]);
+
+  const resetAllFilters = useCallback(() => {
+    setUrlParams({
+      mode: "garde",
+      animal: null,
+      category: null,
+      radius: 10,
+      date: null,
+      startDate: null,
+      endDate: null,
+    });
+    resetAdvancedFilters();
+  }, [setUrlParams, resetAdvancedFilters]);
+
+  const setViewMode = useCallback((view: "grid" | "list") => {
+    setUrlParams({ view });
+  }, [setUrlParams]);
+
+  const viewMode = urlParams.view;
 
   const categoriesData = useQuery(api.admin.serviceCategories.getActiveCategories) as CategoriesData | undefined;
 
@@ -98,7 +171,6 @@ export default function RecherchePage() {
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const filtersRef = useRef<HTMLDivElement>(null);
   const datePickerRef = useRef<HTMLDivElement>(null);
 

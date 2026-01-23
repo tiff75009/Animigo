@@ -572,5 +572,202 @@ export function useServiceSearch(token?: string | null) {
   };
 }
 
+// Hook pour la recherche avec params URL (nuqs)
+export interface UrlSearchParams {
+  searchMode: "garde" | "services";
+  animalType: string | null;
+  categorySlug: string | null;
+  radius: number;
+  date: string | null;
+  startDate: string | null;
+  endDate: string | null;
+}
+
+export function useServiceSearchWithParams(token: string | null | undefined, urlParams: UrlSearchParams) {
+  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>(defaultAdvancedFilters);
+  const [location, setLocationState] = useState<LocationData>({ text: "" });
+
+  // Récupérer les coordonnées du profil client (si connecté)
+  const clientLocation = useQuery(
+    api.client.profile.getClientCoordinates,
+    token ? { token } : "skip"
+  );
+
+  // Récupérer la catégorie complète à partir du slug
+  const categoriesData = useQuery(api.admin.serviceCategories.getActiveCategories);
+
+  // Find category from slug
+  const category = useMemo(() => {
+    if (!urlParams.categorySlug || !categoriesData) return null;
+
+    // Check in parent categories' subcategories
+    for (const parent of categoriesData.parentCategories) {
+      const found = parent.subcategories.find((sub: { slug: string }) => sub.slug === urlParams.categorySlug);
+      if (found) {
+        return {
+          id: found.id,
+          slug: found.slug,
+          name: found.name,
+          icon: found.icon || "📋",
+          imageUrl: found.imageUrl ?? undefined,
+          billingType: found.billingType as "hourly" | "daily" | "flexible" | undefined,
+        };
+      }
+    }
+
+    // Check in root categories
+    const rootFound = categoriesData.rootCategories.find((cat: { slug: string }) => cat.slug === urlParams.categorySlug);
+    if (rootFound) {
+      return {
+        id: rootFound.id,
+        slug: rootFound.slug,
+        name: rootFound.name,
+        icon: rootFound.icon || "📋",
+        imageUrl: rootFound.imageUrl ?? undefined,
+        billingType: rootFound.billingType as "hourly" | "daily" | "flexible" | undefined,
+      };
+    }
+
+    return null;
+  }, [urlParams.categorySlug, categoriesData]);
+
+  // Build filters object from URL params
+  const filters: SearchFilters = useMemo(() => ({
+    category,
+    animalType: urlParams.animalType,
+    location,
+    radius: urlParams.radius,
+    date: urlParams.date,
+    time: null,
+    startDate: urlParams.startDate,
+    endDate: urlParams.endDate,
+    endTime: null,
+    includeUnavailable: false,
+    searchMode: urlParams.searchMode,
+  }), [category, urlParams, location]);
+
+  // Préparer les arguments pour la query
+  const queryArgs = useMemo(() => {
+    const args: {
+      categorySlug?: string;
+      excludeCategory?: string;
+      animalType?: string;
+      coordinates?: Coordinates;
+      radiusKm?: number;
+      date?: string;
+      time?: string;
+      startDate?: string;
+      endDate?: string;
+      includeUnavailable?: boolean;
+      accountTypes?: string[];
+      verifiedOnly?: boolean;
+      withPhotoOnly?: boolean;
+      hasGarden?: boolean;
+      hasVehicle?: boolean;
+      ownsAnimals?: string[];
+      noAnimals?: boolean;
+      priceMin?: number;
+      priceMax?: number;
+      sortBy?: string;
+    } = {};
+
+    // Appliquer le mode de recherche
+    if (urlParams.searchMode === "garde") {
+      args.categorySlug = "garde";
+    } else if (urlParams.searchMode === "services") {
+      if (urlParams.categorySlug) {
+        args.categorySlug = urlParams.categorySlug;
+      } else {
+        args.excludeCategory = "garde";
+      }
+    }
+
+    if (urlParams.animalType) {
+      args.animalType = urlParams.animalType;
+    }
+
+    // Utiliser les coordonnées manuelles OU celles du profil client
+    if (location.coordinates) {
+      args.coordinates = location.coordinates;
+      args.radiusKm = urlParams.radius;
+    } else if (clientLocation?.coordinates) {
+      args.coordinates = clientLocation.coordinates;
+      args.radiusKm = urlParams.radius;
+    }
+
+    if (urlParams.date) {
+      args.date = urlParams.date;
+    }
+
+    if (urlParams.startDate && urlParams.endDate) {
+      args.startDate = urlParams.startDate;
+      args.endDate = urlParams.endDate;
+    }
+
+    args.includeUnavailable = false;
+
+    // Filtres avancés
+    if (advancedFilters.accountTypes.length > 0) {
+      args.accountTypes = advancedFilters.accountTypes;
+    }
+    if (advancedFilters.verifiedOnly) {
+      args.verifiedOnly = true;
+    }
+    if (advancedFilters.withPhotoOnly) {
+      args.withPhotoOnly = true;
+    }
+    if (advancedFilters.hasGarden !== null) {
+      args.hasGarden = advancedFilters.hasGarden;
+    }
+    if (advancedFilters.hasVehicle !== null) {
+      args.hasVehicle = advancedFilters.hasVehicle;
+    }
+    if (advancedFilters.ownsAnimals.length > 0) {
+      args.ownsAnimals = advancedFilters.ownsAnimals;
+    }
+    if (advancedFilters.noAnimals) {
+      args.noAnimals = true;
+    }
+    if (advancedFilters.priceRange.min !== null) {
+      args.priceMin = advancedFilters.priceRange.min;
+    }
+    if (advancedFilters.priceRange.max !== null) {
+      args.priceMax = advancedFilters.priceRange.max;
+    }
+    if (advancedFilters.sortBy !== "relevance") {
+      args.sortBy = advancedFilters.sortBy;
+    }
+
+    return args;
+  }, [urlParams, location, clientLocation, advancedFilters]);
+
+  // Query Convex
+  const results = useQuery(api.public.search.searchServices, queryArgs);
+
+  // Actions
+  const setLocation = useCallback((loc: LocationData) => {
+    setLocationState(loc);
+  }, []);
+
+  const updateAdvancedFilters = useCallback((newFilters: AdvancedFilters) => {
+    setAdvancedFilters(newFilters);
+  }, []);
+
+  const resetAdvancedFilters = useCallback(() => {
+    setAdvancedFilters(defaultAdvancedFilters);
+  }, []);
+
+  return {
+    filters,
+    advancedFilters,
+    results: (results ?? []) as ServiceResult[],
+    isLoading: results === undefined,
+    clientLocation: clientLocation ?? null,
+    setLocation,
+    updateAdvancedFilters,
+    resetAdvancedFilters,
+  };
+}
+
 // Re-export des types pour faciliter l'utilisation
 export type { AdvancedFilters };
