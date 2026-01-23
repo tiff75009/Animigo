@@ -92,15 +92,28 @@ export async function proxy(request: NextRequest) {
     const baseUrl = getBaseUrl(request);
     const statusUrl = `${baseUrl}/api/maintenance/status`;
 
-    // Passer les headers de la requête originale pour obtenir la bonne IP
-    const forwardedFor = request.headers.get("x-forwarded-for") || "";
-    const realIp = request.headers.get("x-real-ip") || "";
+    // Passer tous les headers IP possibles (Vercel, Cloudflare, etc.)
+    const headers: Record<string, string> = {};
+
+    // Headers IP standards et spécifiques aux providers
+    const ipHeaders = [
+      "x-forwarded-for",
+      "x-real-ip",
+      "x-vercel-forwarded-for",
+      "x-vercel-ip",
+      "cf-connecting-ip", // Cloudflare
+      "true-client-ip",   // Akamai/Cloudflare
+    ];
+
+    for (const header of ipHeaders) {
+      const value = request.headers.get(header);
+      if (value) {
+        headers[header] = value;
+      }
+    }
 
     const response = await fetch(statusUrl, {
-      headers: {
-        "x-forwarded-for": forwardedFor,
-        "x-real-ip": realIp,
-      },
+      headers,
       // Cache court pour éviter trop de requêtes
       next: { revalidate: 5 },
     });

@@ -27,18 +27,30 @@ function normalizeIp(ip: string): string {
 
 /**
  * Récupérer l'IP du client
+ * Essaie plusieurs headers dans l'ordre de priorité
  */
 function getClientIp(req: NextRequest): string {
-  // x-forwarded-for peut contenir plusieurs IPs séparées par des virgules
-  const forwardedFor = req.headers.get("x-forwarded-for");
-  if (forwardedFor) {
-    return normalizeIp(forwardedFor.split(",")[0].trim());
-  }
+  // Headers à vérifier dans l'ordre de priorité
+  // Les providers spécifiques sont plus fiables
+  const headersToCheck = [
+    "cf-connecting-ip",      // Cloudflare (le plus fiable si utilisé)
+    "true-client-ip",        // Akamai/Cloudflare Enterprise
+    "x-vercel-forwarded-for", // Vercel
+    "x-vercel-ip",           // Vercel (alternative)
+    "x-real-ip",             // Nginx
+    "x-forwarded-for",       // Standard (peut contenir plusieurs IPs)
+  ];
 
-  // x-real-ip (utilisé par certains proxies)
-  const realIp = req.headers.get("x-real-ip");
-  if (realIp) {
-    return normalizeIp(realIp);
+  for (const header of headersToCheck) {
+    const value = req.headers.get(header);
+    if (value) {
+      // x-forwarded-for peut contenir plusieurs IPs séparées par des virgules
+      // Prendre la première (IP du client original)
+      const ip = value.split(",")[0].trim();
+      if (ip) {
+        return normalizeIp(ip);
+      }
+    }
   }
 
   return "unknown";

@@ -6,43 +6,28 @@ import { api } from "@/convex/_generated/api";
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
 /**
- * Normaliser l'IP (enlever le préfixe IPv6-mapped)
+ * Valider le format d'une adresse IP (IPv4 ou IPv6)
  */
-function normalizeIp(ip: string): string {
-  // Enlever le préfixe ::ffff: des IPs IPv6-mapped
-  if (ip.startsWith("::ffff:")) {
-    return ip.substring(7);
-  }
-  return ip;
-}
+function isValidIp(ip: string): boolean {
+  // IPv4
+  const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+  // IPv6 (simplifié)
+  const ipv6Regex = /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^([0-9a-fA-F]{1,4}:){1,7}:|^([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}$|^([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}$|^([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}$|^([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}$|^([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}$|^[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})$|^:((:[0-9a-fA-F]{1,4}){1,7}|:)$/;
 
-/**
- * Récupérer l'IP du client
- */
-function getClientIp(req: NextRequest): string {
-  // x-forwarded-for peut contenir plusieurs IPs séparées par des virgules
-  const forwardedFor = req.headers.get("x-forwarded-for");
-  if (forwardedFor) {
-    return normalizeIp(forwardedFor.split(",")[0].trim());
-  }
-
-  // x-real-ip (utilisé par certains proxies)
-  const realIp = req.headers.get("x-real-ip");
-  if (realIp) {
-    return normalizeIp(realIp);
-  }
-
-  return "unknown";
+  return ipv4Regex.test(ip) || ipv6Regex.test(ip);
 }
 
 /**
  * POST /api/maintenance/request-visit
  * Créer une demande de visite
+ *
+ * Body: { name: string, ipAddress: string }
+ * L'IP est envoyée par le client (obtenue via ipify côté frontend)
  */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name } = body;
+    const { name, ipAddress } = body;
 
     if (!name || typeof name !== "string" || name.trim().length === 0) {
       return NextResponse.json(
@@ -51,11 +36,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const clientIp = getClientIp(req);
-
-    if (clientIp === "unknown") {
+    if (!ipAddress || typeof ipAddress !== "string") {
       return NextResponse.json(
-        { error: "Impossible de déterminer votre adresse IP" },
+        { error: "L'adresse IP est requise" },
+        { status: 400 }
+      );
+    }
+
+    // Valider le format de l'IP
+    if (!isValidIp(ipAddress)) {
+      return NextResponse.json(
+        { error: "Format d'adresse IP invalide" },
         { status: 400 }
       );
     }
@@ -65,7 +56,7 @@ export async function POST(req: NextRequest) {
       api.maintenance.visitRequests.createVisitRequest,
       {
         name: name.trim(),
-        ipAddress: clientIp,
+        ipAddress: ipAddress.trim(),
       }
     );
 
