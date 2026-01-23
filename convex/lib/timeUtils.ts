@@ -20,6 +20,17 @@ export function addMinutesToTime(time: string, minutes: number): string {
 }
 
 /**
+ * Soustraire des minutes à une heure "HH:MM"
+ * Retourne le résultat au format "HH:MM" (minimum 00:00)
+ */
+export function subtractMinutesFromTime(time: string, minutes: number): string {
+  const totalMinutes = Math.max(0, parseTimeToMinutes(time) - minutes);
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
+}
+
+/**
  * Vérifier si deux créneaux horaires se chevauchent sur une même journée
  * Les créneaux sont au format "HH:MM"
  */
@@ -35,6 +46,25 @@ export function timeSlotsOverlap(
   const e2 = parseTimeToMinutes(end2);
   // Chevauchement si : début1 < fin2 ET fin1 > début2
   return s1 < e2 && e1 > s2;
+}
+
+/**
+ * Vérifier si deux créneaux horaires se chevauchent en tenant compte des buffers
+ * Les buffers étendent le créneau existant (m1) pour inclure le temps de préparation
+ */
+export function timeSlotsOverlapWithBuffers(
+  start1: string,
+  end1: string,
+  start2: string,
+  end2: string,
+  bufferBefore: number = 0,
+  bufferAfter: number = 0
+): boolean {
+  // Étendre le créneau 1 avec les buffers
+  const adjustedStart1 = subtractMinutesFromTime(start1, bufferBefore);
+  const adjustedEnd1 = addMinutesToTime(end1, bufferAfter);
+
+  return timeSlotsOverlap(adjustedStart1, adjustedEnd1, start2, end2);
 }
 
 /**
@@ -88,4 +118,64 @@ export function missionsOverlap(m1: MissionTimeSlot, m2: MissionTimeSlot): boole
   // Jours différents mais dans la même plage de dates
   // Cela ne devrait pas arriver si les deux sont single-day, mais par sécurité
   return false;
+}
+
+/**
+ * Vérifier si deux missions se chevauchent en tenant compte des buffers
+ * Les buffers sont appliqués aux missions existantes (m1) pour bloquer le temps de préparation
+ *
+ * @param m1 - Mission existante (avec ses créneaux)
+ * @param m2 - Nouvelle mission à vérifier
+ * @param bufferBefore - Minutes à bloquer AVANT la mission existante
+ * @param bufferAfter - Minutes à bloquer APRÈS la mission existante
+ */
+export function missionsOverlapWithBuffers(
+  m1: MissionTimeSlot,
+  m2: MissionTimeSlot,
+  bufferBefore: number = 0,
+  bufferAfter: number = 0
+): boolean {
+  // Pas de chevauchement de dates = pas de conflit
+  if (m1.startDate > m2.endDate || m1.endDate < m2.startDate) {
+    return false;
+  }
+
+  // Si une des missions couvre plusieurs jours, on bloque la journée entière
+  const m1MultiDay = m1.startDate !== m1.endDate;
+  const m2MultiDay = m2.startDate !== m2.endDate;
+
+  if (m1MultiDay || m2MultiDay) {
+    return true;
+  }
+
+  // Les deux missions sont sur un seul jour chacune
+  if (m1.startDate === m2.startDate) {
+    // Même jour unique - vérifier les heures avec buffers
+    const t1Start = m1.startTime || "00:00";
+    const t1End = m1.endTime || "23:59";
+    const t2Start = m2.startTime || "00:00";
+    const t2End = m2.endTime || "23:59";
+
+    return timeSlotsOverlapWithBuffers(t1Start, t1End, t2Start, t2End, bufferBefore, bufferAfter);
+  }
+
+  return false;
+}
+
+/**
+ * Appliquer les buffers à un créneau horaire
+ * Retourne le créneau étendu avec les temps de préparation
+ */
+export function applyBuffersToTimeSlot(
+  startTime: string,
+  endTime: string,
+  bufferBefore: number = 0,
+  bufferAfter: number = 0
+): { startTime: string; endTime: string; originalStartTime: string; originalEndTime: string } {
+  return {
+    startTime: subtractMinutesFromTime(startTime, bufferBefore),
+    endTime: addMinutesToTime(endTime, bufferAfter),
+    originalStartTime: startTime,
+    originalEndTime: endTime,
+  };
 }

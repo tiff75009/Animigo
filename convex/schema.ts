@@ -330,6 +330,12 @@ export default defineSchema({
       v.literal("subcategory"),
       v.literal("badge")
     )),
+    // Catégorie basée sur la capacité (uniquement pour les catégories parentes)
+    // Si true, les réservations sont gérées par capacité (nombre d'animaux max simultanés)
+    // au lieu de bloquer entièrement le créneau horaire
+    // Ex: Un gardien peut garder 3 animaux en même temps, donc 3 réservations peuvent
+    // chevaucher sur le même créneau
+    isCapacityBased: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

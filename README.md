@@ -407,6 +407,37 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.10.0 - Systeme de Capacite pour Categories de Garde
+
+- **Gestion de capacite pour les services de garde**
+  - Nouveau parametre `isCapacityBased` sur les categories parentes
+  - Permet aux annonceurs de garder plusieurs animaux simultanement
+  - Verifie le `maxAnimalsPerSlot` du profil annonceur
+  - Ne bloque pas les creneaux si la capacite n'est pas atteinte
+
+- **Calendrier de reservation ameliore**
+  - Affiche les places restantes pour chaque jour (categories de garde)
+  - Indicateur visuel : fond vert avec "X places" pour les jours partiels
+  - Indicateur "Complet" en rouge quand capacite maximale atteinte
+  - Banniere d'information pour les services de garde
+
+- **Backend - Nouvelles fonctions de capacite** (`convex/lib/capacityUtils.ts`)
+  - `isCategoryCapacityBased()` : Verifie si une categorie est basee sur la capacite
+  - `getAllSubcategorySlugs()` : Recupere toutes les sous-categories d'un parent
+  - `countAnimalsOnSlot()` : Compte les animaux sur toutes les sous-categories
+  - `checkBookingConflict()` : Verification unifiee (standard ou capacite)
+
+- **Buffers de temps de preparation**
+  - Prise en compte des temps de preparation (bufferBefore/bufferAfter)
+  - Blocage intelligent des creneaux avec temps de prep inclus
+  - Fonctions `missionsOverlapWithBuffers()` et `applyBuffersToTimeSlot()`
+
+- **Configuration admin amelioree** (`/admin/services/categories`)
+  - Nouveau selecteur "Mode de reservation" pour categories parentes
+  - Mode standard : bloque le creneau entier
+  - Mode garde (capacite) : permet plusieurs animaux selon la limite du profil
+  - Propagation automatique aux sous-categories
+
 ### v0.9.0 - Structure Hierarchique des Categories
 
 - **Refonte complete de la gestion des categories** (`/admin/services/categories`)

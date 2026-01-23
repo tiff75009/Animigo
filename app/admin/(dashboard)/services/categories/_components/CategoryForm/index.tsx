@@ -20,6 +20,7 @@ import PriceUnitsSelector from "./PriceUnitsSelector";
 import OvernightStaySection from "./OvernightStaySection";
 import VariantFormSection from "./VariantFormSection";
 import DisplayFormatSelector from "./DisplayFormatSelector";
+import CapacityBasedSelector from "./CapacityBasedSelector";
 
 interface CategoryFormProps {
   mode: "add" | "edit";
@@ -92,6 +93,10 @@ export default function CategoryForm({
 
   const handleDisplayFormatChange = (displayFormat: DisplayFormat) => {
     onFormDataChange((prev) => ({ ...prev, displayFormat }));
+  };
+
+  const handleCapacityBasedChange = (isCapacityBased: boolean) => {
+    onFormDataChange((prev) => ({ ...prev, isCapacityBased }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -200,13 +205,17 @@ export default function CategoryForm({
           onParentChange={handleParentChange}
         />
 
-        {/* Section format d'affichage - uniquement pour les catégories parentes */}
+        {/* Section format d'affichage et mode de réservation - uniquement pour les catégories parentes */}
         {!isSubcategory && (
-          <div className="mt-4">
+          <div className="mt-4 space-y-4">
             <DisplayFormatSelector
               value={formData.displayFormat}
               onChange={handleDisplayFormatChange}
               parentName={formData.name || "Garde"}
+            />
+            <CapacityBasedSelector
+              value={formData.isCapacityBased}
+              onChange={handleCapacityBasedChange}
             />
           </div>
         )}

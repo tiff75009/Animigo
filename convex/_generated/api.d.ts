@@ -38,6 +38,7 @@ import type * as auth_utils from "../auth/utils.js";
 import type * as config from "../config.js";
 import type * as crons from "../crons.js";
 import type * as http from "../http.js";
+import type * as lib_capacityUtils from "../lib/capacityUtils.js";
 import type * as lib_notificationTemplates from "../lib/notificationTemplates.js";
 import type * as lib_qstash from "../lib/qstash.js";
 import type * as lib_timeUtils from "../lib/timeUtils.js";
@@ -101,6 +102,7 @@ declare const fullApi: ApiFromModules<{
   config: typeof config;
   crons: typeof crons;
   http: typeof http;
+  "lib/capacityUtils": typeof lib_capacityUtils;
   "lib/notificationTemplates": typeof lib_notificationTemplates;
   "lib/qstash": typeof lib_qstash;
   "lib/timeUtils": typeof lib_timeUtils;

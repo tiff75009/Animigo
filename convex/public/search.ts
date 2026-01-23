@@ -2,7 +2,8 @@ import { query, mutation } from "../_generated/server";
 import { v } from "convex/values";
 import { Id, Doc } from "../_generated/dataModel";
 import { ConvexError } from "convex/values";
-import { missionsOverlap, addMinutesToTime } from "../lib/timeUtils";
+import { missionsOverlap, missionsOverlapWithBuffers, addMinutesToTime, subtractMinutesFromTime, applyBuffersToTimeSlot } from "../lib/timeUtils";
+import { checkBookingConflict, checkCapacityAvailability, isCategoryCapacityBased, getAllSubcategorySlugs } from "../lib/capacityUtils";
 
 // Calcul de distance avec la formule de Haversine (en km)
 function calculateDistance(
@@ -278,7 +279,11 @@ export const searchAnnouncers = query({
           )
           .collect();
 
-        // Vérifier chevauchement de créneaux avec missions existantes (détection temporelle)
+        // Récupérer les buffers (temps de préparation) de l'annonceur
+        const bufferBefore = profile?.bufferBefore ?? 0;
+        const bufferAfter = profile?.bufferAfter ?? 0;
+
+        // Vérifier chevauchement de créneaux avec missions existantes (détection temporelle + buffers)
         const hasConflictingMission = existingMissions.some((mission) => {
           // D'abord vérifier si la mission concerne les dates recherchées
           const searchStartDate = args.date || args.startDate!;
@@ -288,7 +293,7 @@ export const searchAnnouncers = query({
             return false; // Pas de chevauchement de dates
           }
 
-          // Si l'utilisateur a spécifié une heure, on vérifie le créneau exact
+          // Si l'utilisateur a spécifié une heure, on vérifie le créneau exact avec buffers
           if (args.time) {
             const searchSlot = {
               startDate: searchStartDate,
@@ -297,9 +302,12 @@ export const searchAnnouncers = query({
               endTime: addMinutesToTime(args.time, 60), // 1h par défaut
             };
 
-            return missionsOverlap(
+            // Utiliser missionsOverlapWithBuffers pour prendre en compte le temps de préparation
+            return missionsOverlapWithBuffers(
               { startDate: mission.startDate, endDate: mission.endDate, startTime: mission.startTime, endTime: mission.endTime },
-              searchSlot
+              searchSlot,
+              bufferBefore,
+              bufferAfter
             );
           }
 
@@ -745,7 +753,7 @@ export const getAnnouncerAvailabilityCalendar = query({
     endDate: v.string(), // "YYYY-MM-DD"
   },
   handler: async (ctx, args) => {
-    // Récupérer le profil de l'annonceur pour les buffers
+    // Récupérer le profil de l'annonceur pour les buffers et capacité
     const profile = await ctx.db
       .query("profiles")
       .withIndex("by_user", (q) => q.eq("userId", args.announcerId))
@@ -753,6 +761,15 @@ export const getAnnouncerAvailabilityCalendar = query({
 
     const bufferBefore = profile?.bufferBefore ?? 0;
     const bufferAfter = profile?.bufferAfter ?? 0;
+    const maxAnimalsPerSlot = profile?.maxAnimalsPerSlot ?? 1;
+
+    // Vérifier si la catégorie est basée sur la capacité
+    const isCapacityBasedCategory = await isCategoryCapacityBased(ctx.db, args.serviceCategory);
+
+    // Pour les catégories capacity-based, récupérer toutes les sous-catégories du même parent
+    const categorySlugs = isCapacityBasedCategory
+      ? await getAllSubcategorySlugs(ctx.db, args.serviceCategory)
+      : [args.serviceCategory];
 
     // Récupérer toutes les indisponibilités
     const unavailabilities = await ctx.db
@@ -766,18 +783,20 @@ export const getAnnouncerAvailabilityCalendar = query({
         .map((a) => a.date)
     );
 
-    // Récupérer les missions existantes pour cette catégorie
-    const missions = await ctx.db
+    // Récupérer les missions existantes pour cette catégorie (ou toutes les sous-catégories si capacity-based)
+    const allMissions = await ctx.db
       .query("missions")
       .withIndex("by_announcer", (q) => q.eq("announcerId", args.announcerId))
       .filter((q) =>
         q.and(
-          q.eq(q.field("serviceCategory"), args.serviceCategory),
           q.neq(q.field("status"), "cancelled"),
           q.neq(q.field("status"), "refused")
         )
       )
       .collect();
+
+    // Filtrer les missions par catégorie (toutes les sous-catégories si capacity-based)
+    const missions = allMissions.filter((m) => categorySlugs.includes(m.serviceCategory));
 
     // Générer les dates de la plage
     const allDates = getDatesBetween(args.startDate, args.endDate);
@@ -790,7 +809,13 @@ export const getAnnouncerAvailabilityCalendar = query({
       date: string;
       status: "available" | "partial" | "unavailable" | "past";
       timeSlots?: Array<{ startTime: string; endTime: string }>;
-      bookedSlots?: Array<{ startTime: string; endTime: string }>;
+      bookedSlots?: Array<{ startTime: string; endTime: string; originalStartTime?: string; originalEndTime?: string }>;
+      // Informations de capacité (pour les catégories capacity-based)
+      capacity?: {
+        current: number; // Nombre d'animaux actuellement réservés
+        max: number; // Capacité maximale
+        remaining: number; // Places restantes
+      };
     }> = [];
 
     for (const date of allDates) {
@@ -811,10 +836,60 @@ export const getAnnouncerAvailabilityCalendar = query({
       );
 
       if (dayMissions.length > 0) {
-        // Vérifier si une mission bloque toute la journée
-        // Une mission bloque toute la journée si:
-        // - Elle couvre plusieurs jours (startDate !== endDate)
-        // - Ou elle n'a pas d'heures définies (startTime/endTime)
+        // Compter les animaux pour les catégories capacity-based
+        const currentAnimalsCount = dayMissions.length;
+
+        if (isCapacityBasedCategory) {
+          // Mode capacité: vérifier si la capacité maximale est atteinte
+          const remainingCapacity = Math.max(0, maxAnimalsPerSlot - currentAnimalsCount);
+
+          if (remainingCapacity === 0) {
+            // Capacité maximale atteinte - indisponible
+            calendar.push({
+              date,
+              status: "unavailable",
+              capacity: {
+                current: currentAnimalsCount,
+                max: maxAnimalsPerSlot,
+                remaining: 0,
+              },
+            });
+            continue;
+          }
+
+          // Extraire les créneaux occupés pour information
+          const bookedSlots = dayMissions
+            .filter((m) => m.startTime && m.endTime && m.startDate === m.endDate)
+            .map((m) => {
+              const adjustedSlot = applyBuffersToTimeSlot(
+                m.startTime!,
+                m.endTime!,
+                bufferBefore,
+                bufferAfter
+              );
+              return {
+                startTime: adjustedSlot.startTime,
+                endTime: adjustedSlot.endTime,
+                originalStartTime: adjustedSlot.originalStartTime,
+                originalEndTime: adjustedSlot.originalEndTime,
+              };
+            });
+
+          // Disponible avec capacité restante
+          calendar.push({
+            date,
+            status: remainingCapacity < maxAnimalsPerSlot ? "partial" : "available",
+            bookedSlots: bookedSlots.length > 0 ? bookedSlots : undefined,
+            capacity: {
+              current: currentAnimalsCount,
+              max: maxAnimalsPerSlot,
+              remaining: remainingCapacity,
+            },
+          });
+          continue;
+        }
+
+        // Mode standard: vérifier si une mission bloque toute la journée
         const hasFullDayBlock = dayMissions.some((m) => {
           const isMultiDay = m.startDate !== m.endDate;
           const hasNoTimeSlot = !m.startTime || !m.endTime;
@@ -827,13 +902,25 @@ export const getAnnouncerAvailabilityCalendar = query({
         }
 
         // Sinon, ce sont des missions avec créneaux horaires spécifiques
-        // Extraire les créneaux occupés
+        // Extraire les créneaux occupés AVEC les buffers (temps de préparation)
         const bookedSlots = dayMissions
           .filter((m) => m.startTime && m.endTime && m.startDate === m.endDate)
-          .map((m) => ({
-            startTime: m.startTime!,
-            endTime: m.endTime!,
-          }));
+          .map((m) => {
+            // Appliquer les buffers pour bloquer le temps de préparation avant/après
+            const adjustedSlot = applyBuffersToTimeSlot(
+              m.startTime!,
+              m.endTime!,
+              bufferBefore,
+              bufferAfter
+            );
+            return {
+              startTime: adjustedSlot.startTime,
+              endTime: adjustedSlot.endTime,
+              // Garder les heures originales pour affichage
+              originalStartTime: adjustedSlot.originalStartTime,
+              originalEndTime: adjustedSlot.originalEndTime,
+            };
+          });
 
         // Vérifier aussi les disponibilités partielles définies manuellement
         const partialAvail = unavailabilities.find(
@@ -862,13 +949,32 @@ export const getAnnouncerAvailabilityCalendar = query({
         continue;
       }
 
-      calendar.push({ date, status: "available" });
+      // Jour entièrement disponible
+      const calendarEntry: {
+        date: string;
+        status: "available" | "partial" | "unavailable" | "past";
+        capacity?: { current: number; max: number; remaining: number };
+      } = { date, status: "available" };
+
+      // Ajouter les infos de capacité pour les catégories capacity-based
+      if (isCapacityBasedCategory) {
+        calendarEntry.capacity = {
+          current: 0,
+          max: maxAnimalsPerSlot,
+          remaining: maxAnimalsPerSlot,
+        };
+      }
+
+      calendar.push(calendarEntry);
     }
 
     return {
       calendar,
       bufferBefore,
       bufferAfter,
+      // Informations de capacité globales
+      isCapacityBased: isCapacityBasedCategory,
+      maxAnimalsPerSlot: isCapacityBasedCategory ? maxAnimalsPerSlot : undefined,
     };
   },
 });
@@ -1229,6 +1335,10 @@ export const searchServices = query({
             )
             .collect();
 
+          // Récupérer les buffers (temps de préparation) de l'annonceur
+          const bufferBeforeService = profile?.bufferBefore ?? 0;
+          const bufferAfterService = profile?.bufferAfter ?? 0;
+
           const hasConflictingMission = existingMissions.some((mission) => {
             const searchStartDate = args.date || args.startDate!;
             const searchEndDate = args.date || args.endDate!;
@@ -1245,9 +1355,12 @@ export const searchServices = query({
                 endTime: addMinutesToTime(args.time, 60),
               };
 
-              return missionsOverlap(
+              // Utiliser missionsOverlapWithBuffers pour prendre en compte le temps de préparation
+              return missionsOverlapWithBuffers(
                 { startDate: mission.startDate, endDate: mission.endDate, startTime: mission.startTime, endTime: mission.endTime },
-                searchSlot
+                searchSlot,
+                bufferBeforeService,
+                bufferAfterService
               );
             }
 
@@ -1474,18 +1587,14 @@ export const createBookingRequest = mutation({
       }
     }
 
-    // Vérifier les conflits de missions (avec détection temporelle)
-    const existingMissions = await ctx.db
-      .query("missions")
-      .withIndex("by_announcer", (q) => q.eq("announcerId", args.announcerId))
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("serviceCategory"), service.category),
-          q.neq(q.field("status"), "cancelled"),
-          q.neq(q.field("status"), "refused")
-        )
-      )
-      .collect();
+    // Récupérer le profil de l'annonceur pour les buffers (temps de préparation)
+    const announcerProfileForBuffers = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", args.announcerId))
+      .first();
+
+    const bufferBeforeBooking = announcerProfileForBuffers?.bufferBefore ?? 0;
+    const bufferAfterBooking = announcerProfileForBuffers?.bufferAfter ?? 0;
 
     // Construire le créneau de la nouvelle mission
     const newMissionSlot = {
@@ -1495,15 +1604,18 @@ export const createBookingRequest = mutation({
       endTime: args.endTime,
     };
 
-    const hasConflict = existingMissions.some((m) =>
-      missionsOverlap(
-        { startDate: m.startDate, endDate: m.endDate, startTime: m.startTime, endTime: m.endTime },
-        newMissionSlot
-      )
+    // Vérifier les conflits en tenant compte de la capacité pour les catégories de garde
+    const conflictCheckRequest = await checkBookingConflict(
+      ctx.db,
+      args.announcerId,
+      service.category,
+      newMissionSlot,
+      bufferBeforeBooking,
+      bufferAfterBooking
     );
 
-    if (hasConflict) {
-      throw new ConvexError("L'annonceur a déjà une réservation sur ce créneau");
+    if (conflictCheckRequest.hasConflict) {
+      throw new ConvexError(conflictCheckRequest.conflictMessage || "L'annonceur n'est pas disponible sur ce créneau");
     }
 
     // Récupérer le profil client pour le téléphone

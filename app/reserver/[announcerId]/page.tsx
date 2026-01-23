@@ -640,10 +640,12 @@ export default function ReserverPage({
                 selectedEndTime={bookingData.selectedEndTime}
                 includeOvernightStay={bookingData.includeOvernightStay}
                 calendarMonth={calendarMonth}
-                availabilityCalendar={availabilityCalendar?.calendar as Array<{ date: string; status: string }> | undefined}
+                availabilityCalendar={availabilityCalendar?.calendar}
                 isRangeMode={isRangeMode}
                 days={days}
                 nights={nights}
+                isCapacityBased={availabilityCalendar?.isCapacityBased}
+                maxAnimalsPerSlot={availabilityCalendar?.maxAnimalsPerSlot}
                 onDateSelect={handleDateSelect}
                 onEndDateSelect={handleEndDateSelect}
                 onTimeSelect={handleTimeSelect}

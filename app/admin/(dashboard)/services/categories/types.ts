@@ -32,6 +32,9 @@ export interface CategoryFormData {
   allowCustomVariants: boolean;
   allowOvernightStay: boolean;
   displayFormat: DisplayFormat;
+  // Pour les catégories parentes : indique que les réservations sont gérées par capacité
+  // (nombre max d'animaux simultanés) au lieu de bloquer le créneau
+  isCapacityBased: boolean;
 }
 
 // Catégorie complète (depuis l'API)
@@ -53,6 +56,7 @@ export interface Category {
   defaultVariants?: DefaultVariant[];
   allowCustomVariants?: boolean;
   displayFormat?: DisplayFormat;
+  isCapacityBased?: boolean;
   isActive: boolean;
   order: number;
   createdAt: number;
@@ -156,6 +160,7 @@ export const DEFAULT_FORM_DATA: CategoryFormData = {
   allowCustomVariants: true,
   allowOvernightStay: false,
   displayFormat: "subcategory",
+  isCapacityBased: false,
 };
 
 // Helper pour convertir une catégorie en données de formulaire
@@ -176,6 +181,7 @@ export function categoryToFormData(category: Category): CategoryFormData {
     allowCustomVariants: category.allowCustomVariants !== false,
     allowOvernightStay: category.allowOvernightStay || false,
     displayFormat: category.displayFormat || "subcategory",
+    isCapacityBased: category.isCapacityBased || false,
   };
 }
 

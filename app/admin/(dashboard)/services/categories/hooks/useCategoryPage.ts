@@ -142,6 +142,7 @@ export function useCategoryPage(
       allowCustomVariants: category.allowCustomVariants !== false,
       allowOvernightStay: category.allowOvernightStay || false,
       displayFormat: category.displayFormat || "subcategory",
+      isCapacityBased: category.isCapacityBased || false,
     });
     setEditingCategory(category);
     setFormMode("edit");
@@ -164,6 +165,9 @@ export function useCategoryPage(
         description: formData.description || undefined,
         icon: formData.icon || undefined,
         parentCategoryId: formData.parentCategoryId || undefined,
+        // Champs pour les catégories parentes
+        displayFormat: !isSubcategory ? formData.displayFormat : undefined,
+        isCapacityBased: !isSubcategory ? formData.isCapacityBased : undefined,
         // Champs métier uniquement pour les sous-catégories
         billingType: isSubcategory ? formData.billingType : undefined,
         defaultHourlyPrice:
@@ -220,6 +224,12 @@ export function useCategoryPage(
       // N'envoyer parentCategoryId que si changé
       if (parentChanged) {
         updateArgs.parentCategoryId = formData.parentCategoryId;
+      }
+
+      // Champs pour les catégories parentes
+      if (!isSubcategory) {
+        updateArgs.displayFormat = formData.displayFormat;
+        updateArgs.isCapacityBased = formData.isCapacityBased;
       }
 
       // Champs métier uniquement pour les sous-catégories

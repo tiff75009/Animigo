@@ -74,6 +74,7 @@ export const listCategories = query({
           allowCustomVariants: cat.allowCustomVariants,
           allowOvernightStay: cat.allowOvernightStay,
           displayFormat: cat.displayFormat,
+          isCapacityBased: cat.isCapacityBased,
           createdAt: cat.createdAt,
           updatedAt: cat.updatedAt,
         };
@@ -270,6 +271,8 @@ export const createCategory = mutation({
       v.literal("subcategory"),
       v.literal("badge")
     )),
+    // Catégorie basée sur la capacité (uniquement pour catégories parentes)
+    isCapacityBased: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx, args.token);
@@ -318,6 +321,8 @@ export const createCategory = mutation({
       allowOvernightStay: args.parentCategoryId ? args.allowOvernightStay : undefined,
       // Format d'affichage (uniquement pour les catégories parentes)
       displayFormat: !args.parentCategoryId ? args.displayFormat : undefined,
+      // Catégorie basée sur la capacité (uniquement pour les catégories parentes)
+      isCapacityBased: !args.parentCategoryId ? args.isCapacityBased : undefined,
       order: maxOrder + 1,
       isActive: true,
       createdAt: now,
@@ -367,6 +372,8 @@ export const updateCategory = mutation({
       v.literal("subcategory"),
       v.literal("badge")
     )),
+    // Catégorie basée sur la capacité (uniquement pour catégories parentes)
+    isCapacityBased: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx, args.token);
@@ -436,6 +443,7 @@ export const updateCategory = mutation({
     if (args.allowCustomVariants !== undefined) updates.allowCustomVariants = args.allowCustomVariants;
     if (args.allowOvernightStay !== undefined) updates.allowOvernightStay = args.allowOvernightStay;
     if (args.displayFormat !== undefined) updates.displayFormat = args.displayFormat;
+    if (args.isCapacityBased !== undefined) updates.isCapacityBased = args.isCapacityBased;
 
     await ctx.db.patch(args.categoryId, updates);
 

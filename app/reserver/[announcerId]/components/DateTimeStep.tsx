@@ -1,8 +1,21 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, Calendar, Clock, Moon, Sun } from "lucide-react";
+import { ArrowLeft, ArrowRight, Calendar, Clock, Moon, Sun, Users } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import type { ServiceDetail, ServiceVariant } from "./FormulaStep";
+
+// Type pour les entrées du calendrier avec capacité
+interface CalendarEntry {
+  date: string;
+  status: string;
+  capacity?: {
+    current: number;
+    max: number;
+    remaining: number;
+  };
+  timeSlots?: Array<{ startTime: string; endTime: string }>;
+  bookedSlots?: Array<{ startTime: string; endTime: string }>;
+}
 
 interface DateTimeStepProps {
   selectedService: ServiceDetail;
@@ -13,10 +26,13 @@ interface DateTimeStepProps {
   selectedEndTime: string | null;
   includeOvernightStay: boolean;
   calendarMonth: Date;
-  availabilityCalendar: Array<{ date: string; status: string }> | undefined;
+  availabilityCalendar: CalendarEntry[] | undefined;
   isRangeMode: boolean;
   days: number;
   nights: number;
+  // Informations de capacité (pour les catégories de garde)
+  isCapacityBased?: boolean;
+  maxAnimalsPerSlot?: number;
   onDateSelect: (date: string) => void;
   onEndDateSelect: (date: string | null) => void;
   onTimeSelect: (time: string) => void;
@@ -107,6 +123,8 @@ export default function DateTimeStep({
   isRangeMode,
   days,
   nights,
+  isCapacityBased,
+  maxAnimalsPerSlot,
   onDateSelect,
   onEndDateSelect,
   onTimeSelect,
@@ -180,6 +198,11 @@ export default function DateTimeStep({
         ? "past"
         : availability?.status || "available";
 
+      // Capacité restante pour les catégories de garde
+      const capacity = availability?.capacity;
+      const hasCapacityInfo = isCapacityBased && capacity;
+      const remainingCapacity = capacity?.remaining ?? maxAnimalsPerSlot ?? 0;
+
       const isSelected = selectedDate === dateStr;
       const isEndSelected = selectedEndDate === dateStr;
       const isInRange =
@@ -189,24 +212,53 @@ export default function DateTimeStep({
         dateStr > selectedDate &&
         dateStr < selectedEndDate;
 
+      // Pour les catégories capacity-based, le jour est disponible s'il reste de la capacité
+      const isDisabled = status === "past" || (status === "unavailable" && (!hasCapacityInfo || remainingCapacity === 0));
+
       elements.push(
         <button
           key={dateStr}
-          disabled={status === "past" || status === "unavailable"}
+          disabled={isDisabled}
           onClick={() => handleDateClick(dateStr)}
           className={cn(
-            "aspect-square flex items-center justify-center text-sm rounded-lg transition-colors",
+            "aspect-square flex flex-col items-center justify-center text-sm rounded-lg transition-colors relative",
             status === "past" && "text-gray-300 cursor-not-allowed",
-            status === "unavailable" &&
+            status === "unavailable" && !hasCapacityInfo &&
               "text-gray-300 bg-gray-50 cursor-not-allowed",
-            status === "partial" && "text-amber-600 bg-amber-50",
-            status === "available" && "hover:bg-gray-100",
+            // Catégorie capacity-based avec capacité atteinte
+            hasCapacityInfo && remainingCapacity === 0 &&
+              "text-gray-300 bg-red-50 cursor-not-allowed",
+            // Catégorie capacity-based avec capacité partielle
+            hasCapacityInfo && remainingCapacity > 0 && remainingCapacity < (maxAnimalsPerSlot ?? 1) &&
+              "text-emerald-700 bg-emerald-50 hover:bg-emerald-100",
+            // Catégorie capacity-based avec capacité complète
+            hasCapacityInfo && remainingCapacity === (maxAnimalsPerSlot ?? 1) &&
+              "hover:bg-gray-100",
+            // Mode standard: partial
+            status === "partial" && !hasCapacityInfo && "text-amber-600 bg-amber-50",
+            // Mode standard: available
+            status === "available" && !hasCapacityInfo && "hover:bg-gray-100",
             (isSelected || isEndSelected) &&
               "bg-primary text-white hover:bg-primary",
             isInRange && "bg-primary/20"
           )}
         >
-          {d}
+          <span>{d}</span>
+          {/* Afficher la capacité restante pour les catégories de garde */}
+          {hasCapacityInfo && remainingCapacity > 0 && !isSelected && !isEndSelected && (
+            <span className={cn(
+              "text-[10px] leading-none font-medium",
+              remainingCapacity < (maxAnimalsPerSlot ?? 1) ? "text-emerald-600" : "text-gray-400"
+            )}>
+              {remainingCapacity} place{remainingCapacity > 1 ? "s" : ""}
+            </span>
+          )}
+          {/* Afficher "Complet" si capacité atteinte */}
+          {hasCapacityInfo && remainingCapacity === 0 && (
+            <span className="text-[9px] leading-none text-red-400 font-medium">
+              Complet
+            </span>
+          )}
         </button>
       );
     }
@@ -228,6 +280,24 @@ export default function DateTimeStep({
           {selectedVariant.name}
         </p>
       </div>
+
+      {/* Info capacité pour les catégories de garde */}
+      {isCapacityBased && maxAnimalsPerSlot && (
+        <div className="mb-4 p-3 bg-emerald-50 rounded-xl border border-emerald-200">
+          <div className="flex items-start gap-2">
+            <Users className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-emerald-800">
+                Service de garde - Capacité maximale : {maxAnimalsPerSlot} animaux
+              </p>
+              <p className="text-xs text-emerald-600 mt-1">
+                Le calendrier indique le nombre de places disponibles pour chaque jour.
+                Les jours avec des places restantes sont réservables même si d&apos;autres animaux sont déjà en garde.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Calendar */}
       <div className="mb-4">

@@ -4,7 +4,8 @@ import { Id } from "../_generated/dataModel";
 import { ConvexError } from "convex/values";
 import { ANIMAL_TYPES } from "../animals";
 import { internal } from "../_generated/api";
-import { missionsOverlap, addMinutesToTime } from "../lib/timeUtils";
+import { missionsOverlap, missionsOverlapWithBuffers, addMinutesToTime } from "../lib/timeUtils";
+import { checkBookingConflict } from "../lib/capacityUtils";
 import { hashPassword, generateUniqueSlug } from "../auth/utils";
 
 // Générer toutes les dates entre deux dates (YYYY-MM-DD)
@@ -366,18 +367,14 @@ export const finalizeBooking = mutation({
       }
     }
 
-    // Vérifier les conflits de missions (avec détection temporelle)
-    const existingMissions = await ctx.db
-      .query("missions")
-      .withIndex("by_announcer", (q) => q.eq("announcerId", pendingBooking.announcerId))
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("serviceCategory"), service.category),
-          q.neq(q.field("status"), "cancelled"),
-          q.neq(q.field("status"), "refused")
-        )
-      )
-      .collect();
+    // Récupérer le profil de l'annonceur pour les buffers (temps de préparation)
+    const announcerProfile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", pendingBooking.announcerId))
+      .first();
+
+    const bufferBefore = announcerProfile?.bufferBefore ?? 0;
+    const bufferAfter = announcerProfile?.bufferAfter ?? 0;
 
     // Construire l'objet de la nouvelle mission pour la comparaison temporelle
     const newMissionSlot = {
@@ -387,15 +384,18 @@ export const finalizeBooking = mutation({
       endTime: pendingBooking.endTime,
     };
 
-    const hasConflict = existingMissions.some((m) =>
-      missionsOverlap(
-        { startDate: m.startDate, endDate: m.endDate, startTime: m.startTime, endTime: m.endTime },
-        newMissionSlot
-      )
+    // Vérifier les conflits en tenant compte de la capacité pour les catégories de garde
+    const conflictCheck = await checkBookingConflict(
+      ctx.db,
+      pendingBooking.announcerId,
+      service.category,
+      newMissionSlot,
+      bufferBefore,
+      bufferAfter
     );
 
-    if (hasConflict) {
-      throw new ConvexError("L'annonceur a déjà une réservation sur ce créneau");
+    if (conflictCheck.hasConflict) {
+      throw new ConvexError(conflictCheck.conflictMessage || "L'annonceur n'est pas disponible sur ce créneau");
     }
 
     // Trouver le type d'animal pour l'emoji
@@ -632,18 +632,14 @@ export const finalizeBookingAsGuest = mutation({
       }
     }
 
-    // Vérifier les conflits de missions (avec détection temporelle)
-    const existingMissions = await ctx.db
-      .query("missions")
-      .withIndex("by_announcer", (q) => q.eq("announcerId", pendingBooking.announcerId))
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("serviceCategory"), service.category),
-          q.neq(q.field("status"), "cancelled"),
-          q.neq(q.field("status"), "refused")
-        )
-      )
-      .collect();
+    // Récupérer le profil de l'annonceur pour les buffers (temps de préparation)
+    const announcerProfileGuest = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", pendingBooking.announcerId))
+      .first();
+
+    const bufferBeforeGuest = announcerProfileGuest?.bufferBefore ?? 0;
+    const bufferAfterGuest = announcerProfileGuest?.bufferAfter ?? 0;
 
     // Construire l'objet de la nouvelle mission pour la comparaison temporelle
     const newMissionSlot = {
@@ -653,15 +649,18 @@ export const finalizeBookingAsGuest = mutation({
       endTime: pendingBooking.endTime,
     };
 
-    const hasConflict = existingMissions.some((m) =>
-      missionsOverlap(
-        { startDate: m.startDate, endDate: m.endDate, startTime: m.startTime, endTime: m.endTime },
-        newMissionSlot
-      )
+    // Vérifier les conflits en tenant compte de la capacité pour les catégories de garde
+    const conflictCheckGuest = await checkBookingConflict(
+      ctx.db,
+      pendingBooking.announcerId,
+      service.category,
+      newMissionSlot,
+      bufferBeforeGuest,
+      bufferAfterGuest
     );
 
-    if (hasConflict) {
-      throw new ConvexError("L'annonceur a déjà une réservation sur ce créneau");
+    if (conflictCheckGuest.hasConflict) {
+      throw new ConvexError(conflictCheckGuest.conflictMessage || "L'annonceur n'est pas disponible sur ce créneau");
     }
 
     const now = Date.now();
