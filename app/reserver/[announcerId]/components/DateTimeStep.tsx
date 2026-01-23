@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { ArrowLeft, ArrowRight, Calendar, Clock, Moon, Sun, Users } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import type { ServiceDetail, ServiceVariant } from "./FormulaStep";
@@ -33,6 +34,14 @@ interface DateTimeStepProps {
   // Informations de capacité (pour les catégories de garde)
   isCapacityBased?: boolean;
   maxAnimalsPerSlot?: number;
+  // Blocage basé sur la durée (la fin est calculée automatiquement)
+  enableDurationBasedBlocking?: boolean;
+  // Temps de préparation de l'annonceur (en minutes)
+  bufferBefore?: number;
+  bufferAfter?: number;
+  // Horaires de disponibilité de l'annonceur
+  acceptReservationsFrom?: string; // "08:00"
+  acceptReservationsTo?: string;   // "20:00"
   onDateSelect: (date: string) => void;
   onEndDateSelect: (date: string | null) => void;
   onTimeSelect: (time: string) => void;
@@ -79,36 +88,42 @@ function calculateDuration(startTime: string, endTime: string): string {
   return `${hours}h${minutes}`;
 }
 
-// Available time slots for start time
-const TIME_SLOTS = [
-  "08:00",
-  "09:00",
-  "10:00",
-  "11:00",
-  "12:00",
-  "14:00",
-  "15:00",
-  "16:00",
-  "17:00",
-  "18:00",
-];
+// Générer des créneaux horaires par intervalles
+function generateTimeSlots(
+  startHour: number,
+  endHour: number,
+  intervalMinutes: number = 30,
+  excludeLunchBreak: boolean = false
+): string[] {
+  const slots: string[] = [];
+  let currentMinutes = startHour * 60;
+  const endMinutes = endHour * 60;
 
-// Extended time slots for end time (includes later hours)
-const EXTENDED_TIME_SLOTS = [
-  "08:00",
-  "09:00",
-  "10:00",
-  "11:00",
-  "12:00",
-  "13:00",
-  "14:00",
-  "15:00",
-  "16:00",
-  "17:00",
-  "18:00",
-  "19:00",
-  "20:00",
-];
+  while (currentMinutes <= endMinutes) {
+    const hours = Math.floor(currentMinutes / 60);
+    const minutes = currentMinutes % 60;
+
+    // Exclure la pause déjeuner (12:30-13:30) si demandé
+    const isLunchBreak = excludeLunchBreak && hours === 12 && minutes === 30;
+    const isAfterLunch = excludeLunchBreak && hours === 13 && minutes === 0;
+
+    if (!isLunchBreak && !isAfterLunch) {
+      slots.push(
+        `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`
+      );
+    }
+
+    currentMinutes += intervalMinutes;
+  }
+
+  return slots;
+}
+
+// Helper pour parser une heure "HH:MM" en heures décimales
+function parseTimeToHour(time: string): number {
+  const [hours, minutes] = time.split(":").map(Number);
+  return hours + minutes / 60;
+}
 
 export default function DateTimeStep({
   selectedService,
@@ -125,6 +140,11 @@ export default function DateTimeStep({
   nights,
   isCapacityBased,
   maxAnimalsPerSlot,
+  enableDurationBasedBlocking,
+  bufferBefore = 0,
+  bufferAfter = 0,
+  acceptReservationsFrom = "08:00",
+  acceptReservationsTo = "20:00",
   onDateSelect,
   onEndDateSelect,
   onTimeSelect,
@@ -132,6 +152,33 @@ export default function DateTimeStep({
   onOvernightChange,
   onMonthChange,
 }: DateTimeStepProps) {
+  // Calculate end time based on variant duration (for duration-based blocking)
+  const variantDuration = selectedVariant.duration || 60;
+  const calculatedEndTime = selectedTime
+    ? (() => {
+        const [hours, minutes] = selectedTime.split(":").map(Number);
+        const totalMinutes = hours * 60 + minutes + variantDuration;
+        const endHours = Math.floor(totalMinutes / 60);
+        const endMinutes = totalMinutes % 60;
+        return `${String(endHours).padStart(2, "0")}:${String(endMinutes).padStart(2, "0")}`;
+      })()
+    : null;
+
+  // Générer les créneaux dynamiquement selon les horaires de l'annonceur
+  const timeSlots = useMemo(() => {
+    const startHour = parseTimeToHour(acceptReservationsFrom);
+    const endHour = parseTimeToHour(acceptReservationsTo);
+    // Pour l'heure de début, on termine 30 min avant la fin pour laisser de la place
+    return generateTimeSlots(Math.floor(startHour), Math.floor(endHour), 30);
+  }, [acceptReservationsFrom, acceptReservationsTo]);
+
+  const extendedTimeSlots = useMemo(() => {
+    const startHour = parseTimeToHour(acceptReservationsFrom);
+    const endHour = parseTimeToHour(acceptReservationsTo);
+    // Pour l'heure de fin, on va jusqu'à l'heure de fin configurée
+    return generateTimeSlots(Math.floor(startHour), Math.floor(endHour), 30);
+  }, [acceptReservationsFrom, acceptReservationsTo]);
+
   // Handle date click
   const handleDateClick = (dateStr: string) => {
     if (isRangeMode) {
@@ -154,7 +201,7 @@ export default function DateTimeStep({
   const getEndTimeSlots = () => {
     if (!selectedTime) return [];
     const startMinutes = parseTimeToMinutes(selectedTime);
-    return EXTENDED_TIME_SLOTS.filter((time) => {
+    return extendedTimeSlots.filter((time) => {
       const timeMinutes = parseTimeToMinutes(time);
       return timeMinutes > startMinutes;
     });
@@ -243,7 +290,9 @@ export default function DateTimeStep({
             isInRange && "bg-primary/20"
           )}
         >
-          <span>{d}</span>
+          <span className={cn(
+            status === "unavailable" && !hasCapacityInfo && "line-through"
+          )}>{d}</span>
           {/* Afficher la capacité restante pour les catégories de garde */}
           {hasCapacityInfo && remainingCapacity > 0 && !isSelected && !isEndSelected && (
             <span className={cn(
@@ -257,6 +306,12 @@ export default function DateTimeStep({
           {hasCapacityInfo && remainingCapacity === 0 && (
             <span className="text-[9px] leading-none text-red-400 font-medium">
               Complet
+            </span>
+          )}
+          {/* Indicateur visuel pour jours indisponibles */}
+          {status === "unavailable" && !hasCapacityInfo && (
+            <span className="text-[8px] leading-none text-gray-400">
+              indispo
             </span>
           )}
         </button>
@@ -298,6 +353,22 @@ export default function DateTimeStep({
           </div>
         </div>
       )}
+
+      {/* Légende du calendrier */}
+      <div className="mb-4 flex flex-wrap gap-3 text-xs">
+        <div className="flex items-center gap-1.5">
+          <div className="w-4 h-4 rounded bg-gray-100 border border-gray-200" />
+          <span className="text-gray-500">Indisponible</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-4 h-4 rounded bg-amber-50 border border-amber-200" />
+          <span className="text-gray-500">Partiel</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-4 h-4 rounded bg-white border border-gray-200" />
+          <span className="text-gray-500">Disponible</span>
+        </div>
+      </div>
 
       {/* Calendar */}
       <div className="mb-4">
@@ -369,7 +440,58 @@ export default function DateTimeStep({
       )}
 
       {/* Time Selection - always available when date is selected */}
-      {selectedDate && (
+      {selectedDate && (() => {
+        // Récupérer les infos de disponibilité pour la date sélectionnée
+        const selectedDateAvailability = availabilityCalendar?.find(
+          (a) => a.date === selectedDate
+        );
+        const bookedSlots = selectedDateAvailability?.bookedSlots || [];
+        const availableTimeSlots = selectedDateAvailability?.timeSlots;
+
+        // Fonction pour vérifier si un créneau est disponible
+        // Prend en compte le temps de préparation (bufferBefore/bufferAfter)
+        const isTimeSlotAvailable = (startTime: string, duration: number = variantDuration) => {
+          const startMinutes = parseTimeToMinutes(startTime);
+          const endMinutes = startMinutes + duration;
+
+          // Pour le blocage basé sur la durée, ajouter les buffers au créneau
+          // Le créneau effectivement bloqué sera: (start - bufferBefore) à (end + bufferAfter)
+          const effectiveStartMinutes = enableDurationBasedBlocking
+            ? startMinutes - bufferBefore
+            : startMinutes;
+          const effectiveEndMinutes = enableDurationBasedBlocking
+            ? endMinutes + bufferAfter
+            : endMinutes;
+
+          // Vérifier si le créneau est dans les horaires disponibles (dispo partielle)
+          if (availableTimeSlots && availableTimeSlots.length > 0) {
+            const isInAvailableSlot = availableTimeSlots.some((slot) => {
+              const slotStart = parseTimeToMinutes(slot.startTime);
+              const slotEnd = parseTimeToMinutes(slot.endTime);
+              // Pour dispo partielle, vérifier avec le créneau effectif (incluant buffers)
+              return effectiveStartMinutes >= slotStart && effectiveEndMinutes <= slotEnd;
+            });
+            if (!isInAvailableSlot) return false;
+          }
+
+          // Vérifier si le créneau ne chevauche pas un créneau réservé
+          // Les bookedSlots ont déjà les buffers appliqués côté backend
+          const hasConflict = bookedSlots.some((booked) => {
+            const bookedStart = parseTimeToMinutes(booked.startTime);
+            const bookedEnd = parseTimeToMinutes(booked.endTime);
+            // Conflit si les créneaux (avec buffers) se chevauchent
+            return effectiveStartMinutes < bookedEnd && effectiveEndMinutes > bookedStart;
+          });
+
+          return !hasConflict;
+        };
+
+        // Filtrer les créneaux disponibles
+        const availableStartTimes = timeSlots.filter((time) =>
+          isTimeSlotAvailable(time)
+        );
+
+        return (
         <div className="space-y-4 mb-4">
           {/* Info for range mode */}
           {isRangeMode && (
@@ -378,56 +500,144 @@ export default function DateTimeStep({
             </p>
           )}
 
+          {/* Légende si créneaux réservés */}
+          {bookedSlots.length > 0 && (
+            <div className="p-2 bg-gray-50 rounded-lg text-xs text-gray-600">
+              <span className="font-medium">Créneaux déjà réservés : </span>
+              {bookedSlots.map((slot, i) => (
+                <span key={i} className="text-red-500">
+                  {slot.startTime}-{slot.endTime}
+                  {i < bookedSlots.length - 1 ? ", " : ""}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Info si disponibilité partielle */}
+          {availableTimeSlots && availableTimeSlots.length > 0 && (
+            <div className="p-2 bg-amber-50 rounded-lg text-xs text-amber-700">
+              <span className="font-medium">Disponible uniquement : </span>
+              {availableTimeSlots.map((slot, i) => (
+                <span key={i}>
+                  {slot.startTime}-{slot.endTime}
+                  {i < availableTimeSlots.length - 1 ? ", " : ""}
+                </span>
+              ))}
+            </div>
+          )}
+
           {/* Start Time */}
           <div>
             <p className="text-sm font-medium text-foreground mb-2">
               Heure de début
             </p>
-            <div className="grid grid-cols-5 gap-2">
-              {TIME_SLOTS.map((time) => (
-                <button
-                  key={time}
-                  onClick={() => onTimeSelect(time)}
-                  className={cn(
-                    "py-2 text-sm rounded-lg border transition-colors",
-                    selectedTime === time
-                      ? "border-primary bg-primary/10 text-primary font-medium"
-                      : "border-gray-200 hover:border-gray-300"
-                  )}
-                >
-                  {time}
-                </button>
-              ))}
-            </div>
-          </div>
+            <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+              {timeSlots.map((time) => {
+                const isAvailable = isTimeSlotAvailable(time);
+                const isBooked = bookedSlots.some((slot) => {
+                  const slotStart = parseTimeToMinutes(slot.startTime);
+                  const slotEnd = parseTimeToMinutes(slot.endTime);
+                  const timeMin = parseTimeToMinutes(time);
+                  return timeMin >= slotStart && timeMin < slotEnd;
+                });
 
-          {/* End Time (appears after start time is selected) */}
-          {selectedTime && (
-            <div>
-              <p className="text-sm font-medium text-foreground mb-2">
-                Heure de fin
-              </p>
-              <div className="grid grid-cols-5 gap-2">
-                {getEndTimeSlots().map((time) => (
+                return (
                   <button
                     key={time}
-                    onClick={() => onEndTimeSelect(time)}
+                    disabled={!isAvailable}
+                    onClick={() => onTimeSelect(time)}
                     className={cn(
                       "py-2 text-sm rounded-lg border transition-colors",
-                      selectedEndTime === time
-                        ? "border-secondary bg-secondary/10 text-secondary font-medium"
-                        : "border-gray-200 hover:border-gray-300"
+                      !isAvailable && "opacity-40 cursor-not-allowed bg-gray-100 text-gray-400",
+                      isBooked && "line-through bg-red-50 border-red-200 text-red-400",
+                      isAvailable && selectedTime === time
+                        ? "border-primary bg-primary/10 text-primary font-medium"
+                        : isAvailable && "border-gray-200 hover:border-gray-300"
                     )}
                   >
                     {time}
                   </button>
-                ))}
+                );
+              })}
+            </div>
+          </div>
+
+          {/* End Time Selection - conditional based on duration-based blocking */}
+          {selectedTime && enableDurationBasedBlocking && selectedVariant.duration ? (
+            /* Duration-based blocking: show calculated end time (not editable) */
+            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
+              <div className="flex items-center gap-2 text-sm text-foreground">
+                <Clock className="w-4 h-4 text-amber-600" />
+                <span className="font-medium text-amber-800">
+                  Durée de la prestation : {variantDuration >= 60
+                    ? `${Math.floor(variantDuration / 60)}h${variantDuration % 60 > 0 ? variantDuration % 60 : ''}`
+                    : `${variantDuration}min`}
+                </span>
+              </div>
+              <p className="text-xs text-amber-600 mt-1">
+                Créneau réservé : {selectedTime} → {calculatedEndTime}
+              </p>
+              {(bufferBefore > 0 || bufferAfter > 0) && (
+                <p className="text-xs text-amber-500 mt-1">
+                  Temps de préparation inclus : {bufferBefore > 0 && `${bufferBefore}min avant`}{bufferBefore > 0 && bufferAfter > 0 && " / "}{bufferAfter > 0 && `${bufferAfter}min après`}
+                </p>
+              )}
+            </div>
+          ) : selectedTime ? (
+            /* Normal mode: show end time picker */
+            <div>
+              <p className="text-sm font-medium text-foreground mb-2">
+                Heure de fin
+              </p>
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                {getEndTimeSlots().map((time) => {
+                  // Vérifier si l'heure de fin est disponible
+                  const startMinutes = parseTimeToMinutes(selectedTime);
+                  const endMinutes = parseTimeToMinutes(time);
+
+                  // Vérifier conflit avec créneaux réservés
+                  const hasConflict = bookedSlots.some((slot) => {
+                    const bookedStart = parseTimeToMinutes(slot.startTime);
+                    const bookedEnd = parseTimeToMinutes(slot.endTime);
+                    return startMinutes < bookedEnd && endMinutes > bookedStart;
+                  });
+
+                  // Vérifier si dans les horaires disponibles (dispo partielle)
+                  let isInAvailableRange = true;
+                  if (availableTimeSlots && availableTimeSlots.length > 0) {
+                    isInAvailableRange = availableTimeSlots.some((slot) => {
+                      const slotStart = parseTimeToMinutes(slot.startTime);
+                      const slotEnd = parseTimeToMinutes(slot.endTime);
+                      return startMinutes >= slotStart && endMinutes <= slotEnd;
+                    });
+                  }
+
+                  const isEndTimeAvailable = !hasConflict && isInAvailableRange;
+
+                  return (
+                    <button
+                      key={time}
+                      disabled={!isEndTimeAvailable}
+                      onClick={() => onEndTimeSelect(time)}
+                      className={cn(
+                        "py-2 text-sm rounded-lg border transition-colors",
+                        !isEndTimeAvailable && "opacity-40 cursor-not-allowed bg-gray-100 text-gray-400",
+                        hasConflict && "line-through bg-red-50 border-red-200",
+                        isEndTimeAvailable && selectedEndTime === time
+                          ? "border-secondary bg-secondary/10 text-secondary font-medium"
+                          : isEndTimeAvailable && "border-gray-200 hover:border-gray-300"
+                      )}
+                    >
+                      {time}
+                    </button>
+                  );
+                })}
               </div>
             </div>
-          )}
+          ) : null}
 
-          {/* Duration Display */}
-          {selectedTime && selectedEndTime && (
+          {/* Duration Display - only for manual end time selection */}
+          {selectedTime && selectedEndTime && !enableDurationBasedBlocking && (
             <div className="p-3 bg-primary/5 rounded-xl">
               <div className="flex items-center gap-2 text-sm text-foreground">
                 <Clock className="w-4 h-4 text-primary" />
@@ -441,7 +651,8 @@ export default function DateTimeStep({
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* Overnight Stay Option */}
       {isRangeMode && days > 1 && selectedService.allowOvernightStay && (

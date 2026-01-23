@@ -357,6 +357,10 @@ export default defineSchema({
     // Ex: Un gardien peut garder 3 animaux en même temps, donc 3 réservations peuvent
     // chevaucher sur le même créneau
     isCapacityBased: v.optional(v.boolean()),
+    // Blocage des créneaux basé sur la durée du service (sous-catégories uniquement)
+    // Si true: créneau bloqué = startTime + durée_variant + bufferAfter
+    // Les formules doivent avoir une durée définie quand ce mode est activé
+    enableDurationBasedBlocking: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -423,6 +427,12 @@ export default defineSchema({
     overnightAmount: v.optional(v.number()),       // Montant des nuits en centimes
     dayStartTime: v.optional(v.string()),          // Heure début journée "08:00"
     dayEndTime: v.optional(v.string()),            // Heure fin journée "20:00"
+
+    // Lieu de prestation choisi par le client
+    serviceLocation: v.optional(v.union(
+      v.literal("announcer_home"),  // Chez l'annonceur
+      v.literal("client_home")      // Chez le client (à domicile)
+    )),
 
     // Statut
     status: v.union(
@@ -591,6 +601,12 @@ export default defineSchema({
     includeOvernightStay: v.optional(v.boolean()), // Le client souhaite la garde de nuit
     overnightNights: v.optional(v.number()),       // Nombre de nuits
     overnightAmount: v.optional(v.number()),       // Montant des nuits en centimes
+
+    // Lieu de prestation choisi par le client
+    serviceLocation: v.optional(v.union(
+      v.literal("announcer_home"),  // Chez l'annonceur
+      v.literal("client_home")      // Chez le client (à domicile)
+    )),
 
     // Prix calculé
     calculatedAmount: v.number(),

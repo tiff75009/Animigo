@@ -9,12 +9,19 @@ import { ServiceData, FormuleData } from "./types";
 interface AnnouncerServicesProps {
   services: ServiceData[];
   initialExpandedService?: string | null;
+  commissionRate?: number; // Taux de commission en %
   className?: string;
 }
 
 // Helper pour formater le prix (centimes -> euros)
 const formatPrice = (priceInCents: number) => {
-  return (priceInCents / 100).toFixed(2).replace(".00", "");
+  return (priceInCents / 100).toFixed(2).replace(".", ",");
+};
+
+// Calculer le prix avec commission
+const calculatePriceWithCommission = (basePriceCents: number, commissionRate: number): number => {
+  const commission = Math.round((basePriceCents * commissionRate) / 100);
+  return basePriceCents + commission;
 };
 
 // Déterminer si c'est une garde (afficher /jour) ou un service (afficher /heure)
@@ -74,7 +81,7 @@ const getServiceMinPrice = (service: ServiceData): { price: number; unit: string
   return { price: minPrice === Infinity ? 0 : minPrice, unit: minUnit };
 };
 
-export default function AnnouncerServices({ services, initialExpandedService, className }: AnnouncerServicesProps) {
+export default function AnnouncerServices({ services, initialExpandedService, commissionRate = 15, className }: AnnouncerServicesProps) {
   const [expandedService, setExpandedService] = useState<string | null>(initialExpandedService ?? null);
 
   if (services.length === 0) {
@@ -130,7 +137,7 @@ export default function AnnouncerServices({ services, initialExpandedService, cl
                 <div className="flex items-center gap-3">
                   {minPrice > 0 && (
                     <span className="text-lg font-bold text-primary">
-                      Dès {formatPrice(minPrice)}€{minUnit && `/${minUnit}`}
+                      Dès {formatPrice(calculatePriceWithCommission(minPrice, commissionRate))}€{minUnit && `/${minUnit}`}
                     </span>
                   )}
                   <ChevronRight className={cn(
@@ -170,7 +177,7 @@ export default function AnnouncerServices({ services, initialExpandedService, cl
                             </div>
                             <div className="text-right">
                               <p className="font-bold text-primary">
-                                {formatPrice(formulePrice)}€{formuleUnit && `/${formuleUnit}`}
+                                {formatPrice(calculatePriceWithCommission(formulePrice, commissionRate))}€{formuleUnit && `/${formuleUnit}`}
                               </p>
                             </div>
                           </div>
@@ -187,7 +194,7 @@ export default function AnnouncerServices({ services, initialExpandedService, cl
                                 key={option.id}
                                 className="px-3 py-1.5 bg-primary/5 text-primary text-sm font-medium rounded-full"
                               >
-                                {option.name} (+{formatPrice(option.price)}€)
+                                {option.name} (+{formatPrice(calculatePriceWithCommission(option.price, commissionRate))}€)
                               </span>
                             ))}
                           </div>

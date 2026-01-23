@@ -35,6 +35,9 @@ export interface CategoryFormData {
   // Pour les catégories parentes : indique que les réservations sont gérées par capacité
   // (nombre max d'animaux simultanés) au lieu de bloquer le créneau
   isCapacityBased: boolean;
+  // Pour les sous-catégories : blocage basé sur la durée du service
+  // créneau bloqué = startTime + durée_variant + bufferAfter
+  enableDurationBasedBlocking: boolean;
 }
 
 // Catégorie complète (depuis l'API)
@@ -57,6 +60,7 @@ export interface Category {
   allowCustomVariants?: boolean;
   displayFormat?: DisplayFormat;
   isCapacityBased?: boolean;
+  enableDurationBasedBlocking?: boolean;
   isActive: boolean;
   order: number;
   createdAt: number;
@@ -161,6 +165,7 @@ export const DEFAULT_FORM_DATA: CategoryFormData = {
   allowOvernightStay: false,
   displayFormat: "subcategory",
   isCapacityBased: false,
+  enableDurationBasedBlocking: false,
 };
 
 // Helper pour convertir une catégorie en données de formulaire
@@ -182,6 +187,7 @@ export function categoryToFormData(category: Category): CategoryFormData {
     allowOvernightStay: category.allowOvernightStay || false,
     displayFormat: category.displayFormat || "subcategory",
     isCapacityBased: category.isCapacityBased || false,
+    enableDurationBasedBlocking: category.enableDurationBasedBlocking || false,
   };
 }
 

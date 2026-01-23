@@ -68,6 +68,15 @@ export default function AnnouncerProfilePage() {
     token ? { token } : "skip"
   );
 
+  // Récupérer le taux de commission basé sur le type d'annonceur
+  const commissionData = useQuery(
+    api.admin.commissions.getCommissionRate,
+    announcerData?.statusType
+      ? { announcerType: announcerData.statusType as "particulier" | "micro_entrepreneur" | "professionnel" }
+      : "skip"
+  );
+  const commissionRate = commissionData?.rate ?? 15; // Default 15% for particuliers
+
   // Calculer la distance entre le client et l'annonceur
   // (doit être avant les early returns pour respecter les règles des hooks)
   const distance = useMemo(() => {
@@ -219,6 +228,7 @@ export default function AnnouncerProfilePage() {
             <AnnouncerServices
               services={announcer.services}
               initialExpandedService={selectedService?.id ?? null}
+              commissionRate={commissionRate}
               className={cn(activeTab !== "services" && "hidden md:block")}
             />
 
@@ -239,6 +249,7 @@ export default function AnnouncerProfilePage() {
               responseTime={announcer.responseTime}
               nextAvailable={announcer.availability.nextAvailable}
               selectedServiceId={selectedService?.id ?? null}
+              commissionRate={commissionRate}
               onServiceChange={(serviceId) => {
                 // Trouver le categorySlug du service sélectionné et mettre à jour l'URL
                 const service = announcer.services.find((s) => s.id === serviceId);
@@ -252,7 +263,7 @@ export default function AnnouncerProfilePage() {
       </main>
 
       {/* Mobile Floating CTA */}
-      <AnnouncerMobileCTA services={announcer.services} onBook={handleBook} />
+      <AnnouncerMobileCTA services={announcer.services} commissionRate={commissionRate} onBook={handleBook} />
     </div>
   );
 }

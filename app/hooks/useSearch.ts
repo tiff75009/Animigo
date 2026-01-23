@@ -30,6 +30,7 @@ export interface ServiceResult {
   basePrice: number;
   basePriceUnit: "hour" | "day" | "week" | "month" | "flat";
   animalTypes: string[];
+  serviceLocation?: "announcer_home" | "client_home" | "both";
   variants: Array<{
     id: string;
     name: string;
@@ -163,6 +164,7 @@ export function useSearch() {
       priceMin?: number;
       priceMax?: number;
       sortBy?: string;
+      serviceLocation?: ("announcer_home" | "client_home")[];
     } = {};
 
     // Appliquer le mode de recherche
@@ -236,6 +238,9 @@ export function useSearch() {
     }
     if (advancedFilters.sortBy !== "relevance") {
       args.sortBy = advancedFilters.sortBy;
+    }
+    if (advancedFilters.serviceLocation && advancedFilters.serviceLocation.length > 0) {
+      args.serviceLocation = advancedFilters.serviceLocation;
     }
 
     return args;
@@ -381,6 +386,7 @@ export function useServiceSearch(token?: string | null) {
       priceMin?: number;
       priceMax?: number;
       sortBy?: string;
+      serviceLocation?: ("announcer_home" | "client_home")[];
     } = {};
 
     // Appliquer le mode de recherche
@@ -454,6 +460,9 @@ export function useServiceSearch(token?: string | null) {
     }
     if (advancedFilters.sortBy !== "relevance") {
       args.sortBy = advancedFilters.sortBy;
+    }
+    if (advancedFilters.serviceLocation && advancedFilters.serviceLocation.length > 0) {
+      args.serviceLocation = advancedFilters.serviceLocation;
     }
 
     return args;
@@ -669,6 +678,7 @@ export function useServiceSearchWithParams(token: string | null | undefined, url
       priceMin?: number;
       priceMax?: number;
       sortBy?: string;
+      serviceLocation?: ("announcer_home" | "client_home")[];
     } = {};
 
     // Appliquer le mode de recherche
@@ -736,6 +746,9 @@ export function useServiceSearchWithParams(token: string | null | undefined, url
     }
     if (advancedFilters.sortBy !== "relevance") {
       args.sortBy = advancedFilters.sortBy;
+    }
+    if (advancedFilters.serviceLocation && advancedFilters.serviceLocation.length > 0) {
+      args.serviceLocation = advancedFilters.serviceLocation;
     }
 
     return args;

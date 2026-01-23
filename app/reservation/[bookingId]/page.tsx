@@ -67,6 +67,8 @@ interface PendingBookingData {
     dayStartTime?: string;
     dayEndTime?: string;
     overnightPrice?: number;
+    // Duration-based blocking
+    enableDurationBasedBlocking?: boolean;
   };
   variant: {
     id: string;
@@ -88,6 +90,7 @@ interface PendingBookingData {
     startDate: string;
     endDate: string;
     startTime?: string;
+    endTime?: string;
   };
   amount: number;
   // Overnight booking data
@@ -96,6 +99,7 @@ interface PendingBookingData {
     overnightNights?: number;
     overnightAmount?: number;
   };
+  serviceLocation?: "announcer_home" | "client_home";
   userId?: Id<"users">;
   expiresAt: number;
 }
@@ -166,6 +170,9 @@ function calculateSmartPrice(params: {
     nightly?: number;
   };
   optionsTotal: number;
+  // For duration-based blocking: use fixed price instead of hourly calculation
+  fixedServicePrice?: number;
+  serviceDurationMinutes?: number;
 }): PriceCalculationResult {
   const {
     startDate,
@@ -178,6 +185,8 @@ function calculateSmartPrice(params: {
     workdayHours,
     pricing,
     optionsTotal,
+    fixedServicePrice,
+    serviceDurationMinutes,
   } = params;
 
   // Determine rates (derive missing rates from available ones)
@@ -194,6 +203,32 @@ function calculateSmartPrice(params: {
     let firstDayHours: number;
     let firstDayAmount: number;
     let firstDayIsFullDay = false;
+
+    // Duration-based blocking: use fixed price
+    if (fixedServicePrice !== undefined && serviceDurationMinutes !== undefined) {
+      firstDayHours = serviceDurationMinutes / 60;
+      firstDayAmount = fixedServicePrice;
+      // Not a "full day" in the traditional sense, it's a fixed duration service
+      firstDayIsFullDay = false;
+
+      return {
+        firstDayAmount,
+        firstDayHours,
+        firstDayIsFullDay,
+        fullDays: 0,
+        fullDaysAmount: 0,
+        lastDayAmount: 0,
+        lastDayHours: 0,
+        lastDayIsFullDay: false,
+        nightsAmount: 0,
+        nights: 0,
+        optionsAmount: optionsTotal,
+        totalAmount: firstDayAmount + optionsTotal,
+        hourlyRate: 0, // Not applicable for fixed price
+        dailyRate: 0,
+        nightlyRate,
+      };
+    }
 
     if (startTime && endTime) {
       // Specific time range
@@ -397,6 +432,7 @@ export default function ReservationPage({
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>([]);
+  const [addressPreFilled, setAddressPreFilled] = useState(false);
 
   // Récupérer le token au chargement
   useEffect(() => {
@@ -461,6 +497,18 @@ export default function ReservationPage({
     }
   }, [bookingData?.options]);
 
+  // Pré-remplir l'adresse depuis le profil utilisateur si réservation à domicile
+  useEffect(() => {
+    if (
+      sessionData?.user?.location &&
+      bookingData?.serviceLocation === "client_home" &&
+      !addressPreFilled
+    ) {
+      setAddress(sessionData.user.location);
+      setAddressPreFilled(true);
+    }
+  }, [sessionData?.user?.location, bookingData?.serviceLocation, addressPreFilled]);
+
   // Calculer le nombre de jours entre deux dates
   const calculateDays = () => {
     if (!bookingData) return 1;
@@ -489,11 +537,14 @@ export default function ReservationPage({
     const dayEndTime = bookingData.service.dayEndTime ||
                        announcerPreferences?.acceptReservationsTo || "20:00";
 
+    // For duration-based blocking, use the variant's fixed price
+    const useDurationBasedPricing = bookingData.service.enableDurationBasedBlocking && bookingData.variant.duration;
+
     return calculateSmartPrice({
       startDate: bookingData.dates.startDate,
       endDate: bookingData.dates.endDate,
       startTime: bookingData.dates.startTime || null,
-      endTime: null, // End time not stored in pending booking yet
+      endTime: bookingData.dates.endTime || null,
       includeOvernightStay: bookingData.overnight?.includeOvernightStay || false,
       dayStartTime,
       dayEndTime,
@@ -504,6 +555,9 @@ export default function ReservationPage({
         nightly: pricing?.nightly || bookingData.service.overnightPrice,
       },
       optionsTotal,
+      // Pass fixed price and duration for duration-based blocking
+      fixedServicePrice: useDurationBasedPricing ? bookingData.variant.price : undefined,
+      serviceDurationMinutes: useDurationBasedPricing ? bookingData.variant.duration : undefined,
     });
   })();
 
@@ -649,7 +703,7 @@ export default function ReservationPage({
           coordinates: coordinates || undefined,
           notes: notes || undefined,
           updatedOptionIds: selectedOptionIds,
-          updatedAmount: totalWithCommission,
+          updatedAmount: totalAmount, // Prix du service (sans commission) - la commission sera calculée côté backend
         });
 
         if (result.success) {
@@ -686,7 +740,7 @@ export default function ReservationPage({
           coordinates: coordinates || undefined,
           notes: notes?.trim() || undefined,
           updatedOptionIds: selectedOptionIds,
-          updatedAmount: totalWithCommission,
+          updatedAmount: totalAmount, // Prix du service (sans commission) - la commission sera calculée côté backend
         });
 
         if (result.success && result.token) {
@@ -1477,25 +1531,21 @@ export default function ReservationPage({
 
                   {/* Commission */}
                   {commissionRate > 0 && (
-                    <div className="mt-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-text-light flex items-center gap-1">
-                          <Percent className="w-3 h-3" />
-                          Frais de service ({commissionRate}%)
-                        </span>
-                        <span className="text-foreground">
-                          +{formatPrice(commissionAmount)}
-                        </span>
-                      </div>
-                      <div className="mt-1 p-2 bg-blue-50 rounded-lg">
-                        <p className="text-xs text-blue-600 flex items-start gap-1.5">
-                          <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                          <span>
-                            Ces frais assurent le bon fonctionnement de la plateforme,
-                            la mise en relation sécurisée et notre service client.
-                          </span>
-                        </p>
-                      </div>
+                    <div className="flex items-center justify-between text-sm mt-2">
+                      <span className="text-text-light flex items-center gap-1.5">
+                        <Percent className="w-3 h-3" />
+                        Frais de service ({commissionRate}%)
+                        <div className="relative group">
+                          <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 w-48 text-center z-50 shadow-lg">
+                            Ces frais assurent le bon fonctionnement de la plateforme, la mise en relation sécurisée et notre service client.
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+                          </div>
+                        </div>
+                      </span>
+                      <span className="text-foreground">
+                        +{formatPrice(commissionAmount)}
+                      </span>
                     </div>
                   )}
 

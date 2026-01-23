@@ -21,6 +21,7 @@ import OvernightStaySection from "./OvernightStaySection";
 import VariantFormSection from "./VariantFormSection";
 import DisplayFormatSelector from "./DisplayFormatSelector";
 import CapacityBasedSelector from "./CapacityBasedSelector";
+import DurationBlockingSelector from "./DurationBlockingSelector";
 
 interface CategoryFormProps {
   mode: "add" | "edit";
@@ -97,6 +98,10 @@ export default function CategoryForm({
 
   const handleCapacityBasedChange = (isCapacityBased: boolean) => {
     onFormDataChange((prev) => ({ ...prev, isCapacityBased }));
+  };
+
+  const handleDurationBlockingChange = (enableDurationBasedBlocking: boolean) => {
+    onFormDataChange((prev) => ({ ...prev, enableDurationBasedBlocking }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -267,6 +272,12 @@ export default function CategoryForm({
               allowOvernightStay={formData.allowOvernightStay}
               onRangeBookingChange={handleRangeBookingChange}
               onOvernightStayChange={handleOvernightStayChange}
+            />
+
+            {/* Blocage basé sur la durée */}
+            <DurationBlockingSelector
+              value={formData.enableDurationBasedBlocking}
+              onChange={handleDurationBlockingChange}
             />
 
             {/* Types de prix autorisés */}

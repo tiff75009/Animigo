@@ -38,6 +38,7 @@ interface BookingData {
   selectedEndTime: string | null;
   includeOvernightStay: boolean;
   selectedOptionIds: string[];
+  serviceLocation: "announcer_home" | "client_home" | null;
 }
 
 // Step labels
@@ -106,6 +107,9 @@ function calculateSmartPrice(params: {
     nightly?: number;
   };
   optionsTotal: number;
+  // For duration-based blocking: use fixed price instead of hourly calculation
+  fixedServicePrice?: number;
+  serviceDurationMinutes?: number;
 }): PriceCalculationResult {
   const {
     startDate,
@@ -118,6 +122,8 @@ function calculateSmartPrice(params: {
     workdayHours,
     pricing,
     optionsTotal,
+    fixedServicePrice,
+    serviceDurationMinutes,
   } = params;
 
   // Determine rates (derive missing rates from available ones)
@@ -134,6 +140,32 @@ function calculateSmartPrice(params: {
     let firstDayHours: number;
     let firstDayAmount: number;
     let firstDayIsFullDay = false;
+
+    // Duration-based blocking: use fixed price
+    if (fixedServicePrice !== undefined && serviceDurationMinutes !== undefined) {
+      firstDayHours = serviceDurationMinutes / 60;
+      firstDayAmount = fixedServicePrice;
+      // Not a "full day" in the traditional sense, it's a fixed duration service
+      firstDayIsFullDay = false;
+
+      return {
+        firstDayAmount,
+        firstDayHours,
+        firstDayIsFullDay,
+        fullDays: 0,
+        fullDaysAmount: 0,
+        lastDayAmount: 0,
+        lastDayHours: 0,
+        lastDayIsFullDay: false,
+        nightsAmount: 0,
+        nights: 0,
+        optionsAmount: optionsTotal,
+        totalAmount: firstDayAmount + optionsTotal,
+        hourlyRate: 0, // Not applicable for fixed price
+        dailyRate: 0,
+        nightlyRate,
+      };
+    }
 
     if (startTime && endTime) {
       // Specific time range
@@ -261,6 +293,7 @@ export default function ReserverPage({
     selectedEndTime: null,
     includeOvernightStay: false,
     selectedOptionIds: [],
+    serviceLocation: null,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -286,6 +319,15 @@ export default function ReserverPage({
   const workdayConfig = useQuery(api.admin.config.getWorkdayConfig);
   const workdayHours = workdayConfig?.workdayHours ?? 8;
 
+  // Commission rate based on announcer type
+  const commissionData = useQuery(
+    api.admin.commissions.getCommissionRate,
+    announcerData?.statusType
+      ? { announcerType: announcerData.statusType }
+      : "skip"
+  );
+  const commissionRate = commissionData?.rate ?? 15; // Default 15% for particuliers
+
   // Selected service and variant (needed before calendar query)
   const selectedService = serviceDetails?.find(
     (s: ServiceDetail) => s.id === bookingData.serviceId
@@ -299,14 +341,22 @@ export default function ReserverPage({
   const startOfMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
   const endOfMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0);
 
+  // Format dates without toISOString() to avoid timezone issues
+  const formatDateLocal = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
   const availabilityCalendar = useQuery(
     api.public.search.getAnnouncerAvailabilityCalendar,
     bookingData.serviceId && selectedService
       ? {
           announcerId: announcerId as Id<"users">,
           serviceCategory: selectedService.category,
-          startDate: startOfMonth.toISOString().split("T")[0],
-          endDate: endOfMonth.toISOString().split("T")[0],
+          startDate: formatDateLocal(startOfMonth),
+          endDate: formatDateLocal(endOfMonth),
         }
       : "skip"
   );
@@ -387,6 +437,9 @@ export default function ReserverPage({
     const dayEndTime = selectedService.dayEndTime ||
                        announcerPreferences?.acceptReservationsTo || "20:00";
 
+    // For duration-based blocking, use the variant's fixed price
+    const useDurationBasedPricing = selectedService.enableDurationBasedBlocking && selectedVariant.duration;
+
     return calculateSmartPrice({
       startDate: bookingData.selectedDate,
       endDate: bookingData.selectedEndDate,
@@ -402,6 +455,9 @@ export default function ReserverPage({
         nightly: pricing?.nightly || selectedService.overnightPrice,
       },
       optionsTotal,
+      // Pass fixed price and duration for duration-based blocking
+      fixedServicePrice: useDurationBasedPricing ? selectedVariant.price : undefined,
+      serviceDurationMinutes: useDurationBasedPricing ? selectedVariant.duration : undefined,
     });
   }, [selectedVariant, selectedService, bookingData, workdayHours, announcerPreferences, optionsTotal]);
 
@@ -439,6 +495,7 @@ export default function ReserverPage({
         includeOvernightStay: bookingData.includeOvernightStay && nights > 0 ? true : undefined,
         overnightNights: nights > 0 ? nights : undefined,
         overnightAmount: overnightAmount > 0 ? overnightAmount : undefined,
+        serviceLocation: bookingData.serviceLocation || undefined,
         token: token || undefined,
       });
 
@@ -468,7 +525,11 @@ export default function ReserverPage({
   const canProceed = () => {
     switch (step) {
       case 1:
-        return bookingData.serviceId && bookingData.variantId;
+        // Service et variante requis
+        if (!bookingData.serviceId || !bookingData.variantId) return false;
+        // Si le service propose "both", le lieu doit être sélectionné
+        if (selectedService?.serviceLocation === "both" && !bookingData.serviceLocation) return false;
+        return true;
       case 2:
         if (isRangeMode) {
           // Range mode: start date required (end date optional for single day)
@@ -491,14 +552,20 @@ export default function ReserverPage({
   };
 
   // Handlers for step components (using functional updates to avoid stale closures)
-  const handleFormulaSelect = (serviceId: string, variantId: string) => {
+  const handleFormulaSelect = (serviceId: string, variantId: string, autoServiceLocation?: "announcer_home" | "client_home" | null) => {
     setBookingData((prev) => ({
       ...prev,
       serviceId,
       variantId,
       // Reset options when changing formula
       selectedOptionIds: [],
+      // Auto-set service location if service only offers one option
+      serviceLocation: autoServiceLocation !== undefined ? autoServiceLocation : prev.serviceLocation,
     }));
+  };
+
+  const handleServiceLocationSelect = (location: "announcer_home" | "client_home") => {
+    setBookingData((prev) => ({ ...prev, serviceLocation: location }));
   };
 
   const handleDateSelect = (date: string) => {
@@ -510,8 +577,18 @@ export default function ReserverPage({
   };
 
   const handleTimeSelect = (time: string) => {
-    // Reset end time when start time changes
-    setBookingData((prev) => ({ ...prev, selectedTime: time, selectedEndTime: null }));
+    // For duration-based blocking, auto-calculate end time
+    if (selectedService?.enableDurationBasedBlocking && selectedVariant?.duration) {
+      const [hours, minutes] = time.split(":").map(Number);
+      const totalMinutes = hours * 60 + minutes + selectedVariant.duration;
+      const endHours = Math.floor(totalMinutes / 60);
+      const endMinutes = totalMinutes % 60;
+      const calculatedEndTime = `${String(endHours).padStart(2, "0")}:${String(endMinutes).padStart(2, "0")}`;
+      setBookingData((prev) => ({ ...prev, selectedTime: time, selectedEndTime: calculatedEndTime }));
+    } else {
+      // Reset end time when start time changes (normal mode)
+      setBookingData((prev) => ({ ...prev, selectedTime: time, selectedEndTime: null }));
+    }
   };
 
   const handleEndTimeSelect = (time: string) => {
@@ -625,7 +702,11 @@ export default function ReserverPage({
                 services={serviceDetails as ServiceDetail[]}
                 selectedServiceId={bookingData.serviceId}
                 selectedVariantId={bookingData.variantId}
+                selectedServiceLocation={bookingData.serviceLocation}
+                commissionRate={commissionRate}
+                preSelectedFromSidebar={!!preSelectedServiceId}
                 onSelect={handleFormulaSelect}
+                onServiceLocationSelect={handleServiceLocationSelect}
               />
             )}
 
@@ -646,6 +727,11 @@ export default function ReserverPage({
                 nights={nights}
                 isCapacityBased={availabilityCalendar?.isCapacityBased}
                 maxAnimalsPerSlot={availabilityCalendar?.maxAnimalsPerSlot}
+                enableDurationBasedBlocking={selectedService.enableDurationBasedBlocking}
+                bufferBefore={availabilityCalendar?.bufferBefore}
+                bufferAfter={availabilityCalendar?.bufferAfter}
+                acceptReservationsFrom={availabilityCalendar?.acceptReservationsFrom}
+                acceptReservationsTo={availabilityCalendar?.acceptReservationsTo}
                 onDateSelect={handleDateSelect}
                 onEndDateSelect={handleEndDateSelect}
                 onTimeSelect={handleTimeSelect}
@@ -682,6 +768,8 @@ export default function ReserverPage({
                 days={days}
                 selectedOptionIds={bookingData.selectedOptionIds}
                 priceBreakdown={priceCalculation}
+                serviceLocation={bookingData.serviceLocation}
+                commissionRate={commissionRate}
                 error={error}
               />
             )}

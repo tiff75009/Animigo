@@ -417,6 +417,37 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.12.0 - Blocage par Duree et Ameliorations UX Reservations
+
+- **Blocage des creneaux base sur la duree du service**
+  - Nouvelle option `enableDurationBasedBlocking` sur les sous-categories admin
+  - Permet de bloquer automatiquement le creneau selon : duree du service + buffer apres
+  - Exemple : toilettage 1h a 10h avec buffer 30min → bloque 10h00-11h30
+  - Configurateur visuel dans le formulaire de sous-categorie avec exemple de calcul
+  - Calcul du prix fixe base sur la formule selectionnee (pas de tarif horaire)
+
+- **Calendriers responsives (bottom sheet mobile)**
+  - Filtre de date sur la page recherche : bottom sheet sur mobile, dropdown sur desktop
+  - Calendrier "Voir les dispo" des cartes annonceur : deja en bottom sheet
+  - Handle bar de glissement et bouton fermer sur mobile
+  - Overlay sombre avec fermeture au clic
+  - Coordination : un seul calendrier ouvert a la fois
+
+- **Ameliorations page de finalisation** (`/reservation/[bookingId]`)
+  - Tooltip CSS pour les details de commission (remplace l'info box)
+  - Pre-remplissage automatique de l'adresse depuis le profil client
+  - Fonctionne uniquement pour les prestations a domicile (client_home)
+
+- **Verification preventive des disponibilites**
+  - Verification des disponibilites et conflits dans `createPendingBooking`
+  - Erreur immediate si l'annonceur est indisponible (avant de remplir le formulaire)
+  - Double securite avec la verification existante dans `finalizeBooking`
+
+- **Corrections TypeScript**
+  - Correction du type `AvailabilityStatus` dans ServiceCard
+  - Correction du type `accountType` dans search.ts (`annonceur_pro` au lieu de `pro`)
+  - Suppression des proprietes inexistantes `originalStartTime`/`originalEndTime`
+
 ### v0.11.0 - Profil Client avec Adresse et Coordonnees
 
 - **Nouvelle page Profil Client** (`/client/profil`)

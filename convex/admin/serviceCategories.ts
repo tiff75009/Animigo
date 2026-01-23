@@ -75,6 +75,7 @@ export const listCategories = query({
           allowOvernightStay: cat.allowOvernightStay,
           displayFormat: cat.displayFormat,
           isCapacityBased: cat.isCapacityBased,
+          enableDurationBasedBlocking: cat.enableDurationBasedBlocking,
           createdAt: cat.createdAt,
           updatedAt: cat.updatedAt,
         };
@@ -174,6 +175,7 @@ export const getActiveCategories = query({
               defaultVariants: child.defaultVariants,
               allowCustomVariants: child.allowCustomVariants,
               allowOvernightStay: child.allowOvernightStay,
+              enableDurationBasedBlocking: child.enableDurationBasedBlocking,
             };
           })
         );
@@ -212,6 +214,7 @@ export const getActiveCategories = query({
           defaultVariants: cat.defaultVariants,
           allowCustomVariants: cat.allowCustomVariants,
           allowOvernightStay: cat.allowOvernightStay,
+          enableDurationBasedBlocking: cat.enableDurationBasedBlocking,
         };
       })
     );
@@ -273,6 +276,8 @@ export const createCategory = mutation({
     )),
     // Catégorie basée sur la capacité (uniquement pour catégories parentes)
     isCapacityBased: v.optional(v.boolean()),
+    // Blocage basé sur la durée (uniquement pour sous-catégories)
+    enableDurationBasedBlocking: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx, args.token);
@@ -319,6 +324,8 @@ export const createCategory = mutation({
       defaultVariants: args.parentCategoryId ? args.defaultVariants : undefined,
       allowCustomVariants: args.parentCategoryId ? args.allowCustomVariants : undefined,
       allowOvernightStay: args.parentCategoryId ? args.allowOvernightStay : undefined,
+      // Blocage basé sur la durée (uniquement pour les sous-catégories)
+      enableDurationBasedBlocking: args.parentCategoryId ? args.enableDurationBasedBlocking : undefined,
       // Format d'affichage (uniquement pour les catégories parentes)
       displayFormat: !args.parentCategoryId ? args.displayFormat : undefined,
       // Catégorie basée sur la capacité (uniquement pour les catégories parentes)
@@ -374,6 +381,8 @@ export const updateCategory = mutation({
     )),
     // Catégorie basée sur la capacité (uniquement pour catégories parentes)
     isCapacityBased: v.optional(v.boolean()),
+    // Blocage basé sur la durée (uniquement pour sous-catégories)
+    enableDurationBasedBlocking: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx, args.token);
@@ -444,6 +453,7 @@ export const updateCategory = mutation({
     if (args.allowOvernightStay !== undefined) updates.allowOvernightStay = args.allowOvernightStay;
     if (args.displayFormat !== undefined) updates.displayFormat = args.displayFormat;
     if (args.isCapacityBased !== undefined) updates.isCapacityBased = args.isCapacityBased;
+    if (args.enableDurationBasedBlocking !== undefined) updates.enableDurationBasedBlocking = args.enableDurationBasedBlocking;
 
     await ctx.db.patch(args.categoryId, updates);
 

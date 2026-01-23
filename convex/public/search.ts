@@ -4,6 +4,7 @@ import { Id, Doc } from "../_generated/dataModel";
 import { ConvexError } from "convex/values";
 import { missionsOverlap, missionsOverlapWithBuffers, addMinutesToTime, subtractMinutesFromTime, applyBuffersToTimeSlot } from "../lib/timeUtils";
 import { checkBookingConflict, checkCapacityAvailability, isCategoryCapacityBased, getAllSubcategorySlugs } from "../lib/capacityUtils";
+import { getDefaultPricing } from "../utils/defaultPricing";
 
 // Calcul de distance avec la formule de Haversine (en km)
 function calculateDistance(
@@ -560,6 +561,10 @@ interface ServiceDetail {
   overnightPrice?: number;
   // Service location
   serviceLocation?: "announcer_home" | "client_home" | "both";
+  // Duration-based blocking (from category settings)
+  enableDurationBasedBlocking?: boolean;
+  // Price range for positioning indicator
+  priceRange?: { min: number; max: number; avg: number };
 }
 
 // Query pour obtenir les détails des services d'un annonceur
@@ -568,6 +573,10 @@ export const getAnnouncerServiceDetails = query({
     announcerId: v.id("users"),
   },
   handler: async (ctx, args): Promise<ServiceDetail[]> => {
+    // Récupérer le type de compte de l'annonceur (pro ou particulier)
+    const announcer = await ctx.db.get(args.announcerId);
+    const accountType = announcer?.accountType === "annonceur_pro" ? "pro" : "particulier";
+
     // Récupérer les services actifs de l'annonceur
     const services = await ctx.db
       .query("services")
@@ -599,6 +608,26 @@ export const getAnnouncerServiceDetails = query({
 
       const categoryData = categoryMap.get(service.category);
 
+      // Récupérer le price range pour cette catégorie
+      // Utiliser le premier variant pour déterminer l'unité de prix principale
+      const firstVariant = variants[0];
+      let priceRange: { min: number; max: number; avg: number } | undefined;
+      if (firstVariant) {
+        // Déterminer l'unité de prix principale
+        const pricing = firstVariant.pricing as { hourly?: number; daily?: number; weekly?: number; monthly?: number } | undefined;
+        let priceUnit: "hour" | "day" | "week" | "month" | "flat" = "hour";
+        if (pricing?.daily) priceUnit = "day";
+        else if (pricing?.weekly) priceUnit = "week";
+        else if (pricing?.monthly) priceUnit = "month";
+        else if (pricing?.hourly) priceUnit = "hour";
+        else priceUnit = "flat";
+
+        const defaultRange = getDefaultPricing(service.category, priceUnit, accountType);
+        if (defaultRange) {
+          priceRange = defaultRange;
+        }
+      }
+
       results.push({
         id: service._id,
         category: service.category,
@@ -613,6 +642,10 @@ export const getAnnouncerServiceDetails = query({
         overnightPrice: service.overnightPrice,
         // Service location
         serviceLocation: service.serviceLocation as "announcer_home" | "client_home" | "both" | undefined,
+        // Duration-based blocking (from category settings)
+        enableDurationBasedBlocking: categoryData?.enableDurationBasedBlocking,
+        // Price range
+        priceRange,
         variants: variants.map((v) => ({
           id: v._id,
           name: v.name,
@@ -759,9 +792,17 @@ export const getAnnouncerAvailabilityCalendar = query({
       .withIndex("by_user", (q) => q.eq("userId", args.announcerId))
       .first();
 
+    // Récupérer les préférences utilisateur pour les horaires de disponibilité
+    const userPreferences = await ctx.db
+      .query("userPreferences")
+      .withIndex("by_user", (q) => q.eq("userId", args.announcerId))
+      .first();
+
     const bufferBefore = profile?.bufferBefore ?? 0;
     const bufferAfter = profile?.bufferAfter ?? 0;
     const maxAnimalsPerSlot = profile?.maxAnimalsPerSlot ?? 1;
+    const acceptReservationsFrom = userPreferences?.acceptReservationsFrom ?? "08:00";
+    const acceptReservationsTo = userPreferences?.acceptReservationsTo ?? "20:00";
 
     // Vérifier si la catégorie est basée sur la capacité
     const isCapacityBasedCategory = await isCategoryCapacityBased(ctx.db, args.serviceCategory);
@@ -972,6 +1013,9 @@ export const getAnnouncerAvailabilityCalendar = query({
       calendar,
       bufferBefore,
       bufferAfter,
+      // Horaires de disponibilité de l'annonceur
+      acceptReservationsFrom,
+      acceptReservationsTo,
       // Informations de capacité globales
       isCapacityBased: isCapacityBasedCategory,
       maxAnimalsPerSlot: isCapacityBasedCategory ? maxAnimalsPerSlot : undefined,
@@ -1009,12 +1053,23 @@ export const getAnnouncerById = query({
       profileImageUrl = await ctx.storage.getUrl(profilePhoto.storageId);
     }
 
+    // Déterminer le type de statut pour la commission
+    let statusType: "particulier" | "micro_entrepreneur" | "professionnel" = "particulier";
+    if (announcer.accountType === "annonceur_pro") {
+      if (announcer.companyType === "micro_enterprise") {
+        statusType = "micro_entrepreneur";
+      } else {
+        statusType = "professionnel";
+      }
+    }
+
     return {
       id: announcer._id,
       firstName: announcer.firstName,
       lastName: announcer.lastName,
       profileImage: profileImageUrl,
       location: profile?.city ?? profile?.location ?? "",
+      statusType,
     };
   },
 });
@@ -1045,6 +1100,7 @@ interface ServiceSearchResult {
   basePrice: number;
   basePriceUnit: "hour" | "day" | "week" | "month" | "flat";
   animalTypes: string[];
+  serviceLocation?: "announcer_home" | "client_home" | "both";
 
   // Preview variantes (2-3 max)
   variants: Array<{
@@ -1059,6 +1115,17 @@ interface ServiceSearchResult {
     status: "available" | "partial" | "unavailable";
     nextAvailable?: string;
   };
+
+  // Capacity info for garde categories (when dates are selected)
+  capacityInfo?: {
+    isCapacityBased: boolean;
+    currentCount: number;
+    maxCapacity: number;
+    remainingCapacity: number;
+  };
+
+  // Price range for positioning indicator
+  priceRange?: { min: number; max: number; avg: number };
 }
 
 // Query de recherche par service (1 carte par service au lieu de 1 carte par annonceur)
@@ -1098,6 +1165,12 @@ export const searchServices = query({
     priceMin: v.optional(v.number()),
     priceMax: v.optional(v.number()),
     sortBy: v.optional(v.string()),
+
+    // Filtre lieu de prestation
+    serviceLocation: v.optional(v.array(v.union(
+      v.literal("announcer_home"),
+      v.literal("client_home")
+    ))),
 
     // Pagination
     limit: v.optional(v.number()),
@@ -1228,6 +1301,21 @@ export const searchServices = query({
         // Filtrer par type d'animal
         if (args.animalType && !service.animalTypes.includes(args.animalType)) continue;
 
+        // Filtrer par lieu de prestation
+        // Un service avec "both" matche tous les filtres
+        // Un service avec "announcer_home" ou "client_home" matche si inclus dans le filtre
+        if (args.serviceLocation && args.serviceLocation.length > 0) {
+          const serviceLocation = service.serviceLocation;
+          // Si le service n'a pas de lieu défini, on le considère comme "both" (les deux possibles)
+          if (serviceLocation && serviceLocation !== "both") {
+            // Le service ne propose qu'un seul lieu, vérifier s'il est dans le filtre
+            if (!args.serviceLocation.includes(serviceLocation as "announcer_home" | "client_home")) {
+              continue;
+            }
+          }
+          // Si serviceLocation est "both" ou undefined, le service passe le filtre
+        }
+
         // Récupérer les variants
         const variants = await ctx.db
           .query("serviceVariants")
@@ -1298,8 +1386,12 @@ export const searchServices = query({
         if (args.priceMin !== undefined && basePrice < args.priceMin * 100) continue;
         if (args.priceMax !== undefined && basePrice > args.priceMax * 100) continue;
 
+        // Récupérer le price range pour cette catégorie
+        const priceRange = getDefaultPricing(service.category, basePriceUnit, statusType === "professionnel" ? "pro" : "particulier") ?? undefined;
+
         // Vérifier la disponibilité pour ce service
         let availability: { status: "available" | "partial" | "unavailable"; nextAvailable?: string } = { status: "available" };
+        let capacityInfo: { isCapacityBased: boolean; currentCount: number; maxCapacity: number; remainingCapacity: number; } | undefined;
 
         // Déterminer les dates à vérifier
         let datesToCheck: string[] = [];
@@ -1322,85 +1414,126 @@ export const searchServices = query({
             unavailableDateSet.has(d)
           );
 
-          // Vérifier les missions existantes pour cette catégorie
-          const existingMissions = await ctx.db
-            .query("missions")
-            .withIndex("by_announcer", (q) => q.eq("announcerId", announcer._id))
-            .filter((q) =>
-              q.and(
-                q.eq(q.field("serviceCategory"), service.category),
-                q.neq(q.field("status"), "cancelled"),
-                q.neq(q.field("status"), "refused")
-              )
-            )
-            .collect();
-
           // Récupérer les buffers (temps de préparation) de l'annonceur
           const bufferBeforeService = profile?.bufferBefore ?? 0;
           const bufferAfterService = profile?.bufferAfter ?? 0;
 
-          const hasConflictingMission = existingMissions.some((mission) => {
+          // Vérifier si la catégorie est basée sur la capacité
+          const isCapacityBasedCategory = await isCategoryCapacityBased(ctx.db, service.category);
+
+          if (isCapacityBasedCategory) {
+            // Mode capacité: vérifier les places disponibles
             const searchStartDate = args.date || args.startDate!;
             const searchEndDate = args.date || args.endDate!;
+            const searchSlot = {
+              startDate: searchStartDate,
+              endDate: searchEndDate,
+              startTime: args.time,
+              endTime: args.time ? addMinutesToTime(args.time, 60) : undefined,
+            };
 
-            if (!datesOverlap(mission.startDate, mission.endDate, searchStartDate, searchEndDate)) {
-              return false;
+            const capacityCheck = await checkCapacityAvailability(
+              ctx.db,
+              announcer._id,
+              service.category,
+              searchSlot,
+              bufferBeforeService,
+              bufferAfterService
+            );
+
+            capacityInfo = {
+              isCapacityBased: true,
+              currentCount: capacityCheck.currentCount,
+              maxCapacity: capacityCheck.maxCapacity,
+              remainingCapacity: capacityCheck.remainingCapacity,
+            };
+
+            if (hasManualUnavailability) {
+              availability = { status: "unavailable" };
+              if (!args.includeUnavailable) continue;
+            } else if (!capacityCheck.isAvailable) {
+              availability = { status: "unavailable" };
+              if (!args.includeUnavailable) continue;
+            } else if (capacityCheck.remainingCapacity < capacityCheck.maxCapacity) {
+              // Partiellement disponible (certaines places prises)
+              availability = { status: "partial" };
             }
+          } else {
+            // Mode standard: vérifier les chevauchements
+            const existingMissions = await ctx.db
+              .query("missions")
+              .withIndex("by_announcer", (q) => q.eq("announcerId", announcer._id))
+              .filter((q) =>
+                q.and(
+                  q.eq(q.field("serviceCategory"), service.category),
+                  q.neq(q.field("status"), "cancelled"),
+                  q.neq(q.field("status"), "refused")
+                )
+              )
+              .collect();
 
-            if (args.time) {
-              const searchSlot = {
-                startDate: searchStartDate,
-                endDate: searchEndDate,
-                startTime: args.time,
-                endTime: addMinutesToTime(args.time, 60),
-              };
+            const hasConflictingMission = existingMissions.some((mission) => {
+              const searchStartDate = args.date || args.startDate!;
+              const searchEndDate = args.date || args.endDate!;
 
-              // Utiliser missionsOverlapWithBuffers pour prendre en compte le temps de préparation
-              return missionsOverlapWithBuffers(
-                { startDate: mission.startDate, endDate: mission.endDate, startTime: mission.startTime, endTime: mission.endTime },
-                searchSlot,
-                bufferBeforeService,
-                bufferAfterService
-              );
-            }
-
-            const isMultiDay = mission.startDate !== mission.endDate;
-            const hasNoTimeSlot = !mission.startTime || !mission.endTime;
-            return isMultiDay || hasNoTimeSlot;
-          });
-
-          if (hasManualUnavailability || hasConflictingMission) {
-            // Trouver la prochaine date disponible
-            const today = new Date();
-            const nextDays: string[] = [];
-            for (let i = 1; i <= 30; i++) {
-              const d = new Date(today);
-              d.setDate(d.getDate() + i);
-              const year = d.getFullYear();
-              const month = String(d.getMonth() + 1).padStart(2, "0");
-              const day = String(d.getDate()).padStart(2, "0");
-              nextDays.push(`${year}-${month}-${day}`);
-            }
-
-            let nextAvailable: string | undefined;
-            for (const day of nextDays) {
-              const isUnavailable = unavailableDateSet.has(day);
-              const hasFullDayBlock = existingMissions.some((m) => {
-                if (!datesOverlap(m.startDate, m.endDate, day, day)) return false;
-                const isMultiDay = m.startDate !== m.endDate;
-                const hasNoTimeSlot = !m.startTime || !m.endTime;
-                return isMultiDay || hasNoTimeSlot;
-              });
-
-              if (!isUnavailable && !hasFullDayBlock) {
-                nextAvailable = day;
-                break;
+              if (!datesOverlap(mission.startDate, mission.endDate, searchStartDate, searchEndDate)) {
+                return false;
               }
+
+              if (args.time) {
+                const searchSlot = {
+                  startDate: searchStartDate,
+                  endDate: searchEndDate,
+                  startTime: args.time,
+                  endTime: addMinutesToTime(args.time, 60),
+                };
+
+                return missionsOverlapWithBuffers(
+                  { startDate: mission.startDate, endDate: mission.endDate, startTime: mission.startTime, endTime: mission.endTime },
+                  searchSlot,
+                  bufferBeforeService,
+                  bufferAfterService
+                );
+              }
+
+              const isMultiDay = mission.startDate !== mission.endDate;
+              const hasNoTimeSlot = !mission.startTime || !mission.endTime;
+              return isMultiDay || hasNoTimeSlot;
+            });
+
+            if (hasManualUnavailability || hasConflictingMission) {
+              // Trouver la prochaine date disponible
+              const today = new Date();
+              const nextDays: string[] = [];
+              for (let i = 1; i <= 30; i++) {
+                const d = new Date(today);
+                d.setDate(d.getDate() + i);
+                const year = d.getFullYear();
+                const month = String(d.getMonth() + 1).padStart(2, "0");
+                const day = String(d.getDate()).padStart(2, "0");
+                nextDays.push(`${year}-${month}-${day}`);
+              }
+
+              let nextAvailable: string | undefined;
+              for (const day of nextDays) {
+                const isUnavailable = unavailableDateSet.has(day);
+                const hasFullDayBlock = existingMissions.some((m) => {
+                  if (!datesOverlap(m.startDate, m.endDate, day, day)) return false;
+                  const isMultiDay = m.startDate !== m.endDate;
+                  const hasNoTimeSlot = !m.startTime || !m.endTime;
+                  return isMultiDay || hasNoTimeSlot;
+                });
+
+                if (!isUnavailable && !hasFullDayBlock) {
+                  nextAvailable = day;
+                  break;
+                }
+              }
+
+              availability = { status: "unavailable", nextAvailable };
+
+              if (!args.includeUnavailable) continue;
             }
-
-            availability = { status: "unavailable", nextAvailable };
-
-            if (!args.includeUnavailable) continue;
           }
         }
 
@@ -1426,6 +1559,7 @@ export const searchServices = query({
           basePrice,
           basePriceUnit,
           animalTypes: service.animalTypes,
+          serviceLocation: service.serviceLocation as "announcer_home" | "client_home" | "both" | undefined,
           variants: variants.slice(0, 3).map((v) => ({
             id: v._id,
             name: v.name,
@@ -1433,6 +1567,8 @@ export const searchServices = query({
             unit: v.priceUnit,
           })),
           availability,
+          capacityInfo,
+          priceRange,
         });
       }
     }

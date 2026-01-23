@@ -9,12 +9,19 @@ import { cn } from "@/app/lib/utils";
 
 interface AnnouncerMobileCTAProps {
   services: ServiceData[];
+  commissionRate?: number; // Taux de commission en %
   onBook?: (serviceId?: string, variantId?: string) => void;
 }
 
 // Helper pour formater le prix (centimes -> euros)
 const formatPrice = (priceInCents: number) => {
-  return (priceInCents / 100).toFixed(0);
+  return (priceInCents / 100).toFixed(2).replace(".", ",");
+};
+
+// Calculer le prix avec commission
+const calculatePriceWithCommission = (basePriceCents: number, commissionRate: number): number => {
+  const commission = Math.round((basePriceCents * commissionRate) / 100);
+  return basePriceCents + commission;
 };
 
 // Labels des unités de prix
@@ -26,7 +33,7 @@ const priceUnitLabels: Record<string, string> = {
   flat: "",
 };
 
-export default function AnnouncerMobileCTA({ services, onBook }: AnnouncerMobileCTAProps) {
+export default function AnnouncerMobileCTA({ services, commissionRate = 15, onBook }: AnnouncerMobileCTAProps) {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
 
   // Trouver le prix minimum parmi tous les services
@@ -67,7 +74,7 @@ export default function AnnouncerMobileCTA({ services, onBook }: AnnouncerMobile
             <p className="text-sm text-gray-500">À partir de</p>
             {hasPrice ? (
               <p className="text-xl font-bold text-gray-900">
-                {formatPrice(minPrice)}€
+                {formatPrice(calculatePriceWithCommission(minPrice, commissionRate))}€
                 <span className="text-sm font-normal text-gray-500">/prestation</span>
               </p>
             ) : (
@@ -164,7 +171,7 @@ export default function AnnouncerMobileCTA({ services, onBook }: AnnouncerMobile
                               </div>
                               <div className="flex items-center gap-2 flex-shrink-0">
                                 <span className="text-lg font-bold text-primary">
-                                  {formatPrice(formule.price)}€
+                                  {formatPrice(calculatePriceWithCommission(formule.price, commissionRate))}€
                                   <span className="text-sm font-normal text-gray-500">
                                     {formule.unit ? priceUnitLabels[formule.unit] || "" : ""}
                                   </span>

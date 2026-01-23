@@ -1,7 +1,12 @@
 // Helper functions for the platform
 
 export function formatPrice(cents: number): string {
-  return (cents / 100).toFixed(0) + "\u00A0€";
+  const euros = cents / 100;
+  // Si le montant a des centimes, les afficher
+  if (euros % 1 !== 0) {
+    return euros.toFixed(2).replace(".", ",") + "\u00A0€";
+  }
+  return euros.toFixed(0) + "\u00A0€";
 }
 
 export function extractCity(location: string): string {

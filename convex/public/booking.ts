@@ -60,6 +60,11 @@ export const createPendingBooking = mutation({
     includeOvernightStay: v.optional(v.boolean()),
     overnightNights: v.optional(v.number()),
     overnightAmount: v.optional(v.number()),
+    // Lieu de prestation
+    serviceLocation: v.optional(v.union(
+      v.literal("announcer_home"),
+      v.literal("client_home")
+    )),
     // Token optionnel (si utilisateur connecté)
     token: v.optional(v.string()),
   },
@@ -80,12 +85,75 @@ export const createPendingBooking = mutation({
 
     // Récupérer la variante pour obtenir la durée
     const variant = await ctx.db.get(args.variantId as Id<"serviceVariants">);
+
+    // Récupérer le service pour obtenir la catégorie
+    const service = await ctx.db.get(args.serviceId);
+    if (!service) {
+      throw new ConvexError("Service non trouvé");
+    }
+
+    // Récupérer la catégorie pour vérifier le mode de blocage basé sur la durée
+    const category = await ctx.db
+      .query("serviceCategories")
+      .withIndex("by_slug", (q) => q.eq("slug", service.category))
+      .first();
+
+    // Si la catégorie a le blocage basé sur la durée activé, vérifier que la variante a une durée
+    if (category?.enableDurationBasedBlocking && !variant?.duration) {
+      throw new ConvexError("Cette prestation nécessite une formule avec une durée définie");
+    }
+
     const duration = variant?.duration || 60; // Par défaut 60 minutes
 
     // Utiliser endTime fourni OU calculer depuis startTime + duration
     let endTime: string | undefined = args.endTime;
     if (!endTime && args.startTime) {
       endTime = addMinutesToTime(args.startTime, duration);
+    }
+
+    // Vérifier la disponibilité de l'annonceur AVANT de créer la réservation
+    const unavailabilities = await ctx.db
+      .query("availability")
+      .withIndex("by_user", (q) => q.eq("userId", args.announcerId))
+      .filter((q) => q.eq(q.field("status"), "unavailable"))
+      .collect();
+
+    const unavailableDates = new Set(unavailabilities.map((a) => a.date));
+    const requestedDates = getDatesBetween(args.startDate, args.endDate);
+
+    for (const date of requestedDates) {
+      if (unavailableDates.has(date)) {
+        throw new ConvexError(`L'annonceur n'est pas disponible le ${date}`);
+      }
+    }
+
+    // Vérifier les conflits avec les missions existantes
+    const announcerProfile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", args.announcerId))
+      .first();
+
+    const bufferBefore = announcerProfile?.bufferBefore ?? 0;
+    const bufferAfter = announcerProfile?.bufferAfter ?? 0;
+
+    const newMissionSlot = {
+      startDate: args.startDate,
+      endDate: args.endDate,
+      startTime: args.startTime,
+      endTime,
+    };
+
+    const conflictCheck = await checkBookingConflict(
+      ctx.db,
+      args.announcerId,
+      service.category,
+      newMissionSlot,
+      bufferBefore,
+      bufferAfter
+    );
+
+    if (conflictCheck.hasConflict) {
+      throw new ConvexError(conflictCheck.conflictMessage || "L'annonceur n'est pas disponible sur ce créneau");
     }
 
     const now = Date.now();
@@ -106,6 +174,8 @@ export const createPendingBooking = mutation({
       includeOvernightStay: args.includeOvernightStay,
       overnightNights: args.overnightNights,
       overnightAmount: args.overnightAmount,
+      // Lieu de prestation
+      serviceLocation: args.serviceLocation,
       userId,
       expiresAt,
       createdAt: now,
@@ -241,6 +311,8 @@ export const getPendingBooking = query({
         dayStartTime: service.dayStartTime,
         dayEndTime: service.dayEndTime,
         overnightPrice: service.overnightPrice,
+        // Blocage basé sur la durée
+        enableDurationBasedBlocking: category?.enableDurationBasedBlocking,
       },
       variant: variant ? {
         id: variant._id,
@@ -266,6 +338,8 @@ export const getPendingBooking = query({
         overnightNights: pendingBooking.overnightNights,
         overnightAmount: pendingBooking.overnightAmount,
       },
+      // Lieu de prestation
+      serviceLocation: pendingBooking.serviceLocation,
       userId: pendingBooking.userId,
       expiresAt: pendingBooking.expiresAt,
     };
@@ -472,6 +546,8 @@ export const finalizeBooking = mutation({
       overnightAmount: pendingBooking.overnightAmount,
       dayStartTime: service.dayStartTime,
       dayEndTime: service.dayEndTime,
+      // Lieu de prestation
+      serviceLocation: pendingBooking.serviceLocation,
       createdAt: now,
       updatedAt: now,
     });

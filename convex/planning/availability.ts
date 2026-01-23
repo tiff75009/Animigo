@@ -436,3 +436,98 @@ export const setWeekendsUnavailable = mutation({
     return { success: true, datesUpdated: weekendDates.length };
   },
 });
+
+/**
+ * Admin: Supprimer une entrée de disponibilité pour un utilisateur spécifique
+ * (Utile pour déboguer/corriger les problèmes de disponibilité)
+ */
+export const adminClearAvailability = mutation({
+  args: {
+    adminToken: v.string(),
+    userId: v.id("users"),
+    date: v.string(), // "YYYY-MM-DD"
+  },
+  handler: async (ctx, args) => {
+    // Vérifier que c'est un admin
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q) => q.eq("token", args.adminToken))
+      .first();
+
+    if (!session || session.expiresAt < Date.now()) {
+      throw new ConvexError("Session invalide");
+    }
+
+    const admin = await ctx.db.get(session.userId);
+    if (!admin || admin.role !== "admin") {
+      throw new ConvexError("Accès non autorisé");
+    }
+
+    // Supprimer l'entrée de disponibilité
+    const existing = await ctx.db
+      .query("availability")
+      .withIndex("by_user_date", (q) =>
+        q.eq("userId", args.userId).eq("date", args.date)
+      )
+      .first();
+
+    if (existing) {
+      await ctx.db.delete(existing._id);
+      return { success: true, deleted: true, previousStatus: existing.status };
+    }
+
+    return { success: true, deleted: false, message: "Aucune entrée trouvée pour cette date" };
+  },
+});
+
+/**
+ * Admin: Lister les disponibilités d'un utilisateur
+ */
+export const adminGetUserAvailability = query({
+  args: {
+    adminToken: v.string(),
+    userId: v.id("users"),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // Vérifier que c'est un admin
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q) => q.eq("token", args.adminToken))
+      .first();
+
+    if (!session || session.expiresAt < Date.now()) {
+      return [];
+    }
+
+    const admin = await ctx.db.get(session.userId);
+    if (!admin || admin.role !== "admin") {
+      return [];
+    }
+
+    // Récupérer les disponibilités
+    const availabilities = await ctx.db
+      .query("availability")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    // Filtrer par plage de dates si spécifié
+    let filtered = availabilities;
+    if (args.startDate || args.endDate) {
+      filtered = availabilities.filter((a) => {
+        if (args.startDate && a.date < args.startDate) return false;
+        if (args.endDate && a.date > args.endDate) return false;
+        return true;
+      });
+    }
+
+    return filtered.map((a) => ({
+      id: a._id,
+      date: a.date,
+      status: a.status,
+      reason: a.reason,
+      timeSlots: a.timeSlots,
+    }));
+  },
+});

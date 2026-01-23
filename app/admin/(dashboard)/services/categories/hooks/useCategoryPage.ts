@@ -143,6 +143,7 @@ export function useCategoryPage(
       allowOvernightStay: category.allowOvernightStay || false,
       displayFormat: category.displayFormat || "subcategory",
       isCapacityBased: category.isCapacityBased || false,
+      enableDurationBasedBlocking: category.enableDurationBasedBlocking || false,
     });
     setEditingCategory(category);
     setFormMode("edit");
@@ -188,6 +189,9 @@ export function useCategoryPage(
           : undefined,
         allowOvernightStay: isSubcategory
           ? formData.allowOvernightStay
+          : undefined,
+        enableDurationBasedBlocking: isSubcategory
+          ? formData.enableDurationBasedBlocking
           : undefined,
       });
       resetForm();
@@ -249,6 +253,7 @@ export function useCategoryPage(
         }
         updateArgs.allowCustomVariants = formData.allowCustomVariants;
         updateArgs.allowOvernightStay = formData.allowOvernightStay;
+        updateArgs.enableDurationBasedBlocking = formData.enableDurationBasedBlocking;
       }
 
       await updateCategoryMutation(updateArgs);

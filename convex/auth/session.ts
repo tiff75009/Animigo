@@ -28,6 +28,12 @@ export const getSession = query({
       return null;
     }
 
+    // Récupérer le profil client pour l'adresse
+    const clientProfile = await ctx.db
+      .query("clientProfiles")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .first();
+
     return {
       user: {
         id: user._id,
@@ -41,6 +47,9 @@ export const getSession = query({
         emailVerified: user.emailVerified,
         createdAt: user.createdAt,
         role: user.role || "user",
+        // Adresse depuis le profil client
+        location: clientProfile?.location,
+        city: clientProfile?.city,
       },
       session: {
         expiresAt: session.expiresAt,

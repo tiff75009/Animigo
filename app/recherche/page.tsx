@@ -555,33 +555,23 @@ export default function RecherchePage() {
                 <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", showDatePicker && "rotate-180")} />
               </button>
 
-              <AnimatePresence>
-                {showDatePicker && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 4 }}
-                    className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-[100]"
-                  >
-                    <DatePickerDropdown
-                      mode={filters.searchMode === "garde" ? "range" : "single"}
-                      selectedDate={filters.date}
-                      startDate={filters.startDate}
-                      endDate={filters.endDate}
-                      onDateSelect={(date) => {
-                        setDate(date);
-                        setShowDatePicker(false);
-                      }}
-                      onRangeSelect={(start, end) => {
-                        setDateRange(start, end);
-                        setShowDatePicker(false);
-                      }}
-                      onClose={() => setShowDatePicker(false)}
-                      accentColor={filters.searchMode === "garde" ? "primary" : "secondary"}
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              <DatePickerDropdown
+                isOpen={showDatePicker}
+                mode={filters.searchMode === "garde" ? "range" : "single"}
+                selectedDate={filters.date}
+                startDate={filters.startDate}
+                endDate={filters.endDate}
+                onDateSelect={(date) => {
+                  setDate(date);
+                  setShowDatePicker(false);
+                }}
+                onRangeSelect={(start, end) => {
+                  setDateRange(start, end);
+                  setShowDatePicker(false);
+                }}
+                onClose={() => setShowDatePicker(false)}
+                accentColor={filters.searchMode === "garde" ? "primary" : "secondary"}
+              />
             </div>
 
             {/* Main Filters Button - Opens drawer */}
@@ -681,9 +671,11 @@ export default function RecherchePage() {
                   key={`${service.announcerSlug}-${service.categorySlug}`}
                   service={service}
                   index={index}
+                  hasDateFilter={!!(filters.date || filters.startDate)}
                   onViewService={(announcerSlug, categorySlug) =>
                     router.push(`/annonceur/${announcerSlug}?service=${categorySlug}`)
                   }
+                  onCalendarOpen={() => setShowDatePicker(false)}
                 />
               ))}
             </motion.div>
@@ -699,9 +691,11 @@ export default function RecherchePage() {
                   key={`${service.announcerSlug}-${service.categorySlug}`}
                   service={service}
                   index={index}
+                  hasDateFilter={!!(filters.date || filters.startDate)}
                   onViewService={(announcerSlug, categorySlug) =>
                     router.push(`/annonceur/${announcerSlug}?service=${categorySlug}`)
                   }
+                  onCalendarOpen={() => setShowDatePicker(false)}
                 />
               ))}
             </motion.div>
@@ -1031,8 +1025,9 @@ function EmptyState({ onReset }: { onReset: () => void }) {
   );
 }
 
-// Date Picker Dropdown Component
+// Date Picker Dropdown Component (Bottom sheet sur mobile, dropdown sur desktop)
 function DatePickerDropdown({
+  isOpen,
   mode,
   selectedDate,
   startDate,
@@ -1042,6 +1037,7 @@ function DatePickerDropdown({
   onClose,
   accentColor = "primary",
 }: {
+  isOpen: boolean;
   mode: "single" | "range";
   selectedDate: string | null;
   startDate: string | null;
@@ -1058,6 +1054,15 @@ function DatePickerDropdown({
   const [rangeStart, setRangeStart] = useState<string | null>(startDate);
   const [rangeEnd, setRangeEnd] = useState<string | null>(endDate);
   const [selectingEnd, setSelectingEnd] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Détecter si on est sur mobile
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 640);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   const monthNames = [
     "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
@@ -1166,13 +1171,28 @@ function DatePickerDropdown({
     ? "bg-primary/10"
     : "bg-secondary/10";
 
-  return (
-    <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-4 w-80">
-      {/* Header */}
+  // Contenu du calendrier (partagé entre mobile et desktop)
+  const calendarContent = (
+    <div className="p-4 sm:p-5">
+      {/* Header mobile avec titre et bouton fermer */}
+      <div className="flex items-center justify-between mb-4 sm:hidden">
+        <h3 className="font-semibold text-gray-900 text-lg">
+          {mode === "range" ? "Sélectionner les dates" : "Sélectionner une date"}
+        </h3>
+        <button
+          onClick={onClose}
+          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          aria-label="Fermer"
+        >
+          <X className="w-5 h-5 text-gray-500" />
+        </button>
+      </div>
+
+      {/* Navigation mois */}
       <div className="flex items-center justify-between mb-4">
         <button
           onClick={prevMonth}
-          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded-lg transition-colors"
         >
           <ChevronDown className="w-5 h-5 rotate-90" />
         </button>
@@ -1181,7 +1201,7 @@ function DatePickerDropdown({
         </span>
         <button
           onClick={nextMonth}
-          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded-lg transition-colors"
         >
           <ChevronDown className="w-5 h-5 -rotate-90" />
         </button>
@@ -1190,7 +1210,7 @@ function DatePickerDropdown({
       {/* Day names */}
       <div className="grid grid-cols-7 gap-1 mb-2">
         {dayNames.map((day) => (
-          <div key={day} className="text-center text-xs font-medium text-gray-500 py-1">
+          <div key={day} className="text-center text-xs font-medium text-gray-500 py-2">
             {day}
           </div>
         ))}
@@ -1214,10 +1234,10 @@ function DatePickerDropdown({
               onClick={() => handleDayClick(date)}
               disabled={past}
               className={cn(
-                "aspect-square flex items-center justify-center text-sm rounded-lg transition-all",
+                "aspect-square flex items-center justify-center text-sm rounded-xl transition-all font-medium",
                 past && "text-gray-300 cursor-not-allowed",
-                !past && !selected && !inRange && "hover:bg-gray-100",
-                today && !selected && "ring-1 ring-gray-300",
+                !past && !selected && !inRange && "hover:bg-gray-100 active:bg-gray-200",
+                today && !selected && "ring-2 ring-gray-300 ring-offset-1",
                 selected && accentClasses,
                 inRange && rangeClasses
               )}
@@ -1230,7 +1250,7 @@ function DatePickerDropdown({
 
       {/* Range mode hint */}
       {mode === "range" && (
-        <div className="mt-3 pt-3 border-t border-gray-100">
+        <div className="mt-4 pt-4 border-t border-gray-100">
           <p className="text-xs text-gray-500 text-center">
             {!rangeStart
               ? "Sélectionnez la date de début"
@@ -1249,7 +1269,7 @@ function DatePickerDropdown({
       )}
 
       {/* Quick actions */}
-      <div className="mt-3 pt-3 border-t border-gray-100 flex gap-2">
+      <div className="mt-4 pt-4 border-t border-gray-100 flex gap-2">
         <button
           onClick={() => {
             const today = new Date();
@@ -1261,7 +1281,7 @@ function DatePickerDropdown({
               setSelectingEnd(true);
             }
           }}
-          className="flex-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+          className="flex-1 px-3 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 rounded-xl transition-colors"
         >
           Aujourd&apos;hui
         </button>
@@ -1277,7 +1297,7 @@ function DatePickerDropdown({
               setSelectingEnd(true);
             }
           }}
-          className="flex-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+          className="flex-1 px-3 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 rounded-xl transition-colors"
         >
           Demain
         </button>
@@ -1290,12 +1310,62 @@ function DatePickerDropdown({
               end.setDate(end.getDate() + 7);
               onRangeSelect(formatDate(start), formatDate(end));
             }}
-            className="flex-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            className="flex-1 px-3 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 rounded-xl transition-colors"
           >
             Semaine
           </button>
         )}
       </div>
     </div>
+  );
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          {/* Overlay - ferme au clic */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className={cn(
+              "fixed inset-0 z-[100]",
+              isMobile ? "bg-black/40" : "bg-transparent"
+            )}
+            onClick={onClose}
+          />
+
+          {/* Mobile: Bottom Sheet */}
+          {isMobile ? (
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="fixed inset-x-0 bottom-0 z-[101] bg-white shadow-xl rounded-t-3xl max-h-[85vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Handle bar */}
+              <div className="flex justify-center pt-3 pb-1">
+                <div className="w-12 h-1.5 bg-gray-300 rounded-full" />
+              </div>
+              {calendarContent}
+            </motion.div>
+          ) : (
+            /* Desktop: Dropdown positionné */
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.15 }}
+              className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-[101] bg-white shadow-2xl border border-gray-200 rounded-2xl w-[340px]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {calendarContent}
+            </motion.div>
+          )}
+        </>
+      )}
+    </AnimatePresence>
   );
 }

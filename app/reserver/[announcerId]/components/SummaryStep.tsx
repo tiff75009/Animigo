@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { AlertCircle, Clock, MapPin, Moon, Sun } from "lucide-react";
+import { AlertCircle, Clock, MapPin, Moon, Sun, Home } from "lucide-react";
 import type { ServiceDetail, ServiceVariant } from "./FormulaStep";
 import type { ServiceOption } from "./OptionsStep";
 
@@ -42,6 +42,8 @@ interface SummaryStepProps {
   days: number;
   selectedOptionIds: string[];
   priceBreakdown: PriceBreakdown;
+  serviceLocation: "announcer_home" | "client_home" | null;
+  commissionRate?: number; // Taux de commission en %
   error: string | null;
 }
 
@@ -78,9 +80,23 @@ export default function SummaryStep({
   days,
   selectedOptionIds,
   priceBreakdown,
+  serviceLocation,
+  commissionRate = 15,
   error,
 }: SummaryStepProps) {
   const isMultiDay = selectedEndDate && selectedEndDate !== selectedDate;
+
+  // Calculer la commission et le total avec commission
+  const commissionAmount = Math.round((priceBreakdown.totalAmount * commissionRate) / 100);
+  const totalWithCommission = priceBreakdown.totalAmount + commissionAmount;
+
+  // Helper pour afficher le lieu de prestation
+  const getLocationLabel = () => {
+    if (!serviceLocation) return null;
+    return serviceLocation === "client_home"
+      ? "À domicile (chez vous)"
+      : "Chez le pet-sitter";
+  };
 
   return (
     <div className="bg-white rounded-2xl p-5 shadow-sm">
@@ -137,6 +153,19 @@ export default function SummaryStep({
             {selectedVariant.name}
           </span>
         </div>
+        {getLocationLabel() && (
+          <div className="flex justify-between text-sm">
+            <span className="text-text-light">Lieu</span>
+            <span className="font-medium text-foreground flex items-center gap-1">
+              {serviceLocation === "client_home" ? (
+                <Home className="w-3 h-3" />
+              ) : (
+                <MapPin className="w-3 h-3" />
+              )}
+              {getLocationLabel()}
+            </span>
+          </div>
+        )}
         <div className="flex justify-between text-sm">
           <span className="text-text-light">Dates</span>
           <span className="font-medium text-foreground">
@@ -273,17 +302,27 @@ export default function SummaryStep({
           </div>
         )}
 
-        {/* Total */}
-        <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200 mt-2">
-          <span>Total estimé</span>
-          <span className="text-primary">
-            {formatPrice(priceBreakdown.totalAmount)}
-          </span>
+        {/* Sous-total et Commission */}
+        <div className="pt-2 border-t border-gray-200 mt-2 space-y-1">
+          <div className="flex justify-between text-sm">
+            <span className="text-text-light">Sous-total</span>
+            <span className="font-medium">
+              {formatPrice(priceBreakdown.totalAmount)}
+            </span>
+          </div>
+          <div className="flex justify-between text-sm text-text-light">
+            <span>Frais de service ({commissionRate}%)</span>
+            <span>+{formatPrice(commissionAmount)}</span>
+          </div>
         </div>
 
-        <p className="text-xs text-text-light">
-          Les frais de service seront ajoutés à l&apos;étape suivante
-        </p>
+        {/* Total */}
+        <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200 mt-2">
+          <span>Total à payer</span>
+          <span className="text-primary">
+            {formatPrice(totalWithCommission)}
+          </span>
+        </div>
       </div>
     </div>
   );

@@ -12,6 +12,7 @@ interface AnnouncerBookingCardProps {
   responseTime: string;
   nextAvailable: string;
   selectedServiceId?: string | null;
+  commissionRate?: number; // Taux de commission en %
   onServiceChange?: (serviceId: string | null) => void;
   onBook?: (serviceId?: string, variantId?: string) => void;
   onContact?: () => void;
@@ -19,7 +20,13 @@ interface AnnouncerBookingCardProps {
 
 // Helper pour formater le prix (centimes -> euros)
 const formatPrice = (priceInCents: number) => {
-  return (priceInCents / 100).toFixed(0);
+  return (priceInCents / 100).toFixed(2).replace(".", ",");
+};
+
+// Calculer le prix avec commission
+const calculatePriceWithCommission = (basePriceCents: number, commissionRate: number): number => {
+  const commission = Math.round((basePriceCents * commissionRate) / 100);
+  return basePriceCents + commission;
 };
 
 export default function AnnouncerBookingCard({
@@ -28,6 +35,7 @@ export default function AnnouncerBookingCard({
   responseTime,
   nextAvailable,
   selectedServiceId,
+  commissionRate = 15,
   onServiceChange,
   onBook,
   onContact,
@@ -149,7 +157,7 @@ export default function AnnouncerBookingCard({
               </p>
               {hasPrice ? (
                 <p className="text-2xl font-bold text-gray-900">
-                  {formatPrice(displayPrice)}€
+                  {formatPrice(calculatePriceWithCommission(displayPrice, commissionRate))}€
                   <span className="text-sm font-normal text-gray-500">{displayUnit}</span>
                 </p>
               ) : (
@@ -258,7 +266,7 @@ export default function AnnouncerBookingCard({
                             <div className="flex items-center gap-2">
                               {serviceMinPrice > 0 && (
                                 <span className="text-sm font-bold text-primary whitespace-nowrap">
-                                  {formatPrice(serviceMinPrice)}€{serviceUnit}
+                                  {formatPrice(calculatePriceWithCommission(serviceMinPrice, commissionRate))}€{serviceUnit}
                                 </span>
                               )}
                               {isSelected && (

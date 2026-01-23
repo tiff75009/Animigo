@@ -17,6 +17,7 @@ import {
   Cat,
   Euro,
   X,
+  MapPin,
 } from "lucide-react";
 
 // Types pour les filtres avancés
@@ -30,6 +31,7 @@ export interface AdvancedFilters {
   ownsAnimals: string[];
   noAnimals: boolean;
   priceRange: { min: number | null; max: number | null };
+  serviceLocation: ("announcer_home" | "client_home")[];
 }
 
 export const defaultAdvancedFilters: AdvancedFilters = {
@@ -42,6 +44,7 @@ export const defaultAdvancedFilters: AdvancedFilters = {
   ownsAnimals: [],
   noAnimals: false,
   priceRange: { min: null, max: null },
+  serviceLocation: [],
 };
 
 interface FilterSidebarProps {
@@ -56,7 +59,7 @@ interface FilterSidebarProps {
 
 // Filtres contextuels par catégorie
 const getFiltersForCategory = (categorySlug: string | null): string[] => {
-  const baseFilters = ["sortBy", "accountTypes", "verified", "withPhoto", "priceRange"];
+  const baseFilters = ["sortBy", "accountTypes", "verified", "withPhoto", "priceRange", "serviceLocation"];
 
   if (!categorySlug) return baseFilters;
 
@@ -230,6 +233,13 @@ export default function FilterSidebar({
     updateFilter("ownsAnimals", newAnimals);
   };
 
+  const toggleServiceLocation = (location: "announcer_home" | "client_home") => {
+    const newLocations = filters.serviceLocation.includes(location)
+      ? filters.serviceLocation.filter((l) => l !== location)
+      : [...filters.serviceLocation, location];
+    updateFilter("serviceLocation", newLocations);
+  };
+
   const hasActiveFilters =
     filters.sortBy !== "relevance" ||
     filters.accountTypes.length > 0 ||
@@ -240,7 +250,8 @@ export default function FilterSidebar({
     filters.ownsAnimals.length > 0 ||
     filters.noAnimals ||
     filters.priceRange.min !== null ||
-    filters.priceRange.max !== null;
+    filters.priceRange.max !== null ||
+    filters.serviceLocation.length > 0;
 
   return (
     <div
@@ -423,6 +434,26 @@ export default function FilterSidebar({
                 label="Aucun animal"
                 checked={filters.noAnimals}
                 onChange={(checked) => updateFilter("noAnimals", checked)}
+              />
+            </div>
+          </FilterSection>
+        )}
+
+        {/* Lieu de prestation */}
+        {availableFilters.includes("serviceLocation") && (
+          <FilterSection title="Lieu de prestation" icon={Home}>
+            <div className="space-y-1">
+              <FilterCheckbox
+                label="À domicile"
+                checked={filters.serviceLocation.includes("client_home")}
+                onChange={() => toggleServiceLocation("client_home")}
+                icon={<Home className="w-4 h-4 text-primary" />}
+              />
+              <FilterCheckbox
+                label="Chez le pet-sitter"
+                checked={filters.serviceLocation.includes("announcer_home")}
+                onChange={() => toggleServiceLocation("announcer_home")}
+                icon={<MapPin className="w-4 h-4 text-secondary" />}
               />
             </div>
           </FilterSection>
