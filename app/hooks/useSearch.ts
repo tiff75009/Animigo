@@ -19,6 +19,7 @@ export interface ServiceResult {
   profileImage: string | null;
   coverImage: string | null;
   location: string;
+  coordinates: { lat: number; lng: number } | null;
   distance?: number;
   rating: number;
   reviewCount: number;

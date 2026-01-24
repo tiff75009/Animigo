@@ -1089,6 +1089,7 @@ interface ServiceSearchResult {
   profileImage: string | null;
   coverImage: string | null;
   location: string;
+  coordinates: { lat: number; lng: number } | null;
   distance?: number;
   rating: number;
   reviewCount: number;
@@ -1551,6 +1552,7 @@ export const searchServices = query({
           profileImage: profile.profileImageUrl ?? profileImageUrl,
           coverImage: profile.coverImageUrl ?? null,
           location: profile.city ?? profile.location ?? "",
+          coordinates: profile.coordinates ?? null,
           distance,
           rating: 4.5, // TODO: Calculer depuis les avis
           reviewCount: 0, // TODO: Compter les avis
