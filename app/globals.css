@@ -3,8 +3,8 @@
 /* Custom Font - Love Taking */
 @font-face {
   font-family: 'Love Taking';
-  src: url('/fonts/Love Taking.otf') format('opentype'),
-       url('/fonts/Love Taking.ttf') format('truetype');
+  src: url('/fonts/LoveTaking.otf') format('opentype'),
+       url('/fonts/LoveTaking.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
