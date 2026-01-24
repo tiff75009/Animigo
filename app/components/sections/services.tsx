@@ -7,11 +7,8 @@ import { containerVariants, itemVariants } from "@/app/lib/animations";
 
 export function Services() {
   return (
-    <section id="services" className="py-24 relative">
-      {/* Background decoration */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-background to-transparent" />
-      </div>
+    <section id="services" className="py-24 relative bg-white">
+      {/* No background decoration needed - clean white background */}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Section Header */}
