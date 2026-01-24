@@ -252,6 +252,21 @@ export const markPaymentAuthorized = internalMutation({
       updatedAt: now,
     });
 
+    // Envoyer la notification push à l'annonceur (mission confirmée)
+    const mission = await ctx.db.get(payment.missionId);
+    if (mission) {
+      const client = await ctx.db.get(mission.clientId);
+      if (client) {
+        await ctx.scheduler.runAfter(0, internal.notifications.actions.sendMissionConfirmedNotification, {
+          announcerId: mission.announcerId,
+          clientName: `${client.firstName} ${client.lastName}`,
+          serviceName: mission.serviceName,
+          startDate: mission.startDate,
+          missionId: payment.missionId,
+        });
+      }
+    }
+
     return { paymentId: payment._id, missionId: payment.missionId };
   },
 });
@@ -290,6 +305,20 @@ export const markPaymentCaptured = internalMutation({
       paymentStatus: "paid",
       updatedAt: now,
     });
+
+    // Envoyer la notification push à l'annonceur (paiement capturé)
+    const mission = await ctx.db.get(args.missionId);
+    if (mission) {
+      const client = await ctx.db.get(mission.clientId);
+      if (client) {
+        await ctx.scheduler.runAfter(0, internal.notifications.actions.sendPaymentCapturedNotification, {
+          announcerId: mission.announcerId,
+          clientName: `${client.firstName} ${client.lastName}`,
+          amount: payment.announcerEarnings ?? payment.amount, // Montant reçu par l'annonceur
+          missionId: args.missionId,
+        });
+      }
+    }
   },
 });
 

@@ -1,6 +1,7 @@
 import { mutation } from "../_generated/server";
 import { v } from "convex/values";
 import { Id } from "../_generated/dataModel";
+import { internal } from "../_generated/api";
 
 // Taux de commission de la plateforme (en pourcentage)
 const PLATFORM_COMMISSION_RATE = 15; // 15%
@@ -159,6 +160,15 @@ export const verifyEmail = mutation({
         // Mettre à jour la pending booking
         await ctx.db.patch(pendingBooking._id, {
           status: "completed",
+        });
+
+        // Envoyer la notification push à l'annonceur (nouvelle mission)
+        await ctx.scheduler.runAfter(0, internal.notifications.actions.sendNewMissionNotification, {
+          announcerId: pendingBooking.announcerId,
+          clientName: `${pendingBooking.clientData?.firstName || user.firstName} ${pendingBooking.clientData?.lastName || user.lastName}`,
+          animalName: pendingBooking.clientData?.animalName || "Animal",
+          serviceName,
+          missionId,
         });
 
         reservationData = {

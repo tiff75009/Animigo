@@ -580,6 +580,15 @@ export const finalizeBooking = mutation({
       });
     }
 
+    // Envoyer la notification push à l'annonceur (nouvelle mission)
+    await ctx.scheduler.runAfter(0, internal.notifications.actions.sendNewMissionNotification, {
+      announcerId: pendingBooking.announcerId,
+      clientName: `${client.firstName} ${client.lastName}`,
+      animalName: animal.name,
+      serviceName: `${category?.name ?? service.category} - ${variant.name}`,
+      missionId,
+    });
+
     // Envoyer l'email de notification à l'annonceur
     const announcer = await ctx.db.get(pendingBooking.announcerId);
     if (announcer) {

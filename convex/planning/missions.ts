@@ -362,6 +362,14 @@ export const acceptMission = mutation({
         : undefined,
     });
 
+    // Envoyer la notification push au client (mission acceptée)
+    await ctx.scheduler.runAfter(0, internal.notifications.actions.sendMissionAcceptedNotification, {
+      clientId: mission.clientId,
+      announcerName: `${announcer.firstName} ${announcer.lastName.charAt(0)}.`,
+      serviceName: mission.serviceName,
+      missionId: args.missionId,
+    });
+
     return { success: true };
   },
 });

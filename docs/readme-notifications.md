@@ -250,6 +250,47 @@ export const acceptMission = action({
 
 ---
 
+## Notifications automatiques implementees
+
+Les notifications suivantes sont envoyees automatiquement lors des evenements du workflow de reservation :
+
+| Evenement | Destinataire | Type | Fichier source |
+|-----------|--------------|------|----------------|
+| Client reserve | Annonceur | `new_mission` | `convex/public/booking.ts` (finalizeBooking) |
+| Client reserve (guest) | Annonceur | `new_mission` | `convex/public/emailVerify.ts` (verifyEmail) |
+| Annonceur accepte | Client | `mission_accepted` | `convex/planning/missions.ts` (acceptMission) |
+| Client paie | Annonceur | `mission_confirmed` | `convex/api/stripeInternal.ts` (markPaymentAuthorized) |
+| Paiement capture | Annonceur | `payment_captured` | `convex/api/stripeInternal.ts` (markPaymentCaptured) |
+
+### Flux complet
+
+```
+Client reserve
+    ↓
+🔔 new_mission → Annonceur
+    ↓
+Annonceur accepte
+    ↓
+🔔 mission_accepted → Client
+    ↓
+Client paie (pre-autorisation)
+    ↓
+🔔 mission_confirmed → Annonceur
+    ↓
+Mission terminee + Auto-capture 48h
+    ↓
+🔔 payment_captured → Annonceur
+```
+
+### Fallback automatique
+
+Les actions de notification incluent un fallback automatique :
+- Si l'URL de l'app est `localhost`, la notification est creee directement en base
+- Si QStash echoue (timeout, erreur), la notification est creee directement en base
+- Cela permet de tester en local sans ngrok
+
+---
+
 ## Structure d'une notification
 
 ```typescript
