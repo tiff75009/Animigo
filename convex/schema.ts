@@ -636,6 +636,17 @@ export default defineSchema({
       v.literal("client_home")      // Chez le client (à domicile)
     )),
 
+    // Adresse invité (pour les utilisateurs non connectés avec service à domicile)
+    guestAddress: v.optional(v.object({
+      address: v.string(),
+      city: v.optional(v.string()),
+      postalCode: v.optional(v.string()),
+      coordinates: v.optional(v.object({
+        lat: v.number(),
+        lng: v.number(),
+      })),
+    })),
+
     // Prix calculé
     calculatedAmount: v.number(),
 

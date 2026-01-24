@@ -30,6 +30,7 @@ interface AnnouncerBookingCardProps {
   clientAddress?: ClientAddress | null;
   onServiceChange?: (serviceId: string | null) => void;
   onBook?: () => void;
+  onFinalize?: () => void;
   onContact?: () => void;
 }
 
@@ -66,6 +67,7 @@ export default function AnnouncerBookingCard({
   clientAddress,
   onServiceChange,
   onBook,
+  onFinalize,
   onContact,
 }: AnnouncerBookingCardProps) {
   const [isServicesExpanded, setIsServicesExpanded] = useState(false);
@@ -81,7 +83,7 @@ export default function AnnouncerBookingCard({
   // If booking is in progress, show the summary
   if (hasBookingInProgress && bookingSelection) {
     return (
-      <div className="sticky top-24 space-y-4">
+      <div className="sticky top-36 space-y-4">
         <BookingSummary
           service={bookingService!}
           variant={bookingVariant!}
@@ -93,6 +95,7 @@ export default function AnnouncerBookingCard({
           nextAvailable={nextAvailable}
           clientAddress={clientAddress}
           onBook={onBook}
+          onFinalize={onFinalize}
           onContact={onContact}
         />
 
@@ -137,7 +140,7 @@ export default function AnnouncerBookingCard({
   const hasPrice = displayPrice !== Infinity && displayPrice > 0;
 
   return (
-    <div className="sticky top-24">
+    <div className="sticky top-36">
       <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
         {/* Header */}
         <div className="p-5 bg-gradient-to-r from-primary/5 via-secondary/5 to-purple/5 border-b border-gray-100">

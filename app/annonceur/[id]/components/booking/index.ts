@@ -4,6 +4,8 @@ export { default as BookingCalendar } from "./BookingCalendar";
 export { default as BookingSummary } from "./BookingSummary";
 export { default as ServiceLocationSelector } from "./ServiceLocationSelector";
 export { default as AddressSelector } from "./AddressSelector";
+export { default as GuestAddressSelector } from "./GuestAddressSelector";
 export { default as MobileTimePicker } from "./MobileTimePicker";
+export { default as BookingStepBar, useBookingSteps } from "./BookingStepBar";
 export * from "./types";
 export * from "./pricing";

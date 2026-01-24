@@ -1,5 +1,12 @@
 import { Id } from "@/convex/_generated/dataModel";
 
+export interface GuestAddress {
+  address: string;
+  city: string | null;
+  postalCode: string | null;
+  coordinates: { lat: number; lng: number } | null;
+}
+
 export interface BookingSelection {
   selectedServiceId: string | null;
   selectedVariantId: string | null;
@@ -10,7 +17,8 @@ export interface BookingSelection {
   endTime: string | null;
   includeOvernightStay: boolean;
   serviceLocation: "announcer_home" | "client_home" | null;
-  selectedAddressId: string | null; // ID de l'adresse client sélectionnée
+  selectedAddressId: string | null; // ID de l'adresse client sélectionnée (utilisateur connecté)
+  guestAddress: GuestAddress | null; // Adresse saisie par un invité
 }
 
 export interface ClientAddress {
@@ -72,4 +80,5 @@ export const DEFAULT_BOOKING_SELECTION: BookingSelection = {
   includeOvernightStay: false,
   serviceLocation: null,
   selectedAddressId: null,
+  guestAddress: null,
 };

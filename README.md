@@ -428,6 +428,53 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.16.0 - Refonte Page Annonceur et Experience de Reservation
+
+- **Barre de progression des etapes**
+  - Nouvelle barre verticale sur desktop montrant la progression de la reservation
+  - 4 etapes : Formule, Date & heure, Lieu, Options
+  - Indicateurs visuels : cercles avec icones, progression animee, compteur
+  - Position sticky pour rester visible lors du scroll
+
+- **Nouveaux boutons de reservation**
+  - "Verifier la reservation" : redirige vers la page de reservation (etape 1)
+  - "Finaliser la reservation" : redirige directement vers l'etape de finalisation (etape 4)
+  - Disponible sur desktop (sidebar) et mobile (sheet recapitulatif)
+  - Parametre URL `finalize=true` pour aller directement a l'etape 4
+
+- **Saisie d'adresse pour les invites (guest checkout)**
+  - Nouveau composant `GuestAddressSelector` avec autocompletion Google Maps
+  - Calcul et affichage de la distance entre le client et l'annonceur
+  - Sauvegarde des coordonnees GPS avec la reservation
+  - Utilisateurs connectes : selection parmi les adresses enregistrees
+  - Invites : saisie manuelle avec autocompletion
+
+- **Indicateurs visuels de selection obligatoire**
+  - Animation pulsante sur la section formules quand aucune n'est selectionnee
+  - Bordure coloree et effet de lueur pour attirer l'attention
+  - Meme effet sur la section lieu de prestation si applicable
+  - Indication subtile sur les options additionnelles
+
+- **Reorganisation des sections**
+  - Nouvel ordre : Formule → Calendrier → Lieu → Adresse → Options
+  - Le calendrier apparait juste apres la selection de formule
+  - Meilleure logique de flux de reservation
+
+- **Validation horaire obligatoire**
+  - La reservation ne peut pas etre finalisee sans selection d'heure
+  - Message d'avertissement dans le recapitulatif si l'heure manque
+  - Boutons de reservation desactives tant que l'heure n'est pas choisie
+
+- **Corrections du positionnement sticky**
+  - Barre d'etapes et sidebar restent sous la barre des tabs lors du scroll
+  - Valeur `top-36` (144px) pour compenser la hauteur du header + tabs
+
+- **Redesign du header annonceur**
+  - Badge de statut sur l'avatar
+  - Bio affichee dans le header
+  - Meilleur effet d'ombre sur la carte
+  - Tabs avec badges de compteurs (services, avis)
+
 ### v0.15.0 - Experience Mobile Amelioree (Page Annonceur)
 
 - **Calendrier mobile en bottom sheet**

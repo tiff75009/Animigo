@@ -96,50 +96,151 @@ export default function AnnouncerProfile({ announcer, className }: AnnouncerProf
 
   return (
     <section className={cn("space-y-6", className)}>
-      {/* Galerie Photos */}
+      {/* À propos */}
       <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100">
         <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-          <span className="p-2 bg-primary/10 rounded-lg">
-            <PawPrint className="w-5 h-5 text-primary" />
+          <span className="p-2 bg-secondary/10 rounded-lg">
+            <Users className="w-5 h-5 text-secondary" />
           </span>
-          Galerie photos
+          À propos de {announcer.firstName}
         </h3>
 
-        {announcer.gallery.length === 0 ? (
-          <div className="bg-gray-50 rounded-xl p-6 text-center">
-            <ImageIcon className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-            <p className="text-gray-500">Aucune photo pour le moment</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-3 gap-2 sm:gap-3">
-            {announcer.gallery.slice(0, 6).map((photo, index) => (
-              <motion.button
-                key={index}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setGalleryLightboxIndex(index)}
-                className={cn(
-                  "relative aspect-square rounded-xl overflow-hidden",
-                  index === 0 && "col-span-2 row-span-2"
+        {/* Equipment Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {/* Type de logement */}
+          {equipment.housingType && (
+            <div className="flex items-center gap-2 text-gray-600">
+              <div className="p-2 bg-primary/10 rounded-lg">
+                {equipment.housingType === "house" ? (
+                  <Home className="w-4 h-4 text-primary" />
+                ) : (
+                  <Building2 className="w-4 h-4 text-primary" />
                 )}
-              >
-                <Image
-                  src={photo}
-                  alt={`Photo ${index + 1} de ${announcer.firstName}`}
-                  fill
-                  className="object-cover hover:scale-105 transition-transform duration-300"
-                />
-                {index === 5 && announcer.gallery.length > 6 && (
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                    <span className="text-white font-bold text-lg">
-                      +{announcer.gallery.length - 6}
-                    </span>
-                  </div>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">
+                  {equipment.housingType === "house" ? "Maison" : "Appartement"}
+                </p>
+                {equipment.housingSize && (
+                  <p className="text-xs text-gray-500">{equipment.housingSize} m²</p>
                 )}
-              </motion.button>
-            ))}
-          </div>
-        )}
+              </div>
+            </div>
+          )}
+
+          {/* Jardin */}
+          {equipment.hasGarden && (
+            <div className="flex items-center gap-2 text-gray-600">
+              <div className="p-2 bg-green-50 rounded-lg">
+                <Trees className="w-4 h-4 text-green-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">Jardin</p>
+                {equipment.gardenSize && (
+                  <p className="text-xs text-gray-500">
+                    {equipment.gardenSize === "petit" ? "Petit" :
+                     equipment.gardenSize === "moyen" ? "Moyen" : "Grand"}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Véhicule */}
+          {equipment.hasVehicle && (
+            <div className="flex items-center gap-2 text-gray-600">
+              <div className="p-2 bg-blue-50 rounded-lg">
+                <Car className="w-4 h-4 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">Véhicule</p>
+                <p className="text-xs text-gray-500">Disponible</p>
+              </div>
+            </div>
+          )}
+
+          {/* Non-fumeur */}
+          {equipment.isSmoker === false && (
+            <div className="flex items-center gap-2 text-gray-600">
+              <div className="p-2 bg-emerald-50 rounded-lg">
+                <CigaretteOff className="w-4 h-4 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">Non-fumeur</p>
+                <p className="text-xs text-gray-500">Environnement sain</p>
+              </div>
+            </div>
+          )}
+
+          {/* Fumeur */}
+          {equipment.isSmoker === true && (
+            <div className="flex items-center gap-2 text-gray-600">
+              <div className="p-2 bg-orange-50 rounded-lg">
+                <Cigarette className="w-4 h-4 text-orange-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">Fumeur</p>
+              </div>
+            </div>
+          )}
+
+          {/* Enfants */}
+          {equipment.hasChildren && (
+            <div className="flex items-center gap-2 text-gray-600">
+              <div className="p-2 bg-pink-50 rounded-lg">
+                <Baby className="w-4 h-4 text-pink-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">Enfants</p>
+                {equipment.childrenAges.length > 0 && (
+                  <p className="text-xs text-gray-500">
+                    {equipment.childrenAges.map(a =>
+                      a === "0-3" ? "0-3 ans" : a === "4-10" ? "4-10 ans" : "11-17 ans"
+                    ).join(", ")}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Pas d'enfants */}
+          {equipment.hasChildren === false && (
+            <div className="flex items-center gap-2 text-gray-600">
+              <div className="p-2 bg-gray-100 rounded-lg">
+                <Baby className="w-4 h-4 text-gray-400" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">Pas d&apos;enfants</p>
+              </div>
+            </div>
+          )}
+
+          {/* Alimentation fournie */}
+          {equipment.providesFood === true && (
+            <div className="flex items-center gap-2 text-gray-600">
+              <div className="p-2 bg-green-50 rounded-lg">
+                <Utensils className="w-4 h-4 text-green-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">Alimentation</p>
+                <p className="text-xs text-gray-500">Fournie</p>
+              </div>
+            </div>
+          )}
+
+          {/* I-CAD */}
+          {announcer.icadRegistered && (
+            <div className="flex items-center gap-2 text-gray-600">
+              <div className="p-2 bg-emerald-50 rounded-lg">
+                <Shield className="w-4 h-4 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">I-CAD</p>
+                <p className="text-xs text-gray-500">Inscrit</p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Mes Compagnons */}
@@ -448,160 +549,50 @@ export default function AnnouncerProfile({ announcer, className }: AnnouncerProf
         </div>
       )}
 
-      {/* À propos */}
+      {/* Galerie Photos */}
       <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100">
         <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-          <span className="p-2 bg-secondary/10 rounded-lg">
-            <Users className="w-5 h-5 text-secondary" />
+          <span className="p-2 bg-primary/10 rounded-lg">
+            <PawPrint className="w-5 h-5 text-primary" />
           </span>
-          À propos de {announcer.firstName}
+          Galerie photos
         </h3>
 
-        {/* Bio */}
-        {announcer.bio ? (
-          <p className="text-gray-600 whitespace-pre-line leading-relaxed">
-            {announcer.bio}
-          </p>
+        {announcer.gallery.length === 0 ? (
+          <div className="bg-gray-50 rounded-xl p-6 text-center">
+            <ImageIcon className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+            <p className="text-gray-500">Aucune photo pour le moment</p>
+          </div>
         ) : (
-          <p className="text-gray-400 italic">Pas de description disponible</p>
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            {announcer.gallery.slice(0, 6).map((photo, index) => (
+              <motion.button
+                key={index}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setGalleryLightboxIndex(index)}
+                className={cn(
+                  "relative aspect-square rounded-xl overflow-hidden",
+                  index === 0 && "col-span-2 row-span-2"
+                )}
+              >
+                <Image
+                  src={photo}
+                  alt={`Photo ${index + 1} de ${announcer.firstName}`}
+                  fill
+                  className="object-cover hover:scale-105 transition-transform duration-300"
+                />
+                {index === 5 && announcer.gallery.length > 6 && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                    <span className="text-white font-bold text-lg">
+                      +{announcer.gallery.length - 6}
+                    </span>
+                  </div>
+                )}
+              </motion.button>
+            ))}
+          </div>
         )}
-
-        {/* Equipment Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-6 pt-6 border-t border-gray-100">
-          {/* Type de logement */}
-          {equipment.housingType && (
-            <div className="flex items-center gap-2 text-gray-600">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                {equipment.housingType === "house" ? (
-                  <Home className="w-4 h-4 text-primary" />
-                ) : (
-                  <Building2 className="w-4 h-4 text-primary" />
-                )}
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900">
-                  {equipment.housingType === "house" ? "Maison" : "Appartement"}
-                </p>
-                {equipment.housingSize && (
-                  <p className="text-xs text-gray-500">{equipment.housingSize} m²</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Jardin */}
-          {equipment.hasGarden && (
-            <div className="flex items-center gap-2 text-gray-600">
-              <div className="p-2 bg-green-50 rounded-lg">
-                <Trees className="w-4 h-4 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900">Jardin</p>
-                {equipment.gardenSize && (
-                  <p className="text-xs text-gray-500">
-                    {equipment.gardenSize === "petit" ? "Petit" :
-                     equipment.gardenSize === "moyen" ? "Moyen" : "Grand"}
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Véhicule */}
-          {equipment.hasVehicle && (
-            <div className="flex items-center gap-2 text-gray-600">
-              <div className="p-2 bg-blue-50 rounded-lg">
-                <Car className="w-4 h-4 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900">Véhicule</p>
-                <p className="text-xs text-gray-500">Disponible</p>
-              </div>
-            </div>
-          )}
-
-          {/* Non-fumeur */}
-          {equipment.isSmoker === false && (
-            <div className="flex items-center gap-2 text-gray-600">
-              <div className="p-2 bg-emerald-50 rounded-lg">
-                <CigaretteOff className="w-4 h-4 text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900">Non-fumeur</p>
-                <p className="text-xs text-gray-500">Environnement sain</p>
-              </div>
-            </div>
-          )}
-
-          {/* Fumeur */}
-          {equipment.isSmoker === true && (
-            <div className="flex items-center gap-2 text-gray-600">
-              <div className="p-2 bg-orange-50 rounded-lg">
-                <Cigarette className="w-4 h-4 text-orange-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900">Fumeur</p>
-              </div>
-            </div>
-          )}
-
-          {/* Enfants */}
-          {equipment.hasChildren && (
-            <div className="flex items-center gap-2 text-gray-600">
-              <div className="p-2 bg-pink-50 rounded-lg">
-                <Baby className="w-4 h-4 text-pink-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900">Enfants</p>
-                {equipment.childrenAges.length > 0 && (
-                  <p className="text-xs text-gray-500">
-                    {equipment.childrenAges.map(a =>
-                      a === "0-3" ? "0-3 ans" : a === "4-10" ? "4-10 ans" : "11-17 ans"
-                    ).join(", ")}
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Pas d'enfants */}
-          {equipment.hasChildren === false && (
-            <div className="flex items-center gap-2 text-gray-600">
-              <div className="p-2 bg-gray-100 rounded-lg">
-                <Baby className="w-4 h-4 text-gray-400" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900">Pas d&apos;enfants</p>
-              </div>
-            </div>
-          )}
-
-          {/* Alimentation fournie */}
-          {equipment.providesFood === true && (
-            <div className="flex items-center gap-2 text-gray-600">
-              <div className="p-2 bg-green-50 rounded-lg">
-                <Utensils className="w-4 h-4 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900">Alimentation</p>
-                <p className="text-xs text-gray-500">Fournie</p>
-              </div>
-            </div>
-          )}
-
-          {/* I-CAD */}
-          {announcer.icadRegistered && (
-            <div className="flex items-center gap-2 text-gray-600">
-              <div className="p-2 bg-emerald-50 rounded-lg">
-                <Shield className="w-4 h-4 text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900">I-CAD</p>
-                <p className="text-xs text-gray-500">Inscrit</p>
-              </div>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Gallery Lightbox */}

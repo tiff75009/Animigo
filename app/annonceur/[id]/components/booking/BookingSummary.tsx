@@ -12,6 +12,8 @@ import {
   MessageCircle,
   MapPin,
   Home,
+  CreditCard,
+  Eye,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import type { ServiceData, FormuleData, OptionData } from "../types";
@@ -30,6 +32,7 @@ interface BookingSummaryProps {
   compact?: boolean;
   clientAddress?: ClientAddress | null; // Adresse client pour service a domicile
   onBook?: () => void;
+  onFinalize?: () => void; // Aller directement à la page de finalisation
   onContact?: () => void;
   className?: string;
 }
@@ -46,6 +49,7 @@ export default function BookingSummary({
   compact = false,
   clientAddress,
   onBook,
+  onFinalize,
   onContact,
   className,
 }: BookingSummaryProps) {
@@ -54,12 +58,21 @@ export default function BookingSummary({
     selection.selectedOptionIds.includes(opt.id.toString())
   ) || [];
 
-  // Calculate if booking is ready
+  // Calculate if booking is ready - requires time selection
   const isReadyToBook = Boolean(
     selection.selectedServiceId &&
     selection.selectedVariantId &&
     selection.startDate &&
+    selection.startTime && // L'heure est obligatoire
     priceBreakdown
+  );
+
+  // Check if time is missing for validation message
+  const isTimeRequired = Boolean(
+    selection.selectedServiceId &&
+    selection.selectedVariantId &&
+    selection.startDate &&
+    !selection.startTime
   );
 
   // Empty state
@@ -294,12 +307,25 @@ export default function BookingSummary({
           </div>
         </div>
 
+        {/* Validation message for time */}
+        {isTimeRequired && (
+          <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-600" />
+              <p className="text-sm text-amber-700 font-medium">
+                Veuillez sélectionner un créneau horaire
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* CTA Buttons */}
         {!compact && (
-          <>
+          <div className="space-y-3">
+            {/* Bouton principal - Vérifier la réservation */}
             <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+              whileHover={{ scale: isReadyToBook ? 1.02 : 1 }}
+              whileTap={{ scale: isReadyToBook ? 0.98 : 1 }}
               onClick={onBook}
               disabled={!isReadyToBook}
               className={cn(
@@ -309,10 +335,29 @@ export default function BookingSummary({
                   : "bg-gray-100 text-gray-400 cursor-not-allowed"
               )}
             >
-              Réserver maintenant
+              <Eye className="w-4 h-4" />
+              Vérifier la réservation
+            </motion.button>
+
+            {/* Bouton secondaire - Finaliser directement */}
+            <motion.button
+              whileHover={{ scale: isReadyToBook ? 1.02 : 1 }}
+              whileTap={{ scale: isReadyToBook ? 0.98 : 1 }}
+              onClick={onFinalize}
+              disabled={!isReadyToBook}
+              className={cn(
+                "w-full py-3.5 font-semibold rounded-xl transition-all flex items-center justify-center gap-2 border-2",
+                isReadyToBook
+                  ? "border-secondary bg-secondary/5 text-secondary hover:bg-secondary/10"
+                  : "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
+              )}
+            >
+              <CreditCard className="w-4 h-4" />
+              Finaliser la réservation
               <ArrowRight className="w-4 h-4" />
             </motion.button>
 
+            {/* Bouton contacter */}
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
@@ -322,7 +367,7 @@ export default function BookingSummary({
               <MessageCircle className="w-4 h-4" />
               Contacter
             </motion.button>
-          </>
+          </div>
         )}
       </div>
 

@@ -333,6 +333,15 @@ export default function AnnouncerProfilePage() {
     router.push("/client/profil?section=adresses&action=new");
   }, [router]);
 
+  const handleGuestAddressChange = useCallback((address: {
+    address: string;
+    city: string | null;
+    postalCode: string | null;
+    coordinates: { lat: number; lng: number } | null;
+  } | null) => {
+    setBookingSelection((prev) => ({ ...prev, guestAddress: address }));
+  }, []);
+
   const handleBook = useCallback(() => {
     if (!announcerData || !announcer) return;
 
@@ -369,6 +378,79 @@ export default function AnnouncerProfilePage() {
     if (bookingSelection.selectedAddressId) {
       params.set("addressId", bookingSelection.selectedAddressId);
     }
+    // Guest address for non-logged in users
+    if (bookingSelection.guestAddress) {
+      params.set("guestAddress", bookingSelection.guestAddress.address);
+      if (bookingSelection.guestAddress.city) {
+        params.set("guestCity", bookingSelection.guestAddress.city);
+      }
+      if (bookingSelection.guestAddress.postalCode) {
+        params.set("guestPostalCode", bookingSelection.guestAddress.postalCode);
+      }
+      if (bookingSelection.guestAddress.coordinates) {
+        params.set("guestLat", bookingSelection.guestAddress.coordinates.lat.toString());
+        params.set("guestLng", bookingSelection.guestAddress.coordinates.lng.toString());
+      }
+    }
+
+    const queryString = params.toString();
+    router.push(`/reserver/${announcerData.id}${queryString ? `?${queryString}` : ""}`);
+  }, [announcerData, announcer, bookingSelection, router]);
+
+  // Handler pour aller directement à la finalisation
+  const handleFinalize = useCallback(() => {
+    if (!announcerData || !announcer) return;
+
+    const params = new URLSearchParams();
+
+    if (bookingSelection.selectedServiceId) {
+      const service = announcer.services.find((s) => s.id === bookingSelection.selectedServiceId);
+      params.set("service", service?.categorySlug ?? bookingSelection.selectedServiceId);
+    }
+    if (bookingSelection.selectedVariantId) {
+      params.set("variant", bookingSelection.selectedVariantId);
+    }
+    if (bookingSelection.selectedOptionIds.length > 0) {
+      params.set("options", bookingSelection.selectedOptionIds.join(","));
+    }
+    if (bookingSelection.startDate) {
+      params.set("date", bookingSelection.startDate);
+    }
+    if (bookingSelection.endDate && bookingSelection.endDate !== bookingSelection.startDate) {
+      params.set("endDate", bookingSelection.endDate);
+    }
+    if (bookingSelection.startTime) {
+      params.set("startTime", bookingSelection.startTime);
+    }
+    if (bookingSelection.endTime) {
+      params.set("endTime", bookingSelection.endTime);
+    }
+    if (bookingSelection.includeOvernightStay) {
+      params.set("overnight", "true");
+    }
+    if (bookingSelection.serviceLocation) {
+      params.set("location", bookingSelection.serviceLocation);
+    }
+    if (bookingSelection.selectedAddressId) {
+      params.set("addressId", bookingSelection.selectedAddressId);
+    }
+    // Guest address for non-logged in users
+    if (bookingSelection.guestAddress) {
+      params.set("guestAddress", bookingSelection.guestAddress.address);
+      if (bookingSelection.guestAddress.city) {
+        params.set("guestCity", bookingSelection.guestAddress.city);
+      }
+      if (bookingSelection.guestAddress.postalCode) {
+        params.set("guestPostalCode", bookingSelection.guestAddress.postalCode);
+      }
+      if (bookingSelection.guestAddress.coordinates) {
+        params.set("guestLat", bookingSelection.guestAddress.coordinates.lat.toString());
+        params.set("guestLng", bookingSelection.guestAddress.coordinates.lng.toString());
+      }
+    }
+
+    // Paramètre pour aller directement à la finalisation
+    params.set("finalize", "true");
 
     const queryString = params.toString();
     router.push(`/reserver/${announcerData.id}${queryString ? `?${queryString}` : ""}`);
@@ -430,8 +512,13 @@ export default function AnnouncerProfilePage() {
         onToggleFavorite={() => setIsFavorite(!isFavorite)}
       />
 
-      {/* Navigation Tabs - Mobile */}
-      <AnnouncerTabs activeTab={activeTab} onTabChange={setActiveTab} />
+      {/* Navigation Tabs */}
+      <AnnouncerTabs
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        reviewCount={announcer.reviewCount}
+        serviceCount={announcer.services?.length || 0}
+      />
 
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-4 py-6 sm:py-8">
@@ -460,10 +547,14 @@ export default function AnnouncerProfilePage() {
                 onVariantSelect={handleVariantSelect}
                 onOptionToggle={handleOptionToggle}
                 onLocationSelect={handleLocationSelect}
+                isLoggedIn={!!token}
                 clientAddresses={clientAddresses}
                 isLoadingAddresses={clientAddressesData === undefined}
                 onAddressSelect={handleAddressSelect}
                 onAddNewAddress={handleAddNewAddress}
+                guestAddress={bookingSelection.guestAddress}
+                announcerCoordinates={announcerData?.coordinates ?? undefined}
+                onGuestAddressChange={handleGuestAddressChange}
                 onDateSelect={handleDateSelect}
                 onEndDateSelect={handleEndDateSelect}
                 onTimeSelect={handleTimeSelect}
@@ -510,6 +601,7 @@ export default function AnnouncerProfilePage() {
                 setSelectedServiceSlug(service?.categorySlug ?? service?.categoryId ?? null);
               }}
               onBook={handleBook}
+              onFinalize={handleFinalize}
               onContact={handleContact}
             />
           </div>
@@ -544,6 +636,7 @@ export default function AnnouncerProfilePage() {
         onOvernightChange={handleOvernightChange}
         onMonthChange={setCalendarMonth}
         onBook={handleBook}
+        onFinalize={handleFinalize}
       />
     </div>
   );

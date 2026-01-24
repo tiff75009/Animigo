@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, ArrowRight, Check, ShoppingCart, Calendar, Clock } from "lucide-react";
+import { X, ArrowRight, Check, ShoppingCart, Calendar, Clock, CreditCard, Eye } from "lucide-react";
 import { ServiceData, FormuleData } from "./types";
 import { cn } from "@/app/lib/utils";
 import {
@@ -46,6 +46,7 @@ interface AnnouncerMobileCTAProps {
   onOvernightChange?: (include: boolean) => void;
   onMonthChange?: (date: Date) => void;
   onBook?: () => void;
+  onFinalize?: () => void;
 }
 
 // Get minimum price for a service
@@ -111,6 +112,7 @@ export default function AnnouncerMobileCTA({
   onOvernightChange,
   onMonthChange,
   onBook,
+  onFinalize,
 }: AnnouncerMobileCTAProps) {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isCalendarSheetOpen, setIsCalendarSheetOpen] = useState(false);
@@ -410,15 +412,32 @@ export default function AnnouncerMobileCTA({
                           compact
                         />
 
-                        {/* Confirm button */}
-                        <motion.button
-                          whileTap={{ scale: 0.98 }}
-                          onClick={handleConfirmBooking}
-                          className="w-full py-3.5 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold rounded-xl shadow-lg shadow-primary/25 flex items-center justify-center gap-2"
-                        >
-                          Confirmer la réservation
-                          <ArrowRight className="w-4 h-4" />
-                        </motion.button>
+                        {/* Buttons */}
+                        <div className="space-y-3">
+                          {/* Vérifier la réservation */}
+                          <motion.button
+                            whileTap={{ scale: 0.98 }}
+                            onClick={handleConfirmBooking}
+                            className="w-full py-3.5 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold rounded-xl shadow-lg shadow-primary/25 flex items-center justify-center gap-2"
+                          >
+                            <Eye className="w-4 h-4" />
+                            Vérifier la réservation
+                          </motion.button>
+
+                          {/* Finaliser directement */}
+                          <motion.button
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => {
+                              setIsSheetOpen(false);
+                              onFinalize?.();
+                            }}
+                            className="w-full py-3.5 border-2 border-secondary bg-secondary/5 text-secondary font-semibold rounded-xl flex items-center justify-center gap-2 hover:bg-secondary/10 transition-colors"
+                          >
+                            <CreditCard className="w-4 h-4" />
+                            Finaliser la réservation
+                            <ArrowRight className="w-4 h-4" />
+                          </motion.button>
+                        </div>
                       </div>
                     ) : (
                       // Show service/formule selection

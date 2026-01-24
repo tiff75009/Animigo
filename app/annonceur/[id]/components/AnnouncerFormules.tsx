@@ -1,6 +1,7 @@
 "use client";
 
-import { Package, Sparkles, Plus } from "lucide-react";
+import { Package, Sparkles, Plus, MousePointerClick } from "lucide-react";
+import { motion } from "framer-motion";
 import { cn } from "@/app/lib/utils";
 import { ServiceData, FormuleData } from "./types";
 import {
@@ -9,9 +10,13 @@ import {
   BookingCalendar,
   ServiceLocationSelector,
   AddressSelector,
+  GuestAddressSelector,
+  BookingStepBar,
+  useBookingSteps,
   type BookingSelection,
   type CalendarEntry,
   type ClientAddress,
+  type GuestAddress,
   isGardeService,
 } from "./booking";
 
@@ -36,10 +41,15 @@ interface AnnouncerFormulesProps {
   onOptionToggle?: (optionId: string) => void;
   onLocationSelect?: (location: "announcer_home" | "client_home") => void;
   // Address selection for client_home
+  isLoggedIn?: boolean;
   clientAddresses?: ClientAddress[];
   isLoadingAddresses?: boolean;
   onAddressSelect?: (addressId: string) => void;
   onAddNewAddress?: () => void;
+  // Guest address for non-logged in users
+  guestAddress?: GuestAddress | null;
+  announcerCoordinates?: { lat: number; lng: number };
+  onGuestAddressChange?: (address: GuestAddress | null) => void;
   onDateSelect?: (date: string) => void;
   onEndDateSelect?: (date: string | null) => void;
   onTimeSelect?: (time: string) => void;
@@ -69,10 +79,14 @@ export default function AnnouncerFormules({
   onVariantSelect,
   onOptionToggle,
   onLocationSelect,
+  isLoggedIn = false,
   clientAddresses = [],
   isLoadingAddresses = false,
   onAddressSelect,
   onAddNewAddress,
+  guestAddress,
+  announcerCoordinates,
+  onGuestAddressChange,
   onDateSelect,
   onEndDateSelect,
   onTimeSelect,
@@ -119,49 +133,158 @@ export default function AnnouncerFormules({
     (showLocationSelector && bookingSelection?.serviceLocation)
   );
 
+  // Calculer les étapes de réservation
+  const hasDateSelected = Boolean(bookingSelection?.startDate);
+  const hasTimeSelected = Boolean(bookingSelection?.startTime);
+  const hasLocationSelected = Boolean(bookingSelection?.serviceLocation);
+  const hasOptions = service.options.length > 0;
+
+  const steps = useBookingSteps({
+    hasVariantSelected,
+    hasDateSelected,
+    hasTimeSelected,
+    showLocationSelector,
+    hasLocationSelected,
+    hasOptions,
+  });
+
   return (
-    <section className={cn("space-y-6", className)}>
-      {/* En-tête du service */}
-      <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100">
-        <div className="flex items-start gap-4">
-          <span className="text-3xl">{service.categoryIcon}</span>
-          <div className="flex-1">
-            <h2 className="text-xl font-bold text-gray-900">{service.categoryName}</h2>
-            {service.description && (
-              <p className="text-gray-600 mt-1">{service.description}</p>
-            )}
+    <section className={cn("relative", className)}>
+      <div className="flex gap-4 lg:gap-6">
+        {/* Barre d'étapes verticale - visible uniquement sur desktop */}
+        <div className="hidden lg:block w-48 flex-shrink-0">
+          <div className="sticky top-36">
+            <BookingStepBar steps={steps} />
           </div>
         </div>
-      </div>
+
+        {/* Contenu principal */}
+        <div className="flex-1 min-w-0 space-y-6">
+          {/* En-tête du service */}
+          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100">
+            <div className="flex items-start gap-4">
+              <span className="text-3xl">{service.categoryIcon}</span>
+              <div className="flex-1">
+                <h2 className="text-xl font-bold text-gray-900">{service.categoryName}</h2>
+                {service.description && (
+                  <p className="text-gray-600 mt-1">{service.description}</p>
+                )}
+              </div>
+            </div>
+          </div>
 
       {/* Section Formules */}
-      <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100">
-        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-          <span className="p-2 bg-purple/10 rounded-lg">
-            <Package className="w-5 h-5 text-purple" />
-          </span>
-          Choisissez votre formule
-        </h3>
-
-        {service.formules.length === 0 ? (
-          <div className="bg-gray-50 rounded-xl p-6 text-center">
-            <p className="text-gray-500">Aucune formule disponible</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {service.formules.map((formule) => (
-              <SelectableFormuleCard
-                key={formule.id.toString()}
-                formule={formule}
-                isSelected={selectedVariantId === formule.id.toString()}
-                isGarde={isGarde}
-                commissionRate={commissionRate}
-                onSelect={() => onVariantSelect?.(service.id.toString(), formule.id.toString())}
-              />
-            ))}
-          </div>
+      <motion.div
+        className={cn(
+          "bg-white rounded-2xl p-5 sm:p-6 border-2 transition-colors duration-300 relative overflow-hidden",
+          hasVariantSelected
+            ? "border-gray-100"
+            : "border-primary/50"
         )}
-      </div>
+        animate={!hasVariantSelected ? {
+          boxShadow: [
+            "0 0 0 0 rgba(255, 107, 107, 0)",
+            "0 0 0 8px rgba(255, 107, 107, 0.15)",
+            "0 0 0 0 rgba(255, 107, 107, 0)",
+          ],
+        } : {}}
+        transition={{
+          duration: 2,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      >
+        {/* Subtle gradient overlay when no selection */}
+        {!hasVariantSelected && (
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-secondary/5 pointer-events-none" />
+        )}
+
+        <div className="relative">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <span className={cn(
+                "p-2 rounded-lg transition-colors duration-300",
+                hasVariantSelected ? "bg-purple/10" : "bg-primary/10"
+              )}>
+                <Package className={cn(
+                  "w-5 h-5 transition-colors duration-300",
+                  hasVariantSelected ? "text-purple" : "text-primary"
+                )} />
+              </span>
+              Choisissez votre formule
+            </h3>
+
+            {/* Indicator when no selection */}
+            {!hasVariantSelected && (
+              <motion.div
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="flex items-center gap-1.5 text-sm text-primary font-medium"
+              >
+                <MousePointerClick className="w-4 h-4" />
+                <span className="hidden sm:inline">Sélectionnez une formule</span>
+              </motion.div>
+            )}
+          </div>
+
+          {service.formules.length === 0 ? (
+            <div className="bg-gray-50 rounded-xl p-6 text-center">
+              <p className="text-gray-500">Aucune formule disponible</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {service.formules.map((formule, index) => (
+                <SelectableFormuleCard
+                  key={formule.id.toString()}
+                  formule={formule}
+                  isSelected={selectedVariantId === formule.id.toString()}
+                  isGarde={isGarde}
+                  commissionRate={commissionRate}
+                  onSelect={() => onVariantSelect?.(service.id.toString(), formule.id.toString())}
+                  showAttentionPulse={!hasVariantSelected}
+                  animationDelay={index * 0.1}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </motion.div>
+
+      {/* Calendrier - visible quand une formule est sélectionnée (desktop seulement) */}
+      {hasVariantSelected && calendarMonth && onDateSelect && onEndDateSelect && onTimeSelect && onEndTimeSelect && onOvernightChange && onMonthChange && (
+        <div className="hidden md:block">
+          <BookingCalendar
+            selectedDate={bookingSelection?.startDate ?? null}
+            selectedEndDate={bookingSelection?.endDate ?? null}
+            selectedTime={bookingSelection?.startTime ?? null}
+            selectedEndTime={bookingSelection?.endTime ?? null}
+            includeOvernightStay={bookingSelection?.includeOvernightStay ?? false}
+            calendarMonth={calendarMonth}
+            availabilityCalendar={availabilityCalendar}
+            isRangeMode={isRangeMode}
+            days={days}
+            nights={nights}
+            isCapacityBased={isCapacityBased}
+            maxAnimalsPerSlot={maxAnimalsPerSlot}
+            enableDurationBasedBlocking={enableDurationBasedBlocking}
+            variantDuration={variantDuration}
+            bufferBefore={bufferBefore}
+            bufferAfter={bufferAfter}
+            acceptReservationsFrom={acceptReservationsFrom}
+            acceptReservationsTo={acceptReservationsTo}
+            allowOvernightStay={service.allowOvernightStay}
+            overnightPrice={service.overnightPrice}
+            dayStartTime={service.dayStartTime}
+            dayEndTime={service.dayEndTime}
+            onDateSelect={onDateSelect}
+            onEndDateSelect={onEndDateSelect}
+            onTimeSelect={onTimeSelect}
+            onEndTimeSelect={onEndTimeSelect}
+            onOvernightChange={onOvernightChange}
+            onMonthChange={onMonthChange}
+          />
+        </div>
+      )}
 
       {/* Section Lieu de prestation - visible si nécessaire */}
       {showLocationSelector && onLocationSelect && (
@@ -175,77 +298,92 @@ export default function AnnouncerFormules({
       {/* Section Adresse client - visible si service à domicile */}
       {hasVariantSelected &&
         (bookingSelection?.serviceLocation === "client_home" ||
-          (service.serviceLocation === "client_home" && !showLocationSelector)) &&
-        onAddressSelect &&
-        onAddNewAddress && (
-          <AddressSelector
-            addresses={clientAddresses}
-            selectedAddressId={bookingSelection?.selectedAddressId ?? null}
-            isLoading={isLoadingAddresses}
-            onSelect={onAddressSelect}
-            onAddNew={onAddNewAddress}
-          />
+          (service.serviceLocation === "client_home" && !showLocationSelector)) && (
+          <>
+            {isLoggedIn ? (
+              // Utilisateur connecté - Sélection d'adresse existante
+              onAddressSelect && onAddNewAddress && (
+                <AddressSelector
+                  addresses={clientAddresses}
+                  selectedAddressId={bookingSelection?.selectedAddressId ?? null}
+                  isLoading={isLoadingAddresses}
+                  onSelect={onAddressSelect}
+                  onAddNew={onAddNewAddress}
+                />
+              )
+            ) : (
+              // Invité - Saisie d'adresse avec autocomplétion
+              onGuestAddressChange && (
+                <GuestAddressSelector
+                  guestAddress={guestAddress ?? null}
+                  announcerCoordinates={announcerCoordinates}
+                  onAddressChange={onGuestAddressChange}
+                />
+              )
+            )}
+          </>
         )}
 
       {/* Section Options additionnelles - visible quand une formule est sélectionnée */}
       {hasVariantSelected && service.options.length > 0 && (
-        <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <span className="p-2 bg-secondary/10 rounded-lg">
-              <Plus className="w-5 h-5 text-secondary" />
-            </span>
-            Options additionnelles
-          </h3>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={cn(
+            "bg-white rounded-2xl p-5 sm:p-6 border-2 transition-colors duration-300 relative overflow-hidden",
+            selectedOptionIds.length > 0
+              ? "border-gray-100"
+              : "border-secondary/30"
+          )}
+        >
+          {/* Subtle gradient overlay when no options selected */}
+          {selectedOptionIds.length === 0 && (
+            <div className="absolute inset-0 bg-gradient-to-br from-secondary/5 via-transparent to-secondary/5 pointer-events-none" />
+          )}
 
-          <div className="space-y-3">
-            {service.options.map((option) => (
-              <SelectableOptionCard
-                key={option.id.toString()}
-                option={option}
-                isSelected={selectedOptionIds.includes(option.id.toString())}
-                commissionRate={commissionRate}
-                onToggle={() => onOptionToggle?.(option.id.toString())}
-              />
-            ))}
+          <div className="relative">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <span className={cn(
+                  "p-2 rounded-lg transition-colors duration-300",
+                  selectedOptionIds.length > 0 ? "bg-secondary/10" : "bg-secondary/15"
+                )}>
+                  <Plus className="w-5 h-5 text-secondary" />
+                </span>
+                Options additionnelles
+              </h3>
+
+              {/* Subtle invitation when no options selected */}
+              {selectedOptionIds.length === 0 && (
+                <motion.div
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex items-center gap-1.5 text-sm text-secondary font-medium"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span className="hidden sm:inline">Personnalisez votre réservation</span>
+                </motion.div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              {service.options.map((option, index) => (
+                <SelectableOptionCard
+                  key={option.id.toString()}
+                  option={option}
+                  isSelected={selectedOptionIds.includes(option.id.toString())}
+                  commissionRate={commissionRate}
+                  onToggle={() => onOptionToggle?.(option.id.toString())}
+                  showSuggestPulse={selectedOptionIds.length === 0}
+                  animationDelay={index * 0.1}
+                />
+              ))}
+            </div>
           </div>
-        </div>
+        </motion.div>
       )}
-
-      {/* Calendrier - visible quand les conditions sont remplies (desktop seulement) */}
-      {canShowCalendar && calendarMonth && onDateSelect && onEndDateSelect && onTimeSelect && onEndTimeSelect && onOvernightChange && onMonthChange && (
-        <div className="hidden md:block">
-          <BookingCalendar
-          selectedDate={bookingSelection?.startDate ?? null}
-          selectedEndDate={bookingSelection?.endDate ?? null}
-          selectedTime={bookingSelection?.startTime ?? null}
-          selectedEndTime={bookingSelection?.endTime ?? null}
-          includeOvernightStay={bookingSelection?.includeOvernightStay ?? false}
-          calendarMonth={calendarMonth}
-          availabilityCalendar={availabilityCalendar}
-          isRangeMode={isRangeMode}
-          days={days}
-          nights={nights}
-          isCapacityBased={isCapacityBased}
-          maxAnimalsPerSlot={maxAnimalsPerSlot}
-          enableDurationBasedBlocking={enableDurationBasedBlocking}
-          variantDuration={variantDuration}
-          bufferBefore={bufferBefore}
-          bufferAfter={bufferAfter}
-          acceptReservationsFrom={acceptReservationsFrom}
-          acceptReservationsTo={acceptReservationsTo}
-          allowOvernightStay={service.allowOvernightStay}
-          overnightPrice={service.overnightPrice}
-          dayStartTime={service.dayStartTime}
-          dayEndTime={service.dayEndTime}
-          onDateSelect={onDateSelect}
-          onEndDateSelect={onEndDateSelect}
-          onTimeSelect={onTimeSelect}
-          onEndTimeSelect={onEndTimeSelect}
-          onOvernightChange={onOvernightChange}
-          onMonthChange={onMonthChange}
-        />
         </div>
-      )}
+      </div>
     </section>
   );
 }

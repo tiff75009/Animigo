@@ -11,6 +11,8 @@ interface SelectableOptionCardProps {
   isSelected: boolean;
   commissionRate: number;
   onToggle: () => void;
+  showSuggestPulse?: boolean;
+  animationDelay?: number;
 }
 
 export default function SelectableOptionCard({
@@ -18,21 +20,49 @@ export default function SelectableOptionCard({
   isSelected,
   commissionRate,
   onToggle,
+  showSuggestPulse = false,
+  animationDelay = 0,
 }: SelectableOptionCardProps) {
   return (
     <motion.button
+      initial={showSuggestPulse ? { opacity: 0.9, y: 3 } : false}
+      animate={showSuggestPulse ? {
+        opacity: 1,
+        y: 0,
+      } : { opacity: 1, y: 0 }}
+      transition={{
+        opacity: { duration: 0.3, delay: animationDelay },
+        y: { duration: 0.3, delay: animationDelay },
+      }}
       whileHover={{ scale: 1.01 }}
       whileTap={{ scale: 0.99 }}
       onClick={onToggle}
       className={cn(
-        "w-full flex items-center justify-between p-4 rounded-xl transition-all text-left",
+        "w-full flex items-center justify-between p-4 rounded-xl transition-all text-left relative overflow-hidden",
         "border-2",
         isSelected
           ? "border-secondary bg-secondary/5 ring-2 ring-secondary/20"
-          : "border-gray-100 bg-gray-50 hover:bg-gray-100 hover:border-gray-200"
+          : showSuggestPulse
+            ? "border-secondary/20 bg-gradient-to-r from-gray-50 to-secondary/5 hover:bg-secondary/10 hover:border-secondary/40"
+            : "border-gray-100 bg-gray-50 hover:bg-gray-100 hover:border-gray-200"
       )}
     >
-      <div className="flex items-center gap-3 flex-1 min-w-0">
+      {/* Subtle shimmer effect when suggesting */}
+      {showSuggestPulse && !isSelected && (
+        <motion.div
+          className="absolute inset-0 bg-gradient-to-r from-transparent via-secondary/10 to-transparent -skew-x-12"
+          initial={{ x: "-100%" }}
+          animate={{ x: "200%" }}
+          transition={{
+            duration: 2.5,
+            repeat: Infinity,
+            delay: animationDelay + 1,
+            ease: "easeInOut",
+            repeatDelay: 4,
+          }}
+        />
+      )}
+      <div className="flex items-center gap-3 flex-1 min-w-0 relative z-10">
         <motion.div
           animate={{
             backgroundColor: isSelected ? "rgb(78, 205, 196)" : "rgb(243, 244, 246)",
@@ -61,7 +91,7 @@ export default function SelectableOptionCard({
           )}
         </div>
       </div>
-      <div className="text-right flex-shrink-0 ml-3">
+      <div className="text-right flex-shrink-0 ml-3 relative z-10">
         <p className={cn(
           "font-bold",
           isSelected ? "text-secondary" : "text-secondary"

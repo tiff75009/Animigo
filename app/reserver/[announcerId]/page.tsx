@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, use } from "react";
+import { useState, useMemo, use, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "convex/react";
@@ -29,6 +29,13 @@ import {
 } from "./components";
 
 // Types
+interface GuestAddressData {
+  address: string;
+  city: string | null;
+  postalCode: string | null;
+  coordinates: { lat: number; lng: number } | null;
+}
+
 interface BookingData {
   serviceId: string;
   variantId: string;
@@ -39,6 +46,7 @@ interface BookingData {
   includeOvernightStay: boolean;
   selectedOptionIds: string[];
   serviceLocation: "announcer_home" | "client_home" | null;
+  guestAddress: GuestAddressData | null;
 }
 
 // Step labels
@@ -287,12 +295,36 @@ export default function ReserverPage({
   const preSelectedOvernight = searchParams.get("overnight");
   const preSelectedLocation = searchParams.get("location") as "announcer_home" | "client_home" | null;
 
+  // Guest address params (for non-logged in users)
+  const guestAddressParam = searchParams.get("guestAddress");
+  const guestCityParam = searchParams.get("guestCity");
+  const guestPostalCodeParam = searchParams.get("guestPostalCode");
+  const guestLatParam = searchParams.get("guestLat");
+  const guestLngParam = searchParams.get("guestLng");
+
+  // Direct finalization param (skip to step 4)
+  const shouldFinalize = searchParams.get("finalize") === "true";
+
+  // Build guest address object if present
+  const preSelectedGuestAddress = guestAddressParam ? {
+    address: guestAddressParam,
+    city: guestCityParam,
+    postalCode: guestPostalCodeParam,
+    coordinates: guestLatParam && guestLngParam ? {
+      lat: parseFloat(guestLatParam),
+      lng: parseFloat(guestLngParam),
+    } : null,
+  } : null;
+
   // Parse pre-selected options (comma-separated IDs)
   const preSelectedOptionIds = preSelectedOptions ? preSelectedOptions.split(",") : [];
 
-  // Always start at step 1 - data will be pre-filled from URL params
-  // This allows users to review their selection before proceeding
+  // Determine initial step
+  // If finalize=true and all required data is present, go directly to step 4 (summary)
   const getInitialStep = () => {
+    if (shouldFinalize && preSelectedServiceId && preSelectedVariantId && preSelectedDate && preSelectedStartTime) {
+      return 4; // Go directly to summary/finalization step
+    }
     return 1;
   };
 
@@ -308,12 +340,20 @@ export default function ReserverPage({
     includeOvernightStay: preSelectedOvernight === "true",
     selectedOptionIds: preSelectedOptionIds,
     serviceLocation: preSelectedLocation,
+    guestAddress: preSelectedGuestAddress,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     return preSelectedDate ? new Date(preSelectedDate) : new Date();
   });
+
+  // Effect pour aller directement à l'étape 4 si finalize=true
+  useEffect(() => {
+    if (shouldFinalize && preSelectedServiceId && preSelectedVariantId && preSelectedDate && preSelectedStartTime) {
+      setStep(4);
+    }
+  }, [shouldFinalize, preSelectedServiceId, preSelectedVariantId, preSelectedDate, preSelectedStartTime]);
 
   // Queries
   const announcerData = useQuery(api.public.search.getAnnouncerById, {
@@ -518,6 +558,12 @@ export default function ReserverPage({
         overnightNights: nights > 0 ? nights : undefined,
         overnightAmount: overnightAmount > 0 ? overnightAmount : undefined,
         serviceLocation: bookingData.serviceLocation || undefined,
+        guestAddress: bookingData.guestAddress ? {
+          address: bookingData.guestAddress.address,
+          city: bookingData.guestAddress.city || undefined,
+          postalCode: bookingData.guestAddress.postalCode || undefined,
+          coordinates: bookingData.guestAddress.coordinates || undefined,
+        } : undefined,
         token: token || undefined,
       });
 

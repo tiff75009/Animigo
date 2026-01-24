@@ -65,6 +65,16 @@ export const createPendingBooking = mutation({
       v.literal("announcer_home"),
       v.literal("client_home")
     )),
+    // Adresse invité (pour les utilisateurs non connectés)
+    guestAddress: v.optional(v.object({
+      address: v.string(),
+      city: v.optional(v.string()),
+      postalCode: v.optional(v.string()),
+      coordinates: v.optional(v.object({
+        lat: v.number(),
+        lng: v.number(),
+      })),
+    })),
     // Token optionnel (si utilisateur connecté)
     token: v.optional(v.string()),
   },
@@ -176,6 +186,13 @@ export const createPendingBooking = mutation({
       overnightAmount: args.overnightAmount,
       // Lieu de prestation
       serviceLocation: args.serviceLocation,
+      // Adresse invité
+      guestAddress: args.guestAddress ? {
+        address: args.guestAddress.address,
+        city: args.guestAddress.city,
+        postalCode: args.guestAddress.postalCode,
+        coordinates: args.guestAddress.coordinates,
+      } : undefined,
       userId,
       expiresAt,
       createdAt: now,

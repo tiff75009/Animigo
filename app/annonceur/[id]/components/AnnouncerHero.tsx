@@ -1,7 +1,19 @@
 "use client";
 
 import Image from "next/image";
-import { MapPin, Star, Clock, Calendar, User, ShieldCheck } from "lucide-react";
+import {
+  MapPin,
+  Star,
+  Clock,
+  Calendar,
+  User,
+  ShieldCheck,
+  ChevronDown,
+  MessageCircle,
+  Zap,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useState } from "react";
 import { cn } from "@/app/lib/utils";
 import { AnnouncerData, animalEmojis } from "./types";
 import { formatDistance } from "@/app/components/platform/helpers";
@@ -22,6 +34,8 @@ export default function AnnouncerHero({
   isFavorite = false,
   onToggleFavorite,
 }: AnnouncerHeroProps) {
+  const [isBioExpanded, setIsBioExpanded] = useState(false);
+
   // Utiliser les animaux du service sélectionné si disponible, sinon ceux de l'annonceur
   const displayedAnimals = selectedServiceAnimals && selectedServiceAnimals.length > 0
     ? selectedServiceAnimals
@@ -33,7 +47,7 @@ export default function AnnouncerHero({
   const getStatusLabel = () => {
     switch (announcer.statusType) {
       case "professionnel":
-        return "Professionnel";
+        return "Pro";
       case "micro_entrepreneur":
         return "Auto-entrepreneur";
       default:
@@ -44,18 +58,18 @@ export default function AnnouncerHero({
   const getStatusColor = () => {
     switch (announcer.statusType) {
       case "professionnel":
-        return "bg-blue-50 text-blue-600";
+        return "bg-gradient-to-r from-blue-500 to-blue-600 text-white";
       case "micro_entrepreneur":
-        return "bg-purple-50 text-purple-600";
+        return "bg-gradient-to-r from-purple-500 to-purple-600 text-white";
       default:
-        return "bg-gray-100 text-gray-600";
+        return "bg-gray-100 text-gray-700";
     }
   };
 
   return (
     <section className="pt-16">
       {/* Cover Image */}
-      <div className="relative h-48 sm:h-64 md:h-80 bg-gradient-to-br from-primary/20 to-secondary/20">
+      <div className="relative h-40 sm:h-56 md:h-64 bg-gradient-to-br from-primary/20 via-secondary/10 to-primary/20">
         {announcer.coverImage && (
           <Image
             src={announcer.coverImage}
@@ -65,7 +79,7 @@ export default function AnnouncerHero({
             priority
           />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
 
         {/* Action Bar - Boutons retour, favoris, partage */}
         <AnnouncerActionBar
@@ -76,117 +90,158 @@ export default function AnnouncerHero({
       </div>
 
       {/* Profile Info Card */}
-      <div className="max-w-6xl mx-auto px-4 -mt-20 sm:-mt-24 relative z-10">
-        <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-6 md:p-8">
-          <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
-            {/* Avatar */}
-            <div className="relative mx-auto sm:mx-0 flex-shrink-0">
-              <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl overflow-hidden bg-gray-100 ring-4 ring-white shadow-2xl">
-                {announcer.profileImage ? (
-                  <Image
-                    src={announcer.profileImage}
-                    alt={announcer.firstName}
-                    width={128}
-                    height={128}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
-                    <User className="w-12 h-12 text-gray-400" />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Info */}
-            <div className="flex-1 text-center sm:text-left">
-              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                <div>
-                  <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-                    {announcer.firstName} {announcer.lastName.charAt(0)}.
-                  </h1>
-                  {announcer.location && (
-                    <div className="flex items-center justify-center sm:justify-start gap-2 mt-1 text-gray-600">
-                      <MapPin className="w-4 h-4 text-primary" />
-                      <span>
-                        {announcer.location}
-                        {formattedDistance && (
-                          <span className="text-gray-400"> · {formattedDistance}</span>
-                        )}
-                      </span>
+      <div className="max-w-6xl mx-auto px-4 -mt-16 sm:-mt-20 relative z-10">
+        <div className="bg-white rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1),0_8px_40px_-8px_rgba(0,0,0,0.05)] border border-gray-100/80 overflow-hidden">
+          {/* Top section with avatar and main info */}
+          <div className="p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row gap-4 sm:gap-5">
+              {/* Avatar with status badge */}
+              <div className="relative mx-auto sm:mx-0 flex-shrink-0">
+                <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden bg-gray-100 ring-4 ring-white shadow-xl">
+                  {announcer.profileImage ? (
+                    <Image
+                      src={announcer.profileImage}
+                      alt={announcer.firstName}
+                      width={112}
+                      height={112}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10">
+                      <User className="w-10 h-10 text-gray-400" />
                     </div>
                   )}
                 </div>
-
-                {/* Badges */}
-                <div className="flex flex-wrap justify-center sm:justify-end gap-2">
-                  <span className={cn(
-                    "px-3 py-1 rounded-full text-sm font-medium",
-                    getStatusColor()
-                  )}>
-                    {getStatusLabel()}
-                  </span>
-                  {announcer.isIdentityVerified && (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-secondary/10 text-secondary">
-                      <ShieldCheck className="w-4 h-4" />
-                      Identité vérifiée
-                    </span>
-                  )}
-                  {announcer.icadRegistered && (
-                    <span className="px-3 py-1 rounded-full text-sm font-medium bg-emerald-50 text-emerald-600">
-                      I-CAD
-                    </span>
-                  )}
+                {/* Status badge on avatar */}
+                <div className={cn(
+                  "absolute -bottom-1 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full text-xs font-semibold shadow-lg",
+                  getStatusColor()
+                )}>
+                  {getStatusLabel()}
                 </div>
               </div>
 
-              {/* Stats */}
-              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4 sm:gap-6 mt-4 pt-4 border-t border-gray-100">
-                {/* Rating */}
-                {announcer.reviewCount > 0 && (
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1 px-2.5 py-1 bg-amber-50 rounded-lg">
-                      <Star className="w-5 h-5 fill-amber-400 text-amber-400" />
-                      <span className="font-bold text-gray-900">{announcer.rating.toFixed(1)}</span>
-                    </div>
-                    <span className="text-sm text-gray-500">({announcer.reviewCount} avis)</span>
-                  </div>
-                )}
-
-                {/* Response time */}
-                <div className="flex items-center gap-2 text-gray-600">
-                  <Clock className="w-4 h-4 text-primary" />
-                  <span className="text-sm">Répond en {announcer.responseTime}</span>
-                </div>
-
-                {/* Member since */}
-                <div className="flex items-center gap-2 text-gray-600">
-                  <Calendar className="w-4 h-4 text-primary" />
-                  <span className="text-sm">Membre depuis {announcer.memberSince}</span>
-                </div>
-              </div>
-
-              {/* Accepted animals */}
-              {displayedAnimals.length > 0 && (
-                <div className="mt-4 pt-4 border-t border-gray-100">
-                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                    {displayedAnimals.map((animal) => (
-                      <div
-                        key={animal}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-primary/5 to-secondary/5 border border-primary/10 rounded-full"
-                      >
-                        <span className="text-lg">
-                          {animalEmojis[animal.toLowerCase()] || "🐾"}
-                        </span>
-                        <span className="text-sm font-medium text-gray-700 capitalize">
-                          {animal}
+              {/* Name, location and badges */}
+              <div className="flex-1 text-center sm:text-left min-w-0">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                  <div>
+                    <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
+                      {announcer.firstName} {announcer.lastName.charAt(0)}.
+                    </h1>
+                    {announcer.location && (
+                      <div className="flex items-center justify-center sm:justify-start gap-1.5 mt-0.5 text-gray-500 text-sm">
+                        <MapPin className="w-3.5 h-3.5 text-primary" />
+                        <span className="truncate">
+                          {announcer.location}
+                          {formattedDistance && (
+                            <span className="text-gray-400"> · {formattedDistance}</span>
+                          )}
                         </span>
                       </div>
-                    ))}
+                    )}
+                  </div>
+
+                  {/* Verification badges */}
+                  <div className="flex flex-wrap justify-center sm:justify-end gap-1.5">
+                    {announcer.isIdentityVerified && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-secondary/10 text-secondary">
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Vérifié</span>
+                      </span>
+                    )}
+                    {announcer.icadRegistered && (
+                      <span className="px-2 py-1 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-600">
+                        I-CAD
+                      </span>
+                    )}
                   </div>
                 </div>
-              )}
+
+                {/* Stats row */}
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 sm:gap-4 mt-3">
+                  {/* Rating */}
+                  {announcer.reviewCount > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1 px-2 py-1 bg-amber-50 rounded-lg">
+                        <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                        <span className="text-sm font-bold text-gray-900">{announcer.rating.toFixed(1)}</span>
+                      </div>
+                      <span className="text-xs text-gray-500">({announcer.reviewCount})</span>
+                    </div>
+                  )}
+
+                  {/* Response rate */}
+                  {announcer.responseRate && announcer.responseRate >= 90 && (
+                    <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 rounded-lg">
+                      <Zap className="w-3.5 h-3.5 text-green-600" />
+                      <span className="text-xs font-medium text-green-700">{announcer.responseRate}%</span>
+                    </div>
+                  )}
+
+                  {/* Response time */}
+                  <div className="flex items-center gap-1.5 text-gray-500">
+                    <Clock className="w-3.5 h-3.5" />
+                    <span className="text-xs">{announcer.responseTime}</span>
+                  </div>
+
+                  {/* Member since */}
+                  <div className="hidden sm:flex items-center gap-1.5 text-gray-500">
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span className="text-xs">Depuis {announcer.memberSince}</span>
+                  </div>
+                </div>
+              </div>
             </div>
+          </div>
+
+          {/* Divider */}
+          <div className="border-t border-gray-100" />
+
+          {/* Bottom section with animals and bio */}
+          <div className="px-4 sm:px-6 py-3 sm:py-4 bg-gray-50/50">
+            {/* Accepted animals as compact chips */}
+            {displayedAnimals.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                <span className="text-xs font-medium text-gray-500 mr-1">Accepte :</span>
+                {displayedAnimals.map((animal) => (
+                  <span
+                    key={animal}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-gray-200 rounded-full text-xs font-medium text-gray-700"
+                  >
+                    <span>{animalEmojis[animal.toLowerCase()] || "🐾"}</span>
+                    <span className="capitalize">{animal}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Bio / Description */}
+            {announcer.bio && (
+              <div>
+                <p className={cn(
+                  "text-gray-600 text-sm leading-relaxed",
+                  !isBioExpanded && "line-clamp-2"
+                )}>
+                  {announcer.bio}
+                </p>
+
+                {/* Bouton "Voir plus" si bio longue */}
+                {announcer.bio.length > 120 && (
+                  <button
+                    onClick={() => setIsBioExpanded(!isBioExpanded)}
+                    className="mt-1.5 text-xs font-medium text-primary flex items-center gap-0.5 hover:underline"
+                  >
+                    <span>{isBioExpanded ? "Voir moins" : "Voir plus"}</span>
+                    <motion.div
+                      animate={{ rotate: isBioExpanded ? 180 : 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </motion.div>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
