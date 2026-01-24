@@ -9,7 +9,7 @@ export function HeroSection() {
   const router = useRouter();
 
   return (
-    <section className="relative min-h-[85vh] bg-background overflow-hidden flex flex-col">
+    <section className="relative min-h-[calc(100vh-7rem)] lg:min-h-[calc(100vh-4rem)] bg-background overflow-hidden flex flex-col">
       {/* Background gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-secondary/5" />
 
