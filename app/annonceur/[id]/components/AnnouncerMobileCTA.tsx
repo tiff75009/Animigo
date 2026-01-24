@@ -4,11 +4,12 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ArrowRight, Check } from "lucide-react";
-import { ServiceData } from "./types";
+import { ServiceData, FormuleData } from "./types";
 import { cn } from "@/app/lib/utils";
 
 interface AnnouncerMobileCTAProps {
   services: ServiceData[];
+  selectedServiceId?: string | null; // Service sélectionné via URL
   commissionRate?: number; // Taux de commission en %
   onBook?: (serviceId?: string, variantId?: string) => void;
 }
@@ -24,27 +25,96 @@ const calculatePriceWithCommission = (basePriceCents: number, commissionRate: nu
   return basePriceCents + commission;
 };
 
-// Labels des unités de prix
-const priceUnitLabels: Record<string, string> = {
-  hour: "/h",
-  day: "/jour",
-  week: "/sem",
-  month: "/mois",
-  flat: "",
+// Déterminer si c'est une garde (afficher /jour) ou un service (afficher /heure)
+const isGardeService = (service: ServiceData) => {
+  const categorySlug = service.categorySlug || service.categoryId || "";
+  return categorySlug.toString().includes("garde") || categorySlug === "garde";
 };
 
-export default function AnnouncerMobileCTA({ services, commissionRate = 15, onBook }: AnnouncerMobileCTAProps) {
+// Obtenir le meilleur prix et unité pour une formule
+const getFormuleBestPrice = (formule: FormuleData, isGarde: boolean): { price: number; unit: string } => {
+  const pricing = formule.pricing;
+
+  if (pricing) {
+    if (isGarde) {
+      // Pour les gardes: priorité daily > weekly > monthly > hourly
+      if (pricing.daily) return { price: pricing.daily, unit: "jour" };
+      if (pricing.weekly) return { price: pricing.weekly, unit: "semaine" };
+      if (pricing.monthly) return { price: pricing.monthly, unit: "mois" };
+      if (pricing.hourly) return { price: pricing.hourly, unit: "heure" };
+    } else {
+      // Pour les services: priorité hourly > daily > weekly > monthly
+      if (pricing.hourly) return { price: pricing.hourly, unit: "heure" };
+      if (pricing.daily) return { price: pricing.daily, unit: "jour" };
+      if (pricing.weekly) return { price: pricing.weekly, unit: "semaine" };
+      if (pricing.monthly) return { price: pricing.monthly, unit: "mois" };
+    }
+  }
+
+  // Fallback sur price/unit
+  if (formule.price > 0) {
+    let unit = isGarde ? "jour" : "heure";
+    if (formule.unit === "day") unit = "jour";
+    else if (formule.unit === "hour") unit = "heure";
+    else if (formule.unit === "week") unit = "semaine";
+    else if (formule.unit === "month") unit = "mois";
+    else if (formule.unit === "flat") unit = "";
+    return { price: formule.price, unit };
+  }
+
+  return { price: 0, unit: "" };
+};
+
+// Obtenir le prix minimum pour un seul service
+const getServiceMinPrice = (service: ServiceData): { price: number; unit: string } => {
+  const isGarde = isGardeService(service);
+  let minPrice = Infinity;
+  let minUnit = "";
+
+  for (const formule of service.formules) {
+    const { price, unit } = getFormuleBestPrice(formule, isGarde);
+    if (price > 0 && price < minPrice) {
+      minPrice = price;
+      minUnit = unit;
+    }
+  }
+
+  return { price: minPrice === Infinity ? 0 : minPrice, unit: minUnit };
+};
+
+// Obtenir le prix minimum global parmi tous les services
+const getGlobalMinPrice = (services: ServiceData[]): { price: number; unit: string } => {
+  let minPrice = Infinity;
+  let minUnit = "";
+
+  for (const service of services) {
+    const isGarde = isGardeService(service);
+    for (const formule of service.formules) {
+      const { price, unit } = getFormuleBestPrice(formule, isGarde);
+      if (price > 0 && price < minPrice) {
+        minPrice = price;
+        minUnit = unit;
+      }
+    }
+  }
+
+  return { price: minPrice === Infinity ? 0 : minPrice, unit: minUnit };
+};
+
+export default function AnnouncerMobileCTA({ services, selectedServiceId, commissionRate = 15, onBook }: AnnouncerMobileCTAProps) {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
 
-  // Trouver le prix minimum parmi tous les services
-  const minPrice = services.reduce((min, service) => {
-    const serviceMin = service.formules.reduce((sMin, formule) => {
-      return formule.price < sMin ? formule.price : sMin;
-    }, Infinity);
-    return serviceMin < min ? serviceMin : min;
-  }, Infinity);
+  // Trouver le service sélectionné (si un est sélectionné via URL)
+  const selectedService = selectedServiceId
+    ? services.find((s) => s.id === selectedServiceId || s.categorySlug === selectedServiceId)
+    : null;
 
-  const hasPrice = minPrice !== Infinity && minPrice > 0;
+  // Obtenir le prix minimum avec la bonne unité
+  // Si un service est sélectionné, prendre son prix. Sinon, prendre le minimum global.
+  const { price: minPrice, unit: minUnit } = selectedService
+    ? getServiceMinPrice(selectedService)
+    : getGlobalMinPrice(services);
+  const hasPrice = minPrice > 0;
 
   // Handle booking with service/variant selection
   const handleBookVariant = (serviceId: string, variantId: string) => {
@@ -75,7 +145,7 @@ export default function AnnouncerMobileCTA({ services, commissionRate = 15, onBo
             {hasPrice ? (
               <p className="text-xl font-bold text-gray-900">
                 {formatPrice(calculatePriceWithCommission(minPrice, commissionRate))}€
-                <span className="text-sm font-normal text-gray-500">/prestation</span>
+                <span className="text-sm font-normal text-gray-500">{minUnit ? `/${minUnit}` : ""}</span>
               </p>
             ) : (
               <p className="text-base font-medium text-gray-500">
@@ -152,36 +222,40 @@ export default function AnnouncerMobileCTA({ services, commissionRate = 15, onBo
 
                         {/* Formules */}
                         <div className="space-y-2">
-                          {service.formules.map((formule) => (
-                            <motion.button
-                              key={formule.id}
-                              whileTap={{ scale: 0.98 }}
-                              onClick={() => handleBookVariant(service.id, formule.id)}
-                              className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors text-left"
-                            >
-                              <div className="flex-1 min-w-0 pr-3">
-                                <p className="font-medium text-gray-900">
-                                  {formule.name}
-                                </p>
-                                {formule.description && (
-                                  <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">
-                                    {formule.description}
+                          {service.formules.map((formule) => {
+                            const isGarde = isGardeService(service);
+                            const { price: formulePrice, unit: formuleUnit } = getFormuleBestPrice(formule, isGarde);
+                            return (
+                              <motion.button
+                                key={formule.id}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => handleBookVariant(service.id, formule.id)}
+                                className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors text-left"
+                              >
+                                <div className="flex-1 min-w-0 pr-3">
+                                  <p className="font-medium text-gray-900">
+                                    {formule.name}
                                   </p>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2 flex-shrink-0">
-                                <span className="text-lg font-bold text-primary">
-                                  {formatPrice(calculatePriceWithCommission(formule.price, commissionRate))}€
-                                  <span className="text-sm font-normal text-gray-500">
-                                    {formule.unit ? priceUnitLabels[formule.unit] || "" : ""}
-                                  </span>
-                                </span>
-                                <div className="p-2 bg-primary text-white rounded-lg">
-                                  <ArrowRight className="w-4 h-4" />
+                                  {formule.description && (
+                                    <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">
+                                      {formule.description}
+                                    </p>
+                                  )}
                                 </div>
-                              </div>
-                            </motion.button>
-                          ))}
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  <span className="text-lg font-bold text-primary">
+                                    {formatPrice(calculatePriceWithCommission(formulePrice, commissionRate))}€
+                                    <span className="text-sm font-normal text-gray-500">
+                                      {formuleUnit ? `/${formuleUnit}` : ""}
+                                    </span>
+                                  </span>
+                                  <div className="p-2 bg-primary text-white rounded-lg">
+                                    <ArrowRight className="w-4 h-4" />
+                                  </div>
+                                </div>
+                              </motion.button>
+                            );
+                          })}
                         </div>
 
                         {/* Options preview */}

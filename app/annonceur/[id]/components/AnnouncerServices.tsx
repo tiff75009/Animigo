@@ -10,6 +10,7 @@ interface AnnouncerServicesProps {
   services: ServiceData[];
   initialExpandedService?: string | null;
   commissionRate?: number; // Taux de commission en %
+  onServiceSelect?: (serviceId: string) => void; // Callback pour sélectionner un service (mobile)
   className?: string;
 }
 
@@ -81,8 +82,17 @@ const getServiceMinPrice = (service: ServiceData): { price: number; unit: string
   return { price: minPrice === Infinity ? 0 : minPrice, unit: minUnit };
 };
 
-export default function AnnouncerServices({ services, initialExpandedService, commissionRate = 15, className }: AnnouncerServicesProps) {
+export default function AnnouncerServices({ services, initialExpandedService, commissionRate = 15, onServiceSelect, className }: AnnouncerServicesProps) {
   const [expandedService, setExpandedService] = useState<string | null>(initialExpandedService ?? null);
+
+  const handleServiceClick = (serviceId: string) => {
+    // Toggle expand
+    setExpandedService(expandedService === serviceId ? null : serviceId);
+    // Notify parent to update selected service (for mobile CTA)
+    if (onServiceSelect) {
+      onServiceSelect(serviceId);
+    }
+  };
 
   if (services.length === 0) {
     return (
@@ -122,9 +132,7 @@ export default function AnnouncerServices({ services, initialExpandedService, co
             >
               {/* Service Header */}
               <button
-                onClick={() => setExpandedService(
-                  expandedService === service.id ? null : service.id
-                )}
+                onClick={() => handleServiceClick(service.id as string)}
                 className="w-full p-4 sm:p-5 flex items-center justify-between hover:bg-gray-50 transition-colors"
               >
                 <div className="flex items-center gap-3">

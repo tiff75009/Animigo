@@ -3,9 +3,11 @@
 import { cn } from "@/app/lib/utils";
 import { navLinks } from "@/app/lib/constants";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Search, LogIn, UserPlus, LayoutDashboard, LogOut, ChevronDown } from "lucide-react";
+import { Menu, X, Search, LogIn, UserPlus, LayoutDashboard, LogOut, ChevronDown, Bell, MessageCircle } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useAuthState } from "@/app/hooks/useAuthState";
+import { useNotifications } from "@/app/hooks/useNotifications";
+import { NotificationDropdown } from "@/app/components/notifications";
 import Link from "next/link";
 
 export function Navbar() {
@@ -15,6 +17,7 @@ export function Navbar() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const { isLoading, isAuthenticated, isAdmin, user, logout } = useAuthState();
+  const { unreadCount } = useNotifications(50);
 
   const handleScroll = useCallback(() => {
     setIsScrolled(window.scrollY > 20);
@@ -141,90 +144,104 @@ export function Navbar() {
             {/* Desktop CTAs - Droite */}
             <div className="hidden md:flex items-center gap-2">
               {!isLoading && isAuthenticated && user ? (
-                /* Menu Profil Connecté */
-                <div className="relative" data-profile-menu>
-                  <motion.button
-                    onClick={() => setIsProfileOpen(!isProfileOpen)}
-                    className={cn(
-                      "flex items-center gap-2 pl-1 pr-3 py-1 rounded-full transition-all",
-                      isProfileOpen
-                        ? "bg-gray-100 shadow-inner"
-                        : "hover:bg-gray-100/80"
-                    )}
-                    whileTap={{ scale: 0.98 }}
+                <>
+                  {/* Messages Button */}
+                  <Link
+                    href="/dashboard/messagerie"
+                    className="relative p-2.5 rounded-xl text-gray-500 hover:text-gray-700 hover:bg-gray-100/80 transition-colors"
                   >
-                    <div className="w-8 h-8 bg-gradient-to-br from-primary to-secondary rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm">
-                      {initials}
-                    </div>
-                    <span className="text-sm font-medium text-gray-700 hidden lg:block max-w-[100px] truncate">
-                      {user.firstName}
-                    </span>
-                    <motion.div
-                      animate={{ rotate: isProfileOpen ? 180 : 0 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <ChevronDown className="w-4 h-4 text-gray-400" />
-                    </motion.div>
-                  </motion.button>
+                    <MessageCircle className="w-5 h-5" />
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full" />
+                  </Link>
 
-                  <AnimatePresence>
-                    {isProfileOpen && (
+                  {/* Notifications - Composant réutilisable */}
+                  <NotificationDropdown />
+
+                  {/* Menu Profil Connecté */}
+                  <div className="relative" data-profile-menu>
+                    <motion.button
+                      onClick={() => setIsProfileOpen(!isProfileOpen)}
+                      className={cn(
+                        "flex items-center gap-2 pl-1 pr-3 py-1 rounded-full transition-all",
+                        isProfileOpen
+                          ? "bg-gray-100 shadow-inner"
+                          : "hover:bg-gray-100/80"
+                      )}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      <div className="w-8 h-8 bg-gradient-to-br from-primary to-secondary rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm">
+                        {initials}
+                      </div>
+                      <span className="text-sm font-medium text-gray-700 hidden lg:block max-w-[100px] truncate">
+                        {user.firstName}
+                      </span>
                       <motion.div
-                        initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                        transition={{ duration: 0.15 }}
-                        className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 overflow-hidden"
+                        animate={{ rotate: isProfileOpen ? 180 : 0 }}
+                        transition={{ duration: 0.2 }}
                       >
-                        {/* Header profil */}
-                        <div className="p-4 bg-gradient-to-br from-primary/5 via-secondary/5 to-transparent">
-                          <div className="flex items-center gap-3">
-                            <div className="w-11 h-11 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center text-white font-bold shadow-md">
-                              {initials}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-gray-900 truncate">
-                                {user.firstName} {user.lastName}
-                              </p>
-                              <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                        <ChevronDown className="w-4 h-4 text-gray-400" />
+                      </motion.div>
+                    </motion.button>
+
+                    <AnimatePresence>
+                      {isProfileOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-xl shadow-black/10 border border-gray-100 overflow-hidden z-[200]"
+                        >
+                          {/* Header profil */}
+                          <div className="p-4 bg-gradient-to-br from-primary/5 via-secondary/5 to-transparent">
+                            <div className="flex items-center gap-3">
+                              <div className="w-11 h-11 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center text-white font-bold shadow-md">
+                                {initials}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-gray-900 truncate">
+                                  {user.firstName} {user.lastName}
+                                </p>
+                                <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        {/* Actions */}
-                        <div className="p-2">
-                          <Link
-                            href={isAdmin ? "/admin" : "/dashboard"}
-                            onClick={() => setIsProfileOpen(false)}
-                            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors"
-                          >
-                            <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
-                              <LayoutDashboard className="w-4 h-4 text-primary" />
-                            </div>
-                            <span className="font-medium">{isAdmin ? "Administration" : "Dashboard"}</span>
-                          </Link>
-                        </div>
+                          {/* Actions */}
+                          <div className="p-2">
+                            <Link
+                              href={isAdmin ? "/admin" : "/dashboard"}
+                              onClick={() => setIsProfileOpen(false)}
+                              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors"
+                            >
+                              <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                                <LayoutDashboard className="w-4 h-4 text-primary" />
+                              </div>
+                              <span className="font-medium">{isAdmin ? "Administration" : "Dashboard"}</span>
+                            </Link>
+                          </div>
 
-                        <div className="mx-3 h-px bg-gray-100" />
+                          <div className="mx-3 h-px bg-gray-100" />
 
-                        <div className="p-2">
-                          <button
-                            onClick={() => {
-                              setIsProfileOpen(false);
-                              logout();
-                            }}
-                            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-red-600 hover:bg-red-50 transition-colors"
-                          >
-                            <div className="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center">
-                              <LogOut className="w-4 h-4" />
-                            </div>
-                            <span className="font-medium">Se déconnecter</span>
-                          </button>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
+                          <div className="p-2">
+                            <button
+                              onClick={() => {
+                                setIsProfileOpen(false);
+                                logout();
+                              }}
+                              className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-red-600 hover:bg-red-50 transition-colors"
+                            >
+                              <div className="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center">
+                                <LogOut className="w-4 h-4" />
+                              </div>
+                              <span className="font-medium">Se déconnecter</span>
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </>
               ) : (
                 /* Boutons Auth - Non connecté */
                 <div className="flex items-center gap-1.5">
@@ -263,6 +280,29 @@ export function Navbar() {
 
             {/* Mobile Menu Button */}
             <div className="flex md:hidden items-center gap-2">
+              {/* Mobile: Messages & Notifications (only when authenticated) */}
+              {!isLoading && isAuthenticated && (
+                <>
+                  <Link
+                    href="/dashboard/messagerie"
+                    className="relative p-2.5 rounded-xl text-gray-500 hover:text-gray-700 hover:bg-gray-100/80 transition-colors"
+                  >
+                    <MessageCircle className="w-5 h-5" />
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full" />
+                  </Link>
+                  <Link
+                    href="/client/notifications"
+                    className="relative p-2.5 rounded-xl text-gray-500 hover:text-gray-700 hover:bg-gray-100/80 transition-colors"
+                  >
+                    <Bell className="w-5 h-5" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-primary text-white text-xs font-bold rounded-full flex items-center justify-center shadow-sm">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </Link>
+                </>
+              )}
               <Link
                 href="/recherche"
                 className="p-2.5 bg-primary text-white rounded-xl shadow-md shadow-primary/25"

@@ -230,6 +230,11 @@ export default function AnnouncerProfilePage() {
               services={announcer.services}
               initialExpandedService={selectedService?.id ?? null}
               commissionRate={commissionRate}
+              onServiceSelect={(serviceId) => {
+                // Trouver le categorySlug du service et mettre à jour l'URL
+                const service = announcer.services.find((s) => s.id === serviceId);
+                setSelectedServiceSlug(service?.categorySlug ?? service?.categoryId ?? null);
+              }}
               className={cn(activeTab !== "services" && "hidden md:block")}
             />
 
@@ -264,7 +269,12 @@ export default function AnnouncerProfilePage() {
       </main>
 
       {/* Mobile Floating CTA */}
-      <AnnouncerMobileCTA services={announcer.services} commissionRate={commissionRate} onBook={handleBook} />
+      <AnnouncerMobileCTA
+        services={announcer.services}
+        selectedServiceId={selectedService?.id ?? null}
+        commissionRate={commissionRate}
+        onBook={handleBook}
+      />
     </div>
   );
 }
