@@ -147,26 +147,6 @@ export const handleStripeWebhook = internalAction({
         break;
       }
 
-      case "payment_intent.requires_capture": {
-        // Alternative event pour la pré-autorisation
-        const paymentIntent = event.data.object as Stripe.PaymentIntent;
-        console.log(`PaymentIntent requires capture: ${paymentIntent.id}`);
-
-        // Marquer le paiement comme autorisé
-        await ctx.runMutation(
-          internal.api.stripeInternal.markPaymentAuthorized,
-          {
-            paymentIntentId: paymentIntent.id,
-            stripeCustomerId:
-              typeof paymentIntent.customer === "string"
-                ? paymentIntent.customer
-                : undefined,
-          }
-        );
-        console.log(`Paiement autorisé pour PaymentIntent: ${paymentIntent.id}`);
-        break;
-      }
-
       case "charge.refunded": {
         const charge = event.data.object as Stripe.Charge;
         console.log(`Remboursement effectué: ${charge.id}`);

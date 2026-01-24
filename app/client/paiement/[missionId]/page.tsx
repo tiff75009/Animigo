@@ -14,9 +14,10 @@ import {
   useStripe,
   useElements,
 } from "@stripe/react-stripe-js";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import type { Stripe } from "@stripe/stripe-js";
 import {
   CreditCard,
   Shield,
@@ -46,16 +47,23 @@ function getStripePromise(publicKey: string) {
 function CheckoutForm({
   missionId,
   amount,
+  token,
+  paymentIntentId,
   onSuccess,
 }: {
   missionId: string;
   amount: number;
+  token: string;
+  paymentIntentId: string;
   onSuccess: () => void;
 }) {
   const stripe = useStripe();
   const elements = useElements();
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Mutation pour confirmer le paiement côté Convex
+  const confirmPaymentSuccess = useMutation(api.api.stripeClient.confirmPaymentSuccess);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,11 +93,20 @@ function CheckoutForm({
     if (confirmError) {
       setError(confirmError.message || "Le paiement a échoué");
       setIsProcessing(false);
-    } else if (paymentIntent && paymentIntent.status === "requires_capture") {
-      // Pré-autorisation réussie
-      onSuccess();
-    } else if (paymentIntent && paymentIntent.status === "succeeded") {
-      // Paiement capturé immédiatement (si capture_method n'était pas manual)
+    } else if (paymentIntent && (paymentIntent.status === "requires_capture" || paymentIntent.status === "succeeded")) {
+      // Pré-autorisation réussie - mettre à jour le statut côté Convex
+      try {
+        await confirmPaymentSuccess({
+          token,
+          missionId: missionId as Id<"missions">,
+          paymentIntentId: paymentIntent.id,
+          paymentStatus: paymentIntent.status,
+        });
+        console.log("Paiement confirmé côté Convex");
+      } catch (err) {
+        console.error("Erreur confirmation Convex:", err);
+        // On continue quand même car le paiement Stripe a réussi
+      }
       onSuccess();
     }
   };
@@ -438,6 +455,8 @@ export default function PaymentPage() {
             <CheckoutForm
               missionId={missionId}
               amount={paymentInfo.payment.amount}
+              token={token || ""}
+              paymentIntentId={paymentInfo.payment.paymentIntentId || ""}
               onSuccess={() => setPaymentSuccess(true)}
             />
           </Elements>

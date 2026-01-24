@@ -5,6 +5,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAdminAuth } from "@/app/hooks/useAdminAuth";
 import { motion } from "framer-motion";
+import Link from "next/link";
 import {
   Search,
   Filter,
@@ -18,8 +19,11 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  Eye,
+  BadgeCheck,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
+import { AnnouncerSearchInput } from "@/app/admin/components/AnnouncerSearchInput";
 
 type AnnonceurFilter = "all" | "annonceur_pro" | "annonceur_particulier";
 type StatusFilter = "all" | "active" | "inactive";
@@ -159,6 +163,19 @@ export default function AnnonceursPage() {
         </motion.div>
       </div>
 
+      {/* Quick Search */}
+      <div className="bg-slate-900 rounded-xl p-4 border border-slate-800 mb-6">
+        <div className="mb-4">
+          <label className="text-sm text-slate-400 mb-2 block">
+            Recherche rapide (avec autocomplete)
+          </label>
+          <AnnouncerSearchInput
+            placeholder="Rechercher un annonceur (Ctrl+K)..."
+            className="max-w-md"
+          />
+        </div>
+      </div>
+
       {/* Filters */}
       <div className="bg-slate-900 rounded-xl p-4 border border-slate-800 mb-6">
         <div className="flex flex-wrap gap-4">
@@ -173,7 +190,7 @@ export default function AnnonceursPage() {
                   setSearch(e.target.value);
                   setPage(0);
                 }}
-                placeholder="Rechercher par nom, email ou société..."
+                placeholder="Filtrer la liste ci-dessous..."
                 className="w-full pl-10 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
               />
             </div>
@@ -235,6 +252,9 @@ export default function AnnonceursPage() {
                 </th>
                 <th className="text-left px-6 py-4 text-slate-400 font-medium">
                   Statut
+                </th>
+                <th className="text-left px-6 py-4 text-slate-400 font-medium">
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -333,6 +353,15 @@ export default function AnnonceursPage() {
                         </>
                       )}
                     </button>
+                  </td>
+                  <td className="px-6 py-4">
+                    <Link
+                      href={`/admin/annonceurs/${user._id}`}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium text-white transition-colors"
+                    >
+                      <Eye className="w-4 h-4" />
+                      Détails
+                    </Link>
                   </td>
                 </motion.tr>
               ))}

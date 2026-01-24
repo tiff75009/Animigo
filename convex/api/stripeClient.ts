@@ -77,6 +77,7 @@ export const getPaymentInfo = query({
       },
       payment: payment ? {
         id: payment._id,
+        paymentIntentId: payment.paymentIntentId,
         status: payment.status,
         clientSecret: payment.clientSecret,
         amount: payment.amount,
@@ -161,12 +162,14 @@ export const getPendingPayments = query({
 /**
  * Confirmer le paiement côté client (après succès Stripe Elements)
  * Cette mutation est appelée après que le paiement a été confirmé via Stripe Elements
+ * Elle met à jour les statuts directement si le paiement est en état requires_capture
  */
 export const confirmPaymentSuccess = mutation({
   args: {
     token: v.string(),
     missionId: v.id("missions"),
     paymentIntentId: v.string(),
+    paymentStatus: v.optional(v.string()), // Status retourné par Stripe Elements
   },
   handler: async (ctx, args) => {
     // Vérifier la session
@@ -194,13 +197,37 @@ export const confirmPaymentSuccess = mutation({
       return { success: false, error: "Paiement non trouvé" };
     }
 
-    // Le webhook Stripe va mettre à jour le statut, mais on peut aussi
-    // vérifier ici si le paiement est déjà autorisé
+    // Si le paiement est déjà autorisé, ne rien faire
     if (payment.status === "authorized") {
       return { success: true, message: "Paiement déjà confirmé" };
     }
 
-    // Le webhook fera le reste
+    // Si le status Stripe est requires_capture ou succeeded, mettre à jour
+    // C'est un fallback si le webhook n'est pas configuré
+    if (args.paymentStatus === "requires_capture" || args.paymentStatus === "succeeded") {
+      const now = Date.now();
+      const autoCaptureTime = now + 48 * 60 * 60 * 1000; // +48h
+
+      // Mettre à jour le paiement
+      await ctx.db.patch(payment._id, {
+        status: "authorized",
+        authorizedAt: now,
+        updatedAt: now,
+      });
+
+      // Mettre à jour la mission: passer en "upcoming"
+      await ctx.db.patch(args.missionId, {
+        status: "upcoming",
+        paymentStatus: "pending", // Fonds bloqués mais pas encore capturés
+        autoCaptureScheduledAt: autoCaptureTime,
+        updatedAt: now,
+      });
+
+      console.log(`Paiement confirmé pour mission ${args.missionId} - status: ${args.paymentStatus}`);
+      return { success: true, message: "Paiement confirmé avec succès" };
+    }
+
+    // Si le status n'est pas fourni, on attend le webhook
     return { success: true, message: "Paiement en cours de confirmation" };
   },
 });

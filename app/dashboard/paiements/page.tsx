@@ -19,17 +19,48 @@ import {
   AlertCircle,
   ArrowRight,
   X,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
-import { getMissionsByStatus, type Mission } from "@/app/lib/dashboard-data";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { useAuth } from "@/app/hooks/useAuth";
+import type { Id } from "@/convex/_generated/dataModel";
+
+// Type pour les missions en attente de paiement
+interface PendingMission {
+  id: Id<"missions">;
+  clientId: Id<"users">;
+  clientName: string;
+  clientAvatar: string;
+  animal: { name: string; type: string; emoji: string };
+  service: string;
+  serviceName: string;
+  serviceCategory: string;
+  startDate: string;
+  endDate: string;
+  amount: number;
+  paymentStatus: string;
+  location: string;
+}
+
+// Type pour l'historique des virements
+interface PayoutHistoryItem {
+  id: Id<"announcerPayouts">;
+  date: number;
+  amount: number;
+  status: string;
+  missions: string[];
+  missionsCount: number;
+}
 
 // Commission tiers
 const commissionTiers = [
-  { min: 0, max: 149.99, rate: 15, label: "0 - 149€" },
-  { min: 150, max: 499.99, rate: 10, label: "150 - 499€" },
-  { min: 500, max: 999.99, rate: 7, label: "500 - 999€" },
-  { min: 1000, max: 1499.99, rate: 5, label: "1000 - 1499€" },
-  { min: 1500, max: Infinity, rate: 3, label: "1500€ et +" },
+  { min: 0, max: 149.99, rate: 15, label: "0 - 149\u20AC" },
+  { min: 150, max: 499.99, rate: 10, label: "150 - 499\u20AC" },
+  { min: 500, max: 999.99, rate: 7, label: "500 - 999\u20AC" },
+  { min: 1000, max: 1499.99, rate: 5, label: "1000 - 1499\u20AC" },
+  { min: 1500, max: Infinity, rate: 3, label: "1500\u20AC et +" },
 ];
 
 // Calculate commission based on amount
@@ -41,44 +72,13 @@ function calculateCommission(amount: number): { rate: number; fee: number; net: 
   return { rate, fee, net };
 }
 
-// Mock transaction history
-const mockTransactions = [
-  {
-    id: "t1",
-    date: "2024-01-10",
-    amount: 280,
-    fee: 28,
-    net: 252,
-    status: "completed",
-    missions: ["Garde Luna - Marie Dupont"],
-  },
-  {
-    id: "t2",
-    date: "2024-01-05",
-    amount: 120,
-    fee: 18,
-    net: 102,
-    status: "completed",
-    missions: ["Visites Mochi - Thomas Martin"],
-  },
-  {
-    id: "t3",
-    date: "2023-12-28",
-    amount: 450,
-    fee: 45,
-    net: 405,
-    status: "completed",
-    missions: ["Garde Max - Pierre Durand", "Promenades Bella - Sophie Laurent"],
-  },
-];
-
 // Pending Payment Card
 function PendingPaymentCard({
   mission,
   isSelected,
   onToggle,
 }: {
-  mission: Mission;
+  mission: PendingMission;
   isSelected: boolean;
   onToggle: () => void;
 }) {
@@ -123,13 +123,13 @@ function PendingPaymentCard({
             </h4>
           </div>
           <p className="text-sm text-text-light">
-            {mission.clientName} • {formatDate(mission.startDate)} - {formatDate(mission.endDate)}
+            {mission.clientName} &bull; {formatDate(mission.startDate)} - {formatDate(mission.endDate)}
           </p>
         </div>
 
         {/* Amount */}
         <div className="text-right">
-          <p className="text-xl font-bold text-primary">{mission.amount}€</p>
+          <p className="text-xl font-bold text-primary">{mission.amount}\u20AC</p>
           <p className="text-xs text-text-light">À encaisser</p>
         </div>
       </div>
@@ -194,7 +194,7 @@ function CashoutModal({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  selectedMissions: Mission[];
+  selectedMissions: PendingMission[];
   totalAmount: number;
 }) {
   const [customAmount, setCustomAmount] = useState<string>(totalAmount.toString());
@@ -248,7 +248,7 @@ function CashoutModal({
                 Demande envoyée !
               </h3>
               <p className="text-text-light">
-                Votre virement de {net.toFixed(2)}€ sera effectué sous 48h.
+                Votre virement de {net.toFixed(2)}\u20AC sera effectué sous 48h.
               </p>
             </div>
           ) : (
@@ -282,7 +282,7 @@ function CashoutModal({
                     onClick={() => setCashoutType("full")}
                     whileTap={{ scale: 0.98 }}
                   >
-                    Tout ({totalAmount}€)
+                    Tout ({totalAmount}\u20AC)
                   </motion.button>
                   <motion.button
                     className={cn(
@@ -313,11 +313,11 @@ function CashoutModal({
                         placeholder="Montant"
                       />
                       <span className="absolute right-4 top-1/2 -translate-y-1/2 text-text-light font-semibold">
-                        €
+                        \u20AC
                       </span>
                     </div>
                     <p className="text-xs text-text-light mt-2">
-                      Maximum disponible : {totalAmount}€
+                      Maximum disponible : {totalAmount}\u20AC
                     </p>
                   </motion.div>
                 )}
@@ -328,18 +328,18 @@ function CashoutModal({
                 <div className="space-y-3">
                   <div className="flex justify-between">
                     <span className="text-text-light">Montant brut</span>
-                    <span className="font-semibold text-foreground">{amount.toFixed(2)}€</span>
+                    <span className="font-semibold text-foreground">{amount.toFixed(2)}\u20AC</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-text-light flex items-center gap-1">
                       Commission ({rate}%)
                       <Info className="w-3 h-3" />
                     </span>
-                    <span className="font-semibold text-red-500">-{fee.toFixed(2)}€</span>
+                    <span className="font-semibold text-red-500">-{fee.toFixed(2)}\u20AC</span>
                   </div>
                   <div className="border-t border-gray-200 pt-3 flex justify-between">
                     <span className="font-semibold text-foreground">Montant net</span>
-                    <span className="text-xl font-bold text-primary">{net.toFixed(2)}€</span>
+                    <span className="text-xl font-bold text-primary">{net.toFixed(2)}\u20AC</span>
                   </div>
                 </div>
               </div>
@@ -351,7 +351,7 @@ function CashoutModal({
                   <div className="text-sm text-blue-700">
                     <p className="font-semibold">Astuce</p>
                     <p>
-                      En encaissant {commissionTiers.find((t) => t.min > amount)?.min || 1500}€ ou plus,
+                      En encaissant {commissionTiers.find((t) => t.min > amount)?.min || 1500}\u20AC ou plus,
                       vous bénéficiez d&apos;un taux réduit de {commissionTiers.find((t) => t.min > amount)?.rate || 3}%.
                     </p>
                   </div>
@@ -372,7 +372,7 @@ function CashoutModal({
                       <span className="text-text-light flex items-center gap-1">
                         {mission.animal.emoji} {mission.animal.name} - {mission.clientName}
                       </span>
-                      <span className="font-medium">{mission.amount}€</span>
+                      <span className="font-medium">{mission.amount}\u20AC</span>
                     </div>
                   ))}
                 </div>
@@ -399,7 +399,7 @@ function CashoutModal({
                 ) : (
                   <>
                     <ArrowDownToLine className="w-5 h-5" />
-                    Encaisser {net.toFixed(2)}€
+                    Encaisser {net.toFixed(2)}\u20AC
                   </>
                 )}
               </motion.button>
@@ -412,8 +412,12 @@ function CashoutModal({
 }
 
 // Transaction History Item
-function TransactionItem({ transaction }: { transaction: typeof mockTransactions[0] }) {
+function TransactionItem({ transaction }: { transaction: PayoutHistoryItem }) {
   const [isExpanded, setIsExpanded] = useState(false);
+
+  // Calculer la commission approximative (15% par défaut)
+  const fee = Math.round(transaction.amount * 0.15);
+  const grossAmount = transaction.amount + fee;
 
   return (
     <div className="border-b border-gray-100 last:border-0">
@@ -422,12 +426,18 @@ function TransactionItem({ transaction }: { transaction: typeof mockTransactions
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-            <ArrowDownToLine className="w-5 h-5 text-green-600" />
+          <div className={cn(
+            "w-10 h-10 rounded-full flex items-center justify-center",
+            transaction.status === "completed" ? "bg-green-100" : "bg-orange-100"
+          )}>
+            <ArrowDownToLine className={cn(
+              "w-5 h-5",
+              transaction.status === "completed" ? "text-green-600" : "text-orange-600"
+            )} />
           </div>
           <div>
             <p className="font-semibold text-foreground">
-              Virement reçu
+              {transaction.status === "completed" ? "Virement reçu" : "Virement en cours"}
             </p>
             <p className="text-sm text-text-light">
               {new Date(transaction.date).toLocaleDateString("fr-FR", {
@@ -440,7 +450,12 @@ function TransactionItem({ transaction }: { transaction: typeof mockTransactions
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <p className="font-bold text-green-600">+{transaction.net}€</p>
+            <p className={cn(
+              "font-bold",
+              transaction.status === "completed" ? "text-green-600" : "text-orange-600"
+            )}>
+              +{transaction.amount}\u20AC
+            </p>
             <p className="text-xs text-text-light">Net reçu</p>
           </div>
           {isExpanded ? (
@@ -462,22 +477,27 @@ function TransactionItem({ transaction }: { transaction: typeof mockTransactions
             <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-text-light">Montant brut</span>
-                <span className="text-foreground">{transaction.amount}€</span>
+                <span className="text-foreground">{grossAmount}\u20AC</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-text-light">Commission</span>
-                <span className="text-red-500">-{transaction.fee}€</span>
+                <span className="text-red-500">-{fee}\u20AC</span>
               </div>
               <div className="flex justify-between font-semibold pt-2 border-t border-gray-200">
                 <span className="text-foreground">Montant net</span>
-                <span className="text-green-600">{transaction.net}€</span>
+                <span className="text-green-600">{transaction.amount}\u20AC</span>
               </div>
-              <div className="pt-2 border-t border-gray-200">
-                <p className="text-text-light mb-1">Missions concernées :</p>
-                {transaction.missions.map((mission, i) => (
-                  <p key={i} className="text-foreground">• {mission}</p>
-                ))}
-              </div>
+              {transaction.missions.length > 0 && (
+                <div className="pt-2 border-t border-gray-200">
+                  <p className="text-text-light mb-1">Missions concernées ({transaction.missionsCount}) :</p>
+                  {transaction.missions.slice(0, 3).map((mission, i) => (
+                    <p key={i} className="text-foreground">&bull; {mission}</p>
+                  ))}
+                  {transaction.missions.length > 3 && (
+                    <p className="text-text-light">... et {transaction.missions.length - 3} autres</p>
+                  )}
+                </div>
+              )}
             </div>
           </motion.div>
         )}
@@ -486,21 +506,59 @@ function TransactionItem({ transaction }: { transaction: typeof mockTransactions
   );
 }
 
+// Loading skeleton
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-6 max-w-5xl mx-auto animate-pulse">
+      <div className="h-20 bg-gray-200 rounded-2xl" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="h-32 bg-gray-200 rounded-2xl" />
+        <div className="h-32 bg-gray-200 rounded-2xl" />
+        <div className="h-32 bg-gray-200 rounded-2xl" />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 h-96 bg-gray-200 rounded-2xl" />
+        <div className="h-96 bg-gray-200 rounded-2xl" />
+      </div>
+    </div>
+  );
+}
+
 export default function PaiementsPage() {
   const [selectedMissionIds, setSelectedMissionIds] = useState<string[]>([]);
   const [showCashoutModal, setShowCashoutModal] = useState(false);
 
-  // Get completed missions with pending payment
-  const completedMissions = getMissionsByStatus("completed");
-  const pendingPaymentMissions = completedMissions.filter(
-    (m) => m.paymentStatus === "pending"
+  const { token, isLoading: authLoading } = useAuth();
+
+  // Queries Convex
+  const pendingPayments = useQuery(
+    api.dashboard.payments.getAnnouncerPendingPayments,
+    token ? { sessionToken: token } : "skip"
   );
 
-  // Calculate totals
-  const totalPending = pendingPaymentMissions.reduce((sum, m) => sum + m.amount, 0);
-  const totalCollected = completedMissions
-    .filter((m) => m.paymentStatus === "paid")
-    .reduce((sum, m) => sum + m.amount, 0);
+  const stats = useQuery(
+    api.dashboard.payments.getAnnouncerPaymentStats,
+    token ? { sessionToken: token } : "skip"
+  );
+
+  const payoutHistory = useQuery(
+    api.dashboard.payments.getAnnouncerPayoutHistory,
+    token ? { sessionToken: token, limit: 10 } : "skip"
+  );
+
+  // Loading state
+  const isLoading = authLoading || pendingPayments === undefined || stats === undefined;
+
+  if (isLoading) {
+    return <LoadingSkeleton />;
+  }
+
+  // Data
+  const pendingPaymentMissions = (pendingPayments || []) as PendingMission[];
+  const payoutHistoryData = (payoutHistory || []) as PayoutHistoryItem[];
+  const totalPending = stats?.totalPending || 0;
+  const totalCollected = stats?.totalCollected || 0;
+  const totalEarned = stats?.totalEarned || 0;
 
   const selectedMissions = pendingPaymentMissions.filter((m) =>
     selectedMissionIds.includes(m.id)
@@ -561,7 +619,7 @@ export default function PaiementsPage() {
             </div>
             <span className="text-sm text-text-light">À encaisser</span>
           </div>
-          <p className="text-3xl font-bold text-orange-600">{totalPending}€</p>
+          <p className="text-3xl font-bold text-orange-600">{totalPending}\u20AC</p>
           <p className="text-sm text-text-light mt-1">
             {pendingPaymentMissions.length} mission{pendingPaymentMissions.length > 1 ? "s" : ""}
           </p>
@@ -574,7 +632,7 @@ export default function PaiementsPage() {
             </div>
             <span className="text-sm text-text-light">Déjà encaissé</span>
           </div>
-          <p className="text-3xl font-bold text-green-600">{totalCollected}€</p>
+          <p className="text-3xl font-bold text-green-600">{totalCollected}\u20AC</p>
           <p className="text-sm text-text-light mt-1">Total reçu</p>
         </div>
 
@@ -585,7 +643,7 @@ export default function PaiementsPage() {
             </div>
             <span className="text-sm text-white/80">Total gagné</span>
           </div>
-          <p className="text-3xl font-bold">{totalPending + totalCollected}€</p>
+          <p className="text-3xl font-bold">{totalEarned}\u20AC</p>
           <p className="text-sm text-white/80 mt-1">Brut cumulé</p>
         </div>
       </motion.div>
@@ -655,18 +713,18 @@ export default function PaiementsPage() {
                         {selectedMissionIds.length} mission{selectedMissionIds.length > 1 ? "s" : ""} sélectionnée{selectedMissionIds.length > 1 ? "s" : ""}
                       </span>
                       <span className="text-xl font-bold text-primary">
-                        {selectedAmount}€
+                        {selectedAmount}\u20AC
                       </span>
                     </div>
 
                     <div className="flex items-center justify-between text-sm text-text-light mb-4">
                       <span>Commission ({rate}%)</span>
-                      <span>-{fee.toFixed(2)}€</span>
+                      <span>-{fee.toFixed(2)}\u20AC</span>
                     </div>
 
                     <div className="flex items-center justify-between mb-4 pt-3 border-t border-primary/20">
                       <span className="font-semibold text-foreground">Vous recevrez</span>
-                      <span className="text-2xl font-bold text-green-600">{net.toFixed(2)}€</span>
+                      <span className="text-2xl font-bold text-green-600">{net.toFixed(2)}\u20AC</span>
                     </div>
 
                     <motion.button
@@ -705,7 +763,7 @@ export default function PaiementsPage() {
             </h3>
             <div className="bg-gray-50 rounded-xl p-3">
               <p className="text-sm text-text-light">IBAN</p>
-              <p className="font-mono text-foreground text-sm">FR76 •••• •••• 847</p>
+              <p className="font-mono text-foreground text-sm">FR76 &bull;&bull;&bull;&bull; &bull;&bull;&bull;&bull; 847</p>
             </div>
             <p className="text-xs text-text-light mt-2 flex items-center gap-1">
               <Info className="w-3 h-3" />
@@ -727,13 +785,13 @@ export default function PaiementsPage() {
           Historique des virements
         </h2>
 
-        {mockTransactions.length === 0 ? (
+        {payoutHistoryData.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-text-light">Aucun virement effectué</p>
           </div>
         ) : (
           <div>
-            {mockTransactions.map((transaction) => (
+            {payoutHistoryData.map((transaction) => (
               <TransactionItem key={transaction.id} transaction={transaction} />
             ))}
           </div>

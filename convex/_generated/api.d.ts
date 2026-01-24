@@ -8,11 +8,15 @@
  * @module
  */
 
+import type * as admin_announcers from "../admin/announcers.js";
 import type * as admin_commissions from "../admin/commissions.js";
 import type * as admin_config from "../admin/config.js";
+import type * as admin_credits from "../admin/credits.js";
 import type * as admin_devPresence from "../admin/devPresence.js";
 import type * as admin_emailTemplates from "../admin/emailTemplates.js";
+import type * as admin_finances from "../admin/finances.js";
 import type * as admin_invitations from "../admin/invitations.js";
+import type * as admin_invoices from "../admin/invoices.js";
 import type * as admin_login from "../admin/login.js";
 import type * as admin_maintenance from "../admin/maintenance.js";
 import type * as admin_moderation from "../admin/moderation.js";
@@ -38,6 +42,7 @@ import type * as auth_utils from "../auth/utils.js";
 import type * as client_profile from "../client/profile.js";
 import type * as config from "../config.js";
 import type * as crons from "../crons.js";
+import type * as dashboard_payments from "../dashboard/payments.js";
 import type * as http from "../http.js";
 import type * as lib_capacityUtils from "../lib/capacityUtils.js";
 import type * as lib_notificationTemplates from "../lib/notificationTemplates.js";
@@ -75,11 +80,15 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "admin/announcers": typeof admin_announcers;
   "admin/commissions": typeof admin_commissions;
   "admin/config": typeof admin_config;
+  "admin/credits": typeof admin_credits;
   "admin/devPresence": typeof admin_devPresence;
   "admin/emailTemplates": typeof admin_emailTemplates;
+  "admin/finances": typeof admin_finances;
   "admin/invitations": typeof admin_invitations;
+  "admin/invoices": typeof admin_invoices;
   "admin/login": typeof admin_login;
   "admin/maintenance": typeof admin_maintenance;
   "admin/moderation": typeof admin_moderation;
@@ -105,6 +114,7 @@ declare const fullApi: ApiFromModules<{
   "client/profile": typeof client_profile;
   config: typeof config;
   crons: typeof crons;
+  "dashboard/payments": typeof dashboard_payments;
   http: typeof http;
   "lib/capacityUtils": typeof lib_capacityUtils;
   "lib/notificationTemplates": typeof lib_notificationTemplates;

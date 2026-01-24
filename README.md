@@ -428,6 +428,68 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.14.0 - Admin Finances et Correction Paiements
+
+- **Panel Admin Finances** (`/admin/finances`)
+  - Vue mensuelle/annuelle des commissions (a venir, validees, payees)
+  - Statistiques des virements annonceurs (en attente, en cours, effectues)
+  - Liste des virements programmes
+  - Graphique d'evolution des revenus
+
+- **Detail Annonceur Admin** (`/admin/annonceurs/[id]`)
+  - Page complete avec 5 onglets : Apercu, Services, Ventes, Finances, Messages
+  - Onglet Apercu : infos profil, stats rapides, verification
+  - Onglet Services : liste des prestations avec revenus et stats
+  - Onglet Ventes : historique des missions avec filtres et pagination
+  - Onglet Finances : revenus, virements, avoirs clients
+  - Onglet Messages : placeholder pour l'historique des conversations
+
+- **Recherche Annonceurs Admin**
+  - Composant `AnnouncerSearchInput` avec autocomplete
+  - Recherche par nom, email, SIRET
+  - Resultats en dropdown avec avatar et infos
+  - Debounce 300ms pour la performance
+
+- **Systeme d'Avoirs Clients**
+  - Nouvelle table `clientCredits` pour les remboursements
+  - Creation d'avoir avec raison et mission associee
+  - Statuts : active, used, expired, cancelled
+  - Backend complet dans `convex/admin/credits.ts`
+
+- **Systeme de Virements Annonceurs**
+  - Nouvelle table `announcerPayouts` pour suivre les virements
+  - Creation de virements avec missions incluses
+  - Statuts : pending, processing, completed, failed
+  - Planification des virements futurs
+
+- **Systeme de Factures**
+  - Nouvelle table `invoices` avec numero unique
+  - Generation de factures pour clients et annonceurs
+  - Structure detaillee avec items, TVA, totaux
+
+- **Page Paiements Annonceur** (`/dashboard/paiements`)
+  - Remplacement des donnees mock par queries Convex dynamiques
+  - Stats en temps reel : a encaisser, deja encaisse, total gagne
+  - Liste des missions en attente de paiement
+  - Historique des virements avec details
+
+- **Correction Flow Paiement Stripe**
+  - Suppression du handler `payment_intent.requires_capture` (evenement inexistant)
+  - Ajout de `confirmPaymentSuccess` dans le frontend
+  - Mise a jour directe des statuts apres confirmation Stripe Elements
+  - Fallback si le webhook n'est pas configure
+  - Mission passe en "upcoming" et paiement en "authorized" apres confirmation
+
+- **Backend Convex**
+  - Nouveau dossier `convex/dashboard/` avec queries paiements annonceur
+  - Fichiers `finances.ts`, `announcers.ts`, `credits.ts`, `invoices.ts` dans admin
+  - Modification de `stripeClient.ts` pour la confirmation de paiement
+  - Modification de `stripeWebhook.ts` pour supprimer l'evenement inexistant
+
+- **Webhook Stripe**
+  - URL : `https://[votre-url-convex].convex.site/stripe-webhook`
+  - Evenements a configurer : `payment_intent.amount_capturable_updated`, `checkout.session.completed`, `charge.refunded`, etc.
+
 ### v0.13.1 - Parametres de Verification Automatique Configurables
 
 - **Panneau de configuration admin** (`/admin/verifications`)

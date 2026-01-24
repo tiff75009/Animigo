@@ -26,6 +26,7 @@ import {
   Sparkles,
   FlaskConical,
   ShieldCheck,
+  Wallet,
 } from "lucide-react";
 
 interface NavItem {
@@ -70,6 +71,11 @@ export function AdminSidebar() {
           label: "Dashboard",
           href: "/admin",
           icon: LayoutDashboard,
+        },
+        {
+          label: "Finances",
+          href: "/admin/finances",
+          icon: Wallet,
         },
       ],
     },

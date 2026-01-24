@@ -1043,4 +1043,77 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_status", ["status"])
     .index("by_user_status", ["userId", "status"]),
+
+  // Avoirs clients (crédits pour remboursements)
+  clientCredits: defineTable({
+    clientId: v.id("users"),
+    amount: v.number(),                    // Montant restant en centimes
+    originalAmount: v.number(),            // Montant initial en centimes
+    reason: v.string(),                    // Raison du crédit
+    missionId: v.optional(v.id("missions")), // Mission associée si remboursement
+    createdBy: v.id("users"),              // Admin qui a créé
+    status: v.union(
+      v.literal("active"),
+      v.literal("used"),
+      v.literal("expired"),
+      v.literal("cancelled")
+    ),
+    usedAt: v.optional(v.number()),
+    usedOnMissionId: v.optional(v.id("missions")),
+    expiresAt: v.optional(v.number()),     // Date d'expiration optionnelle
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_client", ["clientId"])
+    .index("by_status", ["status"])
+    .index("by_client_active", ["clientId", "status"]),
+
+  // Virements annonceurs
+  announcerPayouts: defineTable({
+    announcerId: v.id("users"),
+    amount: v.number(),                    // Montant en centimes
+    missions: v.array(v.id("missions")),   // Missions incluses
+    status: v.union(
+      v.literal("pending"),                // En attente
+      v.literal("processing"),             // En cours de traitement
+      v.literal("completed"),              // Viré
+      v.literal("failed")                  // Échoué
+    ),
+    stripeTransferId: v.optional(v.string()),
+    stripePayoutId: v.optional(v.string()),
+    scheduledAt: v.optional(v.number()),   // Date prévue
+    processedAt: v.optional(v.number()),
+    failureReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_announcer", ["announcerId"])
+    .index("by_status", ["status"])
+    .index("by_scheduled", ["scheduledAt"]),
+
+  // Factures
+  invoices: defineTable({
+    recipientType: v.union(v.literal("client"), v.literal("announcer")),
+    recipientId: v.id("users"),
+    missionId: v.optional(v.id("missions")),
+    invoiceNumber: v.string(),             // "INV-2026-0001"
+    amount: v.number(),                    // Montant TTC en centimes
+    amountHT: v.optional(v.number()),      // Montant HT si TVA
+    tva: v.optional(v.number()),           // Montant TVA
+    items: v.array(v.object({
+      description: v.string(),
+      quantity: v.number(),
+      unitPrice: v.number(),
+      total: v.number(),
+    })),
+    pdfStorageId: v.optional(v.id("_storage")), // ID du PDF stocké
+    pdfUrl: v.optional(v.string()),        // URL du PDF généré
+    sentAt: v.optional(v.number()),
+    sentTo: v.optional(v.string()),        // Email destinataire
+    createdBy: v.id("users"),              // Admin
+    createdAt: v.number(),
+  })
+    .index("by_recipient", ["recipientId"])
+    .index("by_mission", ["missionId"])
+    .index("by_number", ["invoiceNumber"]),
 });
