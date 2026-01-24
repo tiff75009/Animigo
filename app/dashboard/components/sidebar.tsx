@@ -25,6 +25,8 @@ import {
   Briefcase,
   ChevronDown,
   ClipboardList,
+  ShieldCheck,
+  AlertCircle,
 } from "lucide-react";
 import { useState, memo } from "react";
 import { useQuery } from "convex/react";
@@ -117,10 +119,12 @@ const UserInfoSkeleton = memo(function UserInfoSkeleton() {
 // Composant UserInfo séparé
 const UserInfo = memo(function UserInfo({
   user,
-  isLoading
+  isLoading,
+  isIdentityVerified,
 }: {
   user: { firstName: string; lastName: string; profileImage?: string | null; verified: boolean } | null;
   isLoading: boolean;
+  isIdentityVerified?: boolean;
 }) {
   // Afficher skeleton pendant le chargement
   if (isLoading || !user) {
@@ -147,8 +151,17 @@ const UserInfo = memo(function UserInfo({
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-foreground truncate">{user.firstName} {user.lastName}</p>
           <p className="text-xs text-text-light flex items-center gap-1">
-            {user.verified && <CheckCircle className="w-3 h-3 text-secondary" />}
-            {user.verified ? "Garde vérifié" : "Garde"}
+            {isIdentityVerified ? (
+              <>
+                <ShieldCheck className="w-3 h-3 text-secondary" />
+                <span className="text-secondary">Identité vérifiée</span>
+              </>
+            ) : (
+              <>
+                <AlertCircle className="w-3 h-3 text-amber-500" />
+                <span className="text-amber-600">Non vérifié</span>
+              </>
+            )}
           </p>
         </div>
       </div>
@@ -304,6 +317,12 @@ export function Sidebar({ className }: SidebarProps) {
     token ? { token } : "skip"
   );
 
+  // Récupérer le statut de vérification
+  const verificationStatus = useQuery(
+    api.verification.verification.getVerificationStatus,
+    token ? { sessionToken: token } : "skip"
+  );
+
   const closeMobile = () => setIsMobileOpen(false);
 
   // Données utilisateur pour l'affichage (null si en chargement)
@@ -315,6 +334,9 @@ export function Sidebar({ className }: SidebarProps) {
         verified: user.accountType === "annonceur_pro",
       }
     : null;
+
+  const isIdentityVerified = verificationStatus?.isIdentityVerified || false;
+  const hasPendingRequest = verificationStatus?.latestRequest?.status === "submitted";
 
   const handleLogout = () => {
     closeMobile();
@@ -341,7 +363,43 @@ export function Sidebar({ className }: SidebarProps) {
       >
         <div className="flex flex-col h-full">
           <Logo />
-          <UserInfo user={displayUser} isLoading={isLoading} />
+          <UserInfo user={displayUser} isLoading={isLoading} isIdentityVerified={isIdentityVerified} />
+
+          {/* Bouton vérification si non vérifié */}
+          {!isIdentityVerified && !isLoading && (
+            <div className="px-4 pb-2">
+              <Link href="/dashboard/verification" onClick={closeMobile}>
+                <motion.div
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-xl transition-colors",
+                    hasPendingRequest
+                      ? "bg-blue-50 border border-blue-200"
+                      : "bg-amber-50 border border-amber-200 hover:bg-amber-100"
+                  )}
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.99 }}
+                >
+                  {hasPendingRequest ? (
+                    <>
+                      <Clock className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-blue-700">En cours de vérification</p>
+                        <p className="text-xs text-blue-600">Votre demande est en attente</p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-5 h-5 text-amber-500 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-amber-700">Vérifier mon profil</p>
+                        <p className="text-xs text-amber-600">Gagnez en confiance</p>
+                      </div>
+                    </>
+                  )}
+                </motion.div>
+              </Link>
+            </div>
+          )}
 
           <nav className="flex-1 overflow-y-auto p-4 space-y-4">
             <NavSection
@@ -400,7 +458,42 @@ export function Sidebar({ className }: SidebarProps) {
             >
               <div className="flex flex-col h-full">
                 <Logo />
-                <UserInfo user={displayUser} isLoading={isLoading} />
+                <UserInfo user={displayUser} isLoading={isLoading} isIdentityVerified={isIdentityVerified} />
+
+                {/* Bouton vérification si non vérifié (mobile) */}
+                {!isIdentityVerified && !isLoading && (
+                  <div className="px-4 pb-2">
+                    <Link href="/dashboard/verification" onClick={closeMobile}>
+                      <motion.div
+                        className={cn(
+                          "flex items-center gap-3 p-3 rounded-xl transition-colors",
+                          hasPendingRequest
+                            ? "bg-blue-50 border border-blue-200"
+                            : "bg-amber-50 border border-amber-200"
+                        )}
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        {hasPendingRequest ? (
+                          <>
+                            <Clock className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-blue-700">En cours de vérification</p>
+                              <p className="text-xs text-blue-600">Votre demande est en attente</p>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <ShieldCheck className="w-5 h-5 text-amber-500 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-amber-700">Vérifier mon profil</p>
+                              <p className="text-xs text-amber-600">Gagnez en confiance</p>
+                            </div>
+                          </>
+                        )}
+                      </motion.div>
+                    </Link>
+                  </div>
+                )}
 
                 <nav className="flex-1 overflow-y-auto p-4 space-y-4">
                   <NavSection

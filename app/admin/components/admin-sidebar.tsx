@@ -25,6 +25,7 @@ import {
   CalendarCheck,
   Sparkles,
   FlaskConical,
+  ShieldCheck,
 } from "lucide-react";
 
 interface NavItem {
@@ -55,6 +56,12 @@ export function AdminSidebar() {
     token ? { token } : "skip"
   );
 
+  // Récupérer les vérifications en attente
+  const pendingVerifications = useQuery(
+    api.verification.verification.countPendingVerifications,
+    token ? { sessionToken: token } : "skip"
+  );
+
   const navSections: NavSection[] = [
     {
       title: "Général",
@@ -74,6 +81,12 @@ export function AdminSidebar() {
           href: "/admin/moderation/services",
           icon: ShieldAlert,
           badge: moderationStats?.pending || 0,
+        },
+        {
+          label: "Vérifications",
+          href: "/admin/verifications",
+          icon: ShieldCheck,
+          badge: pendingVerifications || 0,
         },
         {
           label: "Réservations",

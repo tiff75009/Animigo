@@ -7,6 +7,7 @@ import {
   Star,
   Heart,
   Shield,
+  ShieldCheck,
   ArrowRight,
   MapPin,
   Navigation,
@@ -46,6 +47,7 @@ export interface ServiceSearchResult {
   rating: number;
   reviewCount: number;
   verified: boolean;
+  isIdentityVerified: boolean;
   statusType: "particulier" | "micro_entrepreneur" | "professionnel";
   categorySlug: string;
   categoryName: string;
@@ -443,14 +445,14 @@ export function ServiceCardGrid({ service, onViewService, index, hasDateFilter =
                 <span className="text-sm">{service.categoryIcon}</span>
                 <span className="text-xs font-medium text-gray-700">{service.categoryName}</span>
               </div>
-              {service.verified && (
+              {service.isIdentityVerified && (
                 <motion.div
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
-                  className="flex items-center gap-1.5 px-2.5 py-1 bg-white/95 backdrop-blur-sm rounded-full shadow-sm"
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-secondary/10 backdrop-blur-sm rounded-full shadow-sm"
                 >
-                  <Shield className="w-3.5 h-3.5 text-secondary" />
-                  <span className="text-xs font-medium text-gray-700">Verifié</span>
+                  <ShieldCheck className="w-3.5 h-3.5 text-secondary" />
+                  <span className="text-xs font-medium text-secondary">Identité vérifiée</span>
                 </motion.div>
               )}
             </div>
@@ -790,10 +792,10 @@ export function ServiceCardList({ service, onViewService, index, hasDateFilter =
                 {service.statusType === "professionnel" ? "Pro" : service.statusType === "micro_entrepreneur" ? "Auto-entrepreneur" : "Particulier"}
               </span>
 
-              {service.verified && (
+              {service.isIdentityVerified && (
                 <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-secondary/10 text-secondary rounded-md">
-                  <Shield className="w-3 h-3" />
-                  Verifié
+                  <ShieldCheck className="w-3 h-3" />
+                  Identité vérifiée
                 </span>
               )}
 

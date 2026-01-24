@@ -233,6 +233,117 @@ export const testQStashConnection = action({
 });
 
 // ==========================================
+// VERIFICATION D'IDENTITE
+// ==========================================
+
+// Query: Récupérer les paramètres de vérification d'identité
+export const getVerificationSettings = query({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx, args.token);
+
+    const autoVerifyEnabled = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "identity_auto_verify_enabled"))
+      .first();
+
+    const confidenceThreshold = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "identity_confidence_threshold"))
+      .first();
+
+    return {
+      autoVerifyEnabled: autoVerifyEnabled?.value === "true",
+      confidenceThreshold: confidenceThreshold ? parseInt(confidenceThreshold.value, 10) : 80,
+    };
+  },
+});
+
+// Query publique: Récupérer les paramètres de vérification (pour l'action auto-verify)
+export const getVerificationSettingsPublic = query({
+  args: {},
+  handler: async (ctx) => {
+    const autoVerifyEnabled = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "identity_auto_verify_enabled"))
+      .first();
+
+    const confidenceThreshold = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "identity_confidence_threshold"))
+      .first();
+
+    return {
+      autoVerifyEnabled: autoVerifyEnabled?.value === "true",
+      confidenceThreshold: confidenceThreshold ? parseInt(confidenceThreshold.value, 10) : 80,
+    };
+  },
+});
+
+// Mutation: Mettre à jour les paramètres de vérification d'identité
+export const updateVerificationSettings = mutation({
+  args: {
+    token: v.string(),
+    autoVerifyEnabled: v.boolean(),
+    confidenceThreshold: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireAdmin(ctx, args.token);
+
+    // Valider le seuil (entre 50 et 100)
+    const threshold = Math.min(100, Math.max(50, args.confidenceThreshold));
+
+    // Mise à jour auto_verify_enabled
+    const existingEnabled = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "identity_auto_verify_enabled"))
+      .first();
+
+    if (existingEnabled) {
+      await ctx.db.patch(existingEnabled._id, {
+        value: args.autoVerifyEnabled ? "true" : "false",
+        updatedAt: Date.now(),
+        updatedBy: user._id,
+      });
+    } else {
+      await ctx.db.insert("systemConfig", {
+        key: "identity_auto_verify_enabled",
+        value: args.autoVerifyEnabled ? "true" : "false",
+        isSecret: false,
+        environment: "production",
+        updatedAt: Date.now(),
+        updatedBy: user._id,
+      });
+    }
+
+    // Mise à jour confidence_threshold
+    const existingThreshold = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "identity_confidence_threshold"))
+      .first();
+
+    if (existingThreshold) {
+      await ctx.db.patch(existingThreshold._id, {
+        value: threshold.toString(),
+        updatedAt: Date.now(),
+        updatedBy: user._id,
+      });
+    } else {
+      await ctx.db.insert("systemConfig", {
+        key: "identity_confidence_threshold",
+        value: threshold.toString(),
+        isSecret: false,
+        environment: "production",
+        updatedAt: Date.now(),
+        updatedBy: user._id,
+      });
+    }
+
+    return { success: true, autoVerifyEnabled: args.autoVerifyEnabled, confidenceThreshold: threshold };
+  },
+});
+
+// ==========================================
 // MODE MAINTENANCE
 // ==========================================
 

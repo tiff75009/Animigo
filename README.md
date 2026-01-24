@@ -90,6 +90,17 @@ bun run build
   - Approbation/Rejet avec commentaires
   - Detection automatique des contenus suspects (emails, telephones)
 
+- **Verifications d'identite** (`/admin/verifications`)
+  - Liste des demandes avec filtres par statut
+  - Visualisation des documents soumis (CNI recto/verso, selfie)
+  - Resultats de verification automatique par IA
+  - Approbation/Rejet avec notes admin
+  - Badge compteur des demandes en attente
+  - **Parametres de verification automatique** (panneau settings)
+    - Toggle on/off pour l'auto-approbation
+    - Seuil de confiance configurable (50%-100%)
+    - Tracabilite du seuil utilise pour chaque decision
+
 - **Categories de services** (`/admin/services/categories`)
   - **Structure hierarchique** : Categories parentes et sous-categories (2 niveaux max)
   - CRUD complet avec formulaire modulaire
@@ -416,6 +427,67 @@ Utilisation de Framer Motion avec des variants predefinies :
 ---
 
 ## Changelog recent
+
+### v0.13.1 - Parametres de Verification Automatique Configurables
+
+- **Panneau de configuration admin** (`/admin/verifications`)
+  - Bouton settings dans l'en-tete pour ouvrir le panneau
+  - Toggle on/off pour activer/desactiver l'auto-approbation
+  - Slider pour ajuster le seuil de confiance (50%-100%, defaut 80%)
+  - Sauvegarde persistante dans `systemConfig`
+
+- **Logique d'auto-approbation amelioree**
+  - Verification si l'auto-verification est activee dans les parametres
+  - Comparaison de la confiance au seuil configure
+  - Notes explicatives quand les criteres ne sont pas remplis
+  - Tracabilite : le seuil utilise est stocke avec chaque resultat
+
+- **Backend Convex**
+  - Nouvelles fonctions `getVerificationSettings` et `updateVerificationSettings` dans `admin/config.ts`
+  - Query interne `getVerificationSettings` dans `verification/autoVerify.ts`
+  - Schema mis a jour : `confidenceThreshold` optionnel dans `aiVerificationResult`
+
+### v0.13.0 - Verification d'Identite avec IA
+
+- **Systeme de verification d'identite pour les annonceurs**
+  - Page dediee `/dashboard/verification` pour soumettre les documents
+  - Code de verification unique a 6 caracteres genere pour chaque demande
+  - Upload de 3 documents : CNI recto, CNI verso, selfie avec code
+  - Lien vers filigrane.beta.gouv.fr pour proteger la CNI
+  - Selfie en mode camera-only sur mobile (pas d'acces galerie)
+
+- **Verification automatique par IA (Claude Vision)**
+  - Lecture OCR du code sur le selfie
+  - Comparaison des visages entre selfie et CNI
+  - Validation de l'authenticite de la piece d'identite
+  - Auto-approbation si tous les criteres sont valides (confiance >= seuil configure)
+  - Resultats detailles stockes en base
+
+- **Interface admin** (`/admin/verifications`)
+  - Liste des demandes avec filtres par statut
+  - Badge compteur des demandes en attente dans la sidebar
+  - Modal de detail avec visualisation des documents
+  - Affichage des resultats de l'IA (code detecte, correspondance visages, validite CNI)
+  - Boutons Approuver/Rejeter avec notes admin
+
+- **Badge "Identite verifiee"**
+  - Affiche sur le profil public de l'annonceur (ShieldCheck icon)
+  - Affiche sur les cartes de resultats de recherche
+  - Stockage dans `profiles.isIdentityVerified`
+
+- **Sidebar annonceur amelioree**
+  - Bouton "Verifier mon profil" si non verifie (jaune)
+  - Badge "En cours de verification" si demande en attente (bleu)
+  - Icone de verification sur l'avatar si verifie
+
+- **Backend Convex**
+  - Nouvelle table `verificationRequests` avec statuts (pending, submitted, approved, rejected)
+  - Champ `aiVerificationResult` pour stocker les resultats de l'IA
+  - Champs `isIdentityVerified` et `identityVerifiedAt` sur la table `profiles`
+  - Action `autoVerifyIdentity` declenchee automatiquement a la soumission
+
+- **Variables d'environnement requises**
+  - `ANTHROPIC_API_KEY` pour la verification par IA
 
 ### v0.12.0 - Blocage par Duree et Ameliorations UX Reservations
 

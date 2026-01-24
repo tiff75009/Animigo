@@ -23,6 +23,7 @@ export interface ServiceResult {
   rating: number;
   reviewCount: number;
   verified: boolean;
+  isIdentityVerified: boolean;
   statusType: "particulier" | "micro_entrepreneur" | "professionnel";
   categorySlug: string;
   categoryName: string;

@@ -82,6 +82,7 @@ interface AnnouncerResult {
   reviewCount: number;
   basePrice?: number;
   verified: boolean;
+  isIdentityVerified: boolean;
   acceptedAnimals: string[];
   services: string[];
   availability: AnnouncerAvailability;
@@ -445,6 +446,7 @@ export const searchAnnouncers = query({
         reviewCount: 0, // TODO: Compter les avis
         basePrice,
         verified: announcer.accountType === "annonceur_pro",
+        isIdentityVerified: profile.isIdentityVerified ?? false,
         acceptedAnimals: profile.acceptedAnimals ?? [],
         services: services.map((s) => s.category),
         availability,
@@ -1091,6 +1093,7 @@ interface ServiceSearchResult {
   rating: number;
   reviewCount: number;
   verified: boolean;
+  isIdentityVerified: boolean;
   statusType: "particulier" | "micro_entrepreneur" | "professionnel";
 
   // Infos service
@@ -1552,6 +1555,7 @@ export const searchServices = query({
           rating: 4.5, // TODO: Calculer depuis les avis
           reviewCount: 0, // TODO: Compter les avis
           verified: announcer.accountType === "annonceur_pro",
+          isIdentityVerified: profile.isIdentityVerified ?? false,
           statusType,
           categorySlug: service.category,
           categoryName: categoryData?.name ?? service.category,

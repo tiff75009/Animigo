@@ -165,11 +165,18 @@ export default defineSchema({
     // I-CAD (Identification des Carnivores Domestiques)
     // true = inscrit I-CAD, false = non inscrit, undefined = pas encore renseigné
     icadRegistered: v.optional(v.boolean()),
+
+    // Vérification d'identité
+    // true = identité vérifiée par admin, false/undefined = non vérifié
+    isIdentityVerified: v.optional(v.boolean()),
+    identityVerifiedAt: v.optional(v.number()), // Date de vérification
+
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
     .index("by_department", ["department"])
-    .index("by_postal_code", ["postalCode"]),
+    .index("by_postal_code", ["postalCode"])
+    .index("by_verified", ["isIdentityVerified"]),
 
   // Profil client (propriétaires d'animaux)
   clientProfiles: defineTable({
@@ -988,4 +995,52 @@ export default defineSchema({
     .index("by_ip", ["ipAddress"])
     .index("by_status", ["status"])
     .index("by_ip_status", ["ipAddress", "status"]),
+
+  // Demandes de vérification d'identité des annonceurs
+  verificationRequests: defineTable({
+    userId: v.id("users"),
+
+    // Code de vérification à écrire sur la photo selfie
+    verificationCode: v.string(), // Code aléatoire 6 caractères (ex: "A3K9P2")
+
+    // Documents uploadés (URLs Cloudinary)
+    idCardFrontUrl: v.optional(v.string()), // CNI recto
+    idCardBackUrl: v.optional(v.string()),  // CNI verso
+    selfieWithCodeUrl: v.optional(v.string()), // Selfie avec le code écrit sur papier
+
+    // Statut de la demande
+    status: v.union(
+      v.literal("pending"),    // Documents en cours de soumission
+      v.literal("submitted"),  // Tous les documents soumis, en attente de review
+      v.literal("approved"),   // Vérifié et approuvé
+      v.literal("rejected")    // Rejeté (documents non conformes)
+    ),
+
+    // Informations de review admin
+    reviewedAt: v.optional(v.number()),
+    reviewedBy: v.optional(v.id("users")),
+    rejectionReason: v.optional(v.string()), // Raison du rejet si applicable
+    adminNotes: v.optional(v.string()), // Notes internes admin
+
+    // Résultat de la vérification automatique par IA
+    aiVerificationResult: v.optional(v.object({
+      codeMatch: v.boolean(),
+      codeDetected: v.union(v.string(), v.null()),
+      faceMatch: v.boolean(),
+      faceMatchConfidence: v.number(),
+      idCardValid: v.boolean(),
+      issues: v.array(v.string()),
+      autoApproved: v.boolean(),
+      verifiedAt: v.number(),
+      confidenceThreshold: v.optional(v.number()), // Seuil de confiance utilisé
+    })),
+
+    // Timestamps
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    submittedAt: v.optional(v.number()), // Date de soumission complète
+  })
+    .index("by_user", ["userId"])
+    .index("by_status", ["status"])
+    .index("by_user_status", ["userId", "status"]),
 });

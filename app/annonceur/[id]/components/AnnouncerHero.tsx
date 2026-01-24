@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { MapPin, Star, Clock, Calendar, User } from "lucide-react";
+import { MapPin, Star, Clock, Calendar, User, ShieldCheck } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { AnnouncerData, animalEmojis } from "./types";
 import { formatDistance } from "@/app/components/platform/helpers";
@@ -126,9 +126,10 @@ export default function AnnouncerHero({
                   )}>
                     {getStatusLabel()}
                   </span>
-                  {announcer.verified && (
-                    <span className="px-3 py-1 rounded-full text-sm font-medium bg-secondary/10 text-secondary">
-                      Profil vérifié
+                  {announcer.isIdentityVerified && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-secondary/10 text-secondary">
+                      <ShieldCheck className="w-4 h-4" />
+                      Identité vérifiée
                     </span>
                   )}
                   {announcer.icadRegistered && (

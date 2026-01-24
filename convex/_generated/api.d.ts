@@ -65,6 +65,8 @@ import type * as services_variants from "../services/variants.js";
 import type * as utils_contentModeration from "../utils/contentModeration.js";
 import type * as utils_defaultPricing from "../utils/defaultPricing.js";
 import type * as utils_location from "../utils/location.js";
+import type * as verification_autoVerify from "../verification/autoVerify.js";
+import type * as verification_verification from "../verification/verification.js";
 
 import type {
   ApiFromModules,
@@ -130,6 +132,8 @@ declare const fullApi: ApiFromModules<{
   "utils/contentModeration": typeof utils_contentModeration;
   "utils/defaultPricing": typeof utils_defaultPricing;
   "utils/location": typeof utils_location;
+  "verification/autoVerify": typeof verification_autoVerify;
+  "verification/verification": typeof verification_verification;
 }>;
 
 /**

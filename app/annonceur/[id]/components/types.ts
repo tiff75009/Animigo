@@ -6,6 +6,7 @@ export interface AnnouncerData {
   lastName: string;
   memberSince: string;
   verified: boolean;
+  isIdentityVerified: boolean;
   statusType: "professionnel" | "micro_entrepreneur" | "particulier";
   profileImage: string | null;
   coverImage: string | null;

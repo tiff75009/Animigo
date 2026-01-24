@@ -150,6 +150,7 @@ export const getAnnouncerProfile = query({
       lastName: user.lastName,
       memberSince: new Date(user.createdAt).getFullYear().toString(),
       verified: user.emailVerified,
+      isIdentityVerified: profile?.isIdentityVerified || false,
       statusType: getStatusType(),
 
       // Infos profil
@@ -383,6 +384,7 @@ export const getAnnouncerBySlug = query({
       lastName: user.lastName,
       memberSince: new Date(user.createdAt).getFullYear().toString(),
       verified: user.emailVerified,
+      isIdentityVerified: profile?.isIdentityVerified || false,
       statusType: getStatusType(),
 
       // Infos profil

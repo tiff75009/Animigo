@@ -133,6 +133,7 @@ export default function AnnouncerProfilePage() {
     lastName: announcerData.lastName,
     memberSince: announcerData.memberSince,
     verified: announcerData.verified,
+    isIdentityVerified: announcerData.isIdentityVerified,
     statusType: announcerData.statusType as "professionnel" | "micro_entrepreneur" | "particulier",
     profileImage: announcerData.profileImage,
     coverImage: announcerData.coverImage,
