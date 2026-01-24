@@ -497,10 +497,17 @@ export default function ReserverPage({
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
 
+      // Use actual IDs from selected objects, not URL params (which may be slugs)
+      if (!selectedService || !selectedVariant) {
+        setError("Service ou formule non trouvé");
+        setIsSubmitting(false);
+        return;
+      }
+
       const result = await createPendingBooking({
         announcerId: announcerId as Id<"users">,
-        serviceId: bookingData.serviceId as Id<"services">,
-        variantId: bookingData.variantId as Id<"serviceVariants">,
+        serviceId: selectedService.id as Id<"services">,
+        variantId: selectedVariant.id,
         optionIds: bookingData.selectedOptionIds as Id<"serviceOptions">[],
         startDate: bookingData.selectedDate,
         endDate: bookingData.selectedEndDate || bookingData.selectedDate,
