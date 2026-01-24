@@ -258,10 +258,9 @@ export function Navbar() {
                   </Link>
                   <Link
                     href="/connexion"
-                    className="flex items-center gap-2 p-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+                    className="p-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
                   >
                     <User className="w-5 h-5" />
-                    <span className="text-sm font-medium">Connexion</span>
                   </Link>
                 </>
               )}

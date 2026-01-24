@@ -1,9 +1,64 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Home, Scissors, ArrowRight } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+
+// Flip Words Component - inspiré de Aceternity UI
+const flipWords = ["compagnons", "petits amours", "fidèles amis", "trésors"];
+
+function FlipWords() {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % flipWords.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <AnimatePresence mode="wait">
+      <motion.span
+        key={flipWords[currentIndex]}
+        initial={{ opacity: 0, y: 20, rotateX: -90, filter: "blur(8px)" }}
+        animate={{ opacity: 1, y: 0, rotateX: 0, filter: "blur(0px)" }}
+        exit={{ opacity: 0, y: -20, rotateX: 90, filter: "blur(8px)" }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="inline-block bg-gradient-to-r from-primary via-pink-500 to-secondary bg-clip-text text-transparent"
+      >
+        {flipWords[currentIndex]}
+      </motion.span>
+    </AnimatePresence>
+  );
+}
+
+// Text Generate Effect - inspiré de Aceternity UI
+function TextGenerateEffect({ words }: { words: string }) {
+  const wordsArray = words.split(" ");
+
+  return (
+    <span className="inline">
+      {wordsArray.map((word, idx) => (
+        <motion.span
+          key={word + idx}
+          initial={{ opacity: 0, filter: "blur(10px)" }}
+          animate={{ opacity: 1, filter: "blur(0px)" }}
+          transition={{
+            duration: 0.4,
+            delay: idx * 0.15,
+            ease: "easeOut",
+          }}
+          className="inline-block mr-[0.25em]"
+        >
+          {word}
+        </motion.span>
+      ))}
+    </span>
+  );
+}
 
 export function HeroSection() {
   const router = useRouter();
@@ -37,16 +92,15 @@ export function HeroSection() {
               <span className="text-sm font-medium text-foreground/70">La plateforme des amoureux des animaux</span>
             </motion.div>
 
-            {/* Main title with Love Taking font */}
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="font-love-taking text-5xl md:text-6xl lg:text-7xl text-foreground mb-6 leading-tight"
-            >
-              Prenez soin de vos{" "}
-              <span className="text-primary">compagnons</span>
-            </motion.h1>
+            {/* Main title with Love Taking font - animated */}
+            <h1 className="font-love-taking text-4xl sm:text-5xl md:text-6xl lg:text-7xl text-foreground mb-6 leading-tight">
+              <span className="block">
+                <TextGenerateEffect words="Prenez soin de vos" />
+              </span>
+              <span className="block whitespace-nowrap">
+                <FlipWords />
+              </span>
+            </h1>
 
             {/* Subtitle */}
             <motion.p
