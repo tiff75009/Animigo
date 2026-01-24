@@ -107,17 +107,13 @@ function extractCity(location: string): string {
   return lastPart;
 }
 
+// Format distance with 1km margin of error for privacy
 function formatDistance(distance?: number): string | null {
   if (distance === undefined) return null;
-  if (distance < 1) return `${Math.round(distance * 1000)}m`;
-  return `${distance.toFixed(1)} km`;
-}
-
-// Commission rate (15%)
-const COMMISSION_RATE = 15;
-function calculatePriceWithCommission(basePriceCents: number): number {
-  const commission = Math.round((basePriceCents * COMMISSION_RATE) / 100);
-  return basePriceCents + commission;
+  // Add 1km margin of error - round up to nearest 0.5km
+  const fuzzyDistance = Math.ceil(distance * 2) / 2;
+  if (fuzzyDistance < 1) return "< 1 km";
+  return `${fuzzyDistance.toFixed(1)} km`;
 }
 
 // =============================================
@@ -288,7 +284,6 @@ function HomeServiceCard({
 }) {
   const router = useRouter();
   const [isFavorite, setIsFavorite] = useState(false);
-  const priceWithCommission = calculatePriceWithCommission(service.basePrice);
   const city = extractCity(service.location);
   const distanceText = formatDistance(service.distance);
 
@@ -380,7 +375,7 @@ function HomeServiceCard({
               )}
             </div>
             <div className="text-right">
-              <span className="text-lg font-bold text-primary">{formatPrice(priceWithCommission)}</span>
+              <span className="text-lg font-bold text-primary">{formatPrice(service.basePrice)}</span>
               <span className="text-sm text-text-light">{priceUnitLabels[service.basePriceUnit] || ""}</span>
             </div>
           </div>
@@ -542,29 +537,87 @@ export function SearchMapSection() {
   const isLoading = results === undefined;
   const services = (results ?? []) as ServiceSearchResult[];
 
-  // Map data - convert services to map markers format
+  // Group services by announcer for the map (same person = one pin with all services)
   const mapSitters = useMemo(() => {
-    return services
-      .filter((s) => s.distance !== undefined && s.coordinates)
-      .map((s) => ({
-        id: s.serviceId as string,
-        firstName: s.firstName,
-        lastName: s.lastName,
-        avatar: "👤",
-        profileImage: s.profileImage,
-        location: s.location,
-        coordinates: s.coordinates!,
-        services: [s.categoryName],
-        rating: s.rating,
-        reviewCount: s.reviewCount,
-        hourlyRate: s.basePrice / 100,
-        verified: s.verified,
-        available: s.availability.status === "available",
-        acceptedAnimals: s.animalTypes,
-        distance: s.distance,
-        statusType: s.statusType,
-        basePrice: s.basePrice,
-      }));
+    const grouped = new Map<string, {
+      id: string;
+      announcerId: string;
+      announcerSlug: string;
+      firstName: string;
+      lastName: string;
+      profileImage: string | null;
+      location: string;
+      coordinates: { lat: number; lng: number };
+      services: Array<{
+        serviceId: string;
+        categorySlug: string;
+        categoryName: string;
+        categoryIcon: string;
+        basePrice: number;
+        basePriceUnit: string;
+      }>;
+      rating: number;
+      reviewCount: number;
+      verified: boolean;
+      isIdentityVerified: boolean;
+      statusType: string;
+      distance?: number;
+      animalTypes: string[];
+    }>();
+
+    for (const s of services) {
+      if (!s.coordinates || s.distance === undefined) continue;
+
+      const announcerId = s.announcerId as string;
+      const existing = grouped.get(announcerId);
+
+      if (existing) {
+        // Add this service to existing announcer
+        existing.services.push({
+          serviceId: s.serviceId as string,
+          categorySlug: s.categorySlug,
+          categoryName: s.categoryName,
+          categoryIcon: s.categoryIcon,
+          basePrice: s.basePrice,
+          basePriceUnit: s.basePriceUnit,
+        });
+        // Merge animal types
+        for (const animal of s.animalTypes || []) {
+          if (!existing.animalTypes.includes(animal)) {
+            existing.animalTypes.push(animal);
+          }
+        }
+      } else {
+        // Create new announcer entry
+        grouped.set(announcerId, {
+          id: announcerId,
+          announcerId,
+          announcerSlug: s.announcerSlug,
+          firstName: s.firstName,
+          lastName: s.lastName,
+          profileImage: s.profileImage,
+          location: s.location,
+          coordinates: s.coordinates,
+          services: [{
+            serviceId: s.serviceId as string,
+            categorySlug: s.categorySlug,
+            categoryName: s.categoryName,
+            categoryIcon: s.categoryIcon,
+            basePrice: s.basePrice,
+            basePriceUnit: s.basePriceUnit,
+          }],
+          rating: s.rating,
+          reviewCount: s.reviewCount,
+          verified: s.verified,
+          isIdentityVerified: s.isIdentityVerified,
+          statusType: s.statusType,
+          distance: s.distance,
+          animalTypes: [...(s.animalTypes || [])],
+        });
+      }
+    }
+
+    return Array.from(grouped.values());
   }, [services]);
 
   // Search center for map
@@ -804,27 +857,10 @@ export function SearchMapSection() {
             <div className="h-[400px] lg:h-[600px] rounded-2xl overflow-hidden shadow-lg sticky top-24">
               <MapComponent
                 sitters={mapSitters as any}
-                selectedSitter={selectedService && selectedService.coordinates ? {
-                  id: selectedService.serviceId as string,
-                  firstName: selectedService.firstName,
-                  lastName: selectedService.lastName,
-                  avatar: "👤",
-                  profileImage: selectedService.profileImage,
-                  location: selectedService.location,
-                  coordinates: selectedService.coordinates,
-                  services: [selectedService.categoryName],
-                  rating: selectedService.rating,
-                  reviewCount: selectedService.reviewCount,
-                  hourlyRate: selectedService.basePrice / 100,
-                  verified: selectedService.verified,
-                  available: selectedService.availability.status === "available",
-                  acceptedAnimals: selectedService.animalTypes,
-                  distance: selectedService.distance,
-                  statusType: selectedService.statusType,
-                  basePrice: selectedService.basePrice,
-                } as any : null}
+                selectedSitter={selectedService ? mapSitters.find(s => s.announcerId === (selectedService.announcerId as string)) as any : null}
                 onSitterSelect={(sitter: any) => {
-                  const found = services.find(s => s.serviceId === sitter.id);
+                  // Find first service from this announcer
+                  const found = services.find(s => (s.announcerId as string) === sitter.id);
                   if (found) setSelectedService(found);
                 }}
                 searchCenter={searchCenter}

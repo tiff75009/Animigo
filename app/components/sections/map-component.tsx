@@ -8,6 +8,17 @@ import { Star, CheckCircle, MapPin } from "lucide-react";
 import { PARIS_CENTER, serviceTypes, type SitterLocation } from "@/app/lib/search-data";
 import "leaflet/dist/leaflet.css";
 
+// Animal types mapping
+const ANIMAL_TYPES: Record<string, { label: string; emoji: string }> = {
+  chien: { label: "chien", emoji: "🐕" },
+  chat: { label: "chat", emoji: "🐈" },
+  oiseau: { label: "oiseau", emoji: "🦜" },
+  rongeur: { label: "rongeur", emoji: "🐹" },
+  poisson: { label: "poisson", emoji: "🐠" },
+  reptile: { label: "reptile", emoji: "🦎" },
+  nac: { label: "NAC", emoji: "🐾" },
+};
+
 // Fix Leaflet default icon issue - only run on client
 if (typeof window !== "undefined") {
   delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
@@ -16,7 +27,7 @@ if (typeof window !== "undefined") {
 // Check if we're in browser environment
 const isBrowser = typeof window !== "undefined";
 
-// Obfuscate coordinates with ~100m random offset for privacy
+// Obfuscate coordinates with ~500m random offset for privacy
 // Uses a seeded random based on sitter ID for consistency
 function obfuscateCoordinates(
   coords: { lat: number; lng: number },
@@ -32,10 +43,10 @@ function obfuscateCoordinates(
   const random1 = Math.abs(Math.sin(seed) * 10000) % 1;
   const random2 = Math.abs(Math.cos(seed) * 10000) % 1;
 
-  // ~100m offset (0.0009 degrees is approximately 100m at mid-latitudes)
-  // Random angle and distance between 50m and 150m
+  // ~500m offset (0.0045 degrees is approximately 500m at mid-latitudes)
+  // Random angle and distance between 300m and 500m
   const angle = random1 * 2 * Math.PI;
-  const distance = 0.00045 + random2 * 0.0009; // 50m to 150m in degrees
+  const distance = 0.0027 + random2 * 0.0018; // 300m to 500m in degrees
 
   return {
     lat: coords.lat + distance * Math.cos(angle),
@@ -136,7 +147,34 @@ function extractCity(location: string): string {
   return lastPart;
 }
 
-// Popup content component
+// Price unit labels
+const priceUnitLabels: Record<string, string> = {
+  hour: "/h",
+  day: "/j",
+  week: "/sem",
+  month: "/mois",
+  flat: "",
+};
+
+// Format fuzzy distance with 1km margin of error
+function formatFuzzyDistance(distance?: number): string | null {
+  if (distance === undefined) return null;
+  const fuzzyDistance = Math.ceil(distance * 2) / 2;
+  if (fuzzyDistance < 1) return "< 1 km";
+  return `${fuzzyDistance.toFixed(1)} km`;
+}
+
+// Type for grouped services
+interface GroupedService {
+  serviceId: string;
+  categorySlug: string;
+  categoryName: string;
+  categoryIcon: string;
+  basePrice: number;
+  basePriceUnit: string;
+}
+
+// Popup content component - handles grouped services
 function SitterPopup({ sitter }: { sitter: SitterLocation }) {
   // Déterminer le label du badge de statut
   const getStatusLabel = () => {
@@ -154,6 +192,15 @@ function SitterPopup({ sitter }: { sitter: SitterLocation }) {
       default: return "bg-gray-100 text-gray-600";
     }
   };
+
+  // Check if services is array of objects (grouped) or strings (legacy)
+  const isGroupedServices = sitter.services.length > 0 && typeof sitter.services[0] === "object";
+  const groupedServices = isGroupedServices ? (sitter.services as unknown as GroupedService[]) : null;
+
+  // Get min price from grouped services
+  const minPrice = groupedServices
+    ? Math.min(...groupedServices.map(s => s.basePrice))
+    : sitter.basePrice;
 
   return (
     <div className="min-w-[260px] max-w-[300px]">
@@ -205,36 +252,62 @@ function SitterPopup({ sitter }: { sitter: SitterLocation }) {
         <span className="truncate">{extractCity(sitter.location)}</span>
         {sitter.distance !== undefined && (
           <span className="text-primary font-medium whitespace-nowrap">
-            • {sitter.distance.toFixed(1)} km
+            • {formatFuzzyDistance(sitter.distance)}
           </span>
         )}
       </div>
 
-      {/* Services */}
-      <div className="flex flex-wrap gap-1.5 mb-3">
-        {sitter.services.slice(0, 4).map((service) => {
-          const info = serviceTypes.find((s) => s.id === service);
-          return (
-            <span
-              key={service}
-              className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary text-xs font-medium rounded-lg"
+      {/* Services - Compact list for grouped services */}
+      {groupedServices ? (
+        <div className="space-y-2 mb-3">
+          {groupedServices.slice(0, 4).map((service) => (
+            <div
+              key={service.serviceId}
+              className="flex items-center justify-between px-2.5 py-1.5 bg-gray-50 rounded-lg"
             >
-              {info?.emoji} {info?.label || service}
+              <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                <span>{service.categoryIcon}</span>
+                <span>{service.categoryName}</span>
+              </span>
+              <span className="text-sm font-semibold text-primary">
+                {formatPrice(service.basePrice)}{priceUnitLabels[service.basePriceUnit] || ""}
+              </span>
+            </div>
+          ))}
+          {groupedServices.length > 4 && (
+            <p className="text-xs text-text-light text-center">
+              +{groupedServices.length - 4} autre{groupedServices.length - 4 > 1 ? "s" : ""} service{groupedServices.length - 4 > 1 ? "s" : ""}
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {sitter.services.slice(0, 4).map((service) => {
+            const info = serviceTypes.find((s) => s.id === service);
+            return (
+              <span
+                key={service as string}
+                className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary text-xs font-medium rounded-lg"
+              >
+                {info?.emoji} {info?.label || service}
+              </span>
+            );
+          })}
+          {sitter.services.length > 4 && (
+            <span className="px-2 py-1 bg-gray-100 text-text-light text-xs rounded-lg">
+              +{sitter.services.length - 4}
             </span>
-          );
-        })}
-        {sitter.services.length > 4 && (
-          <span className="px-2 py-1 bg-gray-100 text-text-light text-xs rounded-lg">
-            +{sitter.services.length - 4}
-          </span>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Animaux acceptés */}
       {sitter.acceptedAnimals && sitter.acceptedAnimals.length > 0 && (
         <div className="flex items-center gap-1.5 text-xs text-text-light mb-3">
           <span>🐾</span>
-          <span>{sitter.acceptedAnimals.slice(0, 3).join(", ")}</span>
+          <span>
+            {sitter.acceptedAnimals.slice(0, 3).map(a => ANIMAL_TYPES[a]?.label || a).join(", ")}
+          </span>
           {sitter.acceptedAnimals.length > 3 && (
             <span>+{sitter.acceptedAnimals.length - 3}</span>
           )}
@@ -243,14 +316,16 @@ function SitterPopup({ sitter }: { sitter: SitterLocation }) {
 
       {/* Prix et CTA */}
       <div className="pt-3 border-t border-gray-100">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm text-text-light">À partir de</span>
-          <span className="text-lg font-bold text-primary">
-            {sitter.basePrice ? formatPrice(sitter.basePrice) : `${sitter.hourlyRate}€`}
-          </span>
-        </div>
+        {!groupedServices && (
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm text-text-light">À partir de</span>
+            <span className="text-lg font-bold text-primary">
+              {minPrice ? formatPrice(minPrice) : `${sitter.hourlyRate}€`}
+            </span>
+          </div>
+        )}
         <button className="w-full py-2.5 bg-gradient-to-r from-primary to-secondary text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-all shadow-sm">
-          Voir les prestations
+          {groupedServices && groupedServices.length > 1 ? "Voir les prestations" : "Voir la prestation"}
         </button>
       </div>
     </div>
