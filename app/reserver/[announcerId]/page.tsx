@@ -281,19 +281,33 @@ export default function ReserverPage({
   const preSelectedVariantId = searchParams.get("variant");
   const preSelectedDate = searchParams.get("date");
   const preSelectedEndDate = searchParams.get("endDate");
+  const preSelectedStartTime = searchParams.get("startTime");
+  const preSelectedEndTime = searchParams.get("endTime");
+  const preSelectedOptions = searchParams.get("options");
+  const preSelectedOvernight = searchParams.get("overnight");
+  const preSelectedLocation = searchParams.get("location") as "announcer_home" | "client_home" | null;
+
+  // Parse pre-selected options (comma-separated IDs)
+  const preSelectedOptionIds = preSelectedOptions ? preSelectedOptions.split(",") : [];
+
+  // Always start at step 1 - data will be pre-filled from URL params
+  // This allows users to review their selection before proceeding
+  const getInitialStep = () => {
+    return 1;
+  };
 
   // State
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(getInitialStep);
   const [bookingData, setBookingData] = useState<BookingData>({
     serviceId: preSelectedServiceId || "",
     variantId: preSelectedVariantId || "",
     selectedDate: preSelectedDate,
     selectedEndDate: preSelectedEndDate,
-    selectedTime: null,
-    selectedEndTime: null,
-    includeOvernightStay: false,
-    selectedOptionIds: [],
-    serviceLocation: null,
+    selectedTime: preSelectedStartTime,
+    selectedEndTime: preSelectedEndTime,
+    includeOvernightStay: preSelectedOvernight === "true",
+    selectedOptionIds: preSelectedOptionIds,
+    serviceLocation: preSelectedLocation,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -329,8 +343,9 @@ export default function ReserverPage({
   const commissionRate = commissionData?.rate ?? 15; // Default 15% for particuliers
 
   // Selected service and variant (needed before calendar query)
+  // Match by id OR by category (slug) since URL may contain either
   const selectedService = serviceDetails?.find(
-    (s: ServiceDetail) => s.id === bookingData.serviceId
+    (s: ServiceDetail) => s.id === bookingData.serviceId || s.category === bookingData.serviceId
   ) as ServiceDetail | undefined;
 
   const selectedVariant = selectedService?.variants.find(
@@ -703,8 +718,12 @@ export default function ReserverPage({
                 selectedServiceId={bookingData.serviceId}
                 selectedVariantId={bookingData.variantId}
                 selectedServiceLocation={bookingData.serviceLocation}
+                selectedOptionIds={bookingData.selectedOptionIds}
+                selectedDate={bookingData.selectedDate}
+                selectedTime={bookingData.selectedTime}
+                selectedEndTime={bookingData.selectedEndTime}
                 commissionRate={commissionRate}
-                preSelectedFromSidebar={!!preSelectedServiceId}
+                preSelectedFromSidebar={!!(preSelectedServiceId && preSelectedVariantId)}
                 onSelect={handleFormulaSelect}
                 onServiceLocationSelect={handleServiceLocationSelect}
               />

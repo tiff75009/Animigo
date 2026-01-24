@@ -428,6 +428,42 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.15.0 - Experience Mobile Amelioree (Page Annonceur)
+
+- **Calendrier mobile en bottom sheet**
+  - Ouverture automatique du calendrier quand une formule est selectionnee sur mobile
+  - Animation fluide depuis le bas de l'ecran (spring animation)
+  - Possibilite de fermer et rouvrir le calendrier
+  - Header avec nom de la formule selectionnee
+
+- **Selecteur d'heure en roulette (wheel picker)**
+  - Nouveau composant `MobileTimePicker` avec effet de roulette
+  - 2 roues : heures et minutes
+  - Gradient de fondu en haut et en bas pour effet de profondeur
+  - Indicateur visuel de la selection actuelle
+  - Gestion des creneaux indisponibles (gris barre)
+  - Support des couleurs primary et secondary
+
+- **Boutons de selection mobile ameliores**
+  - Bouton "tap to select" pour l'heure de debut (icone horloge + chevron)
+  - Bouton "tap to select" pour l'heure de fin
+  - Affichage de l'heure selectionnee avec style actif
+  - Desktop : grille de creneaux conservee
+
+- **Modification des selections existantes**
+  - Zone date/heure cliquable dans la barre fixe en bas
+  - Style souligne pour indiquer la possibilite de modification
+  - Ouvre directement le calendrier pour modifier
+
+- **Condition de validation**
+  - Bouton "Reserver maintenant" desactive si aucune heure selectionnee
+  - Texte contextuel : "Selectionner une date" ou "Selectionner un horaire"
+  - Bouton de confirmation dans le calendrier avec etat desactive/actif
+
+- **Calendrier masque sur mobile dans la page**
+  - Calendrier dans `AnnouncerFormules` visible uniquement sur desktop (md:block)
+  - Sur mobile, accessible uniquement via le bottom sheet
+
 ### v0.14.0 - Admin Finances et Correction Paiements
 
 - **Panel Admin Finances** (`/admin/finances`)

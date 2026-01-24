@@ -297,6 +297,13 @@ export const getAnnouncerBySlug = query({
           categoryIcon: category?.icon || "🐾",
           description: service.description || category?.description || "",
           animalTypes: service.animalTypes || [],
+          // Booking settings from category and service
+          serviceLocation: service.serviceLocation as "announcer_home" | "client_home" | "both" | undefined,
+          allowOvernightStay: category?.allowOvernightStay,
+          overnightPrice: service.overnightPrice,
+          dayStartTime: service.dayStartTime,
+          dayEndTime: service.dayEndTime,
+          enableDurationBasedBlocking: category?.enableDurationBasedBlocking,
           formules: formules.map((f) => ({
             id: f._id,
             name: f.name,

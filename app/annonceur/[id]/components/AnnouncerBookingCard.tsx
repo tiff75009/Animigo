@@ -3,8 +3,18 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MessageCircle, Shield, ChevronDown, ChevronUp, Check } from "lucide-react";
-import { ServiceData } from "./types";
+import { ServiceData, FormuleData } from "./types";
 import { cn } from "@/app/lib/utils";
+import {
+  BookingSummary,
+  type BookingSelection,
+  type PriceBreakdown,
+  type ClientAddress,
+  formatPrice,
+  calculatePriceWithCommission,
+  isGardeService,
+  getFormuleBestPrice,
+} from "./booking";
 
 interface AnnouncerBookingCardProps {
   services: ServiceData[];
@@ -12,21 +22,34 @@ interface AnnouncerBookingCardProps {
   responseTime: string;
   nextAvailable: string;
   selectedServiceId?: string | null;
-  commissionRate?: number; // Taux de commission en %
+  commissionRate?: number;
+  bookingService?: ServiceData | null;
+  bookingVariant?: FormuleData | null;
+  bookingSelection?: BookingSelection;
+  priceBreakdown?: PriceBreakdown | null;
+  clientAddress?: ClientAddress | null;
   onServiceChange?: (serviceId: string | null) => void;
-  onBook?: (serviceId?: string, variantId?: string) => void;
+  onBook?: () => void;
   onContact?: () => void;
 }
 
-// Helper pour formater le prix (centimes -> euros)
-const formatPrice = (priceInCents: number) => {
-  return (priceInCents / 100).toFixed(2).replace(".", ",");
-};
+// Get best price for a service
+const getServiceBestPrice = (service: ServiceData, commissionRate: number): { price: number; unit: string } => {
+  if (service.formules.length === 0) return { price: 0, unit: "" };
 
-// Calculer le prix avec commission
-const calculatePriceWithCommission = (basePriceCents: number, commissionRate: number): number => {
-  const commission = Math.round((basePriceCents * commissionRate) / 100);
-  return basePriceCents + commission;
+  const isGarde = isGardeService(service);
+  let bestPrice = 0;
+  let bestUnit = "";
+
+  for (const formule of service.formules) {
+    const { price, unit } = getFormuleBestPrice(formule, isGarde);
+    if (price > 0 && (bestPrice === 0 || price < bestPrice)) {
+      bestPrice = price;
+      bestUnit = unit;
+    }
+  }
+
+  return { price: bestPrice, unit: bestUnit ? `/${bestUnit}` : "" };
 };
 
 export default function AnnouncerBookingCard({
@@ -36,104 +59,72 @@ export default function AnnouncerBookingCard({
   nextAvailable,
   selectedServiceId,
   commissionRate = 15,
+  bookingService,
+  bookingVariant,
+  bookingSelection,
+  priceBreakdown,
+  clientAddress,
   onServiceChange,
   onBook,
   onContact,
 }: AnnouncerBookingCardProps) {
-  // Le dropdown est fermé par défaut, même avec un service pré-sélectionné
   const [isServicesExpanded, setIsServicesExpanded] = useState(false);
 
-  // Trouver le service sélectionné
+  // Find selected service
   const selectedService = selectedServiceId
     ? services.find((s) => s.id === selectedServiceId)
     : null;
 
-  // Déterminer si c'est une garde (afficher /jour) ou un service (afficher /heure)
-  const isGardeService = (service: ServiceData) => {
-    const categorySlug = service.categorySlug || service.categoryId || "";
-    return categorySlug.includes("garde") || categorySlug === "garde";
-  };
+  // Check if we have a booking in progress (formule selected)
+  const hasBookingInProgress = Boolean(bookingService && bookingVariant);
 
-  // Trouver le meilleur prix à afficher pour un service
-  // Pour les gardes: priorité au prix journalier
-  // Pour les services: priorité au prix horaire
-  const getServiceBestPrice = (service: ServiceData): { price: number; unit: string } => {
-    if (service.formules.length === 0) return { price: 0, unit: "" };
+  // If booking is in progress, show the summary
+  if (hasBookingInProgress && bookingSelection) {
+    return (
+      <div className="sticky top-24 space-y-4">
+        <BookingSummary
+          service={bookingService!}
+          variant={bookingVariant!}
+          selection={bookingSelection}
+          priceBreakdown={priceBreakdown ?? null}
+          commissionRate={commissionRate}
+          responseRate={responseRate}
+          responseTime={responseTime}
+          nextAvailable={nextAvailable}
+          clientAddress={clientAddress}
+          onBook={onBook}
+          onContact={onContact}
+        />
 
-    const isGarde = isGardeService(service);
-    let bestPrice = 0;
-    let bestUnit = "";
+        {/* Trust badges */}
+        <div className="p-4 bg-white rounded-xl border border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-secondary/10 rounded-lg">
+              <Shield className="w-5 h-5 text-secondary" />
+            </div>
+            <div>
+              <p className="font-medium text-gray-900">Réservation sécurisée</p>
+              <p className="text-xs text-gray-500">Paiement protégé, assurance incluse</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-    for (const formule of service.formules) {
-      const pricing = formule.pricing;
-
-      if (pricing) {
-        // Pour les gardes: priorité daily > weekly > monthly > hourly
-        if (isGarde) {
-          if (pricing.daily && (bestPrice === 0 || pricing.daily < bestPrice)) {
-            bestPrice = pricing.daily;
-            bestUnit = "/jour";
-          } else if (!bestPrice && pricing.weekly) {
-            bestPrice = pricing.weekly;
-            bestUnit = "/semaine";
-          } else if (!bestPrice && pricing.monthly) {
-            bestPrice = pricing.monthly;
-            bestUnit = "/mois";
-          } else if (!bestPrice && pricing.hourly) {
-            bestPrice = pricing.hourly;
-            bestUnit = "/heure";
-          }
-        } else {
-          // Pour les services: priorité hourly > daily > weekly > monthly
-          if (pricing.hourly && (bestPrice === 0 || pricing.hourly < bestPrice)) {
-            bestPrice = pricing.hourly;
-            bestUnit = "/heure";
-          } else if (!bestPrice && pricing.daily) {
-            bestPrice = pricing.daily;
-            bestUnit = "/jour";
-          } else if (!bestPrice && pricing.weekly) {
-            bestPrice = pricing.weekly;
-            bestUnit = "/semaine";
-          } else if (!bestPrice && pricing.monthly) {
-            bestPrice = pricing.monthly;
-            bestUnit = "/mois";
-          }
-        }
-      }
-
-      // Fallback sur price/unit si pas de pricing
-      if (bestPrice === 0 && formule.price > 0) {
-        if (bestPrice === 0 || formule.price < bestPrice) {
-          bestPrice = formule.price;
-          const unit = formule.unit;
-          if (unit === "day") bestUnit = "/jour";
-          else if (unit === "hour") bestUnit = "/heure";
-          else if (unit === "week") bestUnit = "/semaine";
-          else if (unit === "month") bestUnit = "/mois";
-          else if (unit === "flat") bestUnit = "";
-          else bestUnit = isGarde ? "/jour" : "/heure";
-        }
-      }
-    }
-
-    return { price: bestPrice, unit: bestUnit };
-  };
-
-  // Prix et unité à afficher
+  // Default view: service selection dropdown (original behavior)
   let displayPrice: number;
   let displayUnit: string;
 
   if (selectedService) {
-    // Prix du service sélectionné
-    const { price, unit } = getServiceBestPrice(selectedService);
+    const { price, unit } = getServiceBestPrice(selectedService, commissionRate);
     displayPrice = price;
     displayUnit = unit;
   } else {
-    // Prix minimum global
     let minPrice = Infinity;
     let minUnit = "/prestation";
     for (const service of services) {
-      const { price, unit } = getServiceBestPrice(service);
+      const { price, unit } = getServiceBestPrice(service, commissionRate);
       if (price > 0 && price < minPrice) {
         minPrice = price;
         minUnit = unit;
@@ -230,13 +221,13 @@ export default function AnnouncerBookingCard({
                   <div className="max-h-[300px] overflow-y-auto">
                     {services.map((service, index) => {
                       const isSelected = service.id === selectedServiceId;
-                      const { price: serviceMinPrice, unit: serviceUnit } = getServiceBestPrice(service);
+                      const { price: serviceMinPrice, unit: serviceUnit } = getServiceBestPrice(service, commissionRate);
 
                       return (
                         <button
-                          key={service.id}
+                          key={service.id.toString()}
                           onClick={() => {
-                            onServiceChange?.(service.id);
+                            onServiceChange?.(service.id.toString());
                             setIsServicesExpanded(false);
                           }}
                           className={cn(
@@ -285,22 +276,12 @@ export default function AnnouncerBookingCard({
             </AnimatePresence>
           </div>
 
-          {/* CTA Buttons */}
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => onBook?.(selectedServiceId ?? undefined)}
-            disabled={!selectedServiceId}
-            className={cn(
-              "w-full py-3.5 font-semibold rounded-xl transition-all",
-              selectedServiceId
-                ? "bg-gradient-to-r from-primary to-primary/90 text-white shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30"
-                : "bg-gray-100 text-gray-400 cursor-not-allowed"
-            )}
-          >
-            {selectedServiceId ? "Réserver maintenant" : "Sélectionnez une prestation"}
-          </motion.button>
+          {/* Instructions */}
+          <p className="text-sm text-gray-500 text-center">
+            Sélectionnez un service puis choisissez une formule ci-dessous
+          </p>
 
+          {/* CTA Buttons */}
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}

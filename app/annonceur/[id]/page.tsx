@@ -1,19 +1,19 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQueryState } from "nuqs";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { useAuth } from "@/app/hooks/useAuth";
 
 import {
   AnnouncerHero,
-  AnnouncerGallery,
-  AnnouncerAbout,
-  AnnouncerServices,
+  AnnouncerFormules,
+  AnnouncerProfile,
   AnnouncerReviews,
   AnnouncerBookingCard,
   AnnouncerMobileCTA,
@@ -22,6 +22,14 @@ import {
   type AnnouncerData,
 } from "./components";
 import { SearchHeader } from "@/app/components/platform";
+import {
+  type BookingSelection,
+  type PriceBreakdown,
+  type ClientAddress,
+  DEFAULT_BOOKING_SELECTION,
+  calculatePriceBreakdown,
+  isGardeService,
+} from "./components/booking";
 
 // Calcul de distance avec la formule de Haversine (en km)
 function calculateDistance(
@@ -48,13 +56,17 @@ export default function AnnouncerProfilePage() {
   const router = useRouter();
   const { token } = useAuth();
   const [isFavorite, setIsFavorite] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabType>("services");
+  const [activeTab, setActiveTab] = useState<TabType>("formules");
 
   // Récupérer le slug de l'annonceur depuis l'URL
   const announcerSlug = params.id as string;
 
   // Gérer le service sélectionné avec nuqs (categorySlug, synchronisé avec l'URL)
   const [selectedServiceSlug, setSelectedServiceSlug] = useQueryState("service");
+
+  // État de la réservation (formule, options, dates, heures)
+  const [bookingSelection, setBookingSelection] = useState<BookingSelection>(DEFAULT_BOOKING_SELECTION);
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
 
   // Récupérer les données de l'annonceur par son slug
   const announcerData = useQuery(
@@ -77,6 +89,62 @@ export default function AnnouncerProfilePage() {
   );
   const commissionRate = commissionData?.rate ?? 15; // Default 15% for particuliers
 
+  // Workday config from admin settings
+  const workdayConfig = useQuery(api.admin.config.getWorkdayConfig);
+  const workdayHours = workdayConfig?.workdayHours ?? 8;
+
+  // Announcer preferences for availability
+  const announcerPreferences = useQuery(
+    api.public.search.getAnnouncerAvailabilityPreferences,
+    announcerData?.id
+      ? { announcerId: announcerData.id as Id<"users"> }
+      : "skip"
+  );
+
+  // Calendar availability - query for current calendar month
+  const startOfMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
+  const endOfMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0);
+
+  const formatDateLocal = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  // Get selected service for calendar query
+  const selectedServiceForCalendar = announcerData?.id && bookingSelection.selectedServiceId
+    ? announcerData
+    : null;
+
+  // Find the service category slug for availability query
+  const selectedServiceCategory = useMemo(() => {
+    if (!announcerData || !bookingSelection.selectedServiceId) return null;
+    const service = announcerData.services?.find(
+      (s: { id: string; categorySlug?: string }) => s.id === bookingSelection.selectedServiceId
+    );
+    return service?.categorySlug || null;
+  }, [announcerData, bookingSelection.selectedServiceId]);
+
+  const availabilityCalendar = useQuery(
+    api.public.search.getAnnouncerAvailabilityCalendar,
+    announcerData?.id && selectedServiceCategory
+      ? {
+          announcerId: announcerData.id as Id<"users">,
+          serviceCategory: selectedServiceCategory,
+          startDate: formatDateLocal(startOfMonth),
+          endDate: formatDateLocal(endOfMonth),
+        }
+      : "skip"
+  );
+
+  // Client addresses - only fetch if user is logged in
+  const clientAddressesData = useQuery(
+    api.client.addresses.getAddresses,
+    token ? { sessionToken: token } : "skip"
+  );
+  const clientAddresses: ClientAddress[] = (clientAddressesData || []) as ClientAddress[];
+
   // Calculer la distance entre le client et l'annonceur
   // (doit être avant les early returns pour respecter les règles des hooks)
   const distance = useMemo(() => {
@@ -91,7 +159,227 @@ export default function AnnouncerProfilePage() {
     );
   }, [clientLocation?.coordinates, announcerData?.coordinates]);
 
-  // État de chargement
+  // Transformer les données pour correspondre au type AnnouncerData (peut être null)
+  const announcer: AnnouncerData | null = useMemo(() => {
+    if (!announcerData) return null;
+    return {
+      id: announcerData.id,
+      firstName: announcerData.firstName,
+      lastName: announcerData.lastName,
+      memberSince: announcerData.memberSince,
+      verified: announcerData.verified,
+      isIdentityVerified: announcerData.isIdentityVerified,
+      statusType: announcerData.statusType as "professionnel" | "micro_entrepreneur" | "particulier",
+      profileImage: announcerData.profileImage,
+      coverImage: announcerData.coverImage,
+      bio: announcerData.bio,
+      location: announcerData.location,
+      coordinates: announcerData.coordinates,
+      rating: announcerData.rating,
+      reviewCount: announcerData.reviewCount,
+      responseTime: announcerData.responseTime,
+      responseRate: announcerData.responseRate,
+      acceptedAnimals: announcerData.acceptedAnimals,
+      equipment: {
+        housingType: announcerData.equipment.housingType as "house" | "apartment" | null,
+        housingSize: announcerData.equipment.housingSize,
+        hasGarden: announcerData.equipment.hasGarden,
+        gardenSize: announcerData.equipment.gardenSize,
+        hasVehicle: announcerData.equipment.hasVehicle,
+        isSmoker: announcerData.equipment.isSmoker,
+        hasChildren: announcerData.equipment.hasChildren,
+        childrenAges: announcerData.equipment.childrenAges,
+        providesFood: announcerData.equipment.providesFood,
+      },
+      ownAnimals: announcerData.ownAnimals || [],
+      icadRegistered: announcerData.icadRegistered,
+      gallery: announcerData.gallery,
+      services: announcerData.services,
+      activities: announcerData.activities,
+      reviews: announcerData.reviews,
+      availability: {
+        nextAvailable: announcerData.availability.nextAvailable,
+      },
+      radius: announcerData.radius,
+    };
+  }, [announcerData]);
+
+  // Trouver le service sélectionné par son categorySlug (peut être null)
+  const selectedService = useMemo(() => {
+    if (!announcer) return null;
+    if (selectedServiceSlug) {
+      return announcer.services.find((s) => s.categorySlug === selectedServiceSlug || s.categoryId === selectedServiceSlug) ?? null;
+    }
+    return announcer.services[0] ?? null;
+  }, [announcer, selectedServiceSlug]);
+
+  // Find selected service and variant from booking selection
+  const bookingService = useMemo(() => {
+    if (!announcer || !bookingSelection.selectedServiceId) return null;
+    return announcer.services.find((s) => s.id === bookingSelection.selectedServiceId) ?? null;
+  }, [announcer, bookingSelection.selectedServiceId]);
+
+  const bookingVariant = useMemo(() => {
+    if (!bookingService || !bookingSelection.selectedVariantId) return null;
+    return bookingService.formules.find((f) => f.id === bookingSelection.selectedVariantId) ?? null;
+  }, [bookingService, bookingSelection.selectedVariantId]);
+
+  // Determine if range mode (daily services like garde)
+  const isRangeMode = bookingService ? isGardeService(bookingService) : false;
+
+  // Calculate days count
+  const days = useMemo(() => {
+    if (!bookingSelection.startDate) return 1;
+    if (!bookingSelection.endDate || bookingSelection.startDate === bookingSelection.endDate) return 1;
+    const start = new Date(bookingSelection.startDate);
+    const end = new Date(bookingSelection.endDate);
+    return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  }, [bookingSelection.startDate, bookingSelection.endDate]);
+
+  const nights = bookingSelection.includeOvernightStay ? Math.max(0, days - 1) : 0;
+
+  // Calculate price breakdown
+  const priceBreakdown = useMemo((): PriceBreakdown | null => {
+    if (!bookingService || !bookingVariant) return null;
+
+    const dayStartTime = announcerPreferences?.acceptReservationsFrom || "08:00";
+    const dayEndTime = announcerPreferences?.acceptReservationsTo || "20:00";
+    const overnightPrice = bookingService.overnightPrice;
+    const enableDurationBasedBlocking = Boolean(bookingService.enableDurationBasedBlocking);
+
+    return calculatePriceBreakdown(
+      bookingService,
+      bookingVariant,
+      bookingSelection,
+      commissionRate,
+      workdayHours,
+      dayStartTime,
+      dayEndTime,
+      overnightPrice,
+      enableDurationBasedBlocking
+    );
+  }, [bookingService, bookingVariant, bookingSelection, commissionRate, workdayHours, announcerPreferences]);
+
+  // Find selected client address for display
+  const selectedClientAddress = useMemo((): ClientAddress | null => {
+    if (!bookingSelection.selectedAddressId || clientAddresses.length === 0) {
+      return null;
+    }
+    return clientAddresses.find(a => a._id === bookingSelection.selectedAddressId) ?? null;
+  }, [bookingSelection.selectedAddressId, clientAddresses]);
+
+  // Booking handlers (doivent être avant les early returns)
+  const handleVariantSelect = useCallback((serviceId: string, variantId: string) => {
+    setBookingSelection((prev) => ({
+      ...prev,
+      selectedServiceId: serviceId,
+      selectedVariantId: variantId,
+      selectedOptionIds: [],
+    }));
+    if (announcer) {
+      const service = announcer.services.find((s) => s.id === serviceId);
+      if (service) {
+        setSelectedServiceSlug(service.categorySlug ?? service.categoryId ?? null);
+      }
+    }
+  }, [announcer, setSelectedServiceSlug]);
+
+  const handleOptionToggle = useCallback((optionId: string) => {
+    setBookingSelection((prev) => ({
+      ...prev,
+      selectedOptionIds: prev.selectedOptionIds.includes(optionId)
+        ? prev.selectedOptionIds.filter((id) => id !== optionId)
+        : [...prev.selectedOptionIds, optionId],
+    }));
+  }, []);
+
+  const handleDateSelect = useCallback((date: string) => {
+    setBookingSelection((prev) => ({ ...prev, startDate: date }));
+  }, []);
+
+  const handleEndDateSelect = useCallback((date: string | null) => {
+    setBookingSelection((prev) => ({ ...prev, endDate: date }));
+  }, []);
+
+  const handleTimeSelect = useCallback((time: string) => {
+    setBookingSelection((prev) => ({ ...prev, startTime: time, endTime: null }));
+  }, []);
+
+  const handleEndTimeSelect = useCallback((time: string) => {
+    setBookingSelection((prev) => ({ ...prev, endTime: time }));
+  }, []);
+
+  const handleOvernightChange = useCallback((include: boolean) => {
+    setBookingSelection((prev) => ({ ...prev, includeOvernightStay: include }));
+  }, []);
+
+  const handleLocationSelect = useCallback((location: "announcer_home" | "client_home") => {
+    setBookingSelection((prev) => ({
+      ...prev,
+      serviceLocation: location,
+      // Auto-select default address when choosing client_home
+      selectedAddressId: location === "client_home" && clientAddresses.length > 0
+        ? (clientAddresses.find(a => a.isDefault)?._id ?? clientAddresses[0]._id) as string
+        : null,
+    }));
+  }, [clientAddresses]);
+
+  const handleAddressSelect = useCallback((addressId: string) => {
+    setBookingSelection((prev) => ({ ...prev, selectedAddressId: addressId }));
+  }, []);
+
+  const handleAddNewAddress = useCallback(() => {
+    // Navigate to client profile to add a new address
+    router.push("/client/profil?section=adresses&action=new");
+  }, [router]);
+
+  const handleBook = useCallback(() => {
+    if (!announcerData || !announcer) return;
+
+    const params = new URLSearchParams();
+
+    if (bookingSelection.selectedServiceId) {
+      const service = announcer.services.find((s) => s.id === bookingSelection.selectedServiceId);
+      params.set("service", service?.categorySlug ?? bookingSelection.selectedServiceId);
+    }
+    if (bookingSelection.selectedVariantId) {
+      params.set("variant", bookingSelection.selectedVariantId);
+    }
+    if (bookingSelection.selectedOptionIds.length > 0) {
+      params.set("options", bookingSelection.selectedOptionIds.join(","));
+    }
+    if (bookingSelection.startDate) {
+      params.set("date", bookingSelection.startDate);
+    }
+    if (bookingSelection.endDate && bookingSelection.endDate !== bookingSelection.startDate) {
+      params.set("endDate", bookingSelection.endDate);
+    }
+    if (bookingSelection.startTime) {
+      params.set("startTime", bookingSelection.startTime);
+    }
+    if (bookingSelection.endTime) {
+      params.set("endTime", bookingSelection.endTime);
+    }
+    if (bookingSelection.includeOvernightStay) {
+      params.set("overnight", "true");
+    }
+    if (bookingSelection.serviceLocation) {
+      params.set("location", bookingSelection.serviceLocation);
+    }
+    if (bookingSelection.selectedAddressId) {
+      params.set("addressId", bookingSelection.selectedAddressId);
+    }
+
+    const queryString = params.toString();
+    router.push(`/reserver/${announcerData.id}${queryString ? `?${queryString}` : ""}`);
+  }, [announcerData, announcer, bookingSelection, router]);
+
+  const handleContact = useCallback(() => {
+    if (!announcerData) return;
+    router.push(`/client/messagerie?annonceur=${announcerData.id}`);
+  }, [announcerData, router]);
+
+  // Early returns APRÈS tous les hooks
   if (announcerData === undefined) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -103,8 +391,7 @@ export default function AnnouncerProfilePage() {
     );
   }
 
-  // Annonceur non trouvé
-  if (announcerData === null) {
+  if (announcerData === null || !announcer) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center max-w-md mx-auto px-4">
@@ -125,67 +412,6 @@ export default function AnnouncerProfilePage() {
       </div>
     );
   }
-
-  // Transformer les données pour correspondre au type AnnouncerData
-  const announcer: AnnouncerData = {
-    id: announcerData.id,
-    firstName: announcerData.firstName,
-    lastName: announcerData.lastName,
-    memberSince: announcerData.memberSince,
-    verified: announcerData.verified,
-    isIdentityVerified: announcerData.isIdentityVerified,
-    statusType: announcerData.statusType as "professionnel" | "micro_entrepreneur" | "particulier",
-    profileImage: announcerData.profileImage,
-    coverImage: announcerData.coverImage,
-    bio: announcerData.bio,
-    location: announcerData.location,
-    coordinates: announcerData.coordinates,
-    rating: announcerData.rating,
-    reviewCount: announcerData.reviewCount,
-    responseTime: announcerData.responseTime,
-    responseRate: announcerData.responseRate,
-    acceptedAnimals: announcerData.acceptedAnimals,
-    equipment: {
-      housingType: announcerData.equipment.housingType as "house" | "apartment" | null,
-      housingSize: announcerData.equipment.housingSize,
-      hasGarden: announcerData.equipment.hasGarden,
-      gardenSize: announcerData.equipment.gardenSize,
-      hasVehicle: announcerData.equipment.hasVehicle,
-      isSmoker: announcerData.equipment.isSmoker,
-      hasChildren: announcerData.equipment.hasChildren,
-      childrenAges: announcerData.equipment.childrenAges,
-      providesFood: announcerData.equipment.providesFood,
-    },
-    ownAnimals: announcerData.ownAnimals || [],
-    icadRegistered: announcerData.icadRegistered,
-    gallery: announcerData.gallery,
-    services: announcerData.services,
-    activities: announcerData.activities,
-    reviews: announcerData.reviews,
-    availability: {
-      nextAvailable: announcerData.availability.nextAvailable,
-    },
-    radius: announcerData.radius,
-  };
-
-  // Trouver le service sélectionné par son categorySlug
-  const selectedService = selectedServiceSlug
-    ? announcer.services.find((s) => s.categorySlug === selectedServiceSlug || s.categoryId === selectedServiceSlug)
-    : null;
-
-  const handleBook = (serviceIdOrSlug?: string, variantId?: string) => {
-    const params = new URLSearchParams();
-    if (serviceIdOrSlug) params.set("service", serviceIdOrSlug);
-    if (variantId) params.set("variant", variantId);
-    const queryString = params.toString();
-    // Utiliser l'ID de l'annonceur pour la réservation (backend a besoin de l'ID)
-    router.push(`/reserver/${announcerData.id}${queryString ? `?${queryString}` : ""}`);
-  };
-
-  const handleContact = () => {
-    // TODO: Ouvrir la messagerie
-    router.push(`/client/messagerie?annonceur=${announcerData.id}`);
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -212,39 +438,56 @@ export default function AnnouncerProfilePage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
           {/* Left Column - Main Content */}
           <div className="md:col-span-2 space-y-6 sm:space-y-8">
-            {/* Gallery Section */}
-            <AnnouncerGallery
-              gallery={announcer.gallery}
-              firstName={announcer.firstName}
-              className={cn(activeTab !== "services" && "hidden md:block")}
-            />
+            {/* Tab: Formules - Selected service with formules and options */}
+            {activeTab === "formules" && (
+              <AnnouncerFormules
+                service={selectedService}
+                commissionRate={commissionRate}
+                selectedVariantId={bookingSelection.selectedVariantId}
+                selectedOptionIds={bookingSelection.selectedOptionIds}
+                bookingSelection={bookingSelection}
+                isRangeMode={isRangeMode}
+                days={days}
+                nights={nights}
+                calendarMonth={calendarMonth}
+                availabilityCalendar={availabilityCalendar?.calendar}
+                isCapacityBased={availabilityCalendar?.isCapacityBased}
+                maxAnimalsPerSlot={availabilityCalendar?.maxAnimalsPerSlot}
+                acceptReservationsFrom={availabilityCalendar?.acceptReservationsFrom || announcerPreferences?.acceptReservationsFrom}
+                acceptReservationsTo={availabilityCalendar?.acceptReservationsTo || announcerPreferences?.acceptReservationsTo}
+                bufferBefore={availabilityCalendar?.bufferBefore || 0}
+                bufferAfter={availabilityCalendar?.bufferAfter || 0}
+                onVariantSelect={handleVariantSelect}
+                onOptionToggle={handleOptionToggle}
+                onLocationSelect={handleLocationSelect}
+                clientAddresses={clientAddresses}
+                isLoadingAddresses={clientAddressesData === undefined}
+                onAddressSelect={handleAddressSelect}
+                onAddNewAddress={handleAddNewAddress}
+                onDateSelect={handleDateSelect}
+                onEndDateSelect={handleEndDateSelect}
+                onTimeSelect={handleTimeSelect}
+                onEndTimeSelect={handleEndTimeSelect}
+                onOvernightChange={handleOvernightChange}
+                onMonthChange={setCalendarMonth}
+              />
+            )}
 
-            {/* About Section */}
-            <AnnouncerAbout
-              announcer={announcer}
-              className={cn(activeTab !== "infos" && "hidden md:block")}
-            />
+            {/* Tab: Profil - Gallery, Compagnons, À propos */}
+            {activeTab === "profil" && (
+              <AnnouncerProfile
+                announcer={announcer}
+              />
+            )}
 
-            {/* Services Section */}
-            <AnnouncerServices
-              services={announcer.services}
-              initialExpandedService={selectedService?.id ?? null}
-              commissionRate={commissionRate}
-              onServiceSelect={(serviceId) => {
-                // Trouver le categorySlug du service et mettre à jour l'URL
-                const service = announcer.services.find((s) => s.id === serviceId);
-                setSelectedServiceSlug(service?.categorySlug ?? service?.categoryId ?? null);
-              }}
-              className={cn(activeTab !== "services" && "hidden md:block")}
-            />
-
-            {/* Reviews Section */}
-            <AnnouncerReviews
-              reviews={announcer.reviews}
-              rating={announcer.rating}
-              reviewCount={announcer.reviewCount}
-              className={cn(activeTab !== "avis" && "hidden md:block")}
-            />
+            {/* Tab: Avis - Reviews */}
+            {activeTab === "avis" && (
+              <AnnouncerReviews
+                reviews={announcer.reviews}
+                rating={announcer.rating}
+                reviewCount={announcer.reviewCount}
+              />
+            )}
           </div>
 
           {/* Right Column - Booking Card (Sticky) */}
@@ -256,6 +499,11 @@ export default function AnnouncerProfilePage() {
               nextAvailable={announcer.availability.nextAvailable}
               selectedServiceId={selectedService?.id ?? null}
               commissionRate={commissionRate}
+              bookingService={bookingService}
+              bookingVariant={bookingVariant}
+              bookingSelection={bookingSelection}
+              priceBreakdown={priceBreakdown}
+              clientAddress={selectedClientAddress}
               onServiceChange={(serviceId) => {
                 // Trouver le categorySlug du service sélectionné et mettre à jour l'URL
                 const service = announcer.services.find((s) => s.id === serviceId);
@@ -273,6 +521,28 @@ export default function AnnouncerProfilePage() {
         services={announcer.services}
         selectedServiceId={selectedService?.id ?? null}
         commissionRate={commissionRate}
+        bookingService={bookingService}
+        bookingVariant={bookingVariant}
+        bookingSelection={bookingSelection}
+        priceBreakdown={priceBreakdown}
+        // Calendar props for mobile sheet
+        isRangeMode={isRangeMode}
+        days={days}
+        nights={nights}
+        calendarMonth={calendarMonth}
+        availabilityCalendar={availabilityCalendar?.calendar}
+        isCapacityBased={availabilityCalendar?.isCapacityBased}
+        maxAnimalsPerSlot={availabilityCalendar?.maxAnimalsPerSlot}
+        acceptReservationsFrom={availabilityCalendar?.acceptReservationsFrom || announcerPreferences?.acceptReservationsFrom}
+        acceptReservationsTo={availabilityCalendar?.acceptReservationsTo || announcerPreferences?.acceptReservationsTo}
+        bufferBefore={availabilityCalendar?.bufferBefore || 0}
+        bufferAfter={availabilityCalendar?.bufferAfter || 0}
+        onDateSelect={handleDateSelect}
+        onEndDateSelect={handleEndDateSelect}
+        onTimeSelect={handleTimeSelect}
+        onEndTimeSelect={handleEndTimeSelect}
+        onOvernightChange={handleOvernightChange}
+        onMonthChange={setCalendarMonth}
         onBook={handleBook}
       />
     </div>

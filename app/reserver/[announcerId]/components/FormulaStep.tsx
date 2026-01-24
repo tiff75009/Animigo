@@ -52,6 +52,10 @@ interface FormulaStepProps {
   selectedServiceId: string;
   selectedVariantId: string;
   selectedServiceLocation: "announcer_home" | "client_home" | null;
+  selectedOptionIds?: string[];
+  selectedDate?: string | null;
+  selectedTime?: string | null;
+  selectedEndTime?: string | null;
   commissionRate?: number;
   preSelectedFromSidebar?: boolean;
   onSelect: (serviceId: string, variantId: string, autoServiceLocation?: "announcer_home" | "client_home" | null) => void;
@@ -151,6 +155,10 @@ export default function FormulaStep({
   selectedServiceId,
   selectedVariantId,
   selectedServiceLocation,
+  selectedOptionIds = [],
+  selectedDate,
+  selectedTime,
+  selectedEndTime,
   commissionRate = 15,
   preSelectedFromSidebar = false,
   onSelect,
@@ -158,8 +166,14 @@ export default function FormulaStep({
 }: FormulaStepProps) {
   const [showAllServices, setShowAllServices] = useState(false);
 
-  // Trouver le service sélectionné
-  const selectedService = services.find((s) => s.id === selectedServiceId);
+  // Trouver le service sélectionné (par id OU par category slug)
+  const selectedService = services.find((s) => s.id === selectedServiceId || s.category === selectedServiceId);
+
+  // Trouver la formule sélectionnée
+  const selectedVariant = selectedService?.variants.find((v) => v.id === selectedVariantId);
+
+  // Trouver les options sélectionnées
+  const selectedOptions = selectedService?.options.filter((o) => selectedOptionIds.includes(o.id)) || [];
 
   // Déterminer l'auto-sélection du lieu de prestation
   const getAutoServiceLocation = (service: ServiceDetail) => {
@@ -178,13 +192,183 @@ export default function FormulaStep({
     }
   }, [preSelectedFromSidebar, selectedService, selectedVariantId, onSelect]);
 
-  // Déterminer si on affiche la vue simplifiée
-  const showSimplifiedView = preSelectedFromSidebar && selectedService && !showAllServices;
+  // Déterminer si on affiche le récapitulatif (quand une formule est déjà sélectionnée depuis la page annonceur)
+  const showRecapView = preSelectedFromSidebar && selectedService && selectedVariant && !showAllServices;
+
+  // Déterminer si on affiche la vue simplifiée (service sélectionné mais pas de variant)
+  const showSimplifiedView = preSelectedFromSidebar && selectedService && !selectedVariant && !showAllServices;
 
   // Le choix du lieu est affiché si le service supporte "both"
   const showLocationChoice = selectedService?.serviceLocation === "both" && selectedVariantId;
 
-  // Vue simplifiée quand on vient de la sidebar
+  // Format date for display
+  const formatDateDisplay = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("fr-FR", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    });
+  };
+
+  // Vue récapitulatif quand tout est pré-sélectionné depuis la page annonceur
+  if (showRecapView && selectedVariant) {
+    const pricing = selectedVariant.pricing;
+    const basePrice = pricing?.daily || pricing?.hourly || selectedVariant.price || 0;
+    const displayPrice = calculatePriceWithCommission(basePrice, commissionRate);
+    const priceUnit = pricing?.daily ? "/jour" : pricing?.hourly ? "/h" : "";
+
+    // Calculate options total
+    const optionsTotal = selectedOptions.reduce((sum, opt) => {
+      return sum + calculatePriceWithCommission(opt.price, commissionRate);
+    }, 0);
+
+    return (
+      <div className="bg-white rounded-2xl p-5 shadow-sm">
+        <h2 className="text-lg font-bold text-foreground mb-4">
+          Recapitulatif de votre selection
+        </h2>
+
+        {/* Service et Formule */}
+        <div className="space-y-4">
+          {/* Service */}
+          <div className="p-4 bg-gray-50 rounded-xl">
+            <div className="flex items-center gap-3">
+              {selectedService.categoryIcon && (
+                <span className="text-2xl">{selectedService.categoryIcon}</span>
+              )}
+              <div className="flex-1">
+                <p className="font-semibold text-foreground">{selectedService.categoryName}</p>
+                <p className="text-sm text-text-light">{selectedVariant.name}</p>
+                {selectedVariant.duration && (
+                  <div className="flex items-center gap-1 mt-1 text-xs text-text-light">
+                    <Clock className="w-3 h-3" />
+                    {formatDuration(selectedVariant.duration)}
+                  </div>
+                )}
+              </div>
+              <div className="text-right">
+                <p className="text-lg font-bold text-primary">
+                  {formatPrice(displayPrice)}
+                  <span className="text-xs font-normal text-text-light">{priceUnit}</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Options sélectionnées */}
+          {selectedOptions.length > 0 && (
+            <div className="p-4 bg-secondary/5 rounded-xl">
+              <p className="font-medium text-foreground mb-2">Options selectionnees</p>
+              <div className="space-y-2">
+                {selectedOptions.map((opt) => (
+                  <div key={opt.id} className="flex items-center justify-between text-sm">
+                    <span className="text-text-light">{opt.name}</span>
+                    <span className="font-medium text-secondary">
+                      +{formatPrice(calculatePriceWithCommission(opt.price, commissionRate))}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Lieu de prestation */}
+          {selectedServiceLocation && (
+            <div className="p-4 bg-blue-50 rounded-xl">
+              <div className="flex items-center gap-2">
+                {selectedServiceLocation === "client_home" ? (
+                  <Home className="w-5 h-5 text-blue-600" />
+                ) : (
+                  <MapPin className="w-5 h-5 text-blue-600" />
+                )}
+                <p className="font-medium text-blue-800">
+                  {selectedServiceLocation === "client_home"
+                    ? "A votre domicile"
+                    : "Chez le prestataire"}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Date et horaire */}
+          {selectedDate && (
+            <div className="p-4 bg-purple-50 rounded-xl">
+              <p className="font-medium text-purple-800 mb-1">Date et horaire</p>
+              <p className="text-sm text-purple-700 capitalize">
+                {formatDateDisplay(selectedDate)}
+              </p>
+              {selectedTime && (
+                <p className="text-sm text-purple-600 mt-1">
+                  {selectedTime}
+                  {selectedEndTime && ` - ${selectedEndTime}`}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Total estimé */}
+          <div className="p-4 bg-primary/5 rounded-xl border border-primary/20">
+            <div className="flex items-center justify-between">
+              <p className="font-medium text-foreground">Total estime</p>
+              <p className="text-xl font-bold text-primary">
+                {formatPrice(displayPrice + optionsTotal)}
+              </p>
+            </div>
+            <p className="text-xs text-text-light mt-1">
+              Le prix final sera calcule a l&apos;etape suivante selon les dates choisies
+            </p>
+          </div>
+        </div>
+
+        {/* Choix du lieu si nécessaire */}
+        {selectedService.serviceLocation === "both" && !selectedServiceLocation && (
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <h3 className="font-semibold text-foreground mb-3">
+              Ou souhaitez-vous que la prestation ait lieu ?
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => onServiceLocationSelect("client_home")}
+                className={cn(
+                  "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
+                  selectedServiceLocation === "client_home"
+                    ? "border-primary bg-primary/5"
+                    : "border-gray-200 hover:border-gray-300"
+                )}
+              >
+                <Home className="w-6 h-6 text-gray-500" />
+                <span className="font-medium text-foreground text-sm">A domicile</span>
+              </button>
+              <button
+                onClick={() => onServiceLocationSelect("announcer_home")}
+                className={cn(
+                  "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
+                  selectedServiceLocation === "announcer_home"
+                    ? "border-primary bg-primary/5"
+                    : "border-gray-200 hover:border-gray-300"
+                )}
+              >
+                <MapPin className="w-6 h-6 text-gray-500" />
+                <span className="font-medium text-foreground text-sm">Chez le pet-sitter</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Bouton pour modifier la sélection */}
+        <button
+          onClick={() => setShowAllServices(true)}
+          className="w-full mt-4 py-2 text-sm text-primary hover:text-primary/80 flex items-center justify-center gap-1"
+        >
+          <ChevronDown className="w-4 h-4" />
+          Modifier ma selection
+        </button>
+      </div>
+    );
+  }
+
+  // Vue simplifiée quand on vient de la sidebar (sans variant sélectionné)
   if (showSimplifiedView) {
     const variant = selectedService.variants.find(v => v.id === selectedVariantId) || selectedService.variants[0];
     const pricing = variant?.pricing;

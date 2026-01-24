@@ -51,6 +51,13 @@ export interface ServiceData {
   animalTypes: string[];
   formules: FormuleData[];
   options: OptionData[];
+  // Booking settings
+  serviceLocation?: "announcer_home" | "client_home" | "both";
+  allowOvernightStay?: boolean;
+  overnightPrice?: number;
+  dayStartTime?: string;
+  dayEndTime?: string;
+  enableDurationBasedBlocking?: boolean;
 }
 
 export interface FormuleData {

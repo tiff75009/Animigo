@@ -133,9 +133,12 @@ function ClientLocationSection({
         <div className="mt-4 p-3 bg-secondary/5 rounded-xl">
           <div className="flex items-center gap-2 text-sm text-secondary">
             <CheckCircle className="w-4 h-4" />
-            <span className="font-medium">Adresse enregistrée</span>
+            <span className="font-medium">Adresse enregistree</span>
           </div>
-          <p className="mt-1 text-sm text-text-light">
+          {location && (
+            <p className="mt-1 text-sm text-foreground">{location}</p>
+          )}
+          <p className="mt-0.5 text-xs text-text-light">
             {city && <span className="font-medium">{city}</span>}
             {postalCode && <span> ({postalCode})</span>}
           </p>
@@ -149,9 +152,12 @@ function ClientLocationSection({
           animate={{ opacity: 1, y: 0 }}
           className="mt-4 flex items-center justify-between"
         >
-          <div className="text-sm text-text-light">
+          <div className="text-sm text-text-light max-w-xs">
+            {selectedAddress.address && (
+              <p className="text-foreground text-xs truncate">{selectedAddress.address}</p>
+            )}
             {selectedAddress.city && (
-              <span>
+              <span className="text-xs">
                 <span className="font-medium">{selectedAddress.city}</span>
                 {selectedAddress.postalCode && ` (${selectedAddress.postalCode})`}
               </span>

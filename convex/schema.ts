@@ -199,6 +199,27 @@ export default defineSchema({
   })
     .index("by_user", ["userId"]),
 
+  // Adresses des clients (pour services à domicile)
+  clientAddresses: defineTable({
+    userId: v.id("users"),
+    label: v.string(),            // Nom de l'adresse (ex: "Maison", "Travail")
+    address: v.string(),          // Adresse complète
+    city: v.optional(v.string()),
+    postalCode: v.optional(v.string()),
+    country: v.optional(v.string()),
+    coordinates: v.optional(v.object({
+      lat: v.number(),
+      lng: v.number(),
+    })),
+    googlePlaceId: v.optional(v.string()),
+    additionalInfo: v.optional(v.string()), // Instructions (code, étage, etc.)
+    isDefault: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_default", ["userId", "isDefault"]),
+
   // Services proposés par les annonceurs
   // Structure simplifiée: category (prestation) + animalTypes + formules (variants)
   services: defineTable({
