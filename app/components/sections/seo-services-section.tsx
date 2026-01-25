@@ -103,8 +103,10 @@ export function SeoServicesSection() {
 
                     {/* Text Content - positioned top left */}
                     <div className="absolute inset-0 p-6 flex flex-col justify-start">
-                      <h3 className="font-love-taking text-3xl sm:text-4xl text-slate-900">
-                        {service.title}
+                      <h3 className="font-love-taking text-3xl sm:text-4xl text-slate-900 leading-tight">
+                        {service.title.split(" ").map((word, i) => (
+                          <span key={i} className="block">{word}</span>
+                        ))}
                       </h3>
                     </div>
 

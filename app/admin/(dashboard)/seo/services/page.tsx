@@ -184,9 +184,8 @@ export default function SeoServicesPage() {
 
     const url = await uploadImage(file, "animigo/seo");
     if (url) {
-      // Appliquer la transformation Cloudinary pour 450x300 avec crop fill
-      const optimizedUrl = getOptimizedUrl(url, 450, 300);
-      setFormData({ ...formData, heroImageUrl: optimizedUrl });
+      // Garder l'URL originale haute qualité pour l'image hero
+      setFormData({ ...formData, heroImageUrl: url });
     }
 
     // Reset input

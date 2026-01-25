@@ -158,14 +158,20 @@ export default function ServicePageClient({ slug }: { slug: string }) {
 
                 {/* Subtitle */}
                 {service.subtitle && (
-                  <motion.p
+                  <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.2 }}
-                    className="text-xl text-muted-foreground mb-6"
+                    className="flex items-center gap-3 mb-6"
                   >
-                    {service.subtitle}
-                  </motion.p>
+                    <div
+                      className="w-1 h-8 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: categoryColor }}
+                    />
+                    <p className="text-xl font-medium text-foreground/80">
+                      {service.subtitle}
+                    </p>
+                  </motion.div>
                 )}
 
                 {/* Description */}
@@ -173,7 +179,7 @@ export default function ServicePageClient({ slug }: { slug: string }) {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.3 }}
-                  className="text-lg text-muted-foreground mb-8 max-w-xl"
+                  className="text-base text-muted-foreground mb-8 max-w-xl leading-relaxed"
                 >
                   {service.description}
                 </motion.p>
@@ -390,7 +396,7 @@ export default function ServicePageClient({ slug }: { slug: string }) {
                 </h2>
 
                 <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                  Decouvrez ce qui fait de nous le choix prefere des proprietaires d&apos;animaux
+                  Découvrez ce qui fait de nous le choix préféré des propriétaires d&apos;animaux
                 </p>
               </motion.div>
 

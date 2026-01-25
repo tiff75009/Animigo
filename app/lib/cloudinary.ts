@@ -28,7 +28,7 @@ const DEFAULT_OPTIONS: UploadOptions = {
   folder: "animigo/animals",
   maxWidth: 1200,
   maxHeight: 1200,
-  quality: 80,
+  quality: 92,
   format: "auto",
 };
 
@@ -184,7 +184,7 @@ export function getOptimizedImageUrl(
     return url;
   }
 
-  const { width = 400, height = 400, quality = 80, format = "auto" } = options;
+  const { width = 400, height = 400, quality = 90, format = "auto" } = options;
 
   // Extraire les parties de l'URL Cloudinary
   // Format: https://res.cloudinary.com/{cloud}/image/upload/{transformations}/{public_id}
