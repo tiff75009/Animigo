@@ -36,11 +36,19 @@ interface Pricing {
   nightly?: number; // Prix de la nuit en centimes
 }
 
+// Type pour un objectif avec icône
+interface Objective {
+  icon: string;
+  text: string;
+}
+
 // Variant pour le mode édition (avec ID backend)
 interface Variant {
   id: Id<"serviceVariants">;
   name: string;
   description?: string;
+  objectives?: Objective[];
+  numberOfSessions?: number;
   price: number;
   priceUnit: PriceUnit;
   pricing?: Pricing;
@@ -55,6 +63,8 @@ export interface LocalVariant {
   localId: string; // ID temporaire local
   name: string;
   description?: string;
+  objectives?: Objective[]; // Objectifs de la prestation avec icônes
+  numberOfSessions?: number; // Nombre de séances
   price: number;
   priceUnit: PriceUnit;
   pricing?: Pricing; // Multi-tarification
@@ -187,6 +197,8 @@ export default function VariantManager({
   const [formData, setFormData] = useState({
     name: "",
     description: "",
+    objectives: [] as Objective[],
+    numberOfSessions: 1,
     price: 0,
     priceUnit: "flat" as PriceUnit,
     // Multi-tarification: prix en euros (sera converti en centimes à la sauvegarde)
@@ -201,6 +213,8 @@ export default function VariantManager({
     includedFeatures: [] as string[],
   });
   const [newFeature, setNewFeature] = useState("");
+  const [newObjectiveIcon, setNewObjectiveIcon] = useState("🎯");
+  const [newObjectiveText, setNewObjectiveText] = useState("");
 
   // Mutations (uniquement utilisées en mode edit)
   const addVariantMutation = useMutation(api.services.variants.addVariant);
@@ -217,6 +231,8 @@ export default function VariantManager({
         id: v.localId,
         name: v.name,
         description: v.description,
+        objectives: v.objectives,
+        numberOfSessions: v.numberOfSessions,
         price: v.price,
         priceUnit: v.priceUnit,
         pricing: v.pricing,
@@ -230,6 +246,8 @@ export default function VariantManager({
         id: v.id as string,
         name: v.name,
         description: v.description,
+        objectives: v.objectives,
+        numberOfSessions: v.numberOfSessions,
         price: v.price,
         priceUnit: v.priceUnit,
         pricing: v.pricing,
@@ -244,6 +262,8 @@ export default function VariantManager({
     setFormData({
       name: "",
       description: "",
+      objectives: [],
+      numberOfSessions: 1,
       price: 0,
       priceUnit: defaultPriceUnit,
       pricing: {
@@ -257,6 +277,8 @@ export default function VariantManager({
       includedFeatures: [],
     });
     setNewFeature("");
+    setNewObjectiveIcon("🎯");
+    setNewObjectiveText("");
     setIsAdding(false);
     setEditingId(null);
     setError(null);
@@ -266,6 +288,8 @@ export default function VariantManager({
     setFormData({
       name: item.name,
       description: item.description || "",
+      objectives: item.objectives || [],
+      numberOfSessions: item.numberOfSessions || 1,
       price: item.price / 100, // Convertir en euros pour l'édition
       priceUnit: item.priceUnit,
       pricing: {
@@ -278,6 +302,8 @@ export default function VariantManager({
       duration: item.duration || 60,
       includedFeatures: item.includedFeatures || [],
     });
+    setNewObjectiveIcon("🎯");
+    setNewObjectiveText("");
     setEditingId(item.id);
     setIsAdding(false);
     setError(null);
@@ -297,6 +323,24 @@ export default function VariantManager({
     setFormData({
       ...formData,
       includedFeatures: formData.includedFeatures.filter((_, i) => i !== index),
+    });
+  };
+
+  const handleAddObjective = () => {
+    if (newObjectiveText.trim()) {
+      setFormData({
+        ...formData,
+        objectives: [...formData.objectives, { icon: newObjectiveIcon, text: newObjectiveText.trim() }],
+      });
+      setNewObjectiveIcon("🎯");
+      setNewObjectiveText("");
+    }
+  };
+
+  const handleRemoveObjective = (index: number) => {
+    setFormData({
+      ...formData,
+      objectives: formData.objectives.filter((_, i) => i !== index),
     });
   };
 
@@ -337,6 +381,8 @@ export default function VariantManager({
                 ...v,
                 name: formData.name,
                 description: formData.description || undefined,
+                objectives: formData.objectives.length > 0 ? formData.objectives : undefined,
+                numberOfSessions: formData.numberOfSessions > 1 ? formData.numberOfSessions : undefined,
                 price: mainPrice,
                 priceUnit: mainPriceUnit,
                 pricing: pricingInCents,
@@ -353,6 +399,8 @@ export default function VariantManager({
           localId: generateLocalId(),
           name: formData.name,
           description: formData.description || undefined,
+          objectives: formData.objectives.length > 0 ? formData.objectives : undefined,
+          numberOfSessions: formData.numberOfSessions > 1 ? formData.numberOfSessions : undefined,
           price: mainPrice,
           priceUnit: mainPriceUnit,
           pricing: pricingInCents,
@@ -375,6 +423,8 @@ export default function VariantManager({
             variantId: editingId as Id<"serviceVariants">,
             name: formData.name,
             description: formData.description || undefined,
+            objectives: formData.objectives.length > 0 ? formData.objectives : undefined,
+            numberOfSessions: formData.numberOfSessions > 1 ? formData.numberOfSessions : undefined,
             price: mainPrice,
             priceUnit: mainPriceUnit,
             pricing: pricingInCents,
@@ -388,6 +438,8 @@ export default function VariantManager({
             serviceId,
             name: formData.name,
             description: formData.description || undefined,
+            objectives: formData.objectives.length > 0 ? formData.objectives : undefined,
+            numberOfSessions: formData.numberOfSessions > 1 ? formData.numberOfSessions : undefined,
             price: mainPrice,
             priceUnit: mainPriceUnit,
             pricing: pricingInCents,
@@ -652,6 +704,85 @@ export default function VariantManager({
                       />
                     </div>
 
+                    {/* Objectifs */}
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-foreground mb-1">
+                        Objectifs <span className="text-text-light font-normal">(optionnel)</span>
+                      </label>
+                      <div className="flex gap-2 mb-2">
+                        <select
+                          value={newObjectiveIcon}
+                          onChange={(e) => setNewObjectiveIcon(e.target.value)}
+                          className="w-16 px-2 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-center text-lg"
+                        >
+                          <option value="🎯">🎯</option>
+                          <option value="✅">✅</option>
+                          <option value="⭐">⭐</option>
+                          <option value="💪">💪</option>
+                          <option value="🐕">🐕</option>
+                          <option value="🐈">🐈</option>
+                          <option value="❤️">❤️</option>
+                          <option value="🏆">🏆</option>
+                          <option value="📈">📈</option>
+                          <option value="🔧">🔧</option>
+                          <option value="🧠">🧠</option>
+                          <option value="🎓">🎓</option>
+                        </select>
+                        <input
+                          type="text"
+                          value={newObjectiveText}
+                          onChange={(e) => setNewObjectiveText(e.target.value)}
+                          onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddObjective())}
+                          placeholder="Ajouter un objectif..."
+                          className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddObjective}
+                          className="px-3 py-2 bg-gray-100 text-foreground rounded-lg hover:bg-gray-200"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {formData.objectives.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {formData.objectives.map((objective, index) => (
+                            <span
+                              key={index}
+                              className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 text-blue-700 text-sm rounded-full"
+                            >
+                              <span>{objective.icon}</span>
+                              <span>{objective.text}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveObjective(index)}
+                                className="hover:text-red-500"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Nombre de séances */}
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1">
+                        Nombre de séances
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.numberOfSessions}
+                        onChange={(e) => setFormData({ ...formData, numberOfSessions: Math.max(1, parseInt(e.target.value) || 1) })}
+                        min="1"
+                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      />
+                      <p className="text-xs text-text-light mt-1">
+                        Prix total = prix × durée × séances
+                      </p>
+                    </div>
+
                     {/* Multi-tarification - un prix par unité autorisée */}
                     <div className="col-span-2">
                       <label className="block text-sm font-medium text-foreground mb-2">
@@ -779,6 +910,36 @@ export default function VariantManager({
                           </div>
                         )}
                       </div>
+
+                      {/* Indicateur de prix recommandé */}
+                      {token && category && (
+                        <div className="mt-3">
+                          <PriceRecommendationCompact
+                            token={token}
+                            category={category}
+                            priceUnit={computedPriceUnits[0]?.id === "day" ? "day" : "hour"}
+                            currentPrice={Math.round(
+                              (computedPriceUnits[0]?.id === "day"
+                                ? formData.pricing.daily
+                                : formData.pricing.hourly) * 100
+                            ) || 0}
+                            onSelectPrice={(price) => {
+                              if (computedPriceUnits[0]?.id === "day") {
+                                setFormData({
+                                  ...formData,
+                                  pricing: { ...formData.pricing, daily: price / 100 }
+                                });
+                              } else {
+                                setFormData({
+                                  ...formData,
+                                  pricing: { ...formData.pricing, hourly: price / 100 }
+                                });
+                              }
+                            }}
+                          />
+                        </div>
+                      )}
+
                       <p className="text-xs text-text-light mt-2">
                         Définissez vos tarifs pour chaque durée de réservation possible. Le prix approprié sera utilisé lors de la réservation.
                       </p>
@@ -796,8 +957,8 @@ export default function VariantManager({
                           onChange={(e) =>
                             setFormData({ ...formData, duration: parseInt(e.target.value) || 0 })
                           }
-                          min="15"
-                          step="15"
+                          min="30"
+                          step="30"
                           placeholder="60"
                           className="w-full px-3 py-2 pr-10 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
                         />
@@ -836,21 +997,6 @@ export default function VariantManager({
                             </span>
                           )}
                         </div>
-                      </div>
-                    )}
-
-                    {/* Prix conseillé - afficher uniquement si on a le token */}
-                    {token && category && (
-                      <div className="col-span-2">
-                        <PriceRecommendationCompact
-                          token={token}
-                          category={category}
-                          priceUnit="hour"
-                          currentPrice={Math.round(formData.price * 100)}
-                          onSelectPrice={(priceInCents) =>
-                            setFormData({ ...formData, price: priceInCents / 100 })
-                          }
-                        />
                       </div>
                     )}
 
@@ -997,7 +1143,28 @@ export default function VariantManager({
                             {formatPrice(item.price)}{getPriceUnitLabel(item.priceUnit)}
                           </span>
                         )}
+                        {/* Badge nombre de séances */}
+                        {item.numberOfSessions && item.numberOfSessions > 1 && (
+                          <span className="px-2 py-0.5 bg-blue-100 text-blue-600 rounded-full text-xs font-medium">
+                            {item.numberOfSessions} séances
+                          </span>
+                        )}
                       </div>
+
+                      {/* Afficher les objectifs */}
+                      {item.objectives && item.objectives.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {item.objectives.map((objective, idx) => (
+                            <span
+                              key={idx}
+                              className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full"
+                            >
+                              <span>{objective.icon}</span>
+                              <span>{objective.text}</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
 
                       {item.includedFeatures && item.includedFeatures.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">

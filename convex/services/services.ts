@@ -118,6 +118,8 @@ export const getMyServices = query({
               id: v._id,
               name: v.name,
               description: v.description,
+              objectives: v.objectives,
+              numberOfSessions: v.numberOfSessions,
               price: v.price,
               priceUnit: v.priceUnit,
               pricing: v.pricing, // Multi-tarification
@@ -169,6 +171,11 @@ export const addService = mutation({
     initialVariants: v.array(v.object({
       name: v.string(),
       description: v.optional(v.string()),
+      objectives: v.optional(v.array(v.object({
+        icon: v.string(),
+        text: v.string(),
+      }))),
+      numberOfSessions: v.optional(v.number()),
       price: v.number(), // En centimes (prix principal)
       priceUnit: v.union(
         v.literal("hour"),
@@ -247,10 +254,11 @@ export const addService = mutation({
 
     const now = Date.now();
 
-    // Calculer le prix de base (min des totaux: prix horaire × durée / 60)
+    // Calculer le prix de base (min des totaux: prix horaire × durée / 60 × nombre de séances)
     const totalPrices = args.initialVariants.map(v => {
       const duration = v.duration || 60; // Par défaut 60 minutes
-      return Math.round((v.price * duration) / 60);
+      const sessions = v.numberOfSessions || 1; // Par défaut 1 séance
+      return Math.round((v.price * duration / 60) * sessions);
     });
     const basePrice = Math.min(...totalPrices);
 
@@ -278,6 +286,8 @@ export const addService = mutation({
         serviceId: serviceId,
         name: variant.name,
         description: variant.description,
+        objectives: variant.objectives,
+        numberOfSessions: variant.numberOfSessions,
         price: variant.price,
         priceUnit: variant.priceUnit,
         pricing: variant.pricing,

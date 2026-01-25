@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import ConfirmModal from "../shared/ConfirmModal";
+import { PriceRecommendationCompact } from "../PriceRecommendationCompact";
 import { cn } from "@/app/lib/utils";
 
 interface ServiceCategory {
@@ -55,10 +56,17 @@ interface Pricing {
 
 type ServiceLocation = "announcer_home" | "client_home" | "both";
 
+interface Objective {
+  icon: string;
+  text: string;
+}
+
 interface Variant {
   id: Id<"serviceVariants">;
   name: string;
   description?: string;
+  objectives?: Objective[];
+  numberOfSessions?: number;
   price: number;
   priceUnit: PriceUnit;
   pricing?: Pricing;
@@ -395,34 +403,58 @@ export default function ServiceCard({
                           return (
                             <div
                               key={variant.id}
-                              className="flex items-center justify-between p-3 bg-foreground/[0.02] rounded-xl border border-foreground/5"
+                              className="p-3 bg-foreground/[0.02] rounded-xl border border-foreground/5"
                             >
-                              <div className="flex items-center gap-3 min-w-0">
-                                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                                  <Sparkles className="w-4 h-4 text-primary" />
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                    <Sparkles className="w-4 h-4 text-primary" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <span className="font-medium text-foreground block truncate">{variant.name}</span>
+                                    <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                                      {variant.duration && (
+                                        <span className="text-xs text-text-light flex items-center gap-1">
+                                          <Clock className="w-3 h-3" />{variant.duration} min
+                                        </span>
+                                      )}
+                                      {variant.numberOfSessions && variant.numberOfSessions > 1 && (
+                                        <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-full">
+                                          {variant.numberOfSessions} séances
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
-                                <div className="min-w-0">
-                                  <span className="font-medium text-foreground block truncate">{variant.name}</span>
-                                  {variant.duration && (
-                                    <span className="text-xs text-text-light flex items-center gap-1">
-                                      <Clock className="w-3 h-3" />{variant.duration} min
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  {prices.slice(0, 2).map((price, idx) => (
+                                    <span key={idx} className={cn(
+                                      "text-xs font-bold px-2 py-1 rounded-lg",
+                                      price.unit === "hour" && "bg-primary/10 text-primary",
+                                      price.unit === "day" && "bg-secondary/10 text-secondary",
+                                      price.unit === "week" && "bg-purple-100 text-purple-600",
+                                      price.unit === "month" && "bg-amber-100 text-amber-600"
+                                    )}>
+                                      {formatPrice(price.value)}{price.label}
                                     </span>
-                                  )}
+                                  ))}
                                 </div>
                               </div>
-                              <div className="flex items-center gap-1 flex-shrink-0">
-                                {prices.slice(0, 2).map((price, idx) => (
-                                  <span key={idx} className={cn(
-                                    "text-xs font-bold px-2 py-1 rounded-lg",
-                                    price.unit === "hour" && "bg-primary/10 text-primary",
-                                    price.unit === "day" && "bg-secondary/10 text-secondary",
-                                    price.unit === "week" && "bg-purple-100 text-purple-600",
-                                    price.unit === "month" && "bg-amber-100 text-amber-600"
-                                  )}>
-                                    {formatPrice(price.value)}{price.label}
-                                  </span>
-                                ))}
-                              </div>
+                              {/* Description */}
+                              {variant.description && (
+                                <p className="text-xs text-text-light mt-2 pl-11 line-clamp-2">{variant.description}</p>
+                              )}
+                              {/* Objectifs */}
+                              {variant.objectives && variant.objectives.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-2 pl-11">
+                                  {variant.objectives.map((objective, idx) => (
+                                    <span key={idx} className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full">
+                                      <span>{objective.icon}</span>
+                                      <span>{objective.text}</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           );
                         })
@@ -627,9 +659,11 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
               <VariantEditForm
                 variant={variant}
                 token={token}
+                category={category}
                 recommendedPrice={recommendedPrice}
                 isGardeService={isGardeService}
                 allowOvernightStay={allowOvernightStay}
+                allowedPriceUnits={categoryData?.allowedPriceUnits}
                 onSave={async (data) => {
                   await updateVariantMutation({ token, variantId: variant.id, ...data });
                   setEditingId(null);
@@ -663,9 +697,11 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
             <VariantAddForm
               serviceId={serviceId}
               token={token}
+              category={category}
               recommendedPrice={recommendedPrice}
               isGardeService={isGardeService}
               allowOvernightStay={allowOvernightStay}
+              allowedPriceUnits={categoryData?.allowedPriceUnits}
               existingCount={variants.length}
               onSave={async (data) => {
                 await addVariantMutation({ token, serviceId, ...data });
@@ -760,12 +796,27 @@ function VariantPreviewCard({
                   {formatPrice(variant.pricing.nightly)}/nuit
                 </span>
               )}
+              {variant.numberOfSessions && variant.numberOfSessions > 1 && (
+                <span className="text-sm font-bold px-2.5 py-1 rounded-lg bg-blue-100 text-blue-600">
+                  {variant.numberOfSessions} séances
+                </span>
+              )}
               {variant.duration && (
                 <span className="text-xs text-text-light flex items-center gap-1">
                   <Clock className="w-3 h-3" />{variant.duration} min
                 </span>
               )}
             </div>
+            {variant.objectives && variant.objectives.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {variant.objectives.map((objective, idx) => (
+                  <span key={idx} className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full">
+                    <span>{objective.icon}</span>
+                    <span>{objective.text}</span>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -796,36 +847,78 @@ function VariantPreviewCard({
 function VariantEditForm({
   variant,
   token,
+  category,
   recommendedPrice,
   isGardeService,
   allowOvernightStay,
+  allowedPriceUnits,
   onSave,
   onCancel,
 }: {
   variant: Variant;
   token: string;
+  category: string;
   recommendedPrice: number;
   isGardeService: boolean;
   allowOvernightStay?: boolean;
+  allowedPriceUnits?: ("hour" | "day" | "week" | "month")[];
   onSave: (data: {
     name?: string;
     description?: string;
+    objectives?: Objective[];
+    numberOfSessions?: number;
     pricing?: Pricing;
     duration?: number;
+    includedFeatures?: string[];
     isActive?: boolean;
   }) => Promise<void>;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(variant.name);
   const [description, setDescription] = useState(variant.description || "");
+  const [objectives, setObjectives] = useState<Objective[]>(variant.objectives || []);
+  const [newObjectiveIcon, setNewObjectiveIcon] = useState("🎯");
+  const [newObjectiveText, setNewObjectiveText] = useState("");
+  const [numberOfSessions, setNumberOfSessions] = useState(variant.numberOfSessions || 1);
   const [duration, setDuration] = useState(variant.duration || 60);
   const [isActive, setIsActive] = useState(variant.isActive);
   const [pricing, setPricing] = useState<Pricing>(variant.pricing || {});
+  const [includedFeatures, setIncludedFeatures] = useState<string[]>(variant.includedFeatures || []);
+  const [newFeature, setNewFeature] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
   const dailyPrice = pricing.daily || recommendedPrice * 8;
   const hourlyPrice = pricing.hourly || recommendedPrice;
   const nightlyPrice = pricing.nightly || Math.round(dailyPrice * 0.5);
+
+  // Déterminer quels prix afficher selon allowedPriceUnits
+  const showHourly = !allowedPriceUnits || allowedPriceUnits.includes("hour");
+  const showDaily = !allowedPriceUnits || allowedPriceUnits.includes("day") || isGardeService;
+  const showWeekly = allowedPriceUnits?.includes("week");
+  const showMonthly = allowedPriceUnits?.includes("month");
+
+  const handleAddObjective = () => {
+    if (newObjectiveText.trim()) {
+      setObjectives([...objectives, { icon: newObjectiveIcon, text: newObjectiveText.trim() }]);
+      setNewObjectiveIcon("🎯");
+      setNewObjectiveText("");
+    }
+  };
+
+  const handleRemoveObjective = (index: number) => {
+    setObjectives(objectives.filter((_, i) => i !== index));
+  };
+
+  const handleAddFeature = () => {
+    if (newFeature.trim()) {
+      setIncludedFeatures([...includedFeatures, newFeature.trim()]);
+      setNewFeature("");
+    }
+  };
+
+  const handleRemoveFeature = (index: number) => {
+    setIncludedFeatures(includedFeatures.filter((_, i) => i !== index));
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -833,8 +926,11 @@ function VariantEditForm({
       await onSave({
         name,
         description: description || undefined,
+        objectives: objectives.length > 0 ? objectives : undefined,
+        numberOfSessions: numberOfSessions > 1 ? numberOfSessions : undefined,
         pricing,
         duration,
+        includedFeatures: includedFeatures.length > 0 ? includedFeatures : undefined,
         isActive,
       });
     } finally {
@@ -882,17 +978,89 @@ function VariantEditForm({
         />
       </div>
 
-      {/* Duration */}
+      {/* Objectifs */}
       <div>
-        <label className="block text-sm font-medium text-foreground mb-1">Durée (minutes)</label>
-        <input
-          type="number"
-          value={duration}
-          onChange={(e) => setDuration(parseInt(e.target.value) || 0)}
-          min={15}
-          step={15}
-          className="w-24 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-        />
+        <label className="block text-sm font-medium text-foreground mb-1">Objectifs (optionnel)</label>
+        <div className="flex gap-2 mb-2">
+          <select
+            value={newObjectiveIcon}
+            onChange={(e) => setNewObjectiveIcon(e.target.value)}
+            className="w-14 px-1 py-2 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none text-center text-lg"
+          >
+            <option value="🎯">🎯</option>
+            <option value="✅">✅</option>
+            <option value="⭐">⭐</option>
+            <option value="💪">💪</option>
+            <option value="🐕">🐕</option>
+            <option value="🐈">🐈</option>
+            <option value="❤️">❤️</option>
+            <option value="🏆">🏆</option>
+            <option value="📈">📈</option>
+            <option value="🔧">🔧</option>
+            <option value="🧠">🧠</option>
+            <option value="🎓">🎓</option>
+          </select>
+          <input
+            type="text"
+            value={newObjectiveText}
+            onChange={(e) => setNewObjectiveText(e.target.value)}
+            onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddObjective())}
+            placeholder="Ajouter un objectif..."
+            className="flex-1 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+          />
+          <button
+            type="button"
+            onClick={handleAddObjective}
+            className="px-3 py-2 bg-gray-100 text-foreground rounded-lg hover:bg-gray-200"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        </div>
+        {objectives.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {objectives.map((objective, index) => (
+              <span
+                key={index}
+                className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 text-blue-700 text-sm rounded-full"
+              >
+                <span>{objective.icon}</span>
+                <span>{objective.text}</span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveObjective(index)}
+                  className="hover:text-red-500"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Duration & Nombre de séances */}
+      <div className="flex gap-4">
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1">Durée (minutes)</label>
+          <input
+            type="number"
+            value={duration}
+            onChange={(e) => setDuration(parseInt(e.target.value) || 0)}
+            min={30}
+            step={30}
+            className="w-24 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1">Nombre de séances</label>
+          <input
+            type="number"
+            value={numberOfSessions}
+            onChange={(e) => setNumberOfSessions(Math.max(1, parseInt(e.target.value) || 1))}
+            min={1}
+            className="w-24 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+          />
+        </div>
       </div>
 
       {/* Pricing */}
@@ -947,34 +1115,127 @@ function VariantEditForm({
           </>
         ) : (
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-text-light mb-1">Par heure</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={(pricing.hourly || 0) / 100}
-                  onChange={(e) => setPricing({ ...pricing, hourly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                  step={0.5}
-                  placeholder="--"
-                  className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+            {showHourly && (
+              <div>
+                <label className="block text-xs text-text-light mb-1">Par heure</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={(pricing.hourly || 0) / 100}
+                    onChange={(e) => setPricing({ ...pricing, hourly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                    step={0.5}
+                    placeholder="--"
+                    className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+                </div>
               </div>
-            </div>
-            <div>
-              <label className="block text-xs text-text-light mb-1">Par jour</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={(pricing.daily || 0) / 100}
-                  onChange={(e) => setPricing({ ...pricing, daily: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                  step={0.5}
-                  placeholder="--"
-                  className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+            )}
+            {showDaily && (
+              <div>
+                <label className="block text-xs text-text-light mb-1">Par jour</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={(pricing.daily || 0) / 100}
+                    onChange={(e) => setPricing({ ...pricing, daily: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                    step={0.5}
+                    placeholder="--"
+                    className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+                </div>
               </div>
-            </div>
+            )}
+            {showWeekly && (
+              <div>
+                <label className="block text-xs text-text-light mb-1">Par semaine</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={(pricing.weekly || 0) / 100}
+                    onChange={(e) => setPricing({ ...pricing, weekly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                    step={0.5}
+                    placeholder="--"
+                    className="w-full px-3 py-2 pr-8 bg-white border border-purple-200 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+                </div>
+              </div>
+            )}
+            {showMonthly && (
+              <div>
+                <label className="block text-xs text-text-light mb-1">Par mois</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={(pricing.monthly || 0) / 100}
+                    onChange={(e) => setPricing({ ...pricing, monthly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                    step={0.5}
+                    placeholder="--"
+                    className="w-full px-3 py-2 pr-8 bg-white border border-amber-200 rounded-lg focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Prix conseillé */}
+        <PriceRecommendationCompact
+          token={token}
+          category={category}
+          priceUnit={isGardeService ? "day" : (showHourly ? "hour" : "day")}
+          currentPrice={isGardeService ? (pricing.daily || 0) : (showHourly ? (pricing.hourly || 0) : (pricing.daily || 0))}
+          onSelectPrice={(price) => {
+            if (isGardeService || !showHourly) {
+              const hourly = Math.round(price / 8);
+              setPricing({ ...pricing, daily: price, hourly });
+            } else {
+              setPricing({ ...pricing, hourly: price });
+            }
+          }}
+        />
+      </div>
+
+      {/* Caractéristiques incluses */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-1">Caractéristiques incluses</label>
+        <div className="flex gap-2 mb-2">
+          <input
+            type="text"
+            value={newFeature}
+            onChange={(e) => setNewFeature(e.target.value)}
+            onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddFeature())}
+            placeholder="Ajouter une caractéristique..."
+            className="flex-1 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+          />
+          <button
+            type="button"
+            onClick={handleAddFeature}
+            className="px-3 py-2 bg-gray-100 text-foreground rounded-lg hover:bg-gray-200"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        </div>
+        {includedFeatures.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {includedFeatures.map((feature, index) => (
+              <span
+                key={index}
+                className="flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary text-sm rounded-full"
+              >
+                {feature}
+                <button
+                  type="button"
+                  onClick={() => handleRemoveFeature(index)}
+                  className="hover:text-red-500"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
           </div>
         )}
       </div>
@@ -1005,32 +1266,45 @@ function VariantEditForm({
 function VariantAddForm({
   serviceId,
   token,
+  category,
   recommendedPrice,
   isGardeService,
   allowOvernightStay,
+  allowedPriceUnits,
   existingCount,
   onSave,
   onCancel,
 }: {
   serviceId: Id<"services">;
   token: string;
+  category: string;
   recommendedPrice: number;
   isGardeService: boolean;
   allowOvernightStay?: boolean;
+  allowedPriceUnits?: ("hour" | "day" | "week" | "month")[];
   existingCount: number;
   onSave: (data: {
     name: string;
     description?: string;
+    objectives?: Objective[];
+    numberOfSessions?: number;
     price: number;
     priceUnit: PriceUnit;
     pricing?: Pricing;
     duration?: number;
+    includedFeatures?: string[];
   }) => Promise<void>;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(`Formule ${existingCount + 1}`);
   const [description, setDescription] = useState("");
+  const [objectives, setObjectives] = useState<Objective[]>([]);
+  const [newObjectiveIcon, setNewObjectiveIcon] = useState("🎯");
+  const [newObjectiveText, setNewObjectiveText] = useState("");
+  const [numberOfSessions, setNumberOfSessions] = useState(1);
   const [duration, setDuration] = useState(60);
+  const [includedFeatures, setIncludedFeatures] = useState<string[]>([]);
+  const [newFeature, setNewFeature] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
   const dailyPrice = recommendedPrice * 8;
@@ -1043,6 +1317,35 @@ function VariantAddForm({
       : { hourly: recommendedPrice }
   );
 
+  // Déterminer quels prix afficher selon allowedPriceUnits
+  const showHourly = !allowedPriceUnits || allowedPriceUnits.includes("hour");
+  const showDaily = !allowedPriceUnits || allowedPriceUnits.includes("day") || isGardeService;
+  const showWeekly = allowedPriceUnits?.includes("week");
+  const showMonthly = allowedPriceUnits?.includes("month");
+
+  const handleAddObjective = () => {
+    if (newObjectiveText.trim()) {
+      setObjectives([...objectives, { icon: newObjectiveIcon, text: newObjectiveText.trim() }]);
+      setNewObjectiveIcon("🎯");
+      setNewObjectiveText("");
+    }
+  };
+
+  const handleRemoveObjective = (index: number) => {
+    setObjectives(objectives.filter((_, i) => i !== index));
+  };
+
+  const handleAddFeature = () => {
+    if (newFeature.trim()) {
+      setIncludedFeatures([...includedFeatures, newFeature.trim()]);
+      setNewFeature("");
+    }
+  };
+
+  const handleRemoveFeature = (index: number) => {
+    setIncludedFeatures(includedFeatures.filter((_, i) => i !== index));
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
@@ -1050,10 +1353,13 @@ function VariantAddForm({
       await onSave({
         name,
         description: description || undefined,
+        objectives: objectives.length > 0 ? objectives : undefined,
+        numberOfSessions: numberOfSessions > 1 ? numberOfSessions : undefined,
         price: mainPrice,
-        priceUnit: isGardeService ? "day" : "hour",
+        priceUnit: isGardeService || !showHourly ? "day" : "hour",
         pricing,
         duration,
+        includedFeatures: includedFeatures.length > 0 ? includedFeatures : undefined,
       });
     } finally {
       setIsSaving(false);
@@ -1089,17 +1395,89 @@ function VariantAddForm({
         />
       </div>
 
-      {/* Duration */}
+      {/* Objectifs */}
       <div>
-        <label className="block text-sm font-medium text-foreground mb-1">Durée (minutes)</label>
-        <input
-          type="number"
-          value={duration}
-          onChange={(e) => setDuration(parseInt(e.target.value) || 0)}
-          min={15}
-          step={15}
-          className="w-24 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
-        />
+        <label className="block text-sm font-medium text-foreground mb-1">Objectifs (optionnel)</label>
+        <div className="flex gap-2 mb-2">
+          <select
+            value={newObjectiveIcon}
+            onChange={(e) => setNewObjectiveIcon(e.target.value)}
+            className="w-14 px-1 py-2 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none text-center text-lg"
+          >
+            <option value="🎯">🎯</option>
+            <option value="✅">✅</option>
+            <option value="⭐">⭐</option>
+            <option value="💪">💪</option>
+            <option value="🐕">🐕</option>
+            <option value="🐈">🐈</option>
+            <option value="❤️">❤️</option>
+            <option value="🏆">🏆</option>
+            <option value="📈">📈</option>
+            <option value="🔧">🔧</option>
+            <option value="🧠">🧠</option>
+            <option value="🎓">🎓</option>
+          </select>
+          <input
+            type="text"
+            value={newObjectiveText}
+            onChange={(e) => setNewObjectiveText(e.target.value)}
+            onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddObjective())}
+            placeholder="Ajouter un objectif..."
+            className="flex-1 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
+          />
+          <button
+            type="button"
+            onClick={handleAddObjective}
+            className="px-3 py-2 bg-gray-100 text-foreground rounded-lg hover:bg-gray-200"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        </div>
+        {objectives.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {objectives.map((objective, index) => (
+              <span
+                key={index}
+                className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 text-blue-700 text-sm rounded-full"
+              >
+                <span>{objective.icon}</span>
+                <span>{objective.text}</span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveObjective(index)}
+                  className="hover:text-red-500"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Duration & Nombre de séances */}
+      <div className="flex gap-4">
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1">Durée (minutes)</label>
+          <input
+            type="number"
+            value={duration}
+            onChange={(e) => setDuration(parseInt(e.target.value) || 0)}
+            min={30}
+            step={30}
+            className="w-24 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1">Nombre de séances</label>
+          <input
+            type="number"
+            value={numberOfSessions}
+            onChange={(e) => setNumberOfSessions(Math.max(1, parseInt(e.target.value) || 1))}
+            min={1}
+            className="w-24 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
+          />
+        </div>
       </div>
 
       {/* Pricing */}
@@ -1152,34 +1530,127 @@ function VariantAddForm({
           </>
         ) : (
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-text-light mb-1">Par heure</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={(pricing.hourly || 0) / 100}
-                  onChange={(e) => setPricing({ ...pricing, hourly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                  step={0.5}
-                  placeholder="--"
-                  className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+            {showHourly && (
+              <div>
+                <label className="block text-xs text-text-light mb-1">Par heure</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={(pricing.hourly || 0) / 100}
+                    onChange={(e) => setPricing({ ...pricing, hourly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                    step={0.5}
+                    placeholder="--"
+                    className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+                </div>
               </div>
-            </div>
-            <div>
-              <label className="block text-xs text-text-light mb-1">Par jour</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={(pricing.daily || 0) / 100}
-                  onChange={(e) => setPricing({ ...pricing, daily: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                  step={0.5}
-                  placeholder="--"
-                  className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+            )}
+            {showDaily && (
+              <div>
+                <label className="block text-xs text-text-light mb-1">Par jour</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={(pricing.daily || 0) / 100}
+                    onChange={(e) => setPricing({ ...pricing, daily: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                    step={0.5}
+                    placeholder="--"
+                    className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+                </div>
               </div>
-            </div>
+            )}
+            {showWeekly && (
+              <div>
+                <label className="block text-xs text-text-light mb-1">Par semaine</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={(pricing.weekly || 0) / 100}
+                    onChange={(e) => setPricing({ ...pricing, weekly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                    step={0.5}
+                    placeholder="--"
+                    className="w-full px-3 py-2 pr-8 bg-white border border-purple-200 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+                </div>
+              </div>
+            )}
+            {showMonthly && (
+              <div>
+                <label className="block text-xs text-text-light mb-1">Par mois</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={(pricing.monthly || 0) / 100}
+                    onChange={(e) => setPricing({ ...pricing, monthly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                    step={0.5}
+                    placeholder="--"
+                    className="w-full px-3 py-2 pr-8 bg-white border border-amber-200 rounded-lg focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Prix conseillé */}
+        <PriceRecommendationCompact
+          token={token}
+          category={category}
+          priceUnit={isGardeService ? "day" : (showHourly ? "hour" : "day")}
+          currentPrice={isGardeService ? (pricing.daily || 0) : (showHourly ? (pricing.hourly || 0) : (pricing.daily || 0))}
+          onSelectPrice={(price) => {
+            if (isGardeService || !showHourly) {
+              const hourly = Math.round(price / 8);
+              setPricing({ ...pricing, daily: price, hourly });
+            } else {
+              setPricing({ ...pricing, hourly: price });
+            }
+          }}
+        />
+      </div>
+
+      {/* Caractéristiques incluses */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-1">Caractéristiques incluses</label>
+        <div className="flex gap-2 mb-2">
+          <input
+            type="text"
+            value={newFeature}
+            onChange={(e) => setNewFeature(e.target.value)}
+            onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddFeature())}
+            placeholder="Ajouter une caractéristique..."
+            className="flex-1 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
+          />
+          <button
+            type="button"
+            onClick={handleAddFeature}
+            className="px-3 py-2 bg-gray-100 text-foreground rounded-lg hover:bg-gray-200"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        </div>
+        {includedFeatures.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {includedFeatures.map((feature, index) => (
+              <span
+                key={index}
+                className="flex items-center gap-1 px-2 py-1 bg-secondary/10 text-secondary text-sm rounded-full"
+              >
+                {feature}
+                <button
+                  type="button"
+                  onClick={() => handleRemoveFeature(index)}
+                  className="hover:text-red-500"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
           </div>
         )}
       </div>

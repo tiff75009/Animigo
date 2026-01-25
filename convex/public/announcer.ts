@@ -67,6 +67,9 @@ export const getAnnouncerProfile = query({
             id: f._id,
             name: f.name,
             description: f.description || "",
+            objectives: f.objectives || [],
+            numberOfSessions: f.numberOfSessions || 1,
+            includedFeatures: f.includedFeatures || [],
             price: f.price, // en centimes
             duration: f.duration || 0,
             unit: f.priceUnit,
@@ -308,6 +311,9 @@ export const getAnnouncerBySlug = query({
             id: f._id,
             name: f.name,
             description: f.description || "",
+            objectives: f.objectives || [],
+            numberOfSessions: f.numberOfSessions || 1,
+            includedFeatures: f.includedFeatures || [],
             price: f.price, // en centimes
             duration: f.duration || 0,
             unit: f.priceUnit,

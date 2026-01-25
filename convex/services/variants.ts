@@ -38,7 +38,7 @@ async function verifyServiceOwnership(
 }
 
 // Helper: Recalculer le basePrice d'un service
-// basePrice = prix total minimum calculé (prix horaire × durée / 60)
+// basePrice = prix total minimum calculé (prix horaire × durée / 60 × nombre de séances)
 async function updateServiceBasePrice(ctx: any, serviceId: Id<"services">) {
   const variants = await ctx.db
     .query("serviceVariants")
@@ -51,10 +51,11 @@ async function updateServiceBasePrice(ctx: any, serviceId: Id<"services">) {
     return;
   }
 
-  // Calculer le prix total pour chaque variante: prix horaire × durée / 60
+  // Calculer le prix total pour chaque variante: prix horaire × durée / 60 × nombre de séances
   const totalPrices = variants.map((v: any) => {
     const duration = v.duration || 60; // Par défaut 60 minutes
-    return Math.round((v.price * duration) / 60);
+    const sessions = v.numberOfSessions || 1; // Par défaut 1 séance
+    return Math.round((v.price * duration / 60) * sessions);
   });
 
   const minPrice = Math.min(...totalPrices);
@@ -113,6 +114,11 @@ export const addVariant = mutation({
     serviceId: v.id("services"),
     name: v.string(),
     description: v.optional(v.string()),
+    objectives: v.optional(v.array(v.object({
+      icon: v.string(),
+      text: v.string(),
+    }))),
+    numberOfSessions: v.optional(v.number()),
     price: v.number(),
     priceUnit: v.union(
       v.literal("hour"),
@@ -152,6 +158,8 @@ export const addVariant = mutation({
       serviceId: args.serviceId,
       name: args.name,
       description: args.description,
+      objectives: args.objectives,
+      numberOfSessions: args.numberOfSessions,
       price: args.price,
       priceUnit: args.priceUnit,
       pricing: args.pricing,
@@ -185,6 +193,11 @@ export const updateVariant = mutation({
     variantId: v.id("serviceVariants"),
     name: v.optional(v.string()),
     description: v.optional(v.string()),
+    objectives: v.optional(v.array(v.object({
+      icon: v.string(),
+      text: v.string(),
+    }))),
+    numberOfSessions: v.optional(v.number()),
     price: v.optional(v.number()),
     priceUnit: v.optional(
       v.union(
@@ -222,6 +235,8 @@ export const updateVariant = mutation({
 
     if (args.name !== undefined) updates.name = args.name;
     if (args.description !== undefined) updates.description = args.description;
+    if (args.objectives !== undefined) updates.objectives = args.objectives;
+    if (args.numberOfSessions !== undefined) updates.numberOfSessions = args.numberOfSessions;
     if (args.price !== undefined) updates.price = args.price;
     if (args.priceUnit !== undefined) updates.priceUnit = args.priceUnit;
     if (args.pricing !== undefined) updates.pricing = args.pricing;
@@ -232,8 +247,8 @@ export const updateVariant = mutation({
 
     await ctx.db.patch(args.variantId, updates);
 
-    // Mettre à jour le basePrice si le prix ou isActive a changé
-    if (args.price !== undefined || args.isActive !== undefined) {
+    // Mettre à jour le basePrice si le prix, durée, séances ou isActive a changé
+    if (args.price !== undefined || args.duration !== undefined || args.numberOfSessions !== undefined || args.isActive !== undefined) {
       await updateServiceBasePrice(ctx, variant.serviceId);
     }
 

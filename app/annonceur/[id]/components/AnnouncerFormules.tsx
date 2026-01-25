@@ -164,9 +164,10 @@ export default function AnnouncerFormules({
     <section className={cn("relative", className)}>
       <div className="flex gap-4 lg:gap-6">
         {/* Barre d'étapes verticale - visible uniquement sur desktop */}
-        <div className="hidden lg:block w-48 flex-shrink-0">
+        {/* La largeur s'adapte automatiquement selon l'état replié/déplié */}
+        <div className="hidden lg:block flex-shrink-0 transition-all duration-300">
           <div className="sticky top-36">
-            <BookingStepBar steps={steps} />
+            <BookingStepBar steps={steps} defaultCollapsed={true} />
           </div>
         </div>
 

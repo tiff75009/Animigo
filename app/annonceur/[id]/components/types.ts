@@ -64,6 +64,9 @@ export interface FormuleData {
   id: Id<"serviceVariants"> | string;
   name: string;
   description?: string;
+  objectives?: { icon: string; text: string }[];
+  numberOfSessions?: number;
+  includedFeatures?: string[];
   price: number; // en centimes
   duration?: number;
   unit?: string;

@@ -428,6 +428,43 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.18.0 - Objectifs et Seances pour les Formules
+
+- **Nouveaux champs pour les formules de service**
+  - Champ "Objectifs de la prestation" : liste d'objectifs avec icones personnalisables
+  - Champ "Nombre de seances" : permet de definir des forfaits multi-seances
+  - Champ "Caracteristiques incluses" : liste de features incluses dans la formule
+  - Affichage complet dans les formulaires de creation et modification
+
+- **Calcul intelligent du prix total**
+  - Nouvelle formule : `prix horaire × (duree/60) × nombre de seances`
+  - Affichage du prix total en avant avec mention "total"
+  - Detail du calcul en petit : "X€/heure × Ymin × Z seances"
+  - Application sur la page annonceur et le parcours de reservation
+
+- **Sidebar des etapes de reservation collapsible**
+  - Barre d'etapes repliee par defaut (icones uniquement)
+  - Bouton pour deployer et voir les labels complets
+  - Mini compteur de progression (X/Y etapes)
+  - Meilleure utilisation de l'espace ecran
+
+- **Ameliorations du formulaire de modification**
+  - Champs de prix conditionnels selon les types autorises par l'admin
+  - Respect du parametre `allowedPriceUnits` des sous-categories
+  - Duree limitee aux tranches de 30 minutes (min=30, step=30)
+  - Ajout du champ "Caracteristiques incluses" avec gestion dynamique
+
+- **Affichage responsive ameliore**
+  - Layout vertical sur mobile, horizontal sur desktop
+  - Titre, description et prix adaptes a la taille d'ecran
+  - Objectifs affiches ligne par ligne avec titre "Objectifs de la prestation"
+  - Badge "X seances" pour les formules multi-seances
+
+- **Backend Convex**
+  - Schema `serviceVariants` enrichi : objectives, numberOfSessions, includedFeatures
+  - Mise a jour de `updateServiceBasePrice` pour inclure les seances
+  - Query `getAnnouncerBySlug` retourne les nouveaux champs
+
 ### v0.17.0 - Pages Legales Admin et Ameliorations Tarification
 
 - **Gestion des pages legales** (`/admin/legal`)

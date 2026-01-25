@@ -1,6 +1,6 @@
 "use client";
 
-import { Check } from "lucide-react";
+import { Check, Clock, Calendar, CheckCircle2, Target } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/app/lib/utils";
 import type { FormuleData } from "../types";
@@ -16,6 +16,17 @@ interface SelectableFormuleCardProps {
   animationDelay?: number;
 }
 
+// Calculer le prix total avec durée et nombre de séances
+function calculateTotalPrice(
+  hourlyPrice: number,
+  duration: number | undefined,
+  numberOfSessions: number | undefined
+): number {
+  const durationHours = (duration || 60) / 60;
+  const sessions = numberOfSessions || 1;
+  return Math.round(hourlyPrice * durationHours * sessions);
+}
+
 export default function SelectableFormuleCard({
   formule,
   isSelected,
@@ -26,6 +37,14 @@ export default function SelectableFormuleCard({
   animationDelay = 0,
 }: SelectableFormuleCardProps) {
   const { price: formulePrice, unit: formuleUnit } = getFormuleBestPrice(formule, isGarde);
+
+  // Calculer le prix total si plusieurs séances ou durée différente de 60min
+  const hasMultipleSessions = formule.numberOfSessions && formule.numberOfSessions > 1;
+  const hasDifferentDuration = formule.duration && formule.duration !== 60;
+  const showTotalPrice = (hasMultipleSessions || hasDifferentDuration) && formuleUnit === "heure";
+  const totalPrice = showTotalPrice
+    ? calculateTotalPrice(formulePrice, formule.duration, formule.numberOfSessions)
+    : null;
 
   return (
     <motion.button
@@ -49,7 +68,7 @@ export default function SelectableFormuleCard({
       whileTap={{ scale: 0.99 }}
       onClick={onSelect}
       className={cn(
-        "w-full flex items-center justify-between p-4 rounded-xl transition-all text-left relative overflow-hidden",
+        "w-full p-4 rounded-xl transition-all text-left relative overflow-hidden",
         "border-2",
         isSelected
           ? "border-primary bg-primary/5 ring-2 ring-primary/20"
@@ -73,40 +92,107 @@ export default function SelectableFormuleCard({
           }}
         />
       )}
-      <div className="flex-1 min-w-0 pr-3 relative z-10">
-        <div className="flex items-center gap-2">
-          <p className={cn(
-            "font-semibold",
-            isSelected ? "text-primary" : "text-gray-900"
-          )}>
-            {formule.name}
-          </p>
-          {isSelected && (
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              className="w-5 h-5 bg-primary rounded-full flex items-center justify-center flex-shrink-0"
-            >
-              <Check className="w-3 h-3 text-white" />
-            </motion.div>
+
+      {/* En-tête: Titre + Prix - layout responsive */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 relative z-10">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className={cn(
+              "font-semibold text-base",
+              isSelected ? "text-primary" : "text-gray-900"
+            )}>
+              {formule.name}
+            </p>
+            {isSelected && (
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="w-5 h-5 bg-primary rounded-full flex items-center justify-center flex-shrink-0"
+              >
+                <Check className="w-3 h-3 text-white" />
+              </motion.div>
+            )}
+          </div>
+        </div>
+
+        {/* Prix - aligné à droite sur desktop, en dessous sur mobile */}
+        <div className="sm:text-right flex-shrink-0">
+          {totalPrice ? (
+            <div className="flex sm:flex-col items-baseline sm:items-end gap-2 sm:gap-0">
+              <p className={cn(
+                "text-lg font-bold",
+                isSelected ? "text-primary" : "text-primary"
+              )}>
+                {formatPriceWithCommission(totalPrice, commissionRate)}€
+                <span className="text-xs font-normal text-gray-400 ml-1">total</span>
+              </p>
+              <p className="text-xs text-gray-500 sm:mt-0.5">
+                {formatPriceWithCommission(formulePrice, commissionRate)}€/{formuleUnit} × {formule.duration || 60}min
+                {formule.numberOfSessions && formule.numberOfSessions > 1 && ` × ${formule.numberOfSessions}`}
+              </p>
+            </div>
+          ) : (
+            <p className={cn(
+              "text-lg font-bold",
+              isSelected ? "text-primary" : "text-primary"
+            )}>
+              {formatPriceWithCommission(formulePrice, commissionRate)}€
+              {formuleUnit && <span className="text-sm font-medium text-gray-500">/{formuleUnit}</span>}
+            </p>
           )}
         </div>
-        {formule.description && (
-          <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{formule.description}</p>
-        )}
+      </div>
+
+      {/* Description */}
+      {formule.description && (
+        <p className="text-sm text-gray-500 mt-2">{formule.description}</p>
+      )}
+
+      {/* Durée et nombre de séances */}
+      <div className="flex flex-wrap items-center gap-2 mt-2">
         {formule.duration && (
-          <p className="text-xs text-gray-400 mt-1">{formule.duration} min</p>
+          <span className="flex items-center gap-1 text-xs text-gray-400">
+            <Clock className="w-3 h-3" />
+            {formule.duration} min
+          </span>
+        )}
+        {formule.numberOfSessions && formule.numberOfSessions > 1 && (
+          <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">
+            <Calendar className="w-3 h-3" />
+            {formule.numberOfSessions} séances
+          </span>
         )}
       </div>
-      <div className="text-right flex-shrink-0 relative z-10">
-        <p className={cn(
-          "text-lg font-bold",
-          isSelected ? "text-primary" : "text-primary"
-        )}>
-          {formatPriceWithCommission(formulePrice, commissionRate)}€
-          {formuleUnit && <span className="text-sm font-medium text-gray-500">/{formuleUnit}</span>}
-        </p>
-      </div>
+
+      {/* Objectifs de la prestation */}
+      {formule.objectives && formule.objectives.length > 0 && (
+        <div className="mt-3 pt-2 border-t border-gray-200/50 relative z-10">
+          <p className="flex items-center gap-1 text-xs font-medium text-purple-700 mb-1.5">
+            <Target className="w-3 h-3" />
+            Objectifs de la prestation
+          </p>
+          <div className="space-y-1.5">
+            {formule.objectives.map((objective, idx) => (
+              <div key={idx} className="flex items-start gap-2 text-xs text-gray-600">
+                <span className="flex-shrink-0 mt-0.5">{objective.icon}</span>
+                <span className="leading-relaxed">{objective.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Caractéristiques incluses */}
+      {formule.includedFeatures && formule.includedFeatures.length > 0 && (
+        <div className="flex flex-wrap gap-2 mt-3 relative z-10">
+          {formule.includedFeatures.map((feature, idx) => (
+            <span key={idx} className="flex items-center gap-1 text-xs text-green-600">
+              <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
+              <span>{feature}</span>
+            </span>
+          ))}
+        </div>
+      )}
     </motion.button>
   );
 }

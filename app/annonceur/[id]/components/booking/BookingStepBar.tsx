@@ -1,7 +1,8 @@
 "use client";
 
-import { Check, Package, Calendar, MapPin, Plus } from "lucide-react";
-import { motion } from "framer-motion";
+import { useState } from "react";
+import { Check, Package, Calendar, MapPin, Plus, ChevronLeft, ChevronRight } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/app/lib/utils";
 
 export interface StepConfig {
@@ -16,9 +17,11 @@ export interface StepConfig {
 interface BookingStepBarProps {
   steps: StepConfig[];
   className?: string;
+  defaultCollapsed?: boolean;
 }
 
-export default function BookingStepBar({ steps, className }: BookingStepBarProps) {
+export default function BookingStepBar({ steps, className, defaultCollapsed = true }: BookingStepBarProps) {
+  const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const visibleSteps = steps.filter((step) => step.isVisible);
 
   if (visibleSteps.length === 0) return null;
@@ -27,10 +30,86 @@ export default function BookingStepBar({ steps, className }: BookingStepBarProps
   const activeStepIndex = visibleSteps.findIndex((step) => step.isActive);
   const completedCount = visibleSteps.filter((step) => step.isCompleted).length;
 
+  // Vue repliée (compacte)
+  if (isCollapsed) {
+    return (
+      <div className={cn("flex flex-col", className)}>
+        <motion.div
+          initial={{ width: 64 }}
+          animate={{ width: 64 }}
+          className="bg-white rounded-2xl border border-gray-100 p-3 shadow-sm"
+        >
+          {/* Bouton pour déplier */}
+          <button
+            onClick={() => setIsCollapsed(false)}
+            className="w-full flex items-center justify-center mb-3 p-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+            title="Afficher les étapes"
+          >
+            <ChevronRight className="w-4 h-4 text-gray-400" />
+          </button>
+
+          {/* Étapes en mode icônes seulement */}
+          <div className="flex flex-col items-center gap-2">
+            {visibleSteps.map((step, index) => {
+              const isLast = index === visibleSteps.length - 1;
+              return (
+                <div key={step.id} className="flex flex-col items-center">
+                  <motion.div
+                    className={cn(
+                      "flex items-center justify-center w-8 h-8 rounded-full border-2 transition-all",
+                      step.isCompleted
+                        ? "bg-primary border-primary text-white"
+                        : step.isActive
+                          ? "bg-white border-primary text-primary"
+                          : "bg-gray-50 border-gray-200 text-gray-400"
+                    )}
+                  >
+                    {step.isCompleted ? (
+                      <Check className="w-4 h-4" />
+                    ) : (
+                      <span className="w-4 h-4 flex items-center justify-center">
+                        {step.icon}
+                      </span>
+                    )}
+                  </motion.div>
+                  {!isLast && (
+                    <div className={cn(
+                      "w-0.5 h-3 mt-1 rounded-full",
+                      step.isCompleted ? "bg-primary" : "bg-gray-200"
+                    )} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Mini progress */}
+          <div className="mt-3 pt-2 border-t border-gray-100 text-center">
+            <span className="text-xs font-medium text-gray-500">
+              {completedCount}/{visibleSteps.length}
+            </span>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className={cn("flex flex-col", className)}>
       {/* Progress indicator compact */}
-      <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
+      <motion.div
+        initial={{ width: 192 }}
+        animate={{ width: 192 }}
+        className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm"
+      >
+        {/* Bouton pour replier */}
+        <button
+          onClick={() => setIsCollapsed(true)}
+          className="w-full flex items-center justify-between mb-3 p-1.5 rounded-lg hover:bg-gray-50 transition-colors text-xs text-gray-500"
+        >
+          <span>Étapes</span>
+          <ChevronLeft className="w-4 h-4" />
+        </button>
         <div className="flex flex-col gap-3">
           {visibleSteps.map((step, index) => {
             const isLast = index === visibleSteps.length - 1;
@@ -151,7 +230,7 @@ export default function BookingStepBar({ steps, className }: BookingStepBarProps
             />
           </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

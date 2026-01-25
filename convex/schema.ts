@@ -273,6 +273,11 @@ export default defineSchema({
     serviceId: v.id("services"),
     name: v.string(), // "Toilettage Simple", "Toilettage Premium"
     description: v.optional(v.string()),
+    objectives: v.optional(v.array(v.object({
+      icon: v.string(), // Emoji ou icône
+      text: v.string(), // Texte de l'objectif
+    }))), // Objectifs de la prestation avec icônes
+    numberOfSessions: v.optional(v.number()), // Nombre de séances (optionnel, défaut: 1)
     // Ancien système (rétrocompatibilité) - prix unique
     price: v.number(), // Prix principal en centimes
     priceUnit: v.union(

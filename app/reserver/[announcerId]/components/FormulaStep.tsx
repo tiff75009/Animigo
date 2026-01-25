@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Check, Home, MapPin, Clock, ChevronDown } from "lucide-react";
+import { Check, Home, MapPin, Clock, ChevronDown, Calendar, CheckCircle2 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 
 // Types
@@ -9,6 +9,8 @@ export interface ServiceVariant {
   id: string;
   name: string;
   description?: string;
+  objectives?: { icon: string; text: string }[];
+  numberOfSessions?: number;
   price: number;
   priceUnit: string;
   duration?: number;
@@ -424,10 +426,31 @@ export default function FormulaStep({
                         {v.description && (
                           <p className="text-sm text-text-light mt-0.5">{v.description}</p>
                         )}
-                        {v.duration && (
-                          <div className="flex items-center gap-1 mt-1 text-xs text-text-light">
-                            <Clock className="w-3 h-3" />
-                            {formatDuration(v.duration)}
+                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                          {v.duration && (
+                            <span className="flex items-center gap-1 text-xs text-text-light">
+                              <Clock className="w-3 h-3" />
+                              {formatDuration(v.duration)}
+                            </span>
+                          )}
+                          {v.numberOfSessions && v.numberOfSessions > 1 && (
+                            <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">
+                              <Calendar className="w-3 h-3" />
+                              {v.numberOfSessions} séances
+                            </span>
+                          )}
+                        </div>
+                        {v.objectives && v.objectives.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {v.objectives.slice(0, 2).map((obj, idx) => (
+                              <span key={idx} className="flex items-center gap-1 px-2 py-0.5 bg-purple-50 text-purple-600 text-xs rounded-full">
+                                <span>{obj.icon}</span>
+                                <span className="truncate max-w-20">{obj.text}</span>
+                              </span>
+                            ))}
+                            {v.objectives.length > 2 && (
+                              <span className="text-xs text-text-light">+{v.objectives.length - 2}</span>
+                            )}
                           </div>
                         )}
                       </div>
