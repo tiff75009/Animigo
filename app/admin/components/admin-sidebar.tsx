@@ -27,6 +27,7 @@ import {
   FlaskConical,
   ShieldCheck,
   Wallet,
+  FileText,
 } from "lucide-react";
 
 interface NavItem {
@@ -143,6 +144,11 @@ export function AdminSidebar() {
           label: "Templates Email",
           href: "/admin/templates-email",
           icon: Mail,
+        },
+        {
+          label: "Pages légales",
+          href: "/admin/legal",
+          icon: FileText,
         },
         {
           label: "Invitations Admin",

@@ -3,7 +3,7 @@
 import { cn } from "@/app/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, User, Briefcase, LogOut, LayoutDashboard, Bell, MessageCircle, ChevronDown, MoreHorizontal } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuthState } from "@/app/hooks/useAuthState";
 import { useNotifications } from "@/app/hooks/useNotifications";
 import { NotificationDropdown } from "@/app/components/notifications";
@@ -31,6 +31,8 @@ export function Navbar() {
   const [hoveredLink, setHoveredLink] = useState<string | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [isAutoScrollPaused, setIsAutoScrollPaused] = useState(false);
+  const autoScrollResumeTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Services visibles et cachés sur desktop
   const visibleServices = serviceCategories.slice(0, DESKTOP_VISIBLE_COUNT);
@@ -41,6 +43,33 @@ export function Navbar() {
 
   const handleScroll = useCallback(() => {
     setIsScrolled(window.scrollY > 20);
+  }, []);
+
+  // Handlers pour le défilement automatique des services mobile
+  const handleServiceBarTouchStart = useCallback(() => {
+    // Annuler le timer existant
+    if (autoScrollResumeTimer.current) {
+      clearTimeout(autoScrollResumeTimer.current);
+      autoScrollResumeTimer.current = null;
+    }
+    // Pause le défilement automatique
+    setIsAutoScrollPaused(true);
+  }, []);
+
+  const handleServiceBarTouchEnd = useCallback(() => {
+    // Reprendre après 10 secondes
+    autoScrollResumeTimer.current = setTimeout(() => {
+      setIsAutoScrollPaused(false);
+    }, 10000);
+  }, []);
+
+  // Cleanup du timer au démontage
+  useEffect(() => {
+    return () => {
+      if (autoScrollResumeTimer.current) {
+        clearTimeout(autoScrollResumeTimer.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -313,22 +342,43 @@ export function Navbar() {
           </div>
         </div>
 
-        {/* Mobile: Services Scrollable Bar */}
-        <div className="lg:hidden border-t border-gray-100 bg-white/95">
-          <div className="overflow-x-auto scrollbar-hide">
-            <div className="flex items-center gap-1 px-4 py-2 min-w-max">
-              {serviceCategories.map((service) => (
-                <Link
-                  key={service.slug}
-                  href={service.href}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg whitespace-nowrap transition-colors"
-                >
-                  <span>{service.emoji}</span>
-                  <span>{service.label}</span>
-                </Link>
-              ))}
-            </div>
-          </div>
+        {/* Mobile: Services Auto-Scrolling Bar */}
+        <div
+          className={cn(
+            "lg:hidden border-t border-gray-100 bg-white/95",
+            isAutoScrollPaused ? "overflow-x-auto scrollbar-hide" : "overflow-hidden"
+          )}
+          onTouchStart={handleServiceBarTouchStart}
+          onTouchEnd={handleServiceBarTouchEnd}
+          onMouseDown={handleServiceBarTouchStart}
+          onMouseUp={handleServiceBarTouchEnd}
+          onMouseLeave={handleServiceBarTouchEnd}
+        >
+          <motion.div
+            className="flex items-center gap-3 py-2 px-2"
+            animate={isAutoScrollPaused ? {} : {
+              x: [0, -1200],
+            }}
+            transition={{
+              x: {
+                duration: 30,
+                repeat: Infinity,
+                ease: "linear",
+              },
+            }}
+          >
+            {/* Double the items for seamless loop */}
+            {[...serviceCategories, ...serviceCategories].map((service, index) => (
+              <Link
+                key={`${service.slug}-${index}`}
+                href={service.href}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-full whitespace-nowrap transition-colors flex-shrink-0"
+              >
+                <span>{service.emoji}</span>
+                <span>{service.label}</span>
+              </Link>
+            ))}
+          </motion.div>
         </div>
       </motion.nav>
 

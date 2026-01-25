@@ -1,28 +1,66 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { CheckCircle, Euro, Calendar, TrendingUp } from "lucide-react";
+import { CheckCircle, Euro, Calendar, TrendingUp, Loader2 } from "lucide-react";
 import { MissionCard } from "../../components/mission-card";
-import { getMissionsByStatus } from "@/app/lib/dashboard-data";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { useAuth } from "@/app/hooks/useAuth";
+import type { FunctionReturnType } from "convex/server";
+
+type MissionType = FunctionReturnType<typeof api.planning.missions.getMissionsByStatus>[number];
 
 export default function MissionsTermineesPage() {
-  const missions = getMissionsByStatus("completed");
-  const totalAmount = missions.reduce((sum, m) => sum + m.amount, 0);
-  const paidAmount = missions
-    .filter((m) => m.paymentStatus === "paid")
-    .reduce((sum, m) => sum + m.amount, 0);
-  const pendingAmount = totalAmount - paidAmount;
+  const { token, isLoading: authLoading } = useAuth();
+
+  // Query Convex pour les missions "completed"
+  const missions = useQuery(
+    api.planning.missions.getMissionsByStatus,
+    token ? { token, status: "completed" } : "skip"
+  );
+
+  // Query pour les coordonnées de l'annonceur
+  const announcerData = useQuery(
+    api.planning.missions.getAnnouncerCoordinates,
+    token ? { token } : "skip"
+  );
+
+  const isLoading = authLoading || missions === undefined;
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("fr-FR", {
       style: "currency",
       currency: "EUR",
       minimumFractionDigits: 0,
-    }).format(amount);
+    }).format(amount / 100);
   };
 
+  if (isLoading || !missions) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-green-600 mx-auto mb-4" />
+          <p className="text-text-light">Chargement des missions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // missions est garanti défini ici grâce à la vérification ci-dessus
+  const missionsList = missions;
+  let totalAmount = 0;
+  let paidAmount = 0;
+  for (const m of missionsList) {
+    const amount = m.announcerEarnings ?? m.amount * 0.85;
+    totalAmount += amount;
+    if (m.paymentStatus === "paid") {
+      paidAmount += amount;
+    }
+  }
+  const pendingAmount = totalAmount - paidAmount;
+
   // Sort by end date (most recent first)
-  const sortedMissions = [...missions].sort(
+  const sortedMissions = [...missionsList].sort(
     (a, b) => new Date(b.endDate).getTime() - new Date(a.endDate).getTime()
   );
 
@@ -42,14 +80,14 @@ export default function MissionsTermineesPage() {
               Missions terminées
             </h1>
             <p className="text-text-light">
-              {missions.length} mission{missions.length > 1 ? "s" : ""} terminée{missions.length > 1 ? "s" : ""}
+              {missionsList.length} mission{missionsList.length > 1 ? "s" : ""} terminée{missionsList.length > 1 ? "s" : ""}
             </p>
           </div>
         </div>
       </motion.div>
 
       {/* Stats */}
-      {missions.length > 0 && (
+      {missionsList.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -63,7 +101,7 @@ export default function MissionsTermineesPage() {
               </div>
               <div>
                 <p className="text-sm text-text-light">Terminées</p>
-                <p className="text-2xl font-bold text-foreground">{missions.length}</p>
+                <p className="text-2xl font-bold text-foreground">{missionsList.length}</p>
               </div>
             </div>
           </div>
@@ -139,14 +177,18 @@ export default function MissionsTermineesPage() {
             </p>
           </div>
         ) : (
-          sortedMissions.map((mission, index) => (
+          sortedMissions.map((mission: MissionType, index: number) => (
             <motion.div
               key={mission.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 + index * 0.05 }}
             >
-              <MissionCard mission={mission} />
+              <MissionCard
+                mission={mission}
+                announcerCoordinates={announcerData?.coordinates}
+                token={token}
+              />
             </motion.div>
           ))
         )}

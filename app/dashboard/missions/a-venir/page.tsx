@@ -1,24 +1,192 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { Calendar, Euro, CalendarDays } from "lucide-react";
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Calendar, Euro, CalendarDays, Loader2, X, AlertTriangle, MessageSquare } from "lucide-react";
 import { MissionCard } from "../../components/mission-card";
-import { getMissionsByStatus } from "@/app/lib/dashboard-data";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { useAuth } from "@/app/hooks/useAuth";
+import { Id } from "@/convex/_generated/dataModel";
+import { useRouter } from "next/navigation";
+import type { FunctionReturnType } from "convex/server";
+
+type MissionType = FunctionReturnType<typeof api.planning.missions.getMissionsByStatus>[number];
+
+// Modal de confirmation d'annulation
+function CancelModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  missionId,
+  isLoading,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: (reason: string) => void;
+  missionId: string;
+  isLoading: boolean;
+}) {
+  const [reason, setReason] = useState("");
+
+  if (!isOpen) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        className="bg-white rounded-2xl p-6 max-w-md w-full"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-3 bg-red-100 rounded-xl">
+            <AlertTriangle className="w-6 h-6 text-red-600" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-foreground">Annuler la mission</h3>
+            <p className="text-sm text-text-light">Cette action est irréversible</p>
+          </div>
+        </div>
+
+        <p className="text-text-light mb-4">
+          Voulez-vous vraiment annuler cette mission ? Le client sera notifié et remboursé.
+        </p>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-foreground mb-2">
+            Raison de l&apos;annulation
+          </label>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Expliquez pourquoi vous annulez cette mission..."
+            className="w-full px-4 py-3 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground resize-none"
+            rows={3}
+          />
+        </div>
+
+        <div className="flex gap-3">
+          <motion.button
+            onClick={onClose}
+            className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-foreground rounded-xl font-semibold"
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
+            disabled={isLoading}
+          >
+            Retour
+          </motion.button>
+          <motion.button
+            onClick={() => onConfirm(reason)}
+            disabled={isLoading || !reason.trim()}
+            className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            whileHover={{ scale: isLoading ? 1 : 1.01 }}
+            whileTap={{ scale: 0.99 }}
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Annulation...
+              </>
+            ) : (
+              "Confirmer l'annulation"
+            )}
+          </motion.button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
 
 export default function MissionsAVenirPage() {
-  const missions = getMissionsByStatus("upcoming");
-  const totalAmount = missions.reduce((sum, m) => sum + m.amount, 0);
+  const { token, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [selectedMissionId, setSelectedMissionId] = useState<string | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
+
+  // Query Convex pour les missions "upcoming"
+  const missions = useQuery(
+    api.planning.missions.getMissionsByStatus,
+    token ? { token, status: "upcoming" } : "skip"
+  );
+
+  // Query pour les coordonnées de l'annonceur (pour le calcul de distance)
+  const announcerData = useQuery(
+    api.planning.missions.getAnnouncerCoordinates,
+    token ? { token } : "skip"
+  );
+
+  // Mutation pour annuler une mission
+  const cancelMission = useMutation(api.planning.missions.cancelMission);
+
+  const isLoading = authLoading || missions === undefined;
 
   const formatCurrency = (amount: number) => {
+    // Convertir centimes en euros
     return new Intl.NumberFormat("fr-FR", {
       style: "currency",
       currency: "EUR",
       minimumFractionDigits: 0,
-    }).format(amount);
+    }).format(amount / 100);
   };
 
+  const handleContact = (missionId: string) => {
+    // Rediriger vers la messagerie avec le client
+    router.push(`/dashboard/messagerie?mission=${missionId}`);
+  };
+
+  const handleCancelClick = (missionId: string) => {
+    setSelectedMissionId(missionId);
+    setCancelModalOpen(true);
+  };
+
+  const handleCancelConfirm = async (reason: string) => {
+    if (!selectedMissionId || !token) return;
+
+    setIsCancelling(true);
+    try {
+      await cancelMission({
+        token,
+        missionId: selectedMissionId as Id<"missions">,
+        reason,
+      });
+      setCancelModalOpen(false);
+      setSelectedMissionId(null);
+    } catch (error) {
+      console.error("Erreur lors de l'annulation:", error);
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  if (isLoading || !missions) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-purple mx-auto mb-4" />
+          <p className="text-text-light">Chargement des missions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // missions est garanti défini ici grâce à la vérification ci-dessus
+  const missionsList = missions;
+  let totalAmount = 0;
+  for (const m of missionsList) {
+    totalAmount += m.announcerEarnings ?? m.amount * 0.85;
+  }
+
   // Sort by start date
-  const sortedMissions = [...missions].sort(
+  const sortedMissions = [...missionsList].sort(
     (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
   );
 
@@ -38,14 +206,14 @@ export default function MissionsAVenirPage() {
               Missions à venir
             </h1>
             <p className="text-text-light">
-              {missions.length} mission{missions.length > 1 ? "s" : ""} planifiée{missions.length > 1 ? "s" : ""}
+              {missionsList.length} mission{missionsList.length > 1 ? "s" : ""} planifiée{missionsList.length > 1 ? "s" : ""}
             </p>
           </div>
         </div>
       </motion.div>
 
       {/* Stats */}
-      {missions.length > 0 && (
+      {missionsList.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -59,7 +227,7 @@ export default function MissionsAVenirPage() {
               </div>
               <div>
                 <p className="text-sm text-text-light">À venir</p>
-                <p className="text-2xl font-bold text-foreground">{missions.length}</p>
+                <p className="text-2xl font-bold text-foreground">{missionsList.length}</p>
               </div>
             </div>
           </div>
@@ -111,18 +279,40 @@ export default function MissionsAVenirPage() {
             </p>
           </div>
         ) : (
-          sortedMissions.map((mission, index) => (
+          sortedMissions.map((mission: MissionType, index: number) => (
             <motion.div
               key={mission.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 + index * 0.05 }}
             >
-              <MissionCard mission={mission} />
+              <MissionCard
+                mission={mission}
+                announcerCoordinates={announcerData?.coordinates}
+                token={token}
+                onContact={handleContact}
+                onCancel={handleCancelClick}
+              />
             </motion.div>
           ))
         )}
       </motion.div>
+
+      {/* Modal d'annulation */}
+      <AnimatePresence>
+        {cancelModalOpen && selectedMissionId && (
+          <CancelModal
+            isOpen={cancelModalOpen}
+            onClose={() => {
+              setCancelModalOpen(false);
+              setSelectedMissionId(null);
+            }}
+            onConfirm={handleCancelConfirm}
+            missionId={selectedMissionId}
+            isLoading={isCancelling}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

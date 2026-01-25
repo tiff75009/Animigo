@@ -428,6 +428,56 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.17.0 - Pages Legales Admin et Ameliorations Tarification
+
+- **Gestion des pages legales** (`/admin/legal`)
+  - Interface admin pour gerer CGV, CGU, Politique de confidentialite, Conditions d'annulation
+  - Editeur de contenu avec support HTML
+  - Systeme de brouillon/publication avec versioning
+  - Pages publiques dynamiques (`/legal/[slug]`)
+  - URLs en francais (confidentialite, annulation)
+  - Navigation entre les pages legales
+
+- **Correction du calcul des prix**
+  - Plafonnement du tarif horaire au tarif journalier
+  - Evite de payer plus pour moins d'heures (ex: 6h ne coute plus 18€ si le tarif journalier est 11€)
+  - Correction appliquee dans toutes les pages de reservation
+
+- **Affichage des prix avec commission incluse**
+  - Tous les prix affiches incluent desormais la commission
+  - Plus de ligne "Frais de service X%" separee
+  - Mention "Frais de service inclus" sous le total
+  - Applique sur : sidebar annonceur, etape 4 recapitulatif, page finalisation
+
+- **Format date/heure unifie**
+  - Format combine : "Du jeu. 12 fevr. a 9h jusqu'au sam. 14 fevr. a 14h"
+  - Affichage de la duree totale (jours + heures)
+  - Meme format sur toutes les pages de reservation
+
+- **Detail des tarifs ameliore**
+  - Section "Detail des tarifs" avec fond gris
+  - Premier jour avec heures reelles (ex: 11h30 → 20h · 8h30)
+  - Jours intermediaires avec dates et tarif/jour
+  - Dernier jour avec heures reelles (ex: 8h → 14h · 6h)
+  - Nuits avec tarif/nuit
+  - Options avec prix TTC
+
+- **Background anime page reservation**
+  - Gradient de fond similaire a la page d'accueil
+  - Blobs animes en arriere-plan avec mouvement fluide
+  - Pattes flottantes decoratives (desktop uniquement)
+  - Header avec effet de transparence/blur
+
+- **Etapes de reservation pour services garde**
+  - Ajout des etapes "Lieu de prestation" et "Options" pour les services en mode garde
+  - Barre de progression mise a jour avec 4 etapes visibles
+  - Validation obligatoire : date debut, date fin, heure debut, heure fin
+
+- **Backend Convex**
+  - Nouvelle table `legalPages` avec slug, titre, contenu, version, statut
+  - Fichiers `convex/admin/legalPages.ts` et `convex/public/legal.ts`
+  - Lien "Pages legales" ajoute dans la sidebar admin
+
 ### v0.16.0 - Refonte Page Annonceur et Experience de Reservation
 
 - **Barre de progression des etapes**

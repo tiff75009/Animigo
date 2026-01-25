@@ -80,6 +80,9 @@ export default function AnnouncerBookingCard({
   // Check if we have a booking in progress (formule selected)
   const hasBookingInProgress = Boolean(bookingService && bookingVariant);
 
+  // Check if it's a range mode service (garde)
+  const isRangeMode = bookingService ? isGardeService(bookingService) : false;
+
   // If booking is in progress, show the summary
   if (hasBookingInProgress && bookingSelection) {
     return (
@@ -93,10 +96,10 @@ export default function AnnouncerBookingCard({
           responseRate={responseRate}
           responseTime={responseTime}
           nextAvailable={nextAvailable}
+          isRangeMode={isRangeMode}
           clientAddress={clientAddress}
           onBook={onBook}
           onFinalize={onFinalize}
-          onContact={onContact}
         />
 
         {/* Trust badges */}

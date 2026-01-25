@@ -237,7 +237,9 @@ function calculateSmartPrice(params: {
         firstDayAmount = dailyRate;
         firstDayIsFullDay = true;
       } else {
-        firstDayAmount = Math.round(hourlyRate * firstDayHours);
+        // Cap hourly amount at daily rate to avoid paying more for fewer hours
+        const hourlyAmount = Math.round(hourlyRate * firstDayHours);
+        firstDayAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
       }
     } else {
       // Full day
@@ -277,7 +279,9 @@ function calculateSmartPrice(params: {
     firstDayAmount = dailyRate;
     firstDayIsFullDay = true;
   } else if (hourlyRate > 0) {
-    firstDayAmount = Math.round(hourlyRate * firstDayHours);
+    // Cap hourly amount at daily rate to avoid paying more for fewer hours
+    const hourlyAmount = Math.round(hourlyRate * firstDayHours);
+    firstDayAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
   } else {
     firstDayAmount = dailyRate;
     firstDayIsFullDay = true;
@@ -294,7 +298,9 @@ function calculateSmartPrice(params: {
     lastDayAmount = dailyRate;
     lastDayIsFullDay = true;
   } else if (hourlyRate > 0) {
-    lastDayAmount = Math.round(hourlyRate * lastDayHours);
+    // Cap hourly amount at daily rate to avoid paying more for fewer hours
+    const hourlyAmount = Math.round(hourlyRate * lastDayHours);
+    lastDayAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
   } else {
     lastDayAmount = dailyRate;
     lastDayIsFullDay = true;
@@ -348,6 +354,20 @@ function formatDate(dateStr: string): string {
     month: "long",
     year: "numeric",
   });
+}
+
+function formatShortDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString("fr-FR", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+}
+
+function formatTime(time: string): string {
+  const [hours, minutes] = time.split(":");
+  return minutes === "00" ? `${parseInt(hours)}h` : `${parseInt(hours)}h${minutes}`;
 }
 
 function formatPrice(cents: number): string {
@@ -1337,224 +1357,247 @@ export default function ReservationPage({
                   </div>
                 </div>
 
-                {/* Dates */}
-                <div className="py-4 border-b border-gray-100 space-y-2">
-                  <div className="flex items-center gap-3 text-foreground">
-                    <Calendar className="w-5 h-5 text-primary" />
-                    <span className="text-sm">
-                      {formatDate(bookingData.dates.startDate)}
-                      {bookingData.dates.endDate !== bookingData.dates.startDate && (
-                        <>
-                          <br />
-                          <span className="text-text-light">au {formatDate(bookingData.dates.endDate)}</span>
-                        </>
-                      )}
-                    </span>
-                  </div>
-
-                  {bookingData.dates.startTime && (
-                    <div className="flex items-center gap-3 text-foreground">
-                      <Clock className="w-5 h-5 text-primary" />
-                      <span className="text-sm">
-                        {bookingData.dates.startTime}
-                        {bookingData.variant?.duration && (
-                          <>
-                            {" → "}
-                            {calculateEndTime(bookingData.dates.startTime, bookingData.variant.duration)}
-                            <span className="text-text-light ml-1">
-                              ({formatDuration(bookingData.variant.duration)})
+                {/* Dates et horaires - format combiné comme étape 4 */}
+                <div className="py-4 border-b border-gray-100">
+                  <p className="text-xs font-medium text-text-light uppercase mb-2">Date et horaire</p>
+                  <div className="flex items-start gap-3">
+                    <Calendar className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-foreground">
+                      {isMultiDay && bookingData.dates.startTime && bookingData.dates.endTime ? (
+                        // Multi-jours avec heures
+                        <span>
+                          Du {formatShortDate(bookingData.dates.startDate)} à {formatTime(bookingData.dates.startTime)} jusqu&apos;au {formatShortDate(bookingData.dates.endDate)} à {formatTime(bookingData.dates.endTime)}
+                        </span>
+                      ) : bookingData.dates.startTime && bookingData.dates.endTime ? (
+                        // Même jour avec plage horaire
+                        <span>
+                          {formatShortDate(bookingData.dates.startDate)} de {formatTime(bookingData.dates.startTime)} à {formatTime(bookingData.dates.endTime)}
+                        </span>
+                      ) : bookingData.dates.startTime ? (
+                        // Même jour avec heure de début et durée
+                        <span>
+                          {formatShortDate(bookingData.dates.startDate)} à {formatTime(bookingData.dates.startTime)}
+                          {bookingData.variant?.duration && (
+                            <span className="text-text-light">
+                              {" → "}{formatTime(calculateEndTime(bookingData.dates.startTime, bookingData.variant.duration))}
+                              {" "}({formatDuration(bookingData.variant.duration)})
                             </span>
-                          </>
-                        )}
-                      </span>
+                          )}
+                        </span>
+                      ) : isMultiDay ? (
+                        // Multi-jours sans heures
+                        <span>
+                          Du {formatShortDate(bookingData.dates.startDate)} au {formatShortDate(bookingData.dates.endDate)}
+                        </span>
+                      ) : (
+                        // Date simple
+                        <span>{formatShortDate(bookingData.dates.startDate)}</span>
+                      )}
+
+                      {/* Durée */}
+                      {priceCalculation && (daysCount > 1 || priceCalculation.firstDayHours > 0) && (
+                        <div className="flex items-center gap-1 mt-1.5 text-xs text-text-light">
+                          <Clock className="w-3 h-3" />
+                          {daysCount > 1 ? (
+                            <span>
+                              {daysCount} jour{daysCount > 1 ? "s" : ""}
+                              {priceCalculation.firstDayHours + priceCalculation.lastDayHours + (priceCalculation.fullDays * 8) > 0 && (
+                                <> · {formatHoursDisplay(priceCalculation.firstDayHours + priceCalculation.lastDayHours + (priceCalculation.fullDays * 8))} au total</>
+                              )}
+                            </span>
+                          ) : priceCalculation.firstDayHours > 0 ? (
+                            <span>Durée : {formatHoursDisplay(priceCalculation.firstDayHours)}</span>
+                          ) : null}
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
 
-                {/* Options sélectionnées */}
-                {selectedOptionIds.length > 0 && (
-                  <div className="py-4 border-b border-gray-100">
-                    <p className="text-xs font-medium text-text-light uppercase mb-2">
-                      Options sélectionnées
-                    </p>
-                    <div className="space-y-1">
+                {/* Prix - Détail du calcul intelligent - format étape 4 - Tous les prix incluent la commission */}
+                <div className="pt-4">
+                  {priceCalculation && (() => {
+                    // Helper pour appliquer la commission
+                    const withCommission = (amount: number) => Math.round(amount * (1 + commissionRate / 100));
+                    const firstDayWithComm = withCommission(priceCalculation.firstDayAmount);
+                    const fullDaysWithComm = withCommission(priceCalculation.fullDaysAmount);
+                    const dailyRateWithComm = withCommission(priceCalculation.dailyRate);
+                    const hourlyRateWithComm = withCommission(priceCalculation.hourlyRate);
+                    const lastDayWithComm = withCommission(priceCalculation.lastDayAmount);
+                    const nightlyRateWithComm = withCommission(priceCalculation.nightlyRate);
+                    const nightsAmountWithComm = withCommission(priceCalculation.nightsAmount);
+
+                    return (
+                    <div className="bg-gray-50 rounded-xl p-3 space-y-2 mb-3">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Détail des tarifs</p>
+
+                      {/* Multi-jours */}
+                      {isMultiDay ? (
+                        <>
+                          {/* Premier jour */}
+                          <div className="flex justify-between text-sm">
+                            <span className="text-text-light flex items-center gap-2">
+                              <Sun className="w-4 h-4 text-amber-500" />
+                              <span>
+                                {formatShortDate(bookingData.dates.startDate)}
+                                <span className="text-gray-400 ml-1">
+                                  {bookingData.dates.startTime ? (
+                                    `(${formatTime(bookingData.dates.startTime)} → 20h · ${formatHoursDisplay(priceCalculation.firstDayHours)})`
+                                  ) : (
+                                    `(${formatHoursDisplay(priceCalculation.firstDayHours)})`
+                                  )}
+                                </span>
+                              </span>
+                            </span>
+                            <span className="font-medium">{formatPrice(firstDayWithComm)}</span>
+                          </div>
+
+                          {/* Jours complets intermédiaires */}
+                          {priceCalculation.fullDays > 0 && (() => {
+                            const startDateObj = new Date(bookingData.dates.startDate);
+                            const firstMiddleDay = new Date(startDateObj);
+                            firstMiddleDay.setDate(startDateObj.getDate() + 1);
+                            const lastMiddleDay = new Date(firstMiddleDay);
+                            lastMiddleDay.setDate(firstMiddleDay.getDate() + priceCalculation.fullDays - 1);
+
+                            return (
+                              <div className="flex justify-between text-sm">
+                                <span className="text-text-light flex items-center gap-2">
+                                  <Sun className="w-4 h-4 text-amber-500" />
+                                  <span>
+                                    {priceCalculation.fullDays === 1 ? (
+                                      formatShortDate(firstMiddleDay.toISOString())
+                                    ) : (
+                                      `${formatShortDate(firstMiddleDay.toISOString())} → ${formatShortDate(lastMiddleDay.toISOString())}`
+                                    )}
+                                    <span className="text-gray-400 ml-1">
+                                      ({priceCalculation.fullDays} jour{priceCalculation.fullDays > 1 ? "s" : ""} · {formatPrice(dailyRateWithComm)}/jour)
+                                    </span>
+                                  </span>
+                                </span>
+                                <span className="font-medium">{formatPrice(fullDaysWithComm)}</span>
+                              </div>
+                            );
+                          })()}
+
+                          {/* Dernier jour */}
+                          {priceCalculation.lastDayHours > 0 && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-text-light flex items-center gap-2">
+                                <Sun className="w-4 h-4 text-amber-500" />
+                                <span>
+                                  {formatShortDate(bookingData.dates.endDate)}
+                                  <span className="text-gray-400 ml-1">
+                                    {bookingData.dates.endTime ? (
+                                      `(8h → ${formatTime(bookingData.dates.endTime)} · ${formatHoursDisplay(priceCalculation.lastDayHours)})`
+                                    ) : (
+                                      `(${formatHoursDisplay(priceCalculation.lastDayHours)})`
+                                    )}
+                                  </span>
+                                </span>
+                              </span>
+                              <span className="font-medium">{formatPrice(lastDayWithComm)}</span>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        /* Même jour */
+                        priceCalculation.firstDayHours > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-text-light flex items-center gap-2">
+                              <Clock className="w-4 h-4 text-blue-500" />
+                              <span>
+                                {bookingData.dates.startTime && bookingData.dates.endTime ? (
+                                  <>
+                                    {formatTime(bookingData.dates.startTime)} → {formatTime(bookingData.dates.endTime)}
+                                    <span className="text-gray-400 ml-1">
+                                      ({formatHoursDisplay(priceCalculation.firstDayHours)}
+                                      {priceCalculation.firstDayIsFullDay || priceCalculation.firstDayAmount === priceCalculation.dailyRate
+                                        ? ` · ${formatPrice(dailyRateWithComm)}/jour`
+                                        : priceCalculation.hourlyRate > 0
+                                          ? ` · ${formatPrice(hourlyRateWithComm)}/h`
+                                          : ""
+                                      })
+                                    </span>
+                                  </>
+                                ) : (
+                                  <>
+                                    {formatHoursDisplay(priceCalculation.firstDayHours)} de prestation
+                                    <span className="text-gray-400 ml-1">
+                                      ({priceCalculation.firstDayIsFullDay || priceCalculation.firstDayAmount === priceCalculation.dailyRate
+                                        ? `${formatPrice(dailyRateWithComm)}/jour`
+                                        : priceCalculation.hourlyRate > 0
+                                          ? `${formatPrice(hourlyRateWithComm)}/h`
+                                          : ""
+                                      })
+                                    </span>
+                                  </>
+                                )}
+                              </span>
+                            </span>
+                            <span className="font-medium">{formatPrice(firstDayWithComm)}</span>
+                          </div>
+                        )
+                      )}
+
+                      {/* Nuits - prix avec commission incluse */}
+                      {bookingData.overnight?.includeOvernightStay && priceCalculation.nights > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-indigo-700 flex items-center gap-2">
+                            <Moon className="w-4 h-4" />
+                            <span>
+                              {priceCalculation.nights} nuit{priceCalculation.nights > 1 ? "s" : ""}
+                              {priceCalculation.nightlyRate > 0 && (
+                                <span className="text-indigo-400 ml-1">
+                                  ({formatPrice(nightlyRateWithComm)}/nuit)
+                                </span>
+                              )}
+                            </span>
+                          </span>
+                          <span className="font-medium text-indigo-700">+{formatPrice(nightsAmountWithComm)}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                  })()}
+
+                  {/* Options - prix avec commission incluse */}
+                  {selectedOptionIds.length > 0 && (
+                    <div className="space-y-2 mb-3">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Options</p>
                       {selectedOptionIds.map((optId) => {
-                        const option = bookingData.availableOptions?.find(
+                        const opt = bookingData.availableOptions?.find(
                           (o: ServiceOption) => o.id === optId
                         );
-                        if (!option) return null;
+                        if (!opt) return null;
+                        const optPriceWithComm = Math.round(opt.price * (1 + commissionRate / 100));
                         return (
                           <div
                             key={optId}
-                            className="flex items-center justify-between text-sm"
+                            className="flex justify-between text-sm text-secondary"
                           >
-                            <span className="text-foreground">{option.name}</span>
-                            <span className="text-text-light">
-                              +{formatPrice(option.price)}
+                            <span className="flex items-center gap-2">
+                              <span className="w-4 h-4 flex items-center justify-center text-xs">✓</span>
+                              {opt.name}
                             </span>
+                            <span className="font-medium">+{formatPrice(optPriceWithComm)}</span>
                           </div>
                         );
                       })}
                     </div>
-                  </div>
-                )}
-
-                {/* Prix - Détail du calcul intelligent */}
-                <div className="pt-4">
-                  {priceCalculation && (
-                    <div className="space-y-2 mb-2">
-                      {/* Premier jour (ou journée unique) */}
-                      {priceCalculation.firstDayHours > 0 && (
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-text-light flex items-center gap-1">
-                            {isMultiDay ? (
-                              <>
-                                <Sun className="w-3 h-3" />
-                                {formatDate(bookingData.dates.startDate).split(",")[0]}
-                                {priceCalculation.firstDayIsFullDay ? (
-                                  <span className="text-text-light"> (journée)</span>
-                                ) : (
-                                  <span className="text-primary"> ({formatHoursDisplay(priceCalculation.firstDayHours)})</span>
-                                )}
-                              </>
-                            ) : (
-                              <>
-                                <Clock className="w-3 h-3" />
-                                {priceCalculation.firstDayIsFullDay
-                                  ? "Journée complète"
-                                  : `${formatHoursDisplay(priceCalculation.firstDayHours)} de prestation`}
-                              </>
-                            )}
-                          </span>
-                          <span className="text-foreground font-medium">
-                            {formatPrice(priceCalculation.firstDayAmount)}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Jours complets intermédiaires */}
-                      {priceCalculation.fullDays > 0 && (
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-text-light flex items-center gap-1">
-                            <Sun className="w-3 h-3" />
-                            {priceCalculation.fullDays} journée{priceCalculation.fullDays > 1 ? "s" : ""} complète{priceCalculation.fullDays > 1 ? "s" : ""}
-                          </span>
-                          <span className="text-foreground font-medium">
-                            {formatPrice(priceCalculation.fullDaysAmount)}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Dernier jour (multi-jours) */}
-                      {isMultiDay && priceCalculation.lastDayHours > 0 && (
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-text-light flex items-center gap-1">
-                            <Sun className="w-3 h-3" />
-                            {formatDate(bookingData.dates.endDate).split(",")[0]}
-                            {priceCalculation.lastDayIsFullDay ? (
-                              <span className="text-text-light"> (journée)</span>
-                            ) : (
-                              <span className="text-primary"> ({formatHoursDisplay(priceCalculation.lastDayHours)})</span>
-                            )}
-                          </span>
-                          <span className="text-foreground font-medium">
-                            {formatPrice(priceCalculation.lastDayAmount)}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Info tarifs */}
-                      {(priceCalculation.hourlyRate > 0 || priceCalculation.dailyRate > 0) && (
-                        <div className="text-xs text-text-light pt-1">
-                          {priceCalculation.hourlyRate > 0 && (
-                            <span>Tarif: {formatPrice(priceCalculation.hourlyRate)}/h</span>
-                          )}
-                          {priceCalculation.hourlyRate > 0 && priceCalculation.dailyRate > 0 && <span> • </span>}
-                          {priceCalculation.dailyRate > 0 && (
-                            <span>{formatPrice(priceCalculation.dailyRate)}/jour</span>
-                          )}
-                        </div>
-                      )}
-                    </div>
                   )}
 
-                  {/* Affichage des nuits si garde de nuit incluse */}
-                  {bookingData.overnight?.includeOvernightStay && priceCalculation && priceCalculation.nights > 0 && (
-                    <div className="mb-2 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-indigo-700 flex items-center gap-1.5">
-                          <Moon className="w-4 h-4" />
-                          Garde de nuit ({priceCalculation.nights} nuit{priceCalculation.nights > 1 ? "s" : ""})
-                        </span>
-                        <span className="text-indigo-700 font-medium">
-                          +{formatPrice(priceCalculation.nightsAmount)}
-                        </span>
-                      </div>
-                      {/* Détail du calcul des nuits */}
-                      <p className="text-xs text-indigo-500 mt-1">
-                        {formatPrice(priceCalculation.nightlyRate)}/nuit × {priceCalculation.nights} nuit{priceCalculation.nights > 1 ? "s" : ""}
-                      </p>
-                      {/* Horaires journée */}
-                      {bookingData.service.dayStartTime && bookingData.service.dayEndTime && (
-                        <div className="flex items-center gap-1.5 text-xs text-indigo-500 mt-2">
-                          <Sun className="w-3.5 h-3.5" />
-                          Journées: {bookingData.service.dayStartTime} - {bookingData.service.dayEndTime}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {selectedOptionIds.length > 0 && (
-                    <div className="flex items-center justify-between text-sm mb-2">
-                      <span className="text-text-light">
-                        Options ({selectedOptionIds.length})
-                      </span>
-                      <span className="text-foreground">
-                        +{formatPrice(
-                          selectedOptionIds.reduce((sum: number, optId: string) => {
-                            const option = bookingData.availableOptions?.find(
-                              (o: ServiceOption) => o.id === optId
-                            );
-                            return sum + (option?.price || 0);
-                          }, 0)
-                        )}
+                  {/* Total - frais de service inclus */}
+                  <div className="pt-3 border-t border-gray-200 mt-2">
+                    <div className="flex justify-between text-lg font-bold">
+                      <span>Total à payer</span>
+                      <span className="text-primary">
+                        {formatPrice(totalWithCommission)}
                       </span>
                     </div>
-                  )}
-
-                  {/* Sous-total */}
-                  <div className="flex items-center justify-between text-sm pt-2 border-t border-gray-100">
-                    <span className="text-text-light">Sous-total prestation</span>
-                    <span className="text-foreground font-medium">
-                      {formatPrice(totalAmount)}
-                    </span>
-                  </div>
-
-                  {/* Commission */}
-                  {commissionRate > 0 && (
-                    <div className="flex items-center justify-between text-sm mt-2">
-                      <span className="text-text-light flex items-center gap-1.5">
-                        <Percent className="w-3 h-3" />
-                        Frais de service ({commissionRate}%)
-                        <div className="relative group">
-                          <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 w-48 text-center z-50 shadow-lg">
-                            Ces frais assurent le bon fonctionnement de la plateforme, la mise en relation sécurisée et notre service client.
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
-                          </div>
-                        </div>
-                      </span>
-                      <span className="text-foreground">
-                        +{formatPrice(commissionAmount)}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Total final */}
-                  <div className="flex items-center justify-between pt-3 mt-3 border-t-2 border-primary/20">
-                    <span className="font-semibold text-foreground">Total à payer</span>
-                    <span className="text-2xl font-bold text-primary">
-                      {formatPrice(totalWithCommission)}
-                    </span>
+                    <p className="text-xs text-gray-400 mt-1 text-right">
+                      Frais de service inclus
+                    </p>
                   </div>
                 </div>
 

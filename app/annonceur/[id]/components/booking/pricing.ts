@@ -207,7 +207,9 @@ export function calculateSmartPrice(params: SmartPriceParams): Omit<PriceBreakdo
         firstDayAmount = dailyRate;
         firstDayIsFullDay = true;
       } else {
-        firstDayAmount = Math.round(hourlyRate * firstDayHours);
+        // Cap hourly amount at daily rate to avoid paying more for fewer hours
+        const hourlyAmount = Math.round(hourlyRate * firstDayHours);
+        firstDayAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
       }
     } else {
       firstDayHours = workdayHours;
@@ -247,7 +249,9 @@ export function calculateSmartPrice(params: SmartPriceParams): Omit<PriceBreakdo
     firstDayAmount = dailyRate;
     firstDayIsFullDay = true;
   } else if (hourlyRate > 0) {
-    firstDayAmount = Math.round(hourlyRate * firstDayHours);
+    // Cap hourly amount at daily rate to avoid paying more for fewer hours
+    const hourlyAmount = Math.round(hourlyRate * firstDayHours);
+    firstDayAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
   } else {
     firstDayAmount = dailyRate;
     firstDayIsFullDay = true;
@@ -263,7 +267,9 @@ export function calculateSmartPrice(params: SmartPriceParams): Omit<PriceBreakdo
     lastDayAmount = dailyRate;
     lastDayIsFullDay = true;
   } else if (hourlyRate > 0) {
-    lastDayAmount = Math.round(hourlyRate * lastDayHours);
+    // Cap hourly amount at daily rate to avoid paying more for fewer hours
+    const hourlyAmount = Math.round(hourlyRate * lastDayHours);
+    lastDayAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
   } else {
     lastDayAmount = dailyRate;
     lastDayIsFullDay = true;

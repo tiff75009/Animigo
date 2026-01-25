@@ -123,7 +123,11 @@ export default function AnnouncerFormules({
   const variantDuration = selectedFormule?.duration || 60;
 
   // Déterminer si on doit afficher le sélecteur de lieu
-  const showLocationSelector = hasVariantSelected && service.serviceLocation === "both";
+  // Pour les services garde (isRangeMode), on affiche toujours le sélecteur de lieu
+  const showLocationSelector = hasVariantSelected && (
+    service.serviceLocation === "both" ||
+    isRangeMode // Toujours afficher pour les services garde
+  );
 
   // Le calendrier ne s'affiche que si :
   // - Une formule est sélectionnée
@@ -135,17 +139,25 @@ export default function AnnouncerFormules({
 
   // Calculer les étapes de réservation
   const hasDateSelected = Boolean(bookingSelection?.startDate);
+  const hasEndDateSelected = Boolean(bookingSelection?.endDate);
   const hasTimeSelected = Boolean(bookingSelection?.startTime);
+  const hasEndTimeSelected = Boolean(bookingSelection?.endTime);
   const hasLocationSelected = Boolean(bookingSelection?.serviceLocation);
-  const hasOptions = service.options.length > 0;
+  // Pour les services garde (isRangeMode), on affiche toujours l'étape Options
+  const hasOptions = service.options.length > 0 || isRangeMode;
+  const hasOptionsSelected = selectedOptionIds.length > 0;
 
   const steps = useBookingSteps({
     hasVariantSelected,
     hasDateSelected,
+    hasEndDateSelected,
     hasTimeSelected,
+    hasEndTimeSelected,
+    isRangeMode,
     showLocationSelector,
     hasLocationSelected,
     hasOptions,
+    hasOptionsSelected,
   });
 
   return (
@@ -286,12 +298,13 @@ export default function AnnouncerFormules({
         </div>
       )}
 
-      {/* Section Lieu de prestation - visible si nécessaire */}
+      {/* Section Lieu de prestation - visible pour services garde ou si choix nécessaire */}
       {showLocationSelector && onLocationSelect && (
         <ServiceLocationSelector
-          serviceLocation={service.serviceLocation!}
+          serviceLocation={service.serviceLocation || "both"}
           selectedLocation={bookingSelection?.serviceLocation ?? null}
           onSelect={onLocationSelect}
+          isRangeMode={isRangeMode}
         />
       )}
 
@@ -325,7 +338,8 @@ export default function AnnouncerFormules({
         )}
 
       {/* Section Options additionnelles - visible quand une formule est sélectionnée */}
-      {hasVariantSelected && service.options.length > 0 && (
+      {/* Pour les services garde (isRangeMode), toujours afficher cette section */}
+      {hasVariantSelected && (service.options.length > 0 || isRangeMode) && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -354,7 +368,7 @@ export default function AnnouncerFormules({
               </h3>
 
               {/* Subtle invitation when no options selected */}
-              {selectedOptionIds.length === 0 && (
+              {selectedOptionIds.length === 0 && service.options.length > 0 && (
                 <motion.div
                   initial={{ opacity: 0, x: 10 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -366,19 +380,27 @@ export default function AnnouncerFormules({
               )}
             </div>
 
-            <div className="space-y-3">
-              {service.options.map((option, index) => (
-                <SelectableOptionCard
-                  key={option.id.toString()}
-                  option={option}
-                  isSelected={selectedOptionIds.includes(option.id.toString())}
-                  commissionRate={commissionRate}
-                  onToggle={() => onOptionToggle?.(option.id.toString())}
-                  showSuggestPulse={selectedOptionIds.length === 0}
-                  animationDelay={index * 0.1}
-                />
-              ))}
-            </div>
+            {service.options.length > 0 ? (
+              <div className="space-y-3">
+                {service.options.map((option, index) => (
+                  <SelectableOptionCard
+                    key={option.id.toString()}
+                    option={option}
+                    isSelected={selectedOptionIds.includes(option.id.toString())}
+                    commissionRate={commissionRate}
+                    onToggle={() => onOptionToggle?.(option.id.toString())}
+                    showSuggestPulse={selectedOptionIds.length === 0}
+                    animationDelay={index * 0.1}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-gray-500 text-sm">
+                  Aucune option disponible pour ce service
+                </p>
+              </div>
+            )}
           </div>
         </motion.div>
       )}

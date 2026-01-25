@@ -8,15 +8,18 @@ interface ServiceLocationSelectorProps {
   serviceLocation: "announcer_home" | "client_home" | "both";
   selectedLocation: "announcer_home" | "client_home" | null;
   onSelect: (location: "announcer_home" | "client_home") => void;
+  isRangeMode?: boolean; // Mode garde - toujours afficher les deux options
 }
 
 export default function ServiceLocationSelector({
   serviceLocation,
   selectedLocation,
   onSelect,
+  isRangeMode = false,
 }: ServiceLocationSelectorProps) {
-  // Si le service est uniquement chez l'annonceur ou le client, pas besoin de sélection
-  if (serviceLocation !== "both") {
+  // Pour les services garde (isRangeMode), toujours afficher les deux options
+  // Sinon, si le service est uniquement chez l'annonceur ou le client, pas besoin de sélection
+  if (serviceLocation !== "both" && !isRangeMode) {
     return null;
   }
 

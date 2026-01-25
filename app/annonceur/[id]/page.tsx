@@ -456,11 +456,6 @@ export default function AnnouncerProfilePage() {
     router.push(`/reserver/${announcerData.id}${queryString ? `?${queryString}` : ""}`);
   }, [announcerData, announcer, bookingSelection, router]);
 
-  const handleContact = useCallback(() => {
-    if (!announcerData) return;
-    router.push(`/client/messagerie?annonceur=${announcerData.id}`);
-  }, [announcerData, router]);
-
   // Early returns APRÈS tous les hooks
   if (announcerData === undefined) {
     return (
@@ -602,7 +597,6 @@ export default function AnnouncerProfilePage() {
               }}
               onBook={handleBook}
               onFinalize={handleFinalize}
-              onContact={handleContact}
             />
           </div>
         </div>

@@ -1,24 +1,54 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Ban, Calendar, Euro } from "lucide-react";
+import { Ban, Calendar, Euro, Loader2 } from "lucide-react";
 import { MissionCard } from "../../components/mission-card";
-import { getMissionsByStatus } from "@/app/lib/dashboard-data";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { useAuth } from "@/app/hooks/useAuth";
+import type { FunctionReturnType } from "convex/server";
+
+type MissionType = FunctionReturnType<typeof api.planning.missions.getMissionsByStatus>[number];
 
 export default function MissionsAnnuleesPage() {
-  const missions = getMissionsByStatus("cancelled");
-  const totalAmount = missions.reduce((sum, m) => sum + m.amount, 0);
+  const { token, isLoading: authLoading } = useAuth();
+
+  // Query Convex pour les missions "cancelled"
+  const missions = useQuery(
+    api.planning.missions.getMissionsByStatus,
+    token ? { token, status: "cancelled" } : "skip"
+  );
+
+  const isLoading = authLoading || missions === undefined;
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("fr-FR", {
       style: "currency",
       currency: "EUR",
       minimumFractionDigits: 0,
-    }).format(amount);
+    }).format(amount / 100);
   };
 
+  if (isLoading || !missions) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-gray-600 mx-auto mb-4" />
+          <p className="text-text-light">Chargement des missions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // missions est garanti défini ici grâce à la vérification ci-dessus
+  const missionsList = missions;
+  let totalAmount = 0;
+  for (const m of missionsList) {
+    totalAmount += m.announcerEarnings ?? m.amount * 0.85;
+  }
+
   // Sort by start date (most recent first)
-  const sortedMissions = [...missions].sort(
+  const sortedMissions = [...missionsList].sort(
     (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
   );
 
@@ -38,14 +68,14 @@ export default function MissionsAnnuleesPage() {
               Missions annulées
             </h1>
             <p className="text-text-light">
-              {missions.length} mission{missions.length > 1 ? "s" : ""} annulée{missions.length > 1 ? "s" : ""}
+              {missionsList.length} mission{missionsList.length > 1 ? "s" : ""} annulée{missionsList.length > 1 ? "s" : ""}
             </p>
           </div>
         </div>
       </motion.div>
 
       {/* Stats */}
-      {missions.length > 0 && (
+      {missionsList.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -59,7 +89,7 @@ export default function MissionsAnnuleesPage() {
               </div>
               <div>
                 <p className="text-sm text-text-light">Annulées</p>
-                <p className="text-2xl font-bold text-foreground">{missions.length}</p>
+                <p className="text-2xl font-bold text-foreground">{missionsList.length}</p>
               </div>
             </div>
           </div>
@@ -112,14 +142,14 @@ export default function MissionsAnnuleesPage() {
             </p>
           </div>
         ) : (
-          sortedMissions.map((mission, index) => (
+          sortedMissions.map((mission: MissionType, index: number) => (
             <motion.div
               key={mission.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 + index * 0.05 }}
             >
-              <MissionCard mission={mission} />
+              <MissionCard mission={mission} token={token} />
             </motion.div>
           ))
         )}

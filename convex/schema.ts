@@ -1010,6 +1010,24 @@ export default defineSchema({
     .index("by_user_type", ["userId", "type"])
     .index("by_expires", ["expiresAt"]),
 
+  // Pages légales (CGV, CGU, Confidentialité, Annulation)
+  legalPages: defineTable({
+    slug: v.string(), // "cgv", "cgu", "privacy", "cancellation"
+    title: v.string(), // Titre affiché
+    content: v.string(), // Contenu HTML
+    version: v.number(), // Version du document
+    status: v.union(
+      v.literal("draft"), // Brouillon
+      v.literal("published") // Publié
+    ),
+    lastModifiedBy: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    publishedAt: v.optional(v.number()),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_status", ["status"]),
+
   // Demandes de visite (mode maintenance)
   visitRequests: defineTable({
     name: v.string(),

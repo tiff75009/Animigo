@@ -1,21 +1,63 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { CalendarClock, Euro, Calendar, MessageSquare } from "lucide-react";
+import { CalendarClock, Euro, Calendar, MessageSquare, Loader2 } from "lucide-react";
 import { MissionCard } from "../../components/mission-card";
-import { getMissionsByStatus } from "@/app/lib/dashboard-data";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { useAuth } from "@/app/hooks/useAuth";
+import { useRouter } from "next/navigation";
+import type { FunctionReturnType } from "convex/server";
+
+type MissionType = FunctionReturnType<typeof api.planning.missions.getMissionsByStatus>[number];
 
 export default function MissionsEnCoursPage() {
-  const missions = getMissionsByStatus("in_progress");
-  const totalAmount = missions.reduce((sum, m) => sum + m.amount, 0);
+  const { token, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+
+  // Query Convex pour les missions "in_progress"
+  const missions = useQuery(
+    api.planning.missions.getMissionsByStatus,
+    token ? { token, status: "in_progress" } : "skip"
+  );
+
+  // Query pour les coordonnées de l'annonceur
+  const announcerData = useQuery(
+    api.planning.missions.getAnnouncerCoordinates,
+    token ? { token } : "skip"
+  );
+
+  const isLoading = authLoading || missions === undefined;
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("fr-FR", {
       style: "currency",
       currency: "EUR",
       minimumFractionDigits: 0,
-    }).format(amount);
+    }).format(amount / 100);
   };
+
+  const handleContact = (missionId: string) => {
+    router.push(`/dashboard/messagerie?mission=${missionId}`);
+  };
+
+  if (isLoading || !missions) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-text-light">Chargement des missions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // missions est garanti défini ici grâce à la vérification ci-dessus
+  const missionsList = missions;
+  let totalAmount = 0;
+  for (const m of missionsList) {
+    totalAmount += m.announcerEarnings ?? m.amount * 0.85;
+  }
 
   return (
     <div className="space-y-6">
@@ -33,14 +75,14 @@ export default function MissionsEnCoursPage() {
               Missions en cours
             </h1>
             <p className="text-text-light">
-              {missions.length} mission{missions.length > 1 ? "s" : ""} actuellement en cours
+              {missionsList.length} mission{missionsList.length > 1 ? "s" : ""} actuellement en cours
             </p>
           </div>
         </div>
       </motion.div>
 
       {/* Stats */}
-      {missions.length > 0 && (
+      {missionsList.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -54,7 +96,7 @@ export default function MissionsEnCoursPage() {
               </div>
               <div>
                 <p className="text-sm text-text-light">En cours</p>
-                <p className="text-2xl font-bold text-foreground">{missions.length}</p>
+                <p className="text-2xl font-bold text-foreground">{missionsList.length}</p>
               </div>
             </div>
           </div>
@@ -89,7 +131,7 @@ export default function MissionsEnCoursPage() {
       </motion.div>
 
       {/* Quick actions */}
-      {missions.length > 0 && (
+      {missionsList.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -114,7 +156,7 @@ export default function MissionsEnCoursPage() {
         transition={{ delay: 0.2 }}
         className="space-y-4"
       >
-        {missions.length === 0 ? (
+        {missionsList.length === 0 ? (
           <div className="bg-white rounded-2xl p-12 shadow-md text-center">
             <div className="text-6xl mb-4">🏖️</div>
             <h3 className="text-xl font-semibold text-foreground mb-2">
@@ -125,14 +167,19 @@ export default function MissionsEnCoursPage() {
             </p>
           </div>
         ) : (
-          missions.map((mission, index) => (
+          missionsList.map((mission: MissionType, index: number) => (
             <motion.div
               key={mission.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 + index * 0.05 }}
             >
-              <MissionCard mission={mission} />
+              <MissionCard
+                mission={mission}
+                announcerCoordinates={announcerData?.coordinates}
+                token={token}
+                onContact={handleContact}
+              />
             </motion.div>
           ))
         )}

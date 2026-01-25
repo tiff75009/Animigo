@@ -54,13 +54,31 @@ interface PayoutHistoryItem {
   missionsCount: number;
 }
 
+// Type pour les paiements autorisés (en capture)
+interface AuthorizedPayment {
+  id: Id<"missions">;
+  clientId: Id<"users">;
+  clientName: string;
+  animal: { name: string; type: string; emoji: string };
+  serviceName: string;
+  serviceCategory: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+  amount: number;
+  announcerEarnings: number;
+  paymentStatus: string;
+  authorizedAt?: number;
+  autoCaptureScheduledAt?: number;
+}
+
 // Commission tiers
 const commissionTiers = [
-  { min: 0, max: 149.99, rate: 15, label: "0 - 149\u20AC" },
-  { min: 150, max: 499.99, rate: 10, label: "150 - 499\u20AC" },
-  { min: 500, max: 999.99, rate: 7, label: "500 - 999\u20AC" },
-  { min: 1000, max: 1499.99, rate: 5, label: "1000 - 1499\u20AC" },
-  { min: 1500, max: Infinity, rate: 3, label: "1500\u20AC et +" },
+  { min: 0, max: 149.99, rate: 15, label: "0 - 149€" },
+  { min: 150, max: 499.99, rate: 10, label: "150 - 499€" },
+  { min: 500, max: 999.99, rate: 7, label: "500 - 999€" },
+  { min: 1000, max: 1499.99, rate: 5, label: "1000 - 1499€" },
+  { min: 1500, max: Infinity, rate: 3, label: "1500€ et +" },
 ];
 
 // Calculate commission based on amount
@@ -129,7 +147,7 @@ function PendingPaymentCard({
 
         {/* Amount */}
         <div className="text-right">
-          <p className="text-xl font-bold text-primary">{mission.amount}\u20AC</p>
+          <p className="text-xl font-bold text-primary">{mission.amount}€</p>
           <p className="text-xs text-text-light">À encaisser</p>
         </div>
       </div>
@@ -248,7 +266,7 @@ function CashoutModal({
                 Demande envoyée !
               </h3>
               <p className="text-text-light">
-                Votre virement de {net.toFixed(2)}\u20AC sera effectué sous 48h.
+                Votre virement de {net.toFixed(2)}€ sera effectué sous 48h.
               </p>
             </div>
           ) : (
@@ -282,7 +300,7 @@ function CashoutModal({
                     onClick={() => setCashoutType("full")}
                     whileTap={{ scale: 0.98 }}
                   >
-                    Tout ({totalAmount}\u20AC)
+                    Tout ({totalAmount}€)
                   </motion.button>
                   <motion.button
                     className={cn(
@@ -313,11 +331,11 @@ function CashoutModal({
                         placeholder="Montant"
                       />
                       <span className="absolute right-4 top-1/2 -translate-y-1/2 text-text-light font-semibold">
-                        \u20AC
+                        €
                       </span>
                     </div>
                     <p className="text-xs text-text-light mt-2">
-                      Maximum disponible : {totalAmount}\u20AC
+                      Maximum disponible : {totalAmount}€
                     </p>
                   </motion.div>
                 )}
@@ -328,18 +346,18 @@ function CashoutModal({
                 <div className="space-y-3">
                   <div className="flex justify-between">
                     <span className="text-text-light">Montant brut</span>
-                    <span className="font-semibold text-foreground">{amount.toFixed(2)}\u20AC</span>
+                    <span className="font-semibold text-foreground">{amount.toFixed(2)}€</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-text-light flex items-center gap-1">
                       Commission ({rate}%)
                       <Info className="w-3 h-3" />
                     </span>
-                    <span className="font-semibold text-red-500">-{fee.toFixed(2)}\u20AC</span>
+                    <span className="font-semibold text-red-500">-{fee.toFixed(2)}€</span>
                   </div>
                   <div className="border-t border-gray-200 pt-3 flex justify-between">
                     <span className="font-semibold text-foreground">Montant net</span>
-                    <span className="text-xl font-bold text-primary">{net.toFixed(2)}\u20AC</span>
+                    <span className="text-xl font-bold text-primary">{net.toFixed(2)}€</span>
                   </div>
                 </div>
               </div>
@@ -351,7 +369,7 @@ function CashoutModal({
                   <div className="text-sm text-blue-700">
                     <p className="font-semibold">Astuce</p>
                     <p>
-                      En encaissant {commissionTiers.find((t) => t.min > amount)?.min || 1500}\u20AC ou plus,
+                      En encaissant {commissionTiers.find((t) => t.min > amount)?.min || 1500}€ ou plus,
                       vous bénéficiez d&apos;un taux réduit de {commissionTiers.find((t) => t.min > amount)?.rate || 3}%.
                     </p>
                   </div>
@@ -372,7 +390,7 @@ function CashoutModal({
                       <span className="text-text-light flex items-center gap-1">
                         {mission.animal.emoji} {mission.animal.name} - {mission.clientName}
                       </span>
-                      <span className="font-medium">{mission.amount}\u20AC</span>
+                      <span className="font-medium">{mission.amount}€</span>
                     </div>
                   ))}
                 </div>
@@ -399,7 +417,7 @@ function CashoutModal({
                 ) : (
                   <>
                     <ArrowDownToLine className="w-5 h-5" />
-                    Encaisser {net.toFixed(2)}\u20AC
+                    Encaisser {net.toFixed(2)}€
                   </>
                 )}
               </motion.button>
@@ -454,7 +472,7 @@ function TransactionItem({ transaction }: { transaction: PayoutHistoryItem }) {
               "font-bold",
               transaction.status === "completed" ? "text-green-600" : "text-orange-600"
             )}>
-              +{transaction.amount}\u20AC
+              +{transaction.amount}€
             </p>
             <p className="text-xs text-text-light">Net reçu</p>
           </div>
@@ -477,15 +495,15 @@ function TransactionItem({ transaction }: { transaction: PayoutHistoryItem }) {
             <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-text-light">Montant brut</span>
-                <span className="text-foreground">{grossAmount}\u20AC</span>
+                <span className="text-foreground">{grossAmount}€</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-text-light">Commission</span>
-                <span className="text-red-500">-{fee}\u20AC</span>
+                <span className="text-red-500">-{fee}€</span>
               </div>
               <div className="flex justify-between font-semibold pt-2 border-t border-gray-200">
                 <span className="text-foreground">Montant net</span>
-                <span className="text-green-600">{transaction.amount}\u20AC</span>
+                <span className="text-green-600">{transaction.amount}€</span>
               </div>
               {transaction.missions.length > 0 && (
                 <div className="pt-2 border-t border-gray-200">
@@ -546,6 +564,11 @@ export default function PaiementsPage() {
     token ? { sessionToken: token, limit: 10 } : "skip"
   );
 
+  const authorizedPayments = useQuery(
+    api.dashboard.payments.getAuthorizedPayments,
+    token ? { sessionToken: token } : "skip"
+  );
+
   // Loading state
   const isLoading = authLoading || pendingPayments === undefined || stats === undefined;
 
@@ -556,9 +579,11 @@ export default function PaiementsPage() {
   // Data
   const pendingPaymentMissions = (pendingPayments || []) as PendingMission[];
   const payoutHistoryData = (payoutHistory || []) as PayoutHistoryItem[];
+  const authorizedPaymentsList = (authorizedPayments || []) as AuthorizedPayment[];
   const totalPending = stats?.totalPending || 0;
   const totalCollected = stats?.totalCollected || 0;
   const totalEarned = stats?.totalEarned || 0;
+  const totalAuthorized = authorizedPaymentsList.reduce((sum: number, p) => sum + p.announcerEarnings, 0);
 
   const selectedMissions = pendingPaymentMissions.filter((m) =>
     selectedMissionIds.includes(m.id)
@@ -610,30 +635,79 @@ export default function PaiementsPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="grid grid-cols-1 md:grid-cols-3 gap-4"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
       >
-        <div className="bg-white rounded-2xl p-5 shadow-lg">
+        <div
+          className="bg-white rounded-2xl p-5 shadow-lg cursor-help group relative"
+          title="Paiements confirmés par les clients, en attente de capture automatique après la mission"
+        >
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-blue-100 rounded-xl">
+              <CreditCard className="w-5 h-5 text-blue-600" />
+            </div>
+            <span className="text-sm text-text-light flex items-center gap-1">
+              Confirmé
+              <Info className="w-3 h-3 opacity-50" />
+            </span>
+          </div>
+          <p className="text-3xl font-bold text-blue-600">{totalAuthorized}€</p>
+          <p className="text-sm text-text-light mt-1">
+            {authorizedPaymentsList.length} mission{authorizedPaymentsList.length > 1 ? "s" : ""}
+          </p>
+          {/* Tooltip */}
+          <div className="absolute hidden group-hover:block bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-10">
+            <p className="font-semibold mb-1">Paiement confirmé</p>
+            <p>Le client a validé le paiement. La capture sera effectuée automatiquement 48h après la fin de la mission.</p>
+            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-gray-900" />
+          </div>
+        </div>
+
+        <div
+          className="bg-white rounded-2xl p-5 shadow-lg cursor-help group relative"
+          title="Missions terminées avec paiement capturé, virement automatique le 1er du mois"
+        >
           <div className="flex items-center gap-3 mb-3">
             <div className="p-2 bg-orange-100 rounded-xl">
               <Clock className="w-5 h-5 text-orange-600" />
             </div>
-            <span className="text-sm text-text-light">À encaisser</span>
+            <span className="text-sm text-text-light flex items-center gap-1">
+              À encaisser
+              <Info className="w-3 h-3 opacity-50" />
+            </span>
           </div>
-          <p className="text-3xl font-bold text-orange-600">{totalPending}\u20AC</p>
+          <p className="text-3xl font-bold text-orange-600">{totalPending}€</p>
           <p className="text-sm text-text-light mt-1">
             {pendingPaymentMissions.length} mission{pendingPaymentMissions.length > 1 ? "s" : ""}
           </p>
+          {/* Tooltip */}
+          <div className="absolute hidden group-hover:block bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-10">
+            <p className="font-semibold mb-1">À encaisser</p>
+            <p>Missions terminées dont le paiement a été capturé. Le virement est effectué automatiquement le 1er de chaque mois.</p>
+            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-gray-900" />
+          </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-5 shadow-lg">
+        <div
+          className="bg-white rounded-2xl p-5 shadow-lg cursor-help group relative"
+          title="Montant total déjà viré sur votre compte bancaire"
+        >
           <div className="flex items-center gap-3 mb-3">
             <div className="p-2 bg-green-100 rounded-xl">
               <CheckCircle className="w-5 h-5 text-green-600" />
             </div>
-            <span className="text-sm text-text-light">Déjà encaissé</span>
+            <span className="text-sm text-text-light flex items-center gap-1">
+              Encaissé
+              <Info className="w-3 h-3 opacity-50" />
+            </span>
           </div>
-          <p className="text-3xl font-bold text-green-600">{totalCollected}\u20AC</p>
+          <p className="text-3xl font-bold text-green-600">{totalCollected}€</p>
           <p className="text-sm text-text-light mt-1">Total reçu</p>
+          {/* Tooltip */}
+          <div className="absolute hidden group-hover:block bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-10">
+            <p className="font-semibold mb-1">Encaissé</p>
+            <p>Montant total des virements effectués sur votre compte bancaire.</p>
+            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-gray-900" />
+          </div>
         </div>
 
         <div className="bg-gradient-to-r from-primary to-secondary rounded-2xl p-5 shadow-lg text-white">
@@ -643,7 +717,7 @@ export default function PaiementsPage() {
             </div>
             <span className="text-sm text-white/80">Total gagné</span>
           </div>
-          <p className="text-3xl font-bold">{totalEarned}\u20AC</p>
+          <p className="text-3xl font-bold">{totalEarned}€</p>
           <p className="text-sm text-white/80 mt-1">Brut cumulé</p>
         </div>
       </motion.div>
@@ -713,18 +787,18 @@ export default function PaiementsPage() {
                         {selectedMissionIds.length} mission{selectedMissionIds.length > 1 ? "s" : ""} sélectionnée{selectedMissionIds.length > 1 ? "s" : ""}
                       </span>
                       <span className="text-xl font-bold text-primary">
-                        {selectedAmount}\u20AC
+                        {selectedAmount}€
                       </span>
                     </div>
 
                     <div className="flex items-center justify-between text-sm text-text-light mb-4">
                       <span>Commission ({rate}%)</span>
-                      <span>-{fee.toFixed(2)}\u20AC</span>
+                      <span>-{fee.toFixed(2)}€</span>
                     </div>
 
                     <div className="flex items-center justify-between mb-4 pt-3 border-t border-primary/20">
                       <span className="font-semibold text-foreground">Vous recevrez</span>
-                      <span className="text-2xl font-bold text-green-600">{net.toFixed(2)}\u20AC</span>
+                      <span className="text-2xl font-bold text-green-600">{net.toFixed(2)}€</span>
                     </div>
 
                     <motion.button
@@ -772,6 +846,95 @@ export default function PaiementsPage() {
           </div>
         </motion.div>
       </div>
+
+      {/* Authorized Payments (Confirmés) */}
+      {authorizedPaymentsList.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          className="bg-white rounded-2xl shadow-lg p-6"
+        >
+          <h2 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
+            <CreditCard className="w-5 h-5 text-blue-600" />
+            Paiements confirmés
+            <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
+              {authorizedPaymentsList.length}
+            </span>
+          </h2>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4 flex items-start gap-2">
+            <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-blue-700">
+              <p className="font-semibold">Paiements confirmés par les clients</p>
+              <p>
+                Ces paiements ont été validés par les clients et seront automatiquement capturés 48h après la fin de la mission.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {authorizedPaymentsList.map((payment) => {
+              const formatDate = (dateStr: string) => {
+                return new Date(dateStr).toLocaleDateString("fr-FR", {
+                  day: "numeric",
+                  month: "short",
+                });
+              };
+
+              const captureDate = payment.autoCaptureScheduledAt
+                ? new Date(payment.autoCaptureScheduledAt).toLocaleDateString("fr-FR", {
+                    day: "numeric",
+                    month: "short",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "À planifier";
+
+              return (
+                <div
+                  key={payment.id}
+                  className="bg-gray-50 rounded-xl p-4 border border-gray-100"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{payment.animal.emoji}</span>
+                      <div>
+                        <h4 className="font-semibold text-foreground">
+                          {payment.serviceName} - {payment.animal.name}
+                        </h4>
+                        <p className="text-sm text-text-light">
+                          {payment.clientName} &bull; {formatDate(payment.startDate)} - {formatDate(payment.endDate)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xl font-bold text-blue-600">{payment.announcerEarnings}€</p>
+                      <p className="text-xs text-text-light">Vous recevrez</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={cn(
+                        "px-2 py-0.5 text-xs font-medium rounded-full",
+                        payment.status === "upcoming"
+                          ? "bg-purple-100 text-purple-700"
+                          : "bg-blue-100 text-blue-700"
+                      )}>
+                        {payment.status === "upcoming" ? "À venir" : "En cours"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 text-sm text-text-light">
+                      <Calendar className="w-4 h-4" />
+                      <span>Capture prévue: {captureDate}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
 
       {/* Transaction History */}
       <motion.div

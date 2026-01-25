@@ -68,8 +68,11 @@ export interface ConvexMission {
 interface MissionCardProps {
   mission: ConvexMission;
   showActions?: boolean;
+  showUpcomingActions?: boolean;
   onAccept?: (id: string) => void;
   onRefuse?: (id: string) => void;
+  onCancel?: (id: string) => void;
+  onContact?: (id: string) => void;
   announcerCoordinates?: { lat: number; lng: number } | null;
   token?: string | null;
 }
@@ -212,8 +215,11 @@ function formatDistance(km: number): string {
 export function MissionCard({
   mission,
   showActions = false,
+  showUpcomingActions = false,
   onAccept,
   onRefuse,
+  onCancel,
+  onContact,
   announcerCoordinates,
   token,
 }: MissionCardProps) {
@@ -330,6 +336,32 @@ export function MissionCard({
               <X className="w-4 h-4" />
               Refuser
             </motion.button>
+          </div>
+        )}
+
+        {/* Actions pour les missions à venir (upcoming) ou en cours (in_progress) */}
+        {(mission.status === "upcoming" || mission.status === "in_progress") && (
+          <div className="p-2 border-t border-slate-100 flex gap-2">
+            <motion.button
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-secondary hover:bg-secondary/90 text-white rounded-lg text-sm font-semibold"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => onContact?.(mission.id as string)}
+            >
+              <MessageSquare className="w-4 h-4" />
+              Contacter
+            </motion.button>
+            {mission.status === "upcoming" && (
+              <motion.button
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-semibold"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => onCancel?.(mission.id as string)}
+              >
+                <X className="w-4 h-4" />
+                Annuler
+              </motion.button>
+            )}
           </div>
         )}
       </motion.div>

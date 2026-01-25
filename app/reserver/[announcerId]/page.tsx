@@ -182,7 +182,9 @@ function calculateSmartPrice(params: {
         firstDayAmount = dailyRate;
         firstDayIsFullDay = true;
       } else {
-        firstDayAmount = Math.round(hourlyRate * firstDayHours);
+        // Cap hourly amount at daily rate to avoid paying more for fewer hours
+        const hourlyAmount = Math.round(hourlyRate * firstDayHours);
+        firstDayAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
       }
     } else {
       // Full day
@@ -222,7 +224,9 @@ function calculateSmartPrice(params: {
     firstDayAmount = dailyRate;
     firstDayIsFullDay = true;
   } else if (hourlyRate > 0) {
-    firstDayAmount = Math.round(hourlyRate * firstDayHours);
+    // Cap hourly amount at daily rate to avoid paying more for fewer hours
+    const hourlyAmount = Math.round(hourlyRate * firstDayHours);
+    firstDayAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
   } else {
     firstDayAmount = dailyRate;
     firstDayIsFullDay = true;
@@ -239,7 +243,9 @@ function calculateSmartPrice(params: {
     lastDayAmount = dailyRate;
     lastDayIsFullDay = true;
   } else if (hourlyRate > 0) {
-    lastDayAmount = Math.round(hourlyRate * lastDayHours);
+    // Cap hourly amount at daily rate to avoid paying more for fewer hours
+    const hourlyAmount = Math.round(hourlyRate * lastDayHours);
+    lastDayAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
   } else {
     lastDayAmount = dailyRate;
     lastDayIsFullDay = true;
@@ -682,8 +688,11 @@ export default function ReserverPage({
   // Loading state
   if (!announcerData || !serviceDetails) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
+      <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-secondary/5" />
+        <div className="absolute top-20 left-10 w-72 h-72 bg-primary/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 right-10 w-96 h-96 bg-secondary/10 rounded-full blur-3xl" />
+        <div className="text-center relative z-10">
           <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-2" />
           <p className="text-text-light">Chargement...</p>
         </div>
@@ -694,8 +703,11 @@ export default function ReserverPage({
   // Announcer not found
   if (!announcerData) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
+      <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-secondary/5" />
+        <div className="absolute top-20 left-10 w-72 h-72 bg-primary/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 right-10 w-96 h-96 bg-secondary/10 rounded-full blur-3xl" />
+        <div className="text-center relative z-10">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h1 className="text-xl font-bold text-foreground mb-2">Annonceur introuvable</h1>
           <Link href="/" className="text-primary hover:underline">
@@ -707,9 +719,83 @@ export default function ReserverPage({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background relative overflow-hidden">
+      {/* Background gradient */}
+      <div className="fixed inset-0 bg-gradient-to-br from-primary/5 via-background to-secondary/5 pointer-events-none" />
+
+      {/* Decorative animated blobs */}
+      <motion.div
+        className="fixed top-20 -left-20 w-72 h-72 bg-primary/10 rounded-full blur-3xl pointer-events-none"
+        animate={{
+          scale: [1, 1.1, 1],
+          opacity: [0.3, 0.5, 0.3],
+        }}
+        transition={{
+          duration: 8,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      />
+      <motion.div
+        className="fixed bottom-40 -right-20 w-96 h-96 bg-secondary/10 rounded-full blur-3xl pointer-events-none"
+        animate={{
+          scale: [1, 1.15, 1],
+          opacity: [0.3, 0.4, 0.3],
+        }}
+        transition={{
+          duration: 10,
+          repeat: Infinity,
+          ease: "easeInOut",
+          delay: 2,
+        }}
+      />
+      <motion.div
+        className="fixed top-1/2 left-1/3 w-48 h-48 bg-purple/5 rounded-full blur-3xl pointer-events-none"
+        animate={{
+          x: [0, 20, 0],
+          y: [0, -15, 0],
+          opacity: [0.2, 0.35, 0.2],
+        }}
+        transition={{
+          duration: 12,
+          repeat: Infinity,
+          ease: "easeInOut",
+          delay: 4,
+        }}
+      />
+
+      {/* Floating paw decorations - desktop only */}
+      <div className="hidden lg:block fixed inset-0 pointer-events-none overflow-hidden">
+        {[
+          { top: "15%", left: "8%", delay: 0, size: "text-3xl" },
+          { top: "35%", right: "5%", delay: 1.5, size: "text-2xl" },
+          { top: "65%", left: "5%", delay: 3, size: "text-2xl" },
+          { top: "80%", right: "10%", delay: 4.5, size: "text-xl" },
+        ].map((pos, i) => (
+          <motion.span
+            key={i}
+            className={`absolute ${pos.size} opacity-10`}
+            style={{ top: pos.top, left: pos.left, right: pos.right }}
+            initial={{ opacity: 0, scale: 0.5 }}
+            animate={{
+              opacity: [0.05, 0.15, 0.05],
+              y: [0, -10, 0],
+              rotate: [-5, 5, -5],
+            }}
+            transition={{
+              duration: 6,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: pos.delay,
+            }}
+          >
+            🐾
+          </motion.span>
+        ))}
+      </div>
+
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
+      <header className="bg-white/80 backdrop-blur-sm border-b border-gray-200/50 sticky top-0 z-40 relative">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-4">
           <button
             onClick={() => router.back()}
@@ -747,7 +833,7 @@ export default function ReserverPage({
       </header>
 
       {/* Main Content */}
-      <main className="max-w-2xl mx-auto px-4 py-6">
+      <main className="max-w-2xl mx-auto px-4 py-6 relative z-10">
         {/* Step Indicator */}
         <StepIndicator
           currentStep={step}
@@ -836,6 +922,7 @@ export default function ReserverPage({
                 selectedDate={bookingData.selectedDate}
                 selectedEndDate={bookingData.selectedEndDate}
                 selectedTime={bookingData.selectedTime}
+                selectedEndTime={bookingData.selectedEndTime}
                 includeOvernightStay={bookingData.includeOvernightStay}
                 days={days}
                 selectedOptionIds={bookingData.selectedOptionIds}

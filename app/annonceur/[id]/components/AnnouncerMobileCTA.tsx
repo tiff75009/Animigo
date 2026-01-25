@@ -409,6 +409,7 @@ export default function AnnouncerMobileCTA({
                           selection={bookingSelection}
                           priceBreakdown={priceBreakdown ?? null}
                           commissionRate={commissionRate}
+                          isRangeMode={isRangeMode}
                           compact
                         />
 

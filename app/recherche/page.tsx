@@ -1056,6 +1056,16 @@ function DatePickerDropdown({
   const [selectingEnd, setSelectingEnd] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
+  // Réinitialiser l'état de sélection quand le modal s'ouvre
+  // pour permettre de resélectionner une nouvelle date de début
+  useEffect(() => {
+    if (isOpen) {
+      setSelectingEnd(false);
+      setRangeStart(startDate);
+      setRangeEnd(endDate);
+    }
+  }, [isOpen, startDate, endDate]);
+
   // Détecter si on est sur mobile
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 640);

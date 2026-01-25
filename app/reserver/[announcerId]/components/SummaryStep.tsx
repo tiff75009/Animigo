@@ -38,6 +38,7 @@ interface SummaryStepProps {
   selectedDate: string;
   selectedEndDate: string | null;
   selectedTime: string | null;
+  selectedEndTime: string | null;
   includeOvernightStay: boolean;
   days: number;
   selectedOptionIds: string[];
@@ -76,6 +77,7 @@ export default function SummaryStep({
   selectedDate,
   selectedEndDate,
   selectedTime,
+  selectedEndTime,
   includeOvernightStay,
   days,
   selectedOptionIds,
@@ -85,6 +87,39 @@ export default function SummaryStep({
   error,
 }: SummaryStepProps) {
   const isMultiDay = selectedEndDate && selectedEndDate !== selectedDate;
+
+  // Formater l'heure (9:00 -> 9h, 14:30 -> 14h30)
+  const formatTime = (time: string) => {
+    const [hours, minutes] = time.split(":");
+    return minutes === "00" ? `${parseInt(hours)}h` : `${parseInt(hours)}h${minutes}`;
+  };
+
+  // Calculer la durée totale en heures
+  const calculateTotalHours = () => {
+    if (!selectedTime) return 0;
+
+    const startParts = selectedTime.split(":").map(Number);
+    const startHour = startParts[0] + startParts[1] / 60;
+
+    if (selectedEndTime) {
+      const endParts = selectedEndTime.split(":").map(Number);
+      const endHour = endParts[0] + endParts[1] / 60;
+
+      if (isMultiDay) {
+        // Multi-jours: heures du premier jour + jours complets + heures du dernier jour
+        const firstDayHours = 20 - startHour; // Jusqu'à 20h par défaut
+        const lastDayHours = endHour - 8; // Depuis 8h par défaut
+        const middleDays = days - 2;
+        return firstDayHours + (middleDays > 0 ? middleDays * 8 : 0) + lastDayHours;
+      } else {
+        // Même jour
+        return endHour - startHour;
+      }
+    }
+    return 0;
+  };
+
+  const totalHours = calculateTotalHours();
 
   // Calculer la commission et le total avec commission
   const commissionAmount = Math.round((priceBreakdown.totalAmount * commissionRate) / 100);
@@ -166,162 +201,245 @@ export default function SummaryStep({
             </span>
           </div>
         )}
-        <div className="flex justify-between text-sm">
-          <span className="text-text-light">Dates</span>
-          <span className="font-medium text-foreground">
-            {formatDate(selectedDate)}
-            {isMultiDay && <> → {formatDate(selectedEndDate)}</>}
-          </span>
-        </div>
-        {selectedTime && (
-          <div className="flex justify-between text-sm">
-            <span className="text-text-light">Heure</span>
-            <span className="font-medium text-foreground">{selectedTime}</span>
+        {/* Affichage des dates et horaires - format combiné */}
+        <div className="text-sm">
+          <span className="text-text-light block mb-1">Date et horaire</span>
+          <div className="font-medium text-foreground">
+            {isMultiDay && selectedTime && selectedEndTime ? (
+              // Multi-jours avec heures
+              <span>
+                Du {formatDate(selectedDate)} à {formatTime(selectedTime)} jusqu&apos;au {formatDate(selectedEndDate)} à {formatTime(selectedEndTime)}
+              </span>
+            ) : selectedTime && selectedEndTime ? (
+              // Même jour avec plage horaire
+              <span>
+                {formatDate(selectedDate)} de {formatTime(selectedTime)} à {formatTime(selectedEndTime)}
+              </span>
+            ) : selectedTime ? (
+              // Même jour avec heure de début seulement
+              <span>
+                {formatDate(selectedDate)} à {formatTime(selectedTime)}
+              </span>
+            ) : isMultiDay ? (
+              // Multi-jours sans heures
+              <span>
+                Du {formatDate(selectedDate)} au {formatDate(selectedEndDate)}
+              </span>
+            ) : (
+              // Date simple
+              <span>{formatDate(selectedDate)}</span>
+            )}
           </div>
-        )}
+          {/* Durée */}
+          {(days > 1 || totalHours > 0) && (
+            <div className="flex items-center gap-1 mt-1.5 text-xs text-text-light">
+              <Clock className="w-3 h-3" />
+              {days > 1 ? (
+                <span>
+                  {days} jour{days > 1 ? "s" : ""} · {totalHours > 0 ? `${totalHours.toFixed(1).replace(".0", "")}h au total` : ""}
+                  {totalHours > 0 && days > 1 && (
+                    <span className="text-gray-400"> ({(totalHours / days).toFixed(1).replace(".0", "")}h/jour)</span>
+                  )}
+                </span>
+              ) : totalHours > 0 ? (
+                <span>Durée : {totalHours.toFixed(1).replace(".0", "")}h</span>
+              ) : null}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Price Breakdown - Detailed */}
-      <div className="border-t border-gray-200 pt-4 space-y-2">
-        {/* Single day or first day */}
-        {priceBreakdown.firstDayHours > 0 && (
-          <div className="flex justify-between text-sm">
-            <span className="text-text-light flex items-center gap-1">
-              {isMultiDay ? (
-                <>
-                  <Sun className="w-3 h-3" />
-                  {formatDate(selectedDate)}
-                  {priceBreakdown.firstDayIsFullDay ? (
-                    " (journée)"
-                  ) : (
-                    <span className="text-primary">
-                      {" "}
-                      ({formatHours(priceBreakdown.firstDayHours)})
+      {/* Price Breakdown - Detailed - Tous les prix incluent la commission */}
+      <div className="border-t border-gray-200 pt-4 space-y-3">
+        {/* Tarifs de base */}
+        <div className="bg-gray-50 rounded-xl p-3 space-y-2">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Détail des tarifs</p>
+
+          {/* Helper: appliquer la commission */}
+          {(() => {
+            const withCommission = (amount: number) => Math.round(amount * (1 + commissionRate / 100));
+            const firstDayWithComm = withCommission(priceBreakdown.firstDayAmount);
+            const fullDaysWithComm = withCommission(priceBreakdown.fullDaysAmount);
+            const dailyRateWithComm = withCommission(priceBreakdown.dailyRate);
+            const hourlyRateWithComm = withCommission(priceBreakdown.hourlyRate);
+            const lastDayWithComm = withCommission(priceBreakdown.lastDayAmount);
+
+            return (
+              <>
+                {/* Prestation journalière */}
+                {isMultiDay ? (
+                  <>
+                    {/* Premier jour - toujours afficher les heures réelles */}
+                    <div className="flex justify-between text-sm">
+                      <span className="text-text-light flex items-center gap-2">
+                        <Sun className="w-4 h-4 text-amber-500" />
+                        <span>
+                          {formatDate(selectedDate)}
+                          <span className="text-gray-400 ml-1">
+                            {selectedTime ? (
+                              `(${formatTime(selectedTime)} → 20h · ${formatHours(priceBreakdown.firstDayHours)})`
+                            ) : (
+                              `(${formatHours(priceBreakdown.firstDayHours)})`
+                            )}
+                          </span>
+                        </span>
+                      </span>
+                      <span className="font-medium">{formatPrice(firstDayWithComm)}</span>
+                    </div>
+
+                    {/* Jours complets intermédiaires - avec dates */}
+                    {priceBreakdown.fullDays > 0 && (() => {
+                      // Calculer les dates des jours intermédiaires
+                      const startDateObj = new Date(selectedDate);
+                      const firstMiddleDay = new Date(startDateObj);
+                      firstMiddleDay.setDate(startDateObj.getDate() + 1);
+                      const lastMiddleDay = new Date(firstMiddleDay);
+                      lastMiddleDay.setDate(firstMiddleDay.getDate() + priceBreakdown.fullDays - 1);
+
+                      const formatShortDate = (date: Date) => date.toLocaleDateString("fr-FR", {
+                        day: "numeric",
+                        month: "short",
+                      });
+
+                      return (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-text-light flex items-center gap-2">
+                            <Sun className="w-4 h-4 text-amber-500" />
+                            <span>
+                              {priceBreakdown.fullDays === 1 ? (
+                                formatShortDate(firstMiddleDay)
+                              ) : (
+                                `${formatShortDate(firstMiddleDay)} → ${formatShortDate(lastMiddleDay)}`
+                              )}
+                              <span className="text-gray-400 ml-1">
+                                ({priceBreakdown.fullDays} jour{priceBreakdown.fullDays > 1 ? "s" : ""} · {formatPrice(dailyRateWithComm)}/jour)
+                              </span>
+                            </span>
+                          </span>
+                          <span className="font-medium">{formatPrice(fullDaysWithComm)}</span>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Dernier jour - toujours afficher les heures réelles */}
+                    {priceBreakdown.lastDayHours > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-text-light flex items-center gap-2">
+                          <Sun className="w-4 h-4 text-amber-500" />
+                          <span>
+                            {formatDate(selectedEndDate)}
+                            <span className="text-gray-400 ml-1">
+                              {selectedEndTime ? (
+                                `(8h → ${formatTime(selectedEndTime)} · ${formatHours(priceBreakdown.lastDayHours)})`
+                              ) : (
+                                `(${formatHours(priceBreakdown.lastDayHours)})`
+                              )}
+                            </span>
+                          </span>
+                        </span>
+                        <span className="font-medium">{formatPrice(lastDayWithComm)}</span>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  /* Même jour - afficher les heures réelles */
+                  priceBreakdown.firstDayHours > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-text-light flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-blue-500" />
+                        <span>
+                          {selectedTime && selectedEndTime ? (
+                            <>
+                              {formatTime(selectedTime)} → {formatTime(selectedEndTime)}
+                              <span className="text-gray-400 ml-1">
+                                ({formatHours(priceBreakdown.firstDayHours)}
+                                {priceBreakdown.firstDayIsFullDay || priceBreakdown.firstDayAmount === priceBreakdown.dailyRate
+                                  ? ` · ${formatPrice(dailyRateWithComm)}/jour`
+                                  : priceBreakdown.hourlyRate > 0
+                                    ? ` · ${formatPrice(hourlyRateWithComm)}/h`
+                                    : ""
+                                })
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              {formatHours(priceBreakdown.firstDayHours)} de prestation
+                              <span className="text-gray-400 ml-1">
+                                ({priceBreakdown.firstDayIsFullDay || priceBreakdown.firstDayAmount === priceBreakdown.dailyRate
+                                  ? `${formatPrice(dailyRateWithComm)}/jour`
+                                  : priceBreakdown.hourlyRate > 0
+                                    ? `${formatPrice(hourlyRateWithComm)}/h`
+                                    : ""
+                                })
+                              </span>
+                            </>
+                          )}
+                        </span>
+                      </span>
+                      <span className="font-medium">{formatPrice(firstDayWithComm)}</span>
+                    </div>
+                  )
+                )}
+              </>
+            );
+          })()}
+
+          {/* Nuits - prix avec commission incluse */}
+          {includeOvernightStay && priceBreakdown.nights > 0 && (
+            <div className="flex justify-between text-sm">
+              <span className="text-indigo-700 flex items-center gap-2">
+                <Moon className="w-4 h-4" />
+                <span>
+                  {priceBreakdown.nights} nuit{priceBreakdown.nights > 1 ? "s" : ""}
+                  {priceBreakdown.nightlyRate > 0 && (
+                    <span className="text-indigo-400 ml-1">
+                      ({formatPrice(Math.round(priceBreakdown.nightlyRate * (1 + commissionRate / 100)))}/nuit)
                     </span>
                   )}
-                </>
-              ) : (
-                <>
-                  <Clock className="w-3 h-3" />
-                  {priceBreakdown.firstDayIsFullDay
-                    ? "Journée complète"
-                    : `${formatHours(priceBreakdown.firstDayHours)} de prestation`}
-                </>
-              )}
-            </span>
-            <span className="font-medium">
-              {formatPrice(priceBreakdown.firstDayAmount)}
-            </span>
-          </div>
-        )}
-
-        {/* Full days in between */}
-        {priceBreakdown.fullDays > 0 && (
-          <div className="flex justify-between text-sm">
-            <span className="text-text-light flex items-center gap-1">
-              <Sun className="w-3 h-3" />
-              {priceBreakdown.fullDays} journée
-              {priceBreakdown.fullDays > 1 ? "s" : ""} complète
-              {priceBreakdown.fullDays > 1 ? "s" : ""}
-            </span>
-            <span className="font-medium">
-              {formatPrice(priceBreakdown.fullDaysAmount)}
-            </span>
-          </div>
-        )}
-
-        {/* Last day (for multi-day bookings) */}
-        {isMultiDay && priceBreakdown.lastDayHours > 0 && (
-          <div className="flex justify-between text-sm">
-            <span className="text-text-light flex items-center gap-1">
-              <Sun className="w-3 h-3" />
-              {formatDate(selectedEndDate)}
-              {priceBreakdown.lastDayIsFullDay ? (
-                " (journée)"
-              ) : (
-                <span className="text-primary">
-                  {" "}
-                  ({formatHours(priceBreakdown.lastDayHours)})
                 </span>
-              )}
-            </span>
-            <span className="font-medium">
-              {formatPrice(priceBreakdown.lastDayAmount)}
-            </span>
-          </div>
-        )}
-
-        {/* Overnight stays */}
-        {includeOvernightStay && priceBreakdown.nights > 0 && (
-          <div className="flex justify-between text-sm text-indigo-700">
-            <span className="flex items-center gap-1">
-              <Moon className="w-3 h-3" />
-              Garde de nuit ({priceBreakdown.nights} nuit
-              {priceBreakdown.nights > 1 ? "s" : ""})
-            </span>
-            <span className="font-medium">
-              +{formatPrice(priceBreakdown.nightsAmount)}
-            </span>
-          </div>
-        )}
-
-        {/* Options */}
-        {selectedOptionIds.length > 0 &&
-          selectedOptionIds.map((optId) => {
-            const opt = selectedService.options.find(
-              (o: ServiceOption) => o.id === optId
-            );
-            if (!opt) return null;
-            return (
-              <div
-                key={optId}
-                className="flex justify-between text-sm text-secondary"
-              >
-                <span>{opt.name}</span>
-                <span className="font-medium">+{formatPrice(opt.price)}</span>
-              </div>
-            );
-          })}
-
-        {/* Rate info (small text) */}
-        {(priceBreakdown.hourlyRate > 0 || priceBreakdown.dailyRate > 0) && (
-          <div className="text-xs text-text-light pt-1">
-            {priceBreakdown.hourlyRate > 0 && (
-              <span>
-                Tarif horaire: {formatPrice(priceBreakdown.hourlyRate)}/h
               </span>
-            )}
-            {priceBreakdown.hourlyRate > 0 && priceBreakdown.dailyRate > 0 && (
-              <span> • </span>
-            )}
-            {priceBreakdown.dailyRate > 0 && (
-              <span>
-                Tarif journalier: {formatPrice(priceBreakdown.dailyRate)}/jour
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Sous-total et Commission */}
-        <div className="pt-2 border-t border-gray-200 mt-2 space-y-1">
-          <div className="flex justify-between text-sm">
-            <span className="text-text-light">Sous-total</span>
-            <span className="font-medium">
-              {formatPrice(priceBreakdown.totalAmount)}
-            </span>
-          </div>
-          <div className="flex justify-between text-sm text-text-light">
-            <span>Frais de service ({commissionRate}%)</span>
-            <span>+{formatPrice(commissionAmount)}</span>
-          </div>
+              <span className="font-medium text-indigo-700">+{formatPrice(Math.round(priceBreakdown.nightsAmount * (1 + commissionRate / 100)))}</span>
+            </div>
+          )}
         </div>
 
-        {/* Total */}
-        <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200 mt-2">
-          <span>Total à payer</span>
-          <span className="text-primary">
-            {formatPrice(totalWithCommission)}
-          </span>
+        {/* Options - prix avec commission incluse */}
+        {selectedOptionIds.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Options</p>
+            {selectedOptionIds.map((optId) => {
+              const opt = selectedService.options.find(
+                (o: ServiceOption) => o.id === optId
+              );
+              if (!opt) return null;
+              const optPriceWithCommission = Math.round(opt.price * (1 + commissionRate / 100));
+              return (
+                <div
+                  key={optId}
+                  className="flex justify-between text-sm text-secondary"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="w-4 h-4 flex items-center justify-center text-xs">✓</span>
+                    {opt.name}
+                  </span>
+                  <span className="font-medium">+{formatPrice(optPriceWithCommission)}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Total - frais de service inclus */}
+        <div className="pt-3 border-t border-gray-200 mt-2">
+          <div className="flex justify-between text-lg font-bold">
+            <span>Total à payer</span>
+            <span className="text-primary">
+              {formatPrice(totalWithCommission)}
+            </span>
+          </div>
+          <p className="text-xs text-gray-400 mt-1 text-right">
+            Frais de service inclus
+          </p>
         </div>
       </div>
     </div>

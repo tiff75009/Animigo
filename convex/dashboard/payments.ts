@@ -179,6 +179,54 @@ export const getAnnouncerPayoutHistory = query({
 });
 
 /**
+ * Obtenir les missions avec paiement autorisé en attente de capture
+ * Ce sont les missions "upcoming" ou "in_progress" où le paiement a été autorisé
+ */
+export const getAuthorizedPayments = query({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, args) => {
+    const { user } = await validateAnnouncerSession(ctx, args.sessionToken);
+
+    // Récupérer les missions de l'annonceur
+    const missions = await ctx.db
+      .query("missions")
+      .withIndex("by_announcer", (q) => q.eq("announcerId", user._id))
+      .collect();
+
+    // Filtrer les missions upcoming ou in_progress avec paymentStatus = "pending"
+    // Ce sont les missions où le paiement est autorisé mais pas encore capturé
+    const authorizedPayments = missions.filter(
+      (m) => (m.status === "upcoming" || m.status === "in_progress") && m.paymentStatus === "pending"
+    );
+
+    // Enrichir avec infos client et paiement
+    return Promise.all(
+      authorizedPayments.map(async (m) => {
+        const client = await ctx.db.get(m.clientId);
+        const payment = m.stripePaymentId ? await ctx.db.get(m.stripePaymentId) : null;
+
+        return {
+          id: m._id,
+          clientId: m.clientId,
+          clientName: client ? `${client.firstName} ${client.lastName}` : m.clientName,
+          animal: m.animal || { name: "Animal", type: "inconnu", emoji: "🐾" },
+          serviceName: m.serviceName,
+          serviceCategory: m.serviceCategory,
+          startDate: m.startDate,
+          endDate: m.endDate,
+          status: m.status,
+          amount: Math.round((m.amount || 0) / 100),
+          announcerEarnings: Math.round((m.announcerEarnings || m.amount * 0.85) / 100),
+          paymentStatus: payment?.status || "pending",
+          authorizedAt: payment?.authorizedAt,
+          autoCaptureScheduledAt: m.autoCaptureScheduledAt,
+        };
+      })
+    );
+  },
+});
+
+/**
  * Obtenir les missions complétées de l'annonceur avec tous les statuts de paiement
  */
 export const getCompletedMissions = query({

@@ -9,7 +9,6 @@ import {
   Plus,
   ArrowRight,
   Sparkles,
-  MessageCircle,
   MapPin,
   Home,
   CreditCard,
@@ -30,10 +29,10 @@ interface BookingSummaryProps {
   responseTime?: string;
   nextAvailable?: string;
   compact?: boolean;
+  isRangeMode?: boolean; // Mode plage (garde) avec date de début et fin
   clientAddress?: ClientAddress | null; // Adresse client pour service a domicile
   onBook?: () => void;
   onFinalize?: () => void; // Aller directement à la page de finalisation
-  onContact?: () => void;
   className?: string;
 }
 
@@ -47,10 +46,10 @@ export default function BookingSummary({
   responseTime,
   nextAvailable,
   compact = false,
+  isRangeMode = false,
   clientAddress,
   onBook,
   onFinalize,
-  onContact,
   className,
 }: BookingSummaryProps) {
   // Get selected options
@@ -58,22 +57,32 @@ export default function BookingSummary({
     selection.selectedOptionIds.includes(opt.id.toString())
   ) || [];
 
-  // Calculate if booking is ready - requires time selection
+  // Calculate if booking is ready - requires complete date/time selection
+  // Pour le mode plage : date début, date fin, heure début, heure fin
+  // Pour le mode normal : date début, heure début
+  const isDateTimeComplete = isRangeMode
+    ? Boolean(selection.startDate && selection.endDate && selection.startTime && selection.endTime)
+    : Boolean(selection.startDate && selection.startTime);
+
   const isReadyToBook = Boolean(
     selection.selectedServiceId &&
     selection.selectedVariantId &&
-    selection.startDate &&
-    selection.startTime && // L'heure est obligatoire
+    isDateTimeComplete &&
     priceBreakdown
   );
 
-  // Check if time is missing for validation message
-  const isTimeRequired = Boolean(
-    selection.selectedServiceId &&
-    selection.selectedVariantId &&
-    selection.startDate &&
-    !selection.startTime
-  );
+  // Check what is missing for validation message
+  const getMissingFields = () => {
+    const missing: string[] = [];
+    if (!selection.startDate) missing.push("date de début");
+    if (isRangeMode && !selection.endDate) missing.push("date de fin");
+    if (!selection.startTime) missing.push("heure de début");
+    if (isRangeMode && !selection.endTime) missing.push("heure de fin");
+    return missing;
+  };
+
+  const missingFields = getMissingFields();
+  const hasMissingFields = missingFields.length > 0 && selection.selectedServiceId && selection.selectedVariantId;
 
   // Empty state
   if (!service || !variant) {
@@ -189,38 +198,110 @@ export default function BookingSummary({
             <Calendar className="w-4 h-4 text-gray-600" />
             <span className="text-sm font-medium text-gray-900">Date et horaire</span>
           </div>
-          <p className="text-sm text-gray-700">
-            {formatDateDisplay(selection.startDate!)}
-            {selection.endDate && selection.endDate !== selection.startDate && (
-              <> → {formatDateDisplay(selection.endDate)}</>
-            )}
-          </p>
-          {(selection.startTime || selection.endTime) && (
-            <div className="flex items-center gap-2 mt-2 text-sm text-gray-600">
-              <Clock className="w-3 h-3" />
-              {selection.startTime}
-              {selection.endTime && <> - {selection.endTime}</>}
-            </div>
-          )}
-          {/* Duration display - different for duration-based vs day-based services */}
-          {variant.duration && variant.duration > 0 ? (
-            // Duration-based service: show service duration
-            <p className="text-xs text-gray-500 mt-2">
-              Durée de la prestation : {variant.duration >= 60
-                ? `${Math.floor(variant.duration / 60)}h${variant.duration % 60 > 0 ? `${variant.duration % 60}min` : ""}`
-                : `${variant.duration}min`}
-            </p>
-          ) : priceBreakdown.daysCount > 1 || priceBreakdown.hoursCount !== 8 ? (
-            // Day-based service: show days and/or hours
-            <p className="text-xs text-gray-500 mt-2">
-              {priceBreakdown.daysCount} jour{priceBreakdown.daysCount > 1 ? "s" : ""}
-              {priceBreakdown.hoursCount > 0 && priceBreakdown.hoursCount !== priceBreakdown.daysCount * 8 &&
-                ` (${priceBreakdown.hoursCount.toFixed(1).replace(".0", "")}h)`}
-            </p>
-          ) : null}
+          {/* Format combiné date + heure */}
+          {(() => {
+            const formatTime = (time: string) => {
+              const [hours, minutes] = time.split(":");
+              return minutes === "00" ? `${parseInt(hours)}h` : `${parseInt(hours)}h${minutes}`;
+            };
+
+            const formatDateShort = (dateStr: string) => {
+              return new Date(dateStr).toLocaleDateString("fr-FR", {
+                day: "numeric",
+                month: "short",
+              });
+            };
+
+            const hasDateRange = selection.endDate && selection.endDate !== selection.startDate;
+            const hasTimeRange = selection.startTime && selection.endTime;
+
+            if (hasDateRange && hasTimeRange) {
+              // Plage de jours avec heures
+              return (
+                <>
+                  {/* Version desktop */}
+                  <p className="hidden sm:block text-sm text-gray-700">
+                    Du {formatDateDisplay(selection.startDate!)} à {formatTime(selection.startTime!)} jusqu&apos;au {formatDateDisplay(selection.endDate!)} à {formatTime(selection.endTime!)}
+                  </p>
+                  {/* Version mobile - format compact */}
+                  <div className="sm:hidden text-sm text-gray-700 space-y-1">
+                    <p>{formatDateShort(selection.startDate!)} {formatTime(selection.startTime!)}</p>
+                    <p className="text-gray-400">↓</p>
+                    <p>{formatDateShort(selection.endDate!)} {formatTime(selection.endTime!)}</p>
+                  </div>
+                </>
+              );
+            } else if (hasTimeRange) {
+              // Même jour avec plage horaire
+              return (
+                <p className="text-sm text-gray-700">
+                  <span className="hidden sm:inline">{formatDateDisplay(selection.startDate!)}</span>
+                  <span className="sm:hidden">{formatDateShort(selection.startDate!)}</span>
+                  {" "}de {formatTime(selection.startTime!)} à {formatTime(selection.endTime!)}
+                </p>
+              );
+            } else if (selection.startTime) {
+              // Même jour avec heure de début
+              return (
+                <p className="text-sm text-gray-700">
+                  <span className="hidden sm:inline">{formatDateDisplay(selection.startDate!)}</span>
+                  <span className="sm:hidden">{formatDateShort(selection.startDate!)}</span>
+                  {" "}à {formatTime(selection.startTime!)}
+                </p>
+              );
+            } else if (hasDateRange) {
+              // Plage de jours sans heures
+              return (
+                <>
+                  <p className="hidden sm:block text-sm text-gray-700">
+                    Du {formatDateDisplay(selection.startDate!)} au {formatDateDisplay(selection.endDate!)}
+                  </p>
+                  <p className="sm:hidden text-sm text-gray-700">
+                    {formatDateShort(selection.startDate!)} → {formatDateShort(selection.endDate!)}
+                  </p>
+                </>
+              );
+            } else {
+              // Date simple
+              return (
+                <p className="text-sm text-gray-700">
+                  {formatDateDisplay(selection.startDate!)}
+                </p>
+              );
+            }
+          })()}
+          {/* Duration display - calculated from actual selection */}
+          {(() => {
+            const daysCount = priceBreakdown.daysCount;
+            const hoursCount = priceBreakdown.hoursCount;
+            const hoursPerDay = 8; // Heures par journée de garde
+
+            if (daysCount > 1) {
+              // Multi-jours : afficher jours + total heures
+              const avgHoursPerDay = hoursCount / daysCount;
+              return (
+                <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+                  <Clock className="w-3 h-3" />
+                  <span>
+                    {daysCount} jour{daysCount > 1 ? "s" : ""} · {hoursCount.toFixed(1).replace(".0", "")}h au total
+                    <span className="hidden sm:inline text-gray-400"> ({avgHoursPerDay.toFixed(1).replace(".0", "")}h/jour)</span>
+                  </span>
+                </div>
+              );
+            } else if (hoursCount > 0) {
+              // Même jour : afficher heures
+              return (
+                <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+                  <Clock className="w-3 h-3" />
+                  <span>Durée : {hoursCount.toFixed(1).replace(".0", "")}h</span>
+                </div>
+              );
+            }
+            return null;
+          })()}
         </div>
 
-        {/* Overnight stay */}
+        {/* Overnight stay - price with commission included */}
         {selection.includeOvernightStay && priceBreakdown.nights > 0 && (
           <div className="p-3 bg-indigo-50 rounded-xl">
             <div className="flex items-center gap-2">
@@ -229,7 +310,7 @@ export default function BookingSummary({
                 {priceBreakdown.nights} nuit{priceBreakdown.nights > 1 ? "s" : ""}
               </span>
               <span className="text-sm text-indigo-600 ml-auto">
-                +{formatPrice(priceBreakdown.nightsAmount)}€
+                +{formatPrice(priceBreakdown.nightsAmount * (1 + commissionRate / 100))}€
               </span>
             </div>
           </div>
@@ -291,30 +372,30 @@ export default function BookingSummary({
           </div>
         )}
 
-        {/* Price breakdown */}
-        <div className="pt-3 border-t border-gray-100 space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-500">Sous-total</span>
-            <span className="text-gray-700">{formatPrice(priceBreakdown.subtotal)}€</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-500">Frais de service ({commissionRate}%)</span>
-            <span className="text-gray-700">{formatPrice(priceBreakdown.commission)}€</span>
-          </div>
-          <div className="flex justify-between font-bold text-lg pt-2 border-t border-gray-100">
+        {/* Total - frais de service inclus */}
+        <div className="pt-3 border-t border-gray-100">
+          <div className="flex justify-between font-bold text-lg">
             <span className="text-gray-900">Total</span>
             <span className="text-primary">{formatPrice(priceBreakdown.total)}€</span>
           </div>
+          <p className="text-xs text-gray-400 mt-1 text-right">
+            Frais de service inclus
+          </p>
         </div>
 
-        {/* Validation message for time */}
-        {isTimeRequired && (
+        {/* Validation message for missing fields */}
+        {hasMissingFields && (
           <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-amber-600" />
-              <p className="text-sm text-amber-700 font-medium">
-                Veuillez sélectionner un créneau horaire
-              </p>
+            <div className="flex items-start gap-2">
+              <Clock className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm text-amber-700 font-medium">
+                  Veuillez compléter votre réservation
+                </p>
+                <p className="text-xs text-amber-600 mt-1">
+                  Manquant : {missingFields.join(", ")}
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -355,17 +436,6 @@ export default function BookingSummary({
               <CreditCard className="w-4 h-4" />
               Finaliser la réservation
               <ArrowRight className="w-4 h-4" />
-            </motion.button>
-
-            {/* Bouton contacter */}
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={onContact}
-              className="w-full py-3.5 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
-            >
-              <MessageCircle className="w-4 h-4" />
-              Contacter
             </motion.button>
           </div>
         )}

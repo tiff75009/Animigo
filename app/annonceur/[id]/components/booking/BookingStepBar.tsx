@@ -160,18 +160,34 @@ export default function BookingStepBar({ steps, className }: BookingStepBarProps
 export function useBookingSteps({
   hasVariantSelected,
   hasDateSelected,
+  hasEndDateSelected,
   hasTimeSelected,
+  hasEndTimeSelected,
+  isRangeMode,
   showLocationSelector,
   hasLocationSelected,
   hasOptions,
+  hasOptionsSelected,
 }: {
   hasVariantSelected: boolean;
   hasDateSelected: boolean;
+  hasEndDateSelected?: boolean;
   hasTimeSelected: boolean;
+  hasEndTimeSelected?: boolean;
+  isRangeMode?: boolean;
   showLocationSelector: boolean;
   hasLocationSelected: boolean;
   hasOptions: boolean;
+  hasOptionsSelected?: boolean;
 }): StepConfig[] {
+  // Pour le mode plage, on vérifie aussi la date/heure de fin
+  const isDateTimeComplete = isRangeMode
+    ? Boolean(hasDateSelected && hasEndDateSelected && hasTimeSelected && hasEndTimeSelected)
+    : Boolean(hasDateSelected && hasTimeSelected);
+
+  // L'étape lieu est complétée si pas nécessaire ou si sélectionné
+  const isLocationComplete = !showLocationSelector || hasLocationSelected;
+
   return [
     {
       id: "formule",
@@ -183,26 +199,26 @@ export function useBookingSteps({
     },
     {
       id: "calendar",
-      label: "Date & heure",
+      label: isRangeMode ? "Dates & horaires" : "Date & heure",
       icon: <Calendar className="w-4 h-4" />,
-      isCompleted: hasDateSelected && hasTimeSelected,
-      isActive: hasVariantSelected && (!hasDateSelected || !hasTimeSelected),
+      isCompleted: isDateTimeComplete,
+      isActive: hasVariantSelected && !isDateTimeComplete,
       isVisible: hasVariantSelected,
     },
     {
       id: "location",
-      label: "Lieu",
+      label: "Lieu de prestation",
       icon: <MapPin className="w-4 h-4" />,
       isCompleted: hasLocationSelected,
-      isActive: hasVariantSelected && hasDateSelected && hasTimeSelected && !hasLocationSelected,
+      isActive: hasVariantSelected && isDateTimeComplete && !hasLocationSelected,
       isVisible: showLocationSelector,
     },
     {
       id: "options",
       label: "Options",
       icon: <Plus className="w-4 h-4" />,
-      isCompleted: false, // Les options sont optionnelles
-      isActive: hasVariantSelected && hasDateSelected && hasTimeSelected && (!showLocationSelector || hasLocationSelected),
+      isCompleted: hasOptionsSelected || false,
+      isActive: hasVariantSelected && isDateTimeComplete && isLocationComplete,
       isVisible: hasOptions,
     },
   ];
