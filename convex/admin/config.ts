@@ -344,6 +344,23 @@ export const updateVerificationSettings = mutation({
 });
 
 // ==========================================
+// NOM DU SITE (PUBLIC)
+// ==========================================
+
+// Query publique: Récupérer le nom du site
+export const getSiteName = query({
+  args: {},
+  handler: async (ctx) => {
+    const config = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "site_name"))
+      .first();
+
+    return config?.value || "Animigo";
+  },
+});
+
+// ==========================================
 // MODE MAINTENANCE
 // ==========================================
 

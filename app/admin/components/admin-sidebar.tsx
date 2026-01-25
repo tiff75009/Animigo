@@ -28,6 +28,8 @@ import {
   ShieldCheck,
   Wallet,
   FileText,
+  MapPin,
+  Globe,
 } from "lucide-react";
 
 interface NavItem {
@@ -129,6 +131,26 @@ export function AdminSidebar() {
           label: "Activités",
           href: "/admin/activites",
           icon: Sparkles,
+        },
+      ],
+    },
+    {
+      title: "SEO",
+      items: [
+        {
+          label: "Pages services",
+          href: "/admin/seo/services",
+          icon: FileText,
+        },
+        {
+          label: "Villes",
+          href: "/admin/seo/villes",
+          icon: MapPin,
+        },
+        {
+          label: "Pages villes",
+          href: "/admin/seo/pages-villes",
+          icon: Globe,
         },
       ],
     },

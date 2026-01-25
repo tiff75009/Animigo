@@ -328,6 +328,7 @@ export default defineSchema({
     name: v.string(), // Nom affiché (ex: "Garde", "Toilettage")
     description: v.optional(v.string()),
     icon: v.optional(v.string()), // Emoji ou nom d'icône
+    color: v.optional(v.string()), // Couleur HEX (ex: "#FF6B6B") pour le design
     imageStorageId: v.optional(v.id("_storage")), // Image de la catégorie
     order: v.number(), // Ordre d'affichage
     isActive: v.boolean(),
@@ -1166,4 +1167,111 @@ export default defineSchema({
     .index("by_recipient", ["recipientId"])
     .index("by_mission", ["missionId"])
     .index("by_number", ["invoiceNumber"]),
+
+  // ============================================
+  // SEO - Pages services et villes
+  // ============================================
+
+  // Pages SEO pour les services
+  seoServicePages: defineTable({
+    // Identifiant
+    slug: v.string(), // "garde-animaux", "promenade"
+
+    // Référence vers serviceCategories (pour générer les CTAs automatiquement)
+    serviceCategoryId: v.optional(v.id("serviceCategories")),
+
+    // Contenu principal
+    title: v.string(), // "Garde d'animaux de confiance"
+    subtitle: v.optional(v.string()),
+    description: v.string(), // Description courte pour SEO
+
+    // Hero section - Image Cloudinary URL
+    heroImageUrl: v.optional(v.string()),
+
+    // Thumbnail - Miniature pour l'affichage sur la homepage (300x200)
+    thumbnailUrl: v.optional(v.string()),
+
+    // CTAs - Textes personnalisables (URLs générées automatiquement)
+    ctaPrimaryText: v.optional(v.string()), // Par défaut: "Trouver un prestataire"
+    ctaSecondaryText: v.optional(v.string()), // Par défaut: "Devenir prestataire"
+
+    // Features (liste à puces)
+    features: v.array(v.object({
+      icon: v.optional(v.string()), // emoji ou lucide icon
+      title: v.string(),
+      description: v.optional(v.string()),
+    })),
+
+    // 3 cartes de description
+    descriptionCards: v.array(v.object({
+      title: v.string(),
+      content: v.string(),
+      icon: v.optional(v.string()),
+    })),
+
+    // SEO
+    metaTitle: v.string(),
+    metaDescription: v.string(),
+
+    // Status
+    isActive: v.boolean(),
+    order: v.number(),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_active_order", ["isActive", "order"])
+    .index("by_category", ["serviceCategoryId"]),
+
+  // Villes pour le SEO
+  seoServiceCities: defineTable({
+    slug: v.string(), // "paris", "lyon"
+    name: v.string(), // "Paris", "Lyon"
+    region: v.string(), // "Île-de-France"
+    department: v.optional(v.string()), // "75"
+    postalCodes: v.optional(v.array(v.string())), // ["75001", "75002"...]
+    population: v.optional(v.number()), // Pour le tri par importance
+    coordinates: v.optional(v.object({
+      lat: v.number(),
+      lng: v.number(),
+    })),
+    isActive: v.boolean(),
+    order: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_active_order", ["isActive", "order"])
+    .index("by_region", ["region"]),
+
+  // Pages service + ville (générées)
+  seoServiceCityPages: defineTable({
+    servicePageId: v.id("seoServicePages"),
+    cityId: v.id("seoServiceCities"),
+
+    // Contenu personnalisé (avec variables {{ville}}, {{region}}, {{service}})
+    title: v.string(), // "Garde d'animaux à {{ville}}"
+    description: v.string(),
+    metaTitle: v.string(),
+    metaDescription: v.string(),
+
+    // Contenu optionnel spécifique
+    customContent: v.optional(v.string()), // Markdown ou HTML
+
+    // Stats locales (optionnel)
+    localStats: v.optional(v.object({
+      announcersCount: v.optional(v.number()),
+      averageRating: v.optional(v.number()),
+      completedMissions: v.optional(v.number()),
+    })),
+
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_service_city", ["servicePageId", "cityId"])
+    .index("by_city", ["cityId"])
+    .index("by_service", ["servicePageId"])
+    .index("by_active", ["isActive"]),
 });

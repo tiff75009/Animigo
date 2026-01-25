@@ -3,7 +3,7 @@
 import { cn } from "@/app/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, User, Briefcase, LogOut, LayoutDashboard, Bell, MessageCircle, ChevronDown, MoreHorizontal } from "lucide-react";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuthState } from "@/app/hooks/useAuthState";
 import { useNotifications } from "@/app/hooks/useNotifications";
 import { NotificationDropdown } from "@/app/components/notifications";
@@ -31,8 +31,6 @@ export function Navbar() {
   const [hoveredLink, setHoveredLink] = useState<string | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
-  const [isAutoScrollPaused, setIsAutoScrollPaused] = useState(false);
-  const autoScrollResumeTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Services visibles et cachés sur desktop
   const visibleServices = serviceCategories.slice(0, DESKTOP_VISIBLE_COUNT);
@@ -43,33 +41,6 @@ export function Navbar() {
 
   const handleScroll = useCallback(() => {
     setIsScrolled(window.scrollY > 20);
-  }, []);
-
-  // Handlers pour le défilement automatique des services mobile
-  const handleServiceBarTouchStart = useCallback(() => {
-    // Annuler le timer existant
-    if (autoScrollResumeTimer.current) {
-      clearTimeout(autoScrollResumeTimer.current);
-      autoScrollResumeTimer.current = null;
-    }
-    // Pause le défilement automatique
-    setIsAutoScrollPaused(true);
-  }, []);
-
-  const handleServiceBarTouchEnd = useCallback(() => {
-    // Reprendre après 10 secondes
-    autoScrollResumeTimer.current = setTimeout(() => {
-      setIsAutoScrollPaused(false);
-    }, 10000);
-  }, []);
-
-  // Cleanup du timer au démontage
-  useEffect(() => {
-    return () => {
-      if (autoScrollResumeTimer.current) {
-        clearTimeout(autoScrollResumeTimer.current);
-      }
-    };
   }, []);
 
   useEffect(() => {
@@ -97,10 +68,7 @@ export function Navbar() {
   return (
     <>
       {/* Main Navbar */}
-      <motion.nav
-        initial={{ y: -100 }}
-        animate={{ y: 0 }}
-        transition={{ type: "spring", stiffness: 100, damping: 20 }}
+      <nav
         className={cn(
           "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
           isScrolled
@@ -342,35 +310,12 @@ export function Navbar() {
           </div>
         </div>
 
-        {/* Mobile: Services Auto-Scrolling Bar */}
-        <div
-          className={cn(
-            "lg:hidden border-t border-gray-100 bg-white/95",
-            isAutoScrollPaused ? "overflow-x-auto scrollbar-hide" : "overflow-hidden"
-          )}
-          onTouchStart={handleServiceBarTouchStart}
-          onTouchEnd={handleServiceBarTouchEnd}
-          onMouseDown={handleServiceBarTouchStart}
-          onMouseUp={handleServiceBarTouchEnd}
-          onMouseLeave={handleServiceBarTouchEnd}
-        >
-          <motion.div
-            className="flex items-center gap-3 py-2 px-2"
-            animate={isAutoScrollPaused ? {} : {
-              x: [0, -1200],
-            }}
-            transition={{
-              x: {
-                duration: 30,
-                repeat: Infinity,
-                ease: "linear",
-              },
-            }}
-          >
-            {/* Double the items for seamless loop */}
-            {[...serviceCategories, ...serviceCategories].map((service, index) => (
+        {/* Mobile: Services Scrollable Bar */}
+        <div className="lg:hidden border-t border-gray-100 bg-white/95 overflow-x-auto scrollbar-hide">
+          <div className="flex items-center gap-2 py-2 px-3">
+            {serviceCategories.map((service) => (
               <Link
-                key={`${service.slug}-${index}`}
+                key={service.slug}
                 href={service.href}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-full whitespace-nowrap transition-colors flex-shrink-0"
               >
@@ -378,9 +323,9 @@ export function Navbar() {
                 <span>{service.label}</span>
               </Link>
             ))}
-          </motion.div>
+          </div>
         </div>
-      </motion.nav>
+      </nav>
 
       {/* Mobile Menu - Slide from Right */}
       <AnimatePresence>
@@ -420,22 +365,16 @@ export function Navbar() {
                 <div className="p-4">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Nos services</p>
                   <div className="space-y-1">
-                    {serviceCategories.map((service, index) => (
-                      <motion.div
+                    {serviceCategories.map((service) => (
+                      <Link
                         key={service.slug}
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.05 }}
+                        href={service.href}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
                       >
-                        <Link
-                          href={service.href}
-                          onClick={() => setIsMobileMenuOpen(false)}
-                          className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-                        >
-                          <span className="text-xl">{service.emoji}</span>
-                          <span className="font-medium text-gray-900">{service.label}</span>
-                        </Link>
-                      </motion.div>
+                        <span className="text-xl">{service.emoji}</span>
+                        <span className="font-medium text-gray-900">{service.label}</span>
+                      </Link>
                     ))}
                   </div>
                 </div>

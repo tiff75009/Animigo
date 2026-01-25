@@ -2,6 +2,7 @@ import { mutation, query } from "../_generated/server";
 import { v } from "convex/values";
 import { requireAdmin } from "./utils";
 import { ConvexError } from "convex/values";
+import { Doc } from "../_generated/dataModel";
 
 // Récupérer les services en attente de modération
 export const getPendingServices = query({
@@ -17,7 +18,7 @@ export const getPendingServices = query({
     // Récupérer les infos des utilisateurs
     const servicesWithUsers = await Promise.all(
       pendingServices.map(async (service) => {
-        const user = await ctx.db.get(service.userId);
+        const user = await ctx.db.get(service.userId) as Doc<"users"> | null;
         return {
           id: service._id,
           category: service.category,
@@ -85,7 +86,7 @@ export const getAllServicesForModeration = query({
     // Récupérer les infos des utilisateurs
     const servicesWithUsers = await Promise.all(
       paginatedServices.map(async (service) => {
-        const user = await ctx.db.get(service.userId);
+        const user = await ctx.db.get(service.userId) as Doc<"users"> | null;
         return {
           id: service._id,
           category: service.category,

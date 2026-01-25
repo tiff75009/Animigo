@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
-import { api } from "../_generated/api";
+import { internal } from "../_generated/api";
 import { ConvexError } from "convex/values";
+import { Doc } from "../_generated/dataModel";
 
 // Générer un code de vérification aléatoire (6 caractères alphanumériques)
 function generateVerificationCode(): string {
@@ -221,7 +222,7 @@ export const submitVerificationRequest = mutation({
     });
 
     // Planifier la vérification automatique par IA (dans 1 seconde pour laisser le temps au patch)
-    await ctx.scheduler.runAfter(1000, api.verification.autoVerify.autoVerifyIdentity, {
+    await ctx.scheduler.runAfter(1000, internal.verification.autoVerify.autoVerifyIdentity, {
       requestId: args.requestId,
       idCardFrontUrl: request.idCardFrontUrl,
       idCardBackUrl: request.idCardBackUrl,
@@ -280,7 +281,7 @@ export const listVerificationRequests = query({
     // Enrichir avec les infos utilisateur
     const enrichedRequests = await Promise.all(
       requests.map(async (request) => {
-        const requestUser = await ctx.db.get(request.userId);
+        const requestUser = await ctx.db.get(request.userId) as Doc<"users"> | null;
         return {
           ...request,
           user: requestUser ? {
