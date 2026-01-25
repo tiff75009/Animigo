@@ -19,6 +19,8 @@ import {
   Settings,
   X,
   Moon,
+  Home,
+  MapPin,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import ConfirmModal from "./shared/ConfirmModal";
@@ -50,11 +52,20 @@ interface Variant {
   isActive: boolean;
 }
 
+type ServiceLocation = "announcer_home" | "client_home" | "both";
+
 // Variant local pour le mode création (sans ID)
 export interface LocalVariant {
   localId: string;
   name: string;
   description?: string;
+  objectives?: { icon: string; text: string }[];
+  numberOfSessions?: number;
+  sessionInterval?: number; // Délai en jours entre chaque séance
+  sessionType?: "individual" | "collective";
+  maxAnimalsPerSession?: number;
+  serviceLocation?: ServiceLocation; // Lieu de prestation
+  animalTypes?: string[]; // Animaux acceptés pour cette formule
   price: number;
   priceUnit: PriceUnit;
   pricing?: Pricing;
@@ -99,6 +110,9 @@ interface VariantManagerProps {
   // Garde de nuit
   allowOvernightStay?: boolean;
   isGardeService?: boolean;
+
+  // Animaux sélectionnés pour ce service (pour filtrer dans les formules)
+  serviceAnimalTypes?: string[];
 }
 
 // Helper pour formater le prix
@@ -136,6 +150,19 @@ const getComputedPriceUnits = (
 
 // Générer un ID local unique
 const generateLocalId = () => `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+// Labels pour les types d'animaux
+const animalLabels: Record<string, string> = {
+  chien: "Chien",
+  chat: "Chat",
+  lapin: "Lapin",
+  rongeur: "Rongeur",
+  oiseau: "Oiseau",
+  poisson: "Poisson",
+  reptile: "Reptile",
+  nac: "NAC",
+  autre: "Autre",
+};
 
 // Composant pour afficher/éditer le prix d'une formule
 function PriceSlider({
@@ -253,6 +280,7 @@ function SimpleVariantCard({
   isLoadingPrice,
   isGardeService,
   allowOvernightStay,
+  serviceAnimalTypes,
 }: {
   variant: LocalVariant;
   index: number;
@@ -264,9 +292,32 @@ function SimpleVariantCard({
   isLoadingPrice: boolean;
   isGardeService?: boolean;
   allowOvernightStay?: boolean;
+  serviceAnimalTypes: string[];
 }) {
   const [showAdvanced, setShowAdvanced] = useState(true);
   const [newFeature, setNewFeature] = useState("");
+  const [newObjectiveText, setNewObjectiveText] = useState("");
+  const [newObjectiveIcon, setNewObjectiveIcon] = useState("🎯");
+  const [showIconPicker, setShowIconPicker] = useState(false);
+
+  // Emojis disponibles pour les objectifs
+  const objectiveIcons = ["🎯", "✨", "🏆", "💪", "🧠", "❤️", "🐾", "⭐", "🔧", "📈", "🎓", "🤝", "🌟", "👍", "✅"];
+
+  // Ajouter un objectif
+  const handleAddObjective = () => {
+    if (newObjectiveText.trim()) {
+      const currentObjectives = variant.objectives || [];
+      onUpdate({ objectives: [...currentObjectives, { icon: newObjectiveIcon, text: newObjectiveText.trim() }] });
+      setNewObjectiveText("");
+      setNewObjectiveIcon("🎯");
+    }
+  };
+
+  // Supprimer un objectif
+  const handleRemoveObjective = (idx: number) => {
+    const currentObjectives = variant.objectives || [];
+    onUpdate({ objectives: currentObjectives.filter((_, i) => i !== idx) });
+  };
 
   // Pour les gardes: prix journée recommandé (8x le prix horaire)
   const dailyRecommendedPrice = isGardeService ? recommendedPrice * 8 : recommendedPrice;
@@ -527,6 +578,20 @@ function SimpleVariantCard({
               className="overflow-hidden"
             >
               <div className="pt-4 space-y-4">
+                {/* Nom de la formule */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">
+                    Nom de la formule
+                  </label>
+                  <input
+                    type="text"
+                    value={variant.name}
+                    onChange={(e) => onUpdate({ name: e.target.value })}
+                    placeholder="Ex: Formule découverte, Pack 5 séances..."
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                  />
+                </div>
+
                 {/* Description */}
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-1">
@@ -541,6 +606,86 @@ function SimpleVariantCard({
                   />
                 </div>
 
+                {/* Objectifs de la prestation */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">
+                    Objectifs de la prestation <span className="text-text-light font-normal">(optionnel)</span>
+                  </label>
+                  <p className="text-xs text-text-light mb-2">
+                    Décrivez les objectifs que vous souhaitez atteindre avec cette formule
+                  </p>
+                  <div className="flex gap-2 mb-2">
+                    {/* Sélecteur d'icône */}
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowIconPicker(!showIconPicker)}
+                        className="w-10 h-10 flex items-center justify-center bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-xl"
+                      >
+                        {newObjectiveIcon}
+                      </button>
+                      {showIconPicker && (
+                        <div className="absolute top-12 left-0 z-10 p-2 bg-white border border-gray-200 rounded-lg shadow-lg">
+                          <div className="grid grid-cols-5 gap-1">
+                            {objectiveIcons.map((icon) => (
+                              <button
+                                key={icon}
+                                type="button"
+                                onClick={() => {
+                                  setNewObjectiveIcon(icon);
+                                  setShowIconPicker(false);
+                                }}
+                                className={cn(
+                                  "w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-lg",
+                                  newObjectiveIcon === icon && "bg-primary/10"
+                                )}
+                              >
+                                {icon}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={newObjectiveText}
+                      onChange={(e) => setNewObjectiveText(e.target.value)}
+                      onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddObjective())}
+                      placeholder="Ex: Améliorer le rappel, Socialisation..."
+                      className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddObjective}
+                      disabled={!newObjectiveText.trim()}
+                      className="px-3 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {variant.objectives && variant.objectives.length > 0 && (
+                    <div className="space-y-2">
+                      {variant.objectives.map((objective, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center gap-2 px-3 py-2 bg-purple-50 border border-purple-200 rounded-lg"
+                        >
+                          <span className="text-lg">{objective.icon}</span>
+                          <span className="flex-1 text-sm text-purple-800">{objective.text}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveObjective(idx)}
+                            className="p-1 text-purple-400 hover:text-red-500 rounded"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 {/* Durée */}
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-1">
@@ -551,8 +696,8 @@ function SimpleVariantCard({
                       type="number"
                       value={variant.duration || ""}
                       onChange={(e) => onUpdate({ duration: parseInt(e.target.value) || undefined })}
-                      min="15"
-                      step="15"
+                      min="30"
+                      step="30"
                       placeholder="60"
                       required
                       className={cn(
@@ -566,6 +711,216 @@ function SimpleVariantCard({
                     )}
                   </div>
                 </div>
+
+                {/* Nombre de séances */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">
+                    Nombre de séances <span className="text-text-light font-normal">(optionnel)</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={variant.numberOfSessions || 1}
+                      onChange={(e) => onUpdate({ numberOfSessions: parseInt(e.target.value) || 1 })}
+                      min="1"
+                      max="50"
+                      className="w-20 px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    />
+                    <span className="text-sm text-text-light">séance(s)</span>
+                  </div>
+                  {(variant.numberOfSessions || 1) > 1 && (
+                    <p className="text-xs text-text-light mt-1">
+                      Prix total = prix × durée × {variant.numberOfSessions} séances
+                    </p>
+                  )}
+                </div>
+
+                {/* Délai entre séances - visible si plusieurs séances */}
+                {(variant.numberOfSessions || 1) > 1 && (
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">
+                      Délai entre chaque séance
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={variant.sessionInterval || ""}
+                        onChange={(e) => onUpdate({ sessionInterval: e.target.value ? parseInt(e.target.value) : undefined })}
+                        className="px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                      >
+                        <option value="">Pas de délai minimum</option>
+                        <option value="1">1 jour minimum</option>
+                        <option value="2">2 jours minimum</option>
+                        <option value="3">3 jours minimum</option>
+                        <option value="7">1 semaine minimum</option>
+                        <option value="14">2 semaines minimum</option>
+                        <option value="30">1 mois minimum</option>
+                      </select>
+                    </div>
+                    {variant.sessionInterval && (
+                      <p className="text-xs text-text-light mt-1">
+                        Les {variant.numberOfSessions} séances seront espacées d'au moins {variant.sessionInterval} jour(s)
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Type de séance */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">
+                    Type de séance
+                  </label>
+                  <div className="flex gap-3">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name={`sessionType-${variant.localId}`}
+                        value="individual"
+                        checked={(variant.sessionType || "individual") === "individual"}
+                        onChange={() => onUpdate({ sessionType: "individual", maxAnimalsPerSession: undefined })}
+                        className="w-4 h-4 text-primary focus:ring-primary"
+                      />
+                      <span className="text-sm">Individuelle</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name={`sessionType-${variant.localId}`}
+                        value="collective"
+                        checked={variant.sessionType === "collective"}
+                        onChange={() => onUpdate({ sessionType: "collective", maxAnimalsPerSession: 5 })}
+                        className="w-4 h-4 text-primary focus:ring-primary"
+                      />
+                      <span className="text-sm">Collective</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Nombre max d'animaux - visible si séance collective */}
+                {variant.sessionType === "collective" && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1">
+                        Nombre max d'animaux par séance
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          value={variant.maxAnimalsPerSession || 5}
+                          onChange={(e) => onUpdate({ maxAnimalsPerSession: parseInt(e.target.value) || 5 })}
+                          min="2"
+                          max="20"
+                          className="w-20 px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                        />
+                        <span className="text-sm text-text-light">animaux max</span>
+                      </div>
+                    </div>
+                    {/* Info créneaux collectifs */}
+                    <div className="flex items-start gap-2 p-3 bg-orange-50 rounded-xl border border-orange-200">
+                      <Info className="w-4 h-4 text-orange-500 mt-0.5 flex-shrink-0" />
+                      <p className="text-xs text-orange-700">
+                        <strong>Créneaux à configurer :</strong> Après avoir créé le service, vous pourrez définir les créneaux disponibles pour cette formule collective depuis la page de gestion du service.
+                      </p>
+                    </div>
+                  </>
+                )}
+
+                {/* Lieu de prestation */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Lieu de prestation
+                  </label>
+                  {variant.sessionType === "collective" && (
+                    <p className="text-xs text-orange-600 mb-2">Les séances collectives se déroulent obligatoirement à votre domicile.</p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => variant.sessionType !== "collective" && onUpdate({ serviceLocation: "announcer_home" })}
+                      disabled={variant.sessionType === "collective" && variant.serviceLocation !== "announcer_home"}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all text-sm",
+                        (variant.serviceLocation || "announcer_home") === "announcer_home"
+                          ? "border-primary bg-primary/5 text-primary"
+                          : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50",
+                        variant.sessionType === "collective" && (variant.serviceLocation || "announcer_home") !== "announcer_home" && "opacity-50 cursor-not-allowed"
+                      )}
+                    >
+                      <Home className="w-4 h-4" />
+                      Mon domicile
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => variant.sessionType !== "collective" && onUpdate({ serviceLocation: "client_home" })}
+                      disabled={variant.sessionType === "collective"}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all text-sm",
+                        variant.serviceLocation === "client_home"
+                          ? "border-secondary bg-secondary/5 text-secondary"
+                          : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50",
+                        variant.sessionType === "collective" && "opacity-50 cursor-not-allowed"
+                      )}
+                    >
+                      <MapPin className="w-4 h-4" />
+                      À domicile
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => variant.sessionType !== "collective" && onUpdate({ serviceLocation: "both" })}
+                      disabled={variant.sessionType === "collective"}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all text-sm",
+                        variant.serviceLocation === "both"
+                          ? "border-purple-500 bg-purple-50 text-purple-600"
+                          : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50",
+                        variant.sessionType === "collective" && "opacity-50 cursor-not-allowed"
+                      )}
+                    >
+                      <Home className="w-3.5 h-3.5" />
+                      <MapPin className="w-3.5 h-3.5" />
+                      Les deux
+                    </button>
+                  </div>
+                </div>
+
+                {/* Animaux acceptés pour cette formule */}
+                {serviceAnimalTypes.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      Animaux acceptés pour cette formule
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {serviceAnimalTypes.map((animal) => {
+                        const isSelected = (variant.animalTypes || serviceAnimalTypes).includes(animal);
+                        return (
+                          <button
+                            key={animal}
+                            type="button"
+                            onClick={() => {
+                              const currentAnimals = variant.animalTypes || serviceAnimalTypes;
+                              if (isSelected) {
+                                onUpdate({ animalTypes: currentAnimals.filter(a => a !== animal) });
+                              } else {
+                                onUpdate({ animalTypes: [...currentAnimals, animal] });
+                              }
+                            }}
+                            className={cn(
+                              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all",
+                              isSelected
+                                ? "bg-primary/10 text-primary border-2 border-primary"
+                                : "bg-gray-100 text-gray-500 border-2 border-transparent hover:bg-gray-200"
+                            )}
+                          >
+                            {animalLabels[animal] || animal}
+                            {isSelected && <Check className="w-3 h-3" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {(variant.animalTypes || []).length === 0 && (
+                      <p className="text-xs text-red-500 mt-1">Sélectionnez au moins un type d'animal</p>
+                    )}
+                  </div>
+                )}
 
                 {/* Caractéristiques incluses */}
                 <div>
@@ -636,6 +991,7 @@ export default function VariantManager({
   autoAddFirst = false,
   allowOvernightStay = false,
   isGardeService = false,
+  serviceAnimalTypes = [],
 }: VariantManagerProps) {
   const { token: authToken } = useAuth();
   const [isExpanded, setIsExpanded] = useState(true);
@@ -697,11 +1053,14 @@ export default function VariantManager({
         duration: 60, // Durée par défaut: 1 heure
         includedFeatures: undefined,
         isFromDefault: false,
+        sessionType: "individual",
+        serviceLocation: "announcer_home",
+        animalTypes: serviceAnimalTypes,
       };
       onLocalChange?.([firstVariant]);
       setHasAutoAdded(true);
     }
-  }, [isCreateMode, autoAddFirst, localVariants.length, hasAutoAdded, priceRecommendation, recommendedPrice, serviceName, defaultPriceUnit.id, onLocalChange, isGardeService, allowOvernightStay]);
+  }, [isCreateMode, autoAddFirst, localVariants.length, hasAutoAdded, priceRecommendation, recommendedPrice, serviceName, defaultPriceUnit.id, onLocalChange, isGardeService, allowOvernightStay, serviceAnimalTypes]);
 
   // Mutation pour supprimer (utilisée en mode edit)
   const deleteVariantMutation = useMutation(api.services.variants.deleteVariant);
@@ -738,6 +1097,13 @@ export default function VariantManager({
       localId: generateLocalId(),
       name: `${serviceName} - Formule ${nextIndex}`,
       description: undefined,
+      objectives: undefined,
+      numberOfSessions: 1,
+      sessionInterval: undefined,
+      sessionType: "individual",
+      maxAnimalsPerSession: undefined,
+      serviceLocation: "announcer_home",
+      animalTypes: serviceAnimalTypes,
       price: mainPrice,
       priceUnit: isGardeService ? "day" : defaultPriceUnit.id,
       pricing,
@@ -835,6 +1201,7 @@ export default function VariantManager({
               isLoadingPrice={isLoadingPrice}
               isGardeService={isGardeService}
               allowOvernightStay={allowOvernightStay}
+              serviceAnimalTypes={serviceAnimalTypes}
             />
           ))}
         </AnimatePresence>
@@ -853,20 +1220,51 @@ export default function VariantManager({
         {/* Récapitulatif */}
         {localVariants.length > 0 && (
           <div className="p-4 bg-secondary/10 rounded-xl">
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-3">
               <Check className="w-4 h-4 text-secondary" />
               <span className="text-sm font-medium text-foreground">
                 {localVariants.length} formule{localVariants.length > 1 ? "s" : ""} configurée{localVariants.length > 1 ? "s" : ""}
               </span>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {localVariants.map((v, i) => (
-                <span
+            <div className="space-y-2">
+              {localVariants.map((v) => (
+                <div
                   key={v.localId}
-                  className="px-3 py-1 bg-white rounded-full text-sm text-foreground border border-secondary/20"
+                  className="p-3 bg-white rounded-xl border border-secondary/20"
                 >
-                  Formule {i + 1}: {formatPrice(v.pricing?.hourly || v.pricing?.daily || v.pricing?.weekly || v.pricing?.monthly || v.price)}{defaultPriceUnit.shortLabel}
-                </span>
+                  {/* Nom et prix */}
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium text-foreground text-sm">{v.name}</span>
+                    <span className="text-sm font-semibold text-primary">
+                      {formatPrice(v.pricing?.hourly || v.pricing?.daily || v.pricing?.weekly || v.pricing?.monthly || v.price)}{defaultPriceUnit.shortLabel}
+                    </span>
+                  </div>
+                  {/* Badges */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {/* Type de séance */}
+                    {v.sessionType === "collective" ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-700 text-xs rounded-full">
+                        👥 Collectif
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
+                        👤 Individuel
+                      </span>
+                    )}
+                    {/* Animaux acceptés */}
+                    {v.animalTypes && v.animalTypes.length > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+                        {v.animalTypes.map(a => animalLabels[a] || a).join(", ")}
+                      </span>
+                    )}
+                    {/* Nombre de séances si > 1 */}
+                    {v.numberOfSessions && v.numberOfSessions > 1 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full">
+                        📅 {v.numberOfSessions} séances
+                      </span>
+                    )}
+                  </div>
+                </div>
               ))}
             </div>
           </div>

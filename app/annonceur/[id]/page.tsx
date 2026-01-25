@@ -145,6 +145,31 @@ export default function AnnouncerProfilePage() {
   );
   const clientAddresses: ClientAddress[] = (clientAddressesData || []) as ClientAddress[];
 
+  // Collective slots details - fetch selected slot info for the summary
+  const collectiveSlotsData = useQuery(
+    api.planning.collectiveSlots.getSlotsByIds,
+    bookingSelection.selectedSlotIds.length > 0
+      ? { slotIds: bookingSelection.selectedSlotIds as Id<"collectiveSlots">[] }
+      : "skip"
+  );
+  const collectiveSlots = collectiveSlotsData || [];
+
+  // User's animals - fetch for collective session animal selection
+  const userAnimalsData = useQuery(
+    api.animals.getUserAnimals,
+    token ? { token } : "skip"
+  );
+  const userAnimals = (userAnimalsData || []).map((animal: any) => ({
+    id: animal._id,
+    name: animal.name,
+    type: animal.type,
+    breed: animal.breed,
+    profilePhoto: animal.profilePhoto,
+  }));
+
+  // State for selected animal in collective sessions
+  const [selectedAnimalId, setSelectedAnimalId] = useState<string | null>(null);
+
   // Calculer la distance entre le client et l'annonceur
   // (doit être avant les early returns pour respecter les règles des hooks)
   const distance = useMemo(() => {
@@ -342,6 +367,21 @@ export default function AnnouncerProfilePage() {
     setBookingSelection((prev) => ({ ...prev, guestAddress: address }));
   }, []);
 
+  // Handlers pour créneaux collectifs
+  const handleSlotsSelected = useCallback((slotIds: string[]) => {
+    setBookingSelection((prev) => ({ ...prev, selectedSlotIds: slotIds }));
+  }, []);
+
+  const handleAnimalCountChange = useCallback((count: number) => {
+    setBookingSelection((prev) => ({ ...prev, animalCount: count }));
+  }, []);
+
+  // Handler pour la sélection d'animal (utilisateur connecté)
+  const handleAnimalSelect = useCallback((animalId: string, animalType: string) => {
+    setSelectedAnimalId(animalId);
+    setBookingSelection((prev) => ({ ...prev, selectedAnimalType: animalType }));
+  }, []);
+
   const handleBook = useCallback(() => {
     if (!announcerData || !announcer) return;
 
@@ -391,6 +431,16 @@ export default function AnnouncerProfilePage() {
         params.set("guestLat", bookingSelection.guestAddress.coordinates.lat.toString());
         params.set("guestLng", bookingSelection.guestAddress.coordinates.lng.toString());
       }
+    }
+    // Créneaux collectifs
+    if (bookingSelection.selectedSlotIds.length > 0) {
+      params.set("slotIds", bookingSelection.selectedSlotIds.join(","));
+    }
+    if (bookingSelection.animalCount > 1) {
+      params.set("animalCount", bookingSelection.animalCount.toString());
+    }
+    if (bookingSelection.selectedAnimalType && bookingSelection.selectedAnimalType !== "chien") {
+      params.set("animalType", bookingSelection.selectedAnimalType);
     }
 
     const queryString = params.toString();
@@ -447,6 +497,16 @@ export default function AnnouncerProfilePage() {
         params.set("guestLat", bookingSelection.guestAddress.coordinates.lat.toString());
         params.set("guestLng", bookingSelection.guestAddress.coordinates.lng.toString());
       }
+    }
+    // Créneaux collectifs
+    if (bookingSelection.selectedSlotIds.length > 0) {
+      params.set("slotIds", bookingSelection.selectedSlotIds.join(","));
+    }
+    if (bookingSelection.animalCount > 1) {
+      params.set("animalCount", bookingSelection.animalCount.toString());
+    }
+    if (bookingSelection.selectedAnimalType && bookingSelection.selectedAnimalType !== "chien") {
+      params.set("animalType", bookingSelection.selectedAnimalType);
     }
 
     // Paramètre pour aller directement à la finalisation
@@ -556,6 +616,16 @@ export default function AnnouncerProfilePage() {
                 onEndTimeSelect={handleEndTimeSelect}
                 onOvernightChange={handleOvernightChange}
                 onMonthChange={setCalendarMonth}
+                // Props créneaux collectifs
+                selectedSlotIds={bookingSelection.selectedSlotIds}
+                onSlotsSelected={handleSlotsSelected}
+                selectedAnimalType={bookingSelection.selectedAnimalType}
+                animalCount={bookingSelection.animalCount}
+                onAnimalCountChange={handleAnimalCountChange}
+                // Props sélection d'animal
+                userAnimals={userAnimals}
+                selectedAnimalId={selectedAnimalId}
+                onAnimalSelect={handleAnimalSelect}
               />
             )}
 
@@ -590,6 +660,8 @@ export default function AnnouncerProfilePage() {
               bookingSelection={bookingSelection}
               priceBreakdown={priceBreakdown}
               clientAddress={selectedClientAddress}
+              collectiveSlots={collectiveSlots}
+              animalCount={bookingSelection.animalCount}
               onServiceChange={(serviceId) => {
                 // Trouver le categorySlug du service sélectionné et mettre à jour l'URL
                 const service = announcer.services.find((s) => s.id === serviceId);
@@ -631,6 +703,12 @@ export default function AnnouncerProfilePage() {
         onMonthChange={setCalendarMonth}
         onBook={handleBook}
         onFinalize={handleFinalize}
+        // Props créneaux collectifs
+        selectedSlotIds={bookingSelection.selectedSlotIds}
+        onSlotsSelected={handleSlotsSelected}
+        animalCount={bookingSelection.animalCount}
+        onAnimalCountChange={handleAnimalCountChange}
+        selectedAnimalType={bookingSelection.selectedAnimalType}
       />
     </div>
   );

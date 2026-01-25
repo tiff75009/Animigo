@@ -81,6 +81,32 @@ export const getMyServices = query({
           .withIndex("by_service", (q) => q.eq("serviceId", s._id))
           .collect();
 
+        // Pour les variantes collectives, vérifier si des créneaux existent
+        const today = new Date().toISOString().split("T")[0];
+        const variantsWithSlotCount = await Promise.all(
+          variants.map(async (v) => {
+            if (v.sessionType === "collective") {
+              // Compter les créneaux futurs actifs
+              const slots = await ctx.db
+                .query("collectiveSlots")
+                .withIndex("by_variant", (q: any) => q.eq("variantId", v._id))
+                .collect();
+
+              const activeSlots = slots.filter(
+                (slot: any) => slot.date >= today && slot.isActive && !slot.isCancelled
+              );
+
+              return {
+                ...v,
+                slotsCount: activeSlots.length,
+                needsSlotConfiguration: activeSlots.length === 0,
+                isActive: activeSlots.length > 0, // Une formule collective n'est active que si elle a des créneaux
+              };
+            }
+            return v;
+          })
+        );
+
         // Récupérer les options
         const options = await ctx.db
           .query("serviceOptions")
@@ -109,10 +135,10 @@ export const getMyServices = query({
           createdAt: s.createdAt,
           updatedAt: s.updatedAt,
           // Compteurs pour l'affichage
-          variantsCount: variants.length,
+          variantsCount: variantsWithSlotCount.length,
           optionsCount: options.length,
           // Variantes triées par ordre
-          variants: variants
+          variants: variantsWithSlotCount
             .sort((a, b) => a.order - b.order)
             .map((v) => ({
               id: v._id,
@@ -120,6 +146,11 @@ export const getMyServices = query({
               description: v.description,
               objectives: v.objectives,
               numberOfSessions: v.numberOfSessions,
+              sessionInterval: v.sessionInterval,
+              sessionType: v.sessionType,
+              maxAnimalsPerSession: v.maxAnimalsPerSession,
+              serviceLocation: v.serviceLocation,
+              animalTypes: v.animalTypes,
               price: v.price,
               priceUnit: v.priceUnit,
               pricing: v.pricing, // Multi-tarification
@@ -127,6 +158,8 @@ export const getMyServices = query({
               includedFeatures: v.includedFeatures,
               order: v.order,
               isActive: v.isActive,
+              needsSlotConfiguration: v.needsSlotConfiguration, // Créneaux requis pour collectives
+              slotsCount: v.slotsCount, // Nombre de créneaux configurés
             })),
           // Options triées par ordre
           options: options
@@ -176,6 +209,15 @@ export const addService = mutation({
         text: v.string(),
       }))),
       numberOfSessions: v.optional(v.number()),
+      sessionInterval: v.optional(v.number()),
+      sessionType: v.optional(v.union(v.literal("individual"), v.literal("collective"))),
+      maxAnimalsPerSession: v.optional(v.number()),
+      serviceLocation: v.optional(v.union(
+        v.literal("announcer_home"),
+        v.literal("client_home"),
+        v.literal("both")
+      )),
+      animalTypes: v.optional(v.array(v.string())),
       price: v.number(), // En centimes (prix principal)
       priceUnit: v.union(
         v.literal("hour"),
@@ -282,12 +324,19 @@ export const addService = mutation({
     // Créer les formules
     for (let i = 0; i < args.initialVariants.length; i++) {
       const variant = args.initialVariants[i];
+      // Si collective, forcer le lieu à announcer_home
+      const effectiveLocation = variant.sessionType === "collective" ? "announcer_home" : variant.serviceLocation;
       await ctx.db.insert("serviceVariants", {
         serviceId: serviceId,
         name: variant.name,
         description: variant.description,
         objectives: variant.objectives,
         numberOfSessions: variant.numberOfSessions,
+        sessionInterval: variant.sessionInterval,
+        sessionType: variant.sessionType,
+        maxAnimalsPerSession: variant.maxAnimalsPerSession,
+        serviceLocation: effectiveLocation,
+        animalTypes: variant.animalTypes,
         price: variant.price,
         priceUnit: variant.priceUnit,
         pricing: variant.pricing,

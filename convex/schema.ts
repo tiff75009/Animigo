@@ -278,6 +278,16 @@ export default defineSchema({
       text: v.string(), // Texte de l'objectif
     }))), // Objectifs de la prestation avec icônes
     numberOfSessions: v.optional(v.number()), // Nombre de séances (optionnel, défaut: 1)
+    sessionInterval: v.optional(v.number()), // Délai minimum en jours entre chaque séance (ex: 7 = 1 séance/semaine)
+    sessionType: v.optional(v.union(v.literal("individual"), v.literal("collective"))), // Type de séance
+    maxAnimalsPerSession: v.optional(v.number()), // Nombre max d'animaux par séance (si collective)
+    // Lieu de prestation et animaux acceptés (au niveau de la formule)
+    serviceLocation: v.optional(v.union(
+      v.literal("announcer_home"),
+      v.literal("client_home"),
+      v.literal("both")
+    )), // Où la prestation est effectuée (si collective, forcé à announcer_home)
+    animalTypes: v.optional(v.array(v.string())), // Types d'animaux acceptés pour cette formule
     // Ancien système (rétrocompatibilité) - prix unique
     price: v.number(), // Prix principal en centimes
     priceUnit: v.union(
@@ -300,6 +310,8 @@ export default defineSchema({
     includedFeatures: v.optional(v.array(v.string())), // ["Brossage", "Lavage", "Séchage"]
     order: v.number(), // Ordre d'affichage
     isActive: v.boolean(),
+    needsSlotConfiguration: v.optional(v.boolean()), // true si formule collective sans créneaux configurés
+    slotsCount: v.optional(v.number()), // Nombre de créneaux futurs configurés (cache)
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1172,6 +1184,142 @@ export default defineSchema({
     .index("by_recipient", ["recipientId"])
     .index("by_mission", ["missionId"])
     .index("by_number", ["invoiceNumber"]),
+
+  // ============================================
+  // Créneaux collectifs
+  // ============================================
+
+  // Créneaux pour séances collectives
+  collectiveSlots: defineTable({
+    variantId: v.id("serviceVariants"),
+    userId: v.id("users"),              // Annonceur (pour requêtes rapides)
+    serviceId: v.id("services"),        // Service parent (pour requêtes rapides)
+
+    // Date et horaires
+    date: v.string(),                   // "YYYY-MM-DD"
+    startTime: v.string(),              // "HH:MM"
+    endTime: v.string(),                // "HH:MM" (calculé: startTime + duration)
+
+    // Capacité
+    maxAnimals: v.number(),             // Copié de variant.maxAnimalsPerSession
+    bookedAnimals: v.number(),          // Nombre d'animaux actuellement réservés
+    acceptedAnimalTypes: v.array(v.string()), // Copié de variant.animalTypes
+
+    // Récurrence (null si créneau unique)
+    recurrenceId: v.optional(v.string()), // ID unique pour grouper les créneaux récurrents
+    recurrencePattern: v.optional(v.union(
+      v.literal("daily"),               // Tous les jours
+      v.literal("weekly"),              // Toutes les semaines
+      v.literal("biweekly"),            // Toutes les 2 semaines
+      v.literal("monthly")              // Tous les mois
+    )),
+    recurrenceEndDate: v.optional(v.string()), // Date de fin de la récurrence "YYYY-MM-DD"
+
+    // Statut
+    isActive: v.boolean(),
+    isCancelled: v.boolean(),           // true si annulé par l'annonceur
+    cancellationReason: v.optional(v.string()),
+
+    // Timestamps
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_variant", ["variantId"])
+    .index("by_user", ["userId"])
+    .index("by_service", ["serviceId"])
+    .index("by_user_date", ["userId", "date"])
+    .index("by_variant_date", ["variantId", "date"])
+    .index("by_recurrence", ["recurrenceId"])
+    .index("by_active_date", ["isActive", "date"]),
+
+  // Réservations sur les créneaux collectifs
+  // Lie une mission à un ou plusieurs créneaux
+  collectiveSlotBookings: defineTable({
+    slotId: v.id("collectiveSlots"),
+    missionId: v.id("missions"),
+    clientId: v.id("users"),
+    animalId: v.optional(v.id("animals")), // Animal concerné
+
+    // Nombre d'animaux réservés sur ce créneau
+    animalCount: v.number(),
+
+    // Numéro de séance dans le pack (1, 2, 3...)
+    sessionNumber: v.number(),
+
+    // Statut de la réservation sur ce créneau
+    status: v.union(
+      v.literal("booked"),              // Réservé
+      v.literal("completed"),           // Séance effectuée
+      v.literal("cancelled"),           // Annulé par le client
+      v.literal("rescheduled"),         // Reporté (client a changé de créneau)
+      v.literal("slot_cancelled")       // Créneau annulé par l'annonceur
+    ),
+
+    // Si rescheduled ou slot_cancelled, référence au nouveau créneau
+    newSlotId: v.optional(v.id("collectiveSlots")),
+
+    // Timestamps
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    cancelledAt: v.optional(v.number()),
+  })
+    .index("by_slot", ["slotId"])
+    .index("by_mission", ["missionId"])
+    .index("by_client", ["clientId"])
+    .index("by_slot_status", ["slotId", "status"]),
+
+  // Notifications de changement de créneau
+  // Quand un annonceur modifie/annule un créneau partiellement réservé
+  slotChangeNotifications: defineTable({
+    slotId: v.id("collectiveSlots"),
+    bookingId: v.id("collectiveSlotBookings"),
+    clientId: v.id("users"),
+    missionId: v.id("missions"),
+
+    // Type de changement
+    changeType: v.union(
+      v.literal("time_changed"),        // Horaire modifié
+      v.literal("date_changed"),        // Date modifiée
+      v.literal("cancelled")            // Créneau annulé
+    ),
+
+    // Détails du changement
+    previousDate: v.optional(v.string()),
+    previousStartTime: v.optional(v.string()),
+    previousEndTime: v.optional(v.string()),
+    newDate: v.optional(v.string()),
+    newStartTime: v.optional(v.string()),
+    newEndTime: v.optional(v.string()),
+    reason: v.optional(v.string()),
+
+    // Statut de la notification
+    status: v.union(
+      v.literal("pending"),             // En attente de réponse client
+      v.literal("acknowledged"),        // Client a vu la notification
+      v.literal("rescheduled"),         // Client a choisi un nouveau créneau
+      v.literal("refunded"),            // Client a demandé remboursement
+      v.literal("expired")              // Délai de réponse expiré
+    ),
+
+    // Réponse du client
+    clientResponse: v.optional(v.union(
+      v.literal("accept_change"),       // Accepte le changement (si modification)
+      v.literal("reschedule"),          // Veut changer de créneau
+      v.literal("cancel")               // Veut annuler et être remboursé
+    )),
+    clientResponseAt: v.optional(v.number()),
+    newSelectedSlotId: v.optional(v.id("collectiveSlots")), // Si reschedule
+
+    // Timestamps
+    createdAt: v.number(),
+    expiresAt: v.number(),              // Délai de réponse (ex: 48h)
+  })
+    .index("by_client", ["clientId"])
+    .index("by_mission", ["missionId"])
+    .index("by_slot", ["slotId"])
+    .index("by_status", ["status"])
+    .index("by_expires", ["expiresAt"]),
 
   // ============================================
   // SEO - Pages services et villes

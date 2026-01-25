@@ -66,6 +66,11 @@ export interface FormuleData {
   description?: string;
   objectives?: { icon: string; text: string }[];
   numberOfSessions?: number;
+  sessionInterval?: number; // Délai en jours entre chaque séance
+  sessionType?: "individual" | "collective"; // Type de séance
+  maxAnimalsPerSession?: number; // Nombre max d'animaux si collective
+  serviceLocation?: "announcer_home" | "client_home" | "both"; // Lieu de prestation
+  animalTypes?: string[]; // Animaux acceptés pour cette formule
   includedFeatures?: string[];
   price: number; // en centimes
   duration?: number;

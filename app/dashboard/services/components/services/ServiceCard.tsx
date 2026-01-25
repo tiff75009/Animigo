@@ -29,10 +29,15 @@ import {
   Sparkles,
   X,
   Loader2,
+  User,
+  Users,
+  Settings2,
+  Calendar,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import ConfirmModal from "../shared/ConfirmModal";
 import { PriceRecommendationCompact } from "../PriceRecommendationCompact";
+import CollectiveSlotsManager from "../CollectiveSlotsManager";
 import { cn } from "@/app/lib/utils";
 
 interface ServiceCategory {
@@ -67,6 +72,11 @@ interface Variant {
   description?: string;
   objectives?: Objective[];
   numberOfSessions?: number;
+  sessionInterval?: number; // Délai en jours entre chaque séance
+  sessionType?: "individual" | "collective";
+  maxAnimalsPerSession?: number;
+  serviceLocation?: ServiceLocation; // Lieu de prestation
+  animalTypes?: string[]; // Animaux acceptés
   price: number;
   priceUnit: PriceUnit;
   pricing?: Pricing;
@@ -74,6 +84,8 @@ interface Variant {
   includedFeatures?: string[];
   order: number;
   isActive: boolean;
+  needsSlotConfiguration?: boolean; // true si formule collective sans créneaux
+  slotsCount?: number; // Nombre de créneaux futurs configurés
 }
 
 interface Option {
@@ -167,12 +179,52 @@ export default function ServiceCard({
 }: ServiceCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [editingSection, setEditingSection] = useState<"variants" | "options" | null>(null);
+  const [editingSection, setEditingSection] = useState<"variants" | "options" | "settings" | null>(null);
+  const [managingSlotsVariant, setManagingSlotsVariant] = useState<Variant | null>(null);
+
+  // Filtres pour la vue normale des formules
+  const [previewFilterSessionType, setPreviewFilterSessionType] = useState<"all" | "individual" | "collective">("all");
+  const [previewFilterLocation, setPreviewFilterLocation] = useState<"all" | "announcer_home" | "client_home" | "both">("all");
+  const [previewFilterAnimal, setPreviewFilterAnimal] = useState<string>("all");
+
+  // Check if any variant is collective (to restrict serviceLocation editing)
+  const hasCollectiveVariants = service.variants?.some(v => v.sessionType === "collective") || false;
 
   const activeVariants = service.variants?.filter((v) => v.isActive) || [];
   const activeOptions = service.options?.filter((o) => o.isActive) || [];
   const variantsCount = service.variants?.length || 0;
   const optionsCount = service.options?.length || 0;
+
+  // Collecter tous les types d'animaux uniques dans les variantes actives
+  const allAnimalsInActiveVariants = [...new Set(activeVariants.flatMap(v => v.animalTypes || []))];
+
+  // Filtrer les variantes pour la vue prévisualisation
+  const filteredActiveVariants = activeVariants.filter(variant => {
+    if (previewFilterSessionType !== "all") {
+      const variantSessionType = variant.sessionType || "individual";
+      if (variantSessionType !== previewFilterSessionType) return false;
+    }
+    if (previewFilterLocation !== "all") {
+      if (!variant.serviceLocation) return false;
+      if (previewFilterLocation === "both") {
+        if (variant.serviceLocation !== "both") return false;
+      } else {
+        if (variant.serviceLocation !== previewFilterLocation && variant.serviceLocation !== "both") return false;
+      }
+    }
+    if (previewFilterAnimal !== "all") {
+      if (!variant.animalTypes || !variant.animalTypes.includes(previewFilterAnimal)) return false;
+    }
+    return true;
+  });
+
+  const hasPreviewFilters = previewFilterSessionType !== "all" || previewFilterLocation !== "all" || previewFilterAnimal !== "all";
+
+  const resetPreviewFilters = () => {
+    setPreviewFilterSessionType("all");
+    setPreviewFilterLocation("all");
+    setPreviewFilterAnimal("all");
+  };
 
   const allMinPrices = activeVariants.map((v) => getMinPrice(v)).filter((p): p is NonNullable<typeof p> => p !== null);
   const globalMinPrice = allMinPrices.length > 0
@@ -297,44 +349,103 @@ export default function ServiceCard({
             transition={{ duration: 0.2 }}
           >
             <div className="border-t border-foreground/10">
-              {/* Animals & Location */}
+              {/* Animals & Location & Settings */}
               <div className="p-4 bg-foreground/[0.02]">
-                <div className="flex flex-wrap gap-2">
-                  {service.animalTypes.map((type) => {
-                    const Icon = animalIcons[type] || Star;
-                    return (
-                      <span key={type} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-full text-sm font-medium border border-foreground/10">
-                        <Icon className="w-4 h-4 text-primary" />
-                        {animalLabels[type] || type}
-                      </span>
-                    );
-                  })}
-                  {service.serviceLocation && (
-                    <span className={cn(
-                      "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium",
-                      service.serviceLocation === "announcer_home" && "bg-primary/10 text-primary",
-                      service.serviceLocation === "client_home" && "bg-secondary/10 text-secondary",
-                      service.serviceLocation === "both" && "bg-purple-100 text-purple-600"
-                    )}>
-                      {service.serviceLocation === "announcer_home" && <><Home className="w-4 h-4" /> Mon domicile</>}
-                      {service.serviceLocation === "client_home" && <><MapPin className="w-4 h-4" /> Déplacement</>}
-                      {service.serviceLocation === "both" && <><Home className="w-3.5 h-3.5" /><MapPin className="w-3.5 h-3.5" /> Les deux</>}
-                    </span>
-                  )}
-                  {service.allowOvernightStay && (
-                    <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-indigo-100 text-indigo-600">
-                      <Moon className="w-4 h-4" />
-                      Garde de nuit
-                      {service.overnightPrice && service.overnightPrice > 0 && ` (+${formatPrice(service.overnightPrice)})`}
-                    </span>
-                  )}
-                  {service.dayStartTime && service.dayEndTime && (
-                    <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-amber-50 text-amber-600">
-                      <Sun className="w-4 h-4" />
-                      {service.dayStartTime.replace(":00", "h")} - {service.dayEndTime.replace(":00", "h")}
-                    </span>
-                  )}
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-foreground flex items-center gap-2">
+                    <Settings2 className="w-4 h-4 text-text-light" />
+                    Paramètres du service
+                  </h4>
+                  <button
+                    onClick={() => setEditingSection(editingSection === "settings" ? null : "settings")}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                      editingSection === "settings"
+                        ? "bg-gray-700 text-white"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    )}
+                  >
+                    {editingSection === "settings" ? (
+                      <>
+                        <X className="w-3.5 h-3.5" />
+                        Fermer
+                      </>
+                    ) : (
+                      <>
+                        <Edit2 className="w-3.5 h-3.5" />
+                        Modifier
+                      </>
+                    )}
+                  </button>
                 </div>
+
+                <AnimatePresence mode="wait">
+                  {editingSection === "settings" ? (
+                    <motion.div
+                      key="edit-settings"
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                    >
+                      <ServiceSettingsEditor
+                        serviceId={service.id}
+                        serviceLocation={service.serviceLocation}
+                        hasCollectiveVariants={hasCollectiveVariants}
+                        token={token}
+                        onSaved={() => setEditingSection(null)}
+                      />
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="preview-settings"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="flex flex-wrap gap-2"
+                    >
+                      {service.animalTypes.map((type) => {
+                        const Icon = animalIcons[type] || Star;
+                        return (
+                          <span key={type} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-full text-sm font-medium border border-foreground/10">
+                            <Icon className="w-4 h-4 text-primary" />
+                            {animalLabels[type] || type}
+                          </span>
+                        );
+                      })}
+                      {service.serviceLocation && (
+                        <span className={cn(
+                          "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium",
+                          service.serviceLocation === "announcer_home" && "bg-primary/10 text-primary",
+                          service.serviceLocation === "client_home" && "bg-secondary/10 text-secondary",
+                          service.serviceLocation === "both" && "bg-purple-100 text-purple-600"
+                        )}>
+                          {service.serviceLocation === "announcer_home" && <><Home className="w-4 h-4" /> Mon domicile</>}
+                          {service.serviceLocation === "client_home" && <><MapPin className="w-4 h-4" /> Déplacement</>}
+                          {service.serviceLocation === "both" && <><Home className="w-3.5 h-3.5" /><MapPin className="w-3.5 h-3.5" /> Les deux</>}
+                        </span>
+                      )}
+                      {hasCollectiveVariants && (
+                        <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-orange-100 text-orange-600">
+                          <Users className="w-4 h-4" />
+                          Séances collectives
+                        </span>
+                      )}
+                      {service.allowOvernightStay && (
+                        <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-indigo-100 text-indigo-600">
+                          <Moon className="w-4 h-4" />
+                          Garde de nuit
+                          {service.overnightPrice && service.overnightPrice > 0 && ` (+${formatPrice(service.overnightPrice)})`}
+                        </span>
+                      )}
+                      {service.dayStartTime && service.dayEndTime && (
+                        <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-amber-50 text-amber-600">
+                          <Sun className="w-4 h-4" />
+                          {service.dayStartTime.replace(":00", "h")} - {service.dayEndTime.replace(":00", "h")}
+                        </span>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Variants Section */}
@@ -382,6 +493,8 @@ export default function ServiceCard({
                         categoryData={categoryData}
                         category={service.category}
                         allowOvernightStay={service.allowOvernightStay}
+                        serviceAnimalTypes={service.animalTypes}
+                        onManageSlots={setManagingSlotsVariant}
                       />
                     </motion.div>
                   ) : (
@@ -390,43 +503,187 @@ export default function ServiceCard({
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className="space-y-2"
+                      className="space-y-3"
                     >
+                      {/* Filtres pour la vue prévisualisation */}
+                      {activeVariants.length > 1 && (
+                        <div className="p-2 bg-gray-50 rounded-lg border border-gray-100">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <select
+                              value={previewFilterSessionType}
+                              onChange={(e) => setPreviewFilterSessionType(e.target.value as "all" | "individual" | "collective")}
+                              className={cn(
+                                "px-2 py-1 text-xs rounded-md border transition-colors",
+                                previewFilterSessionType !== "all"
+                                  ? "border-primary bg-primary/5 text-primary"
+                                  : "border-gray-200 bg-white text-foreground"
+                              )}
+                            >
+                              <option value="all">Toutes</option>
+                              <option value="individual">👤 Individuel</option>
+                              <option value="collective">👥 Collectif</option>
+                            </select>
+
+                            <select
+                              value={previewFilterLocation}
+                              onChange={(e) => setPreviewFilterLocation(e.target.value as "all" | "announcer_home" | "client_home" | "both")}
+                              className={cn(
+                                "px-2 py-1 text-xs rounded-md border transition-colors",
+                                previewFilterLocation !== "all"
+                                  ? "border-primary bg-primary/5 text-primary"
+                                  : "border-gray-200 bg-white text-foreground"
+                              )}
+                            >
+                              <option value="all">Tous lieux</option>
+                              <option value="announcer_home">🏠 Mon domicile</option>
+                              <option value="client_home">📍 À domicile</option>
+                              <option value="both">🔄 Flexible</option>
+                            </select>
+
+                            {allAnimalsInActiveVariants.length > 0 && (
+                              <select
+                                value={previewFilterAnimal}
+                                onChange={(e) => setPreviewFilterAnimal(e.target.value)}
+                                className={cn(
+                                  "px-2 py-1 text-xs rounded-md border transition-colors",
+                                  previewFilterAnimal !== "all"
+                                    ? "border-primary bg-primary/5 text-primary"
+                                    : "border-gray-200 bg-white text-foreground"
+                                )}
+                              >
+                                <option value="all">Tous animaux</option>
+                                {allAnimalsInActiveVariants.map(animal => (
+                                  <option key={animal} value={animal}>{animalLabels[animal] || animal}</option>
+                                ))}
+                              </select>
+                            )}
+
+                            {hasPreviewFilters && (
+                              <button
+                                onClick={resetPreviewFilters}
+                                className="px-2 py-1 text-xs text-primary hover:underline"
+                              >
+                                Réinitialiser
+                              </button>
+                            )}
+                          </div>
+                          {hasPreviewFilters && (
+                            <p className="text-xs text-text-light mt-1">
+                              {filteredActiveVariants.length} sur {activeVariants.length}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
                       {activeVariants.length === 0 ? (
                         <div className="p-4 bg-amber-50 rounded-xl text-center">
                           <AlertCircle className="w-6 h-6 text-amber-500 mx-auto mb-2" />
                           <p className="text-sm text-amber-700">Aucune formule active</p>
                         </div>
+                      ) : filteredActiveVariants.length === 0 ? (
+                        <div className="p-4 bg-gray-50 rounded-xl text-center">
+                          <p className="text-sm text-text-light">Aucune formule ne correspond aux filtres</p>
+                        </div>
                       ) : (
-                        activeVariants.map((variant) => {
+                        filteredActiveVariants.map((variant) => {
                           const prices = getVariantPrices(variant);
                           return (
                             <div
                               key={variant.id}
                               className="p-3 bg-foreground/[0.02] rounded-xl border border-foreground/5"
                             >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-start gap-3 min-w-0 flex-1">
+                                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
                                     <Sparkles className="w-4 h-4 text-primary" />
                                   </div>
-                                  <div className="min-w-0">
+                                  <div className="min-w-0 flex-1">
                                     <span className="font-medium text-foreground block truncate">{variant.name}</span>
-                                    <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                                    {/* Badges */}
+                                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                      {/* Type de séance */}
+                                      {variant.sessionType === "collective" ? (
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-orange-100 text-orange-600 text-xs rounded-full">
+                                          <Users className="w-3 h-3" />
+                                          Collectif
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">
+                                          <User className="w-3 h-3" />
+                                          Individuel
+                                        </span>
+                                      )}
+                                      {/* Lieu */}
+                                      {variant.serviceLocation && (
+                                        <span className={cn(
+                                          "inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded-full",
+                                          variant.serviceLocation === "announcer_home" && "bg-primary/10 text-primary",
+                                          variant.serviceLocation === "client_home" && "bg-secondary/10 text-secondary",
+                                          variant.serviceLocation === "both" && "bg-purple-100 text-purple-600"
+                                        )}>
+                                          {variant.serviceLocation === "announcer_home" && <><Home className="w-3 h-3" /> Chez moi</>}
+                                          {variant.serviceLocation === "client_home" && <><MapPin className="w-3 h-3" /> À domicile</>}
+                                          {variant.serviceLocation === "both" && <><Home className="w-2.5 h-2.5" /><MapPin className="w-2.5 h-2.5" /> Flexible</>}
+                                        </span>
+                                      )}
+                                      {/* Durée */}
                                       {variant.duration && (
                                         <span className="text-xs text-text-light flex items-center gap-1">
                                           <Clock className="w-3 h-3" />{variant.duration} min
                                         </span>
                                       )}
+                                      {/* Nombre de séances */}
                                       {variant.numberOfSessions && variant.numberOfSessions > 1 && (
-                                        <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-full">
+                                        <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded-full">
                                           {variant.numberOfSessions} séances
                                         </span>
                                       )}
+                                      {/* Bouton gérer créneaux pour les formules collectives */}
+                                      {variant.sessionType === "collective" && (
+                                        <>
+                                          {/* Indicateur créneaux requis ou nombre de créneaux */}
+                                          {(variant.needsSlotConfiguration || (!variant.slotsCount && variant.slotsCount !== 0)) ? (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 text-xs rounded-full font-medium animate-pulse">
+                                              <AlertCircle className="w-3 h-3" />
+                                              Créneaux requis
+                                            </span>
+                                          ) : variant.slotsCount && variant.slotsCount > 0 ? (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-600 text-xs rounded-full">
+                                              <Calendar className="w-3 h-3" />
+                                              {variant.slotsCount} créneaux
+                                            </span>
+                                          ) : null}
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setManagingSlotsVariant(variant);
+                                            }}
+                                            className={cn(
+                                              "inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full transition-colors",
+                                              variant.needsSlotConfiguration || !variant.slotsCount
+                                                ? "bg-orange-500 text-white hover:bg-orange-600"
+                                                : "bg-primary/10 text-primary hover:bg-primary/20"
+                                            )}
+                                          >
+                                            <Calendar className="w-3 h-3" />
+                                            Gérer
+                                          </button>
+                                        </>
+                                      )}
                                     </div>
+                                    {/* Animaux */}
+                                    {variant.animalTypes && variant.animalTypes.length > 0 && (
+                                      <div className="flex flex-wrap gap-1 mt-1">
+                                        {variant.animalTypes.map((animal) => (
+                                          <span key={animal} className="px-1.5 py-0.5 bg-foreground/5 text-foreground/70 text-xs rounded-full">
+                                            {animalLabels[animal] || animal}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-1 flex-shrink-0">
+                                <div className="flex flex-col items-end gap-1 flex-shrink-0">
                                   {prices.slice(0, 2).map((price, idx) => (
                                     <span key={idx} className={cn(
                                       "text-xs font-bold px-2 py-1 rounded-lg",
@@ -448,7 +705,7 @@ export default function ServiceCard({
                               {variant.objectives && variant.objectives.length > 0 && (
                                 <div className="flex flex-wrap gap-1 mt-2 pl-11">
                                   {variant.objectives.map((objective, idx) => (
-                                    <span key={idx} className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full">
+                                    <span key={idx} className="flex items-center gap-1 px-2 py-0.5 bg-purple-50 text-purple-600 text-xs rounded-full">
                                       <span>{objective.icon}</span>
                                       <span>{objective.text}</span>
                                     </span>
@@ -596,6 +853,20 @@ export default function ServiceCard({
         cancelLabel="Annuler"
         variant="danger"
       />
+
+      {/* Collective Slots Manager Modal */}
+      <AnimatePresence>
+        {managingSlotsVariant && (
+          <CollectiveSlotsManager
+            variantId={managingSlotsVariant.id}
+            variantName={managingSlotsVariant.name}
+            duration={managingSlotsVariant.duration || 60}
+            maxAnimalsPerSession={managingSlotsVariant.maxAnimalsPerSession || 5}
+            animalTypes={managingSlotsVariant.animalTypes || service.animalTypes}
+            onClose={() => setManagingSlotsVariant(null)}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -611,13 +882,20 @@ interface VariantEditorProps {
   categoryData?: ServiceCategory;
   category: string;
   allowOvernightStay?: boolean;
+  serviceAnimalTypes: string[];
+  onManageSlots?: (variant: Variant) => void;
 }
 
-function VariantEditor({ serviceId, variants, token, categoryData, category, allowOvernightStay }: VariantEditorProps) {
+function VariantEditor({ serviceId, variants, token, categoryData, category, allowOvernightStay, serviceAnimalTypes, onManageSlots }: VariantEditorProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<Id<"serviceVariants"> | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ id: Id<"serviceVariants">; name: string } | null>(null);
+
+  // Filtres
+  const [filterSessionType, setFilterSessionType] = useState<"all" | "individual" | "collective">("all");
+  const [filterLocation, setFilterLocation] = useState<"all" | "announcer_home" | "client_home" | "both">("all");
+  const [filterAnimal, setFilterAnimal] = useState<string>("all");
 
   const addVariantMutation = useMutation(api.services.variants.addVariant);
   const updateVariantMutation = useMutation(api.services.variants.updateVariant);
@@ -632,6 +910,35 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
   const recommendedPrice = priceRecommendation?.avgPrice || 2000;
   const isGardeService = categoryData?.allowOvernightStay === true;
 
+  // Collecter tous les types d'animaux uniques dans les variantes
+  const allAnimalsInVariants = [...new Set(variants.flatMap(v => v.animalTypes || []))];
+
+  // Filtrer les variantes
+  const filteredVariants = variants.filter(variant => {
+    // Filtre type de séance
+    if (filterSessionType !== "all") {
+      const variantSessionType = variant.sessionType || "individual";
+      if (variantSessionType !== filterSessionType) return false;
+    }
+    // Filtre lieu
+    if (filterLocation !== "all") {
+      if (!variant.serviceLocation) return false;
+      if (filterLocation === "both") {
+        // "both" signifie flexible
+        if (variant.serviceLocation !== "both") return false;
+      } else {
+        if (variant.serviceLocation !== filterLocation && variant.serviceLocation !== "both") return false;
+      }
+    }
+    // Filtre animal
+    if (filterAnimal !== "all") {
+      if (!variant.animalTypes || !variant.animalTypes.includes(filterAnimal)) return false;
+    }
+    return true;
+  });
+
+  const hasActiveFilters = filterSessionType !== "all" || filterLocation !== "all" || filterAnimal !== "all";
+
   const handleDelete = async () => {
     if (!itemToDelete) return;
     try {
@@ -643,11 +950,94 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
     setItemToDelete(null);
   };
 
+  const resetFilters = () => {
+    setFilterSessionType("all");
+    setFilterLocation("all");
+    setFilterAnimal("all");
+  };
+
   return (
     <div className="space-y-3">
+      {/* Filtres */}
+      {variants.length > 1 && (
+        <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+          <div className="flex items-center gap-2 mb-2">
+            <Settings2 className="w-4 h-4 text-text-light" />
+            <span className="text-sm font-medium text-foreground">Filtrer les formules</span>
+            {hasActiveFilters && (
+              <button
+                onClick={resetFilters}
+                className="ml-auto text-xs text-primary hover:underline"
+              >
+                Réinitialiser
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {/* Filtre type de séance */}
+            <select
+              value={filterSessionType}
+              onChange={(e) => setFilterSessionType(e.target.value as "all" | "individual" | "collective")}
+              className={cn(
+                "px-3 py-1.5 text-xs rounded-lg border transition-colors",
+                filterSessionType !== "all"
+                  ? "border-primary bg-primary/5 text-primary"
+                  : "border-gray-200 bg-white text-foreground"
+              )}
+            >
+              <option value="all">Toutes les séances</option>
+              <option value="individual">👤 Individuel</option>
+              <option value="collective">👥 Collectif</option>
+            </select>
+
+            {/* Filtre lieu */}
+            <select
+              value={filterLocation}
+              onChange={(e) => setFilterLocation(e.target.value as "all" | "announcer_home" | "client_home" | "both")}
+              className={cn(
+                "px-3 py-1.5 text-xs rounded-lg border transition-colors",
+                filterLocation !== "all"
+                  ? "border-primary bg-primary/5 text-primary"
+                  : "border-gray-200 bg-white text-foreground"
+              )}
+            >
+              <option value="all">Tous les lieux</option>
+              <option value="announcer_home">🏠 Mon domicile</option>
+              <option value="client_home">📍 À domicile</option>
+              <option value="both">🔄 Flexible</option>
+            </select>
+
+            {/* Filtre animal */}
+            {allAnimalsInVariants.length > 0 && (
+              <select
+                value={filterAnimal}
+                onChange={(e) => setFilterAnimal(e.target.value)}
+                className={cn(
+                  "px-3 py-1.5 text-xs rounded-lg border transition-colors",
+                  filterAnimal !== "all"
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-gray-200 bg-white text-foreground"
+                )}
+              >
+                <option value="all">Tous les animaux</option>
+                {allAnimalsInVariants.map(animal => (
+                  <option key={animal} value={animal}>{animalLabels[animal] || animal}</option>
+                ))}
+              </select>
+            )}
+          </div>
+          {/* Résultat du filtre */}
+          {hasActiveFilters && (
+            <p className="text-xs text-text-light mt-2">
+              {filteredVariants.length} formule{filteredVariants.length > 1 ? "s" : ""} sur {variants.length}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Existing variants */}
       <AnimatePresence mode="popLayout">
-        {variants.map((variant, index) => (
+        {filteredVariants.map((variant, index) => (
           <motion.div
             key={variant.id}
             layout
@@ -664,6 +1054,7 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
                 isGardeService={isGardeService}
                 allowOvernightStay={allowOvernightStay}
                 allowedPriceUnits={categoryData?.allowedPriceUnits}
+                serviceAnimalTypes={serviceAnimalTypes}
                 onSave={async (data) => {
                   await updateVariantMutation({ token, variantId: variant.id, ...data });
                   setEditingId(null);
@@ -680,6 +1071,7 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
                   setDeleteModalOpen(true);
                 }}
                 canDelete={variants.length > 1}
+                onManageSlots={onManageSlots}
               />
             )}
           </motion.div>
@@ -702,6 +1094,7 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
               isGardeService={isGardeService}
               allowOvernightStay={allowOvernightStay}
               allowedPriceUnits={categoryData?.allowedPriceUnits}
+              serviceAnimalTypes={serviceAnimalTypes}
               existingCount={variants.length}
               onSave={async (data) => {
                 await addVariantMutation({ token, serviceId, ...data });
@@ -748,12 +1141,14 @@ function VariantPreviewCard({
   onEdit,
   onDelete,
   canDelete,
+  onManageSlots,
 }: {
   variant: Variant;
   index: number;
   onEdit: () => void;
   onDelete: () => void;
   canDelete: boolean;
+  onManageSlots?: (variant: Variant) => void;
 }) {
   const prices = getVariantPrices(variant);
 
@@ -770,10 +1165,19 @@ function VariantPreviewCard({
             <Sparkles className="w-5 h-5 text-primary" />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
               <h5 className="font-semibold text-foreground truncate">{variant.name}</h5>
-              {!variant.isActive && (
+              {/* Formule collective sans créneaux */}
+              {variant.sessionType === "collective" && (variant.needsSlotConfiguration || !variant.slotsCount) && (
+                <span className="text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full animate-pulse font-medium">Créneaux requis</span>
+              )}
+              {/* Formule inactive (non collective ou autre raison) */}
+              {!variant.isActive && variant.sessionType !== "collective" && (
                 <span className="text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full">Inactif</span>
+              )}
+              {/* Formule collective avec créneaux configurés */}
+              {variant.sessionType === "collective" && variant.slotsCount && variant.slotsCount > 0 && (
+                <span className="text-xs px-2 py-0.5 bg-green-100 text-green-600 rounded-full">{variant.slotsCount} créneaux</span>
               )}
             </div>
             {variant.description && (
@@ -817,10 +1221,63 @@ function VariantPreviewCard({
                 ))}
               </div>
             )}
+            {/* Type de séance, lieu et animaux */}
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              {/* Type de séance */}
+              {variant.sessionType === "collective" ? (
+                <span className="flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-600 text-xs rounded-full font-medium">
+                  <Users className="w-3 h-3" />
+                  Collectif{variant.maxAnimalsPerSession ? ` (${variant.maxAnimalsPerSession} max)` : ""}
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full font-medium">
+                  <User className="w-3 h-3" />
+                  Individuel
+                </span>
+              )}
+              {/* Lieu de prestation */}
+              {variant.serviceLocation && (
+                <span className={cn(
+                  "flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium",
+                  variant.serviceLocation === "announcer_home" && "bg-primary/10 text-primary",
+                  variant.serviceLocation === "client_home" && "bg-secondary/10 text-secondary",
+                  variant.serviceLocation === "both" && "bg-purple-100 text-purple-600"
+                )}>
+                  {variant.serviceLocation === "announcer_home" && <><Home className="w-3 h-3" /> Mon domicile</>}
+                  {variant.serviceLocation === "client_home" && <><MapPin className="w-3 h-3" /> À domicile</>}
+                  {variant.serviceLocation === "both" && <><Home className="w-2.5 h-2.5" /><MapPin className="w-2.5 h-2.5" /> Flexible</>}
+                </span>
+              )}
+              {/* Animaux acceptés */}
+              {variant.animalTypes && variant.animalTypes.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {variant.animalTypes.map((animal) => (
+                    <span key={animal} className="px-2 py-0.5 bg-foreground/5 text-foreground/70 text-xs rounded-full">
+                      {animalLabels[animal] || animal}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         <div className="flex items-center gap-1 flex-shrink-0">
+          {/* Bouton Créneaux pour les formules collectives */}
+          {variant.sessionType === "collective" && onManageSlots && (
+            <button
+              onClick={() => onManageSlots(variant)}
+              className={cn(
+                "p-2 rounded-lg transition-colors",
+                variant.needsSlotConfiguration
+                  ? "text-white bg-orange-500 hover:bg-orange-600 animate-pulse"
+                  : "text-orange-500 hover:bg-orange-50"
+              )}
+              title="Gérer les créneaux"
+            >
+              <Calendar className="w-4 h-4" />
+            </button>
+          )}
           <button
             onClick={onEdit}
             className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors"
@@ -839,6 +1296,31 @@ function VariantPreviewCard({
           )}
         </div>
       </div>
+
+      {/* Alerte créneaux requis */}
+      {variant.sessionType === "collective" && (variant.needsSlotConfiguration || !variant.slotsCount) && onManageSlots && (
+        <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-xl">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-orange-800">
+                Créneaux non configurés
+              </p>
+              <p className="text-xs text-orange-600 mt-1">
+                Cette formule collective est inactive car aucun créneau n'est défini.
+                Ajoutez des créneaux pour permettre aux clients de réserver.
+              </p>
+              <button
+                onClick={() => onManageSlots(variant)}
+                className="mt-2 inline-flex items-center gap-1 px-3 py-1.5 bg-orange-500 text-white text-xs font-medium rounded-lg hover:bg-orange-600 transition-colors"
+              >
+                <Calendar className="w-3 h-3" />
+                Configurer les créneaux
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -852,6 +1334,7 @@ function VariantEditForm({
   isGardeService,
   allowOvernightStay,
   allowedPriceUnits,
+  serviceAnimalTypes,
   onSave,
   onCancel,
 }: {
@@ -862,11 +1345,17 @@ function VariantEditForm({
   isGardeService: boolean;
   allowOvernightStay?: boolean;
   allowedPriceUnits?: ("hour" | "day" | "week" | "month")[];
+  serviceAnimalTypes: string[];
   onSave: (data: {
     name?: string;
     description?: string;
     objectives?: Objective[];
     numberOfSessions?: number;
+    sessionInterval?: number;
+    sessionType?: "individual" | "collective";
+    maxAnimalsPerSession?: number;
+    serviceLocation?: ServiceLocation;
+    animalTypes?: string[];
     pricing?: Pricing;
     duration?: number;
     includedFeatures?: string[];
@@ -880,6 +1369,11 @@ function VariantEditForm({
   const [newObjectiveIcon, setNewObjectiveIcon] = useState("🎯");
   const [newObjectiveText, setNewObjectiveText] = useState("");
   const [numberOfSessions, setNumberOfSessions] = useState(variant.numberOfSessions || 1);
+  const [sessionInterval, setSessionInterval] = useState<number | undefined>(variant.sessionInterval);
+  const [sessionType, setSessionType] = useState<"individual" | "collective">(variant.sessionType || "individual");
+  const [maxAnimalsPerSession, setMaxAnimalsPerSession] = useState<number | undefined>(variant.maxAnimalsPerSession);
+  const [serviceLocation, setServiceLocation] = useState<ServiceLocation>(variant.serviceLocation || "announcer_home");
+  const [selectedAnimalTypes, setSelectedAnimalTypes] = useState<string[]>(variant.animalTypes || serviceAnimalTypes);
   const [duration, setDuration] = useState(variant.duration || 60);
   const [isActive, setIsActive] = useState(variant.isActive);
   const [pricing, setPricing] = useState<Pricing>(variant.pricing || {});
@@ -890,6 +1384,10 @@ function VariantEditForm({
   const dailyPrice = pricing.daily || recommendedPrice * 8;
   const hourlyPrice = pricing.hourly || recommendedPrice;
   const nightlyPrice = pricing.nightly || Math.round(dailyPrice * 0.5);
+
+  // Si collective, forcer le lieu à announcer_home
+  const isCollective = sessionType === "collective";
+  const effectiveServiceLocation = isCollective ? "announcer_home" : serviceLocation;
 
   // Déterminer quels prix afficher selon allowedPriceUnits
   const showHourly = !allowedPriceUnits || allowedPriceUnits.includes("hour");
@@ -928,6 +1426,11 @@ function VariantEditForm({
         description: description || undefined,
         objectives: objectives.length > 0 ? objectives : undefined,
         numberOfSessions: numberOfSessions > 1 ? numberOfSessions : undefined,
+        sessionInterval: numberOfSessions > 1 ? sessionInterval : undefined,
+        sessionType,
+        maxAnimalsPerSession: sessionType === "collective" ? maxAnimalsPerSession : undefined,
+        serviceLocation: effectiveServiceLocation,
+        animalTypes: selectedAnimalTypes.length > 0 ? selectedAnimalTypes : undefined,
         pricing,
         duration,
         includedFeatures: includedFeatures.length > 0 ? includedFeatures : undefined,
@@ -1039,7 +1542,7 @@ function VariantEditForm({
       </div>
 
       {/* Duration & Nombre de séances */}
-      <div className="flex gap-4">
+      <div className="flex flex-wrap gap-4">
         <div>
           <label className="block text-sm font-medium text-foreground mb-1">Durée (minutes)</label>
           <input
@@ -1061,6 +1564,175 @@ function VariantEditForm({
             className="w-24 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
           />
         </div>
+      </div>
+
+      {/* Délai entre séances - visible si plusieurs séances */}
+      {numberOfSessions > 1 && (
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1">Délai entre chaque séance</label>
+          <select
+            value={sessionInterval || ""}
+            onChange={(e) => setSessionInterval(e.target.value ? parseInt(e.target.value) : undefined)}
+            className="px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+          >
+            <option value="">Pas de délai minimum</option>
+            <option value="1">1 jour minimum</option>
+            <option value="2">2 jours minimum</option>
+            <option value="3">3 jours minimum</option>
+            <option value="7">1 semaine minimum</option>
+            <option value="14">2 semaines minimum</option>
+            <option value="30">1 mois minimum</option>
+          </select>
+          {sessionInterval && (
+            <p className="text-xs text-text-light mt-1">
+              Les {numberOfSessions} séances seront espacées d'au moins {sessionInterval} jour(s)
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Type de séance */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-1">Type de séance</label>
+        <div className="flex gap-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name={`sessionType-edit-${variant.id}`}
+              value="individual"
+              checked={sessionType === "individual"}
+              onChange={() => {
+                setSessionType("individual");
+                setMaxAnimalsPerSession(undefined);
+              }}
+              className="w-4 h-4 text-primary focus:ring-primary"
+            />
+            <span className="text-sm">Individuelle</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name={`sessionType-edit-${variant.id}`}
+              value="collective"
+              checked={sessionType === "collective"}
+              onChange={() => {
+                setSessionType("collective");
+                setMaxAnimalsPerSession(5);
+              }}
+              className="w-4 h-4 text-primary focus:ring-primary"
+            />
+            <span className="text-sm">Collective</span>
+          </label>
+        </div>
+      </div>
+
+      {/* Nombre max d'animaux - visible si séance collective */}
+      {sessionType === "collective" && (
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1">Nombre max d'animaux par séance</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              value={maxAnimalsPerSession || 5}
+              onChange={(e) => setMaxAnimalsPerSession(parseInt(e.target.value) || 5)}
+              min={2}
+              max={20}
+              className="w-20 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+            />
+            <span className="text-sm text-text-light">animaux max</span>
+          </div>
+        </div>
+      )}
+
+      {/* Lieu de prestation */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-2">Lieu de prestation</label>
+        {isCollective && (
+          <p className="text-xs text-orange-600 mb-2">Les séances collectives se déroulent obligatoirement à votre domicile.</p>
+        )}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => !isCollective && setServiceLocation("announcer_home")}
+            disabled={isCollective && effectiveServiceLocation !== "announcer_home"}
+            className={cn(
+              "flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all text-sm",
+              effectiveServiceLocation === "announcer_home"
+                ? "border-primary bg-primary/5 text-primary"
+                : "border-foreground/10 bg-white text-foreground/60 hover:bg-foreground/5",
+              isCollective && effectiveServiceLocation !== "announcer_home" && "opacity-50 cursor-not-allowed"
+            )}
+          >
+            <Home className="w-4 h-4" />
+            Mon domicile
+          </button>
+          <button
+            type="button"
+            onClick={() => !isCollective && setServiceLocation("client_home")}
+            disabled={isCollective}
+            className={cn(
+              "flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all text-sm",
+              effectiveServiceLocation === "client_home"
+                ? "border-secondary bg-secondary/5 text-secondary"
+                : "border-foreground/10 bg-white text-foreground/60 hover:bg-foreground/5",
+              isCollective && "opacity-50 cursor-not-allowed"
+            )}
+          >
+            <MapPin className="w-4 h-4" />
+            À domicile
+          </button>
+          <button
+            type="button"
+            onClick={() => !isCollective && setServiceLocation("both")}
+            disabled={isCollective}
+            className={cn(
+              "flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all text-sm",
+              effectiveServiceLocation === "both"
+                ? "border-purple-500 bg-purple-50 text-purple-600"
+                : "border-foreground/10 bg-white text-foreground/60 hover:bg-foreground/5",
+              isCollective && "opacity-50 cursor-not-allowed"
+            )}
+          >
+            <Home className="w-3.5 h-3.5" />
+            <MapPin className="w-3.5 h-3.5" />
+            Les deux
+          </button>
+        </div>
+      </div>
+
+      {/* Animaux acceptés */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-2">Animaux acceptés pour cette formule</label>
+        <div className="flex flex-wrap gap-2">
+          {serviceAnimalTypes.map((animal) => {
+            const isSelected = selectedAnimalTypes.includes(animal);
+            return (
+              <button
+                key={animal}
+                type="button"
+                onClick={() => {
+                  if (isSelected) {
+                    setSelectedAnimalTypes(selectedAnimalTypes.filter(a => a !== animal));
+                  } else {
+                    setSelectedAnimalTypes([...selectedAnimalTypes, animal]);
+                  }
+                }}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all",
+                  isSelected
+                    ? "bg-primary/10 text-primary border-2 border-primary"
+                    : "bg-foreground/5 text-foreground/60 border-2 border-transparent hover:bg-foreground/10"
+                )}
+              >
+                {animalLabels[animal] || animal}
+                {isSelected && <Check className="w-3 h-3" />}
+              </button>
+            );
+          })}
+        </div>
+        {selectedAnimalTypes.length === 0 && (
+          <p className="text-xs text-red-500 mt-1">Sélectionnez au moins un type d'animal</p>
+        )}
       </div>
 
       {/* Pricing */}
@@ -1271,6 +1943,7 @@ function VariantAddForm({
   isGardeService,
   allowOvernightStay,
   allowedPriceUnits,
+  serviceAnimalTypes,
   existingCount,
   onSave,
   onCancel,
@@ -1282,12 +1955,18 @@ function VariantAddForm({
   isGardeService: boolean;
   allowOvernightStay?: boolean;
   allowedPriceUnits?: ("hour" | "day" | "week" | "month")[];
+  serviceAnimalTypes: string[];
   existingCount: number;
   onSave: (data: {
     name: string;
     description?: string;
     objectives?: Objective[];
     numberOfSessions?: number;
+    sessionInterval?: number;
+    sessionType?: "individual" | "collective";
+    maxAnimalsPerSession?: number;
+    serviceLocation?: ServiceLocation;
+    animalTypes?: string[];
     price: number;
     priceUnit: PriceUnit;
     pricing?: Pricing;
@@ -1302,6 +1981,11 @@ function VariantAddForm({
   const [newObjectiveIcon, setNewObjectiveIcon] = useState("🎯");
   const [newObjectiveText, setNewObjectiveText] = useState("");
   const [numberOfSessions, setNumberOfSessions] = useState(1);
+  const [sessionInterval, setSessionInterval] = useState<number | undefined>(undefined);
+  const [sessionType, setSessionType] = useState<"individual" | "collective">("individual");
+  const [maxAnimalsPerSession, setMaxAnimalsPerSession] = useState<number | undefined>(undefined);
+  const [serviceLocation, setServiceLocation] = useState<ServiceLocation>("announcer_home");
+  const [selectedAnimalTypes, setSelectedAnimalTypes] = useState<string[]>(serviceAnimalTypes);
   const [duration, setDuration] = useState(60);
   const [includedFeatures, setIncludedFeatures] = useState<string[]>([]);
   const [newFeature, setNewFeature] = useState("");
@@ -1316,6 +2000,10 @@ function VariantAddForm({
       ? { daily: dailyPrice, hourly: hourlyPrice, nightly: allowOvernightStay ? nightlyPrice : undefined }
       : { hourly: recommendedPrice }
   );
+
+  // Si collective, forcer le lieu à announcer_home
+  const isCollective = sessionType === "collective";
+  const effectiveServiceLocation = isCollective ? "announcer_home" : serviceLocation;
 
   // Déterminer quels prix afficher selon allowedPriceUnits
   const showHourly = !allowedPriceUnits || allowedPriceUnits.includes("hour");
@@ -1355,6 +2043,11 @@ function VariantAddForm({
         description: description || undefined,
         objectives: objectives.length > 0 ? objectives : undefined,
         numberOfSessions: numberOfSessions > 1 ? numberOfSessions : undefined,
+        sessionInterval: numberOfSessions > 1 ? sessionInterval : undefined,
+        sessionType,
+        maxAnimalsPerSession: sessionType === "collective" ? maxAnimalsPerSession : undefined,
+        serviceLocation: effectiveServiceLocation,
+        animalTypes: selectedAnimalTypes.length > 0 ? selectedAnimalTypes : undefined,
         price: mainPrice,
         priceUnit: isGardeService || !showHourly ? "day" : "hour",
         pricing,
@@ -1456,7 +2149,7 @@ function VariantAddForm({
       </div>
 
       {/* Duration & Nombre de séances */}
-      <div className="flex gap-4">
+      <div className="flex flex-wrap gap-4">
         <div>
           <label className="block text-sm font-medium text-foreground mb-1">Durée (minutes)</label>
           <input
@@ -1478,6 +2171,175 @@ function VariantAddForm({
             className="w-24 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
           />
         </div>
+      </div>
+
+      {/* Délai entre séances - visible si plusieurs séances */}
+      {numberOfSessions > 1 && (
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1">Délai entre chaque séance</label>
+          <select
+            value={sessionInterval || ""}
+            onChange={(e) => setSessionInterval(e.target.value ? parseInt(e.target.value) : undefined)}
+            className="px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
+          >
+            <option value="">Pas de délai minimum</option>
+            <option value="1">1 jour minimum</option>
+            <option value="2">2 jours minimum</option>
+            <option value="3">3 jours minimum</option>
+            <option value="7">1 semaine minimum</option>
+            <option value="14">2 semaines minimum</option>
+            <option value="30">1 mois minimum</option>
+          </select>
+          {sessionInterval && (
+            <p className="text-xs text-text-light mt-1">
+              Les {numberOfSessions} séances seront espacées d'au moins {sessionInterval} jour(s)
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Type de séance */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-1">Type de séance</label>
+        <div className="flex gap-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name="sessionType-add"
+              value="individual"
+              checked={sessionType === "individual"}
+              onChange={() => {
+                setSessionType("individual");
+                setMaxAnimalsPerSession(undefined);
+              }}
+              className="w-4 h-4 text-secondary focus:ring-secondary"
+            />
+            <span className="text-sm">Individuelle</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name="sessionType-add"
+              value="collective"
+              checked={sessionType === "collective"}
+              onChange={() => {
+                setSessionType("collective");
+                setMaxAnimalsPerSession(5);
+              }}
+              className="w-4 h-4 text-secondary focus:ring-secondary"
+            />
+            <span className="text-sm">Collective</span>
+          </label>
+        </div>
+      </div>
+
+      {/* Nombre max d'animaux - visible si séance collective */}
+      {sessionType === "collective" && (
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1">Nombre max d'animaux par séance</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              value={maxAnimalsPerSession || 5}
+              onChange={(e) => setMaxAnimalsPerSession(parseInt(e.target.value) || 5)}
+              min={2}
+              max={20}
+              className="w-20 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
+            />
+            <span className="text-sm text-text-light">animaux max</span>
+          </div>
+        </div>
+      )}
+
+      {/* Lieu de prestation */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-2">Lieu de prestation</label>
+        {isCollective && (
+          <p className="text-xs text-orange-600 mb-2">Les séances collectives se déroulent obligatoirement à votre domicile.</p>
+        )}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => !isCollective && setServiceLocation("announcer_home")}
+            disabled={isCollective && effectiveServiceLocation !== "announcer_home"}
+            className={cn(
+              "flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all text-sm",
+              effectiveServiceLocation === "announcer_home"
+                ? "border-secondary bg-secondary/5 text-secondary"
+                : "border-foreground/10 bg-white text-foreground/60 hover:bg-foreground/5",
+              isCollective && effectiveServiceLocation !== "announcer_home" && "opacity-50 cursor-not-allowed"
+            )}
+          >
+            <Home className="w-4 h-4" />
+            Mon domicile
+          </button>
+          <button
+            type="button"
+            onClick={() => !isCollective && setServiceLocation("client_home")}
+            disabled={isCollective}
+            className={cn(
+              "flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all text-sm",
+              effectiveServiceLocation === "client_home"
+                ? "border-secondary bg-secondary/5 text-secondary"
+                : "border-foreground/10 bg-white text-foreground/60 hover:bg-foreground/5",
+              isCollective && "opacity-50 cursor-not-allowed"
+            )}
+          >
+            <MapPin className="w-4 h-4" />
+            À domicile
+          </button>
+          <button
+            type="button"
+            onClick={() => !isCollective && setServiceLocation("both")}
+            disabled={isCollective}
+            className={cn(
+              "flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all text-sm",
+              effectiveServiceLocation === "both"
+                ? "border-purple-500 bg-purple-50 text-purple-600"
+                : "border-foreground/10 bg-white text-foreground/60 hover:bg-foreground/5",
+              isCollective && "opacity-50 cursor-not-allowed"
+            )}
+          >
+            <Home className="w-3.5 h-3.5" />
+            <MapPin className="w-3.5 h-3.5" />
+            Les deux
+          </button>
+        </div>
+      </div>
+
+      {/* Animaux acceptés */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-2">Animaux acceptés pour cette formule</label>
+        <div className="flex flex-wrap gap-2">
+          {serviceAnimalTypes.map((animal) => {
+            const isSelected = selectedAnimalTypes.includes(animal);
+            return (
+              <button
+                key={animal}
+                type="button"
+                onClick={() => {
+                  if (isSelected) {
+                    setSelectedAnimalTypes(selectedAnimalTypes.filter(a => a !== animal));
+                  } else {
+                    setSelectedAnimalTypes([...selectedAnimalTypes, animal]);
+                  }
+                }}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all",
+                  isSelected
+                    ? "bg-secondary/10 text-secondary border-2 border-secondary"
+                    : "bg-foreground/5 text-foreground/60 border-2 border-transparent hover:bg-foreground/10"
+                )}
+              >
+                {animalLabels[animal] || animal}
+                {isSelected && <Check className="w-3 h-3" />}
+              </button>
+            );
+          })}
+        </div>
+        {selectedAnimalTypes.length === 0 && (
+          <p className="text-xs text-red-500 mt-1">Sélectionnez au moins un type d'animal</p>
+        )}
       </div>
 
       {/* Pricing */}
@@ -2053,6 +2915,168 @@ function OptionAddForm({
         </motion.button>
         <button
           onClick={onCancel}
+          className="px-4 py-2 text-text-light hover:text-foreground transition-colors"
+        >
+          Annuler
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Service Settings Editor Component
+// ============================================================================
+
+interface ServiceSettingsEditorProps {
+  serviceId: Id<"services">;
+  serviceLocation?: ServiceLocation;
+  hasCollectiveVariants: boolean;
+  token: string;
+  onSaved: () => void;
+}
+
+function ServiceSettingsEditor({
+  serviceId,
+  serviceLocation,
+  hasCollectiveVariants,
+  token,
+  onSaved,
+}: ServiceSettingsEditorProps) {
+  const [location, setLocation] = useState<ServiceLocation>(
+    hasCollectiveVariants ? "announcer_home" : (serviceLocation || "announcer_home")
+  );
+  const [isSaving, setIsSaving] = useState(false);
+
+  const updateServiceMutation = useMutation(api.services.services.updateService);
+
+  // If collective variants exist, force announcer_home
+  const effectiveLocation = hasCollectiveVariants ? "announcer_home" : location;
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await updateServiceMutation({
+        token,
+        serviceId,
+        serviceLocation: effectiveLocation,
+      });
+      onSaved();
+    } catch (error) {
+      console.error("Erreur lors de la mise à jour:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-4">
+      <div className="flex items-center gap-2">
+        <Settings2 className="w-4 h-4 text-gray-600" />
+        <h5 className="font-semibold text-foreground">Modifier les paramètres</h5>
+      </div>
+
+      {/* Message d'information si séances collectives */}
+      {hasCollectiveVariants && (
+        <div className="flex items-start gap-2 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+          <AlertCircle className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-orange-700">
+            <p className="font-medium">Ce service contient des séances collectives</p>
+            <p className="text-orange-600 mt-0.5">Le lieu de prestation est automatiquement défini à votre domicile et ne peut pas être modifié.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Lieu de prestation */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-2">
+          Où effectuez-vous cette prestation ?
+        </label>
+        <div className="grid grid-cols-3 gap-2">
+          <motion.button
+            type="button"
+            onClick={() => !hasCollectiveVariants && setLocation("announcer_home")}
+            disabled={hasCollectiveVariants && effectiveLocation !== "announcer_home"}
+            className={cn(
+              "flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all",
+              effectiveLocation === "announcer_home"
+                ? "border-primary bg-primary/5 text-primary"
+                : "border-foreground/10 bg-white hover:bg-foreground/5 text-foreground/60",
+              hasCollectiveVariants && effectiveLocation !== "announcer_home" && "opacity-50 cursor-not-allowed"
+            )}
+            whileHover={!hasCollectiveVariants ? { scale: 1.02 } : {}}
+            whileTap={!hasCollectiveVariants ? { scale: 0.98 } : {}}
+          >
+            <Home className={cn(
+              "w-5 h-5",
+              effectiveLocation === "announcer_home" ? "text-primary" : "text-foreground/40"
+            )} />
+            <span className="text-xs font-medium text-center">Mon domicile</span>
+          </motion.button>
+
+          <motion.button
+            type="button"
+            onClick={() => !hasCollectiveVariants && setLocation("client_home")}
+            disabled={hasCollectiveVariants}
+            className={cn(
+              "flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all",
+              effectiveLocation === "client_home"
+                ? "border-secondary bg-secondary/5 text-secondary"
+                : "border-foreground/10 bg-white hover:bg-foreground/5 text-foreground/60",
+              hasCollectiveVariants && "opacity-50 cursor-not-allowed"
+            )}
+            whileHover={!hasCollectiveVariants ? { scale: 1.02 } : {}}
+            whileTap={!hasCollectiveVariants ? { scale: 0.98 } : {}}
+          >
+            <MapPin className={cn(
+              "w-5 h-5",
+              effectiveLocation === "client_home" ? "text-secondary" : "text-foreground/40"
+            )} />
+            <span className="text-xs font-medium text-center">À domicile</span>
+          </motion.button>
+
+          <motion.button
+            type="button"
+            onClick={() => !hasCollectiveVariants && setLocation("both")}
+            disabled={hasCollectiveVariants}
+            className={cn(
+              "flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all",
+              effectiveLocation === "both"
+                ? "border-purple-500 bg-purple-50 text-purple-600"
+                : "border-foreground/10 bg-white hover:bg-foreground/5 text-foreground/60",
+              hasCollectiveVariants && "opacity-50 cursor-not-allowed"
+            )}
+            whileHover={!hasCollectiveVariants ? { scale: 1.02 } : {}}
+            whileTap={!hasCollectiveVariants ? { scale: 0.98 } : {}}
+          >
+            <div className="flex items-center gap-0.5">
+              <Home className={cn(
+                "w-4 h-4",
+                effectiveLocation === "both" ? "text-purple-600" : "text-foreground/40"
+              )} />
+              <MapPin className={cn(
+                "w-4 h-4",
+                effectiveLocation === "both" ? "text-purple-600" : "text-foreground/40"
+              )} />
+            </div>
+            <span className="text-xs font-medium text-center">Les deux</span>
+          </motion.button>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-2 pt-2">
+        <motion.button
+          onClick={handleSave}
+          disabled={isSaving}
+          className="flex items-center gap-2 px-4 py-2 bg-gray-700 text-white rounded-xl font-medium disabled:opacity-50"
+          whileTap={{ scale: 0.98 }}
+        >
+          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+          Enregistrer
+        </motion.button>
+        <button
+          onClick={onSaved}
           className="px-4 py-2 text-text-light hover:text-foreground transition-colors"
         >
           Annuler

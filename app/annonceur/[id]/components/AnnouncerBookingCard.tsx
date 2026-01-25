@@ -16,6 +16,14 @@ import {
   getFormuleBestPrice,
 } from "./booking";
 
+interface CollectiveSlotInfo {
+  _id: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  availableSpots: number;
+}
+
 interface AnnouncerBookingCardProps {
   services: ServiceData[];
   responseRate: number;
@@ -28,6 +36,9 @@ interface AnnouncerBookingCardProps {
   bookingSelection?: BookingSelection;
   priceBreakdown?: PriceBreakdown | null;
   clientAddress?: ClientAddress | null;
+  // Props pour formules collectives
+  collectiveSlots?: CollectiveSlotInfo[];
+  animalCount?: number;
   onServiceChange?: (serviceId: string | null) => void;
   onBook?: () => void;
   onFinalize?: () => void;
@@ -65,6 +76,8 @@ export default function AnnouncerBookingCard({
   bookingSelection,
   priceBreakdown,
   clientAddress,
+  collectiveSlots = [],
+  animalCount = 1,
   onServiceChange,
   onBook,
   onFinalize,
@@ -98,6 +111,8 @@ export default function AnnouncerBookingCard({
           nextAvailable={nextAvailable}
           isRangeMode={isRangeMode}
           clientAddress={clientAddress}
+          collectiveSlots={collectiveSlots}
+          animalCount={animalCount}
           onBook={onBook}
           onFinalize={onFinalize}
         />

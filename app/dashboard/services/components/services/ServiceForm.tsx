@@ -13,11 +13,8 @@ import {
   PawPrint,
   Layers,
   Zap,
-  Home,
-  MapPin,
   Moon,
   Sun,
-  Clock,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import AnimalTypeSelector from "../shared/AnimalTypeSelector";
@@ -63,8 +60,8 @@ interface ServiceFormProps {
   existingCategories: string[]; // Categories already used by user
   onSubmit: (data: {
     category: string;
+    description?: string;
     animalTypes: string[];
-    serviceLocation?: ServiceLocation;
     // Garde de nuit
     allowOvernightStay?: boolean;
     dayStartTime?: string;
@@ -73,6 +70,7 @@ interface ServiceFormProps {
     initialVariants: Array<{
       name: string;
       description?: string;
+      objectives?: Array<{ icon: string; text: string }>;
       price: number;
       priceUnit: "hour" | "day" | "week" | "month" | "flat";
       // Multi-tarification
@@ -85,6 +83,13 @@ interface ServiceFormProps {
       };
       duration?: number;
       includedFeatures?: string[];
+      // Nouveaux champs au niveau de la formule
+      sessionType?: "individual" | "collective";
+      maxAnimalsPerSession?: number;
+      numberOfSessions?: number;
+      sessionInterval?: number;
+      serviceLocation?: ServiceLocation;
+      animalTypes?: string[];
     }>;
     initialOptions?: Array<{
       name: string;
@@ -110,7 +115,7 @@ export default function ServiceForm({
 }: ServiceFormProps) {
   const [currentStep, setCurrentStep] = useState<FormStep>(1);
   const [category, setCategory] = useState("");
-  const [serviceLocation, setServiceLocation] = useState<ServiceLocation | undefined>(undefined);
+  const [description, setDescription] = useState("");
   const [animalTypes, setAnimalTypes] = useState<string[]>([]);
   const [localVariants, setLocalVariants] = useState<LocalVariant[]>([]);
   const [localOptions, setLocalOptions] = useState<LocalOption[]>([]);
@@ -159,11 +164,19 @@ export default function ServiceForm({
     const initialVariants = localVariants.map((v) => ({
       name: v.name,
       description: v.description,
+      objectives: v.objectives, // Objectifs avec icône
       price: v.price,
       priceUnit: v.priceUnit,
       pricing: v.pricing, // Multi-tarification
       duration: v.duration,
       includedFeatures: v.includedFeatures,
+      // Nouveaux champs au niveau de la formule
+      sessionType: v.sessionType,
+      maxAnimalsPerSession: v.maxAnimalsPerSession,
+      numberOfSessions: v.numberOfSessions,
+      sessionInterval: v.sessionInterval,
+      serviceLocation: v.serviceLocation,
+      animalTypes: v.animalTypes,
     }));
 
     const initialOptions = localOptions.map((o) => ({
@@ -189,8 +202,8 @@ export default function ServiceForm({
 
     const success = await onSubmit({
       category,
+      description: description || undefined,
       animalTypes,
-      serviceLocation,
       ...overnightData,
       initialVariants,
       initialOptions: initialOptions.length > 0 ? initialOptions : undefined,
@@ -395,89 +408,22 @@ export default function ServiceForm({
                 })()
               )}
 
-              {/* Lieu de prestation */}
+              {/* Description du service */}
               {category && (
                 <div className="mt-6 pt-6 border-t border-foreground/10">
                   <h4 className="font-medium text-foreground mb-1">
-                    Où effectuez-vous cette prestation ?
+                    Description de votre service
                   </h4>
                   <p className="text-sm text-text-light mb-4">
-                    Le client pourra choisir selon vos disponibilités
+                    Décrivez brièvement ce que vous proposez (optionnel)
                   </p>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <motion.button
-                      type="button"
-                      onClick={() => setServiceLocation("announcer_home")}
-                      className={cn(
-                        "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
-                        serviceLocation === "announcer_home"
-                          ? "border-primary bg-primary/5"
-                          : "border-foreground/10 hover:border-foreground/20"
-                      )}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      <div className="p-3 rounded-full bg-primary/10">
-                        <Home className="w-6 h-6 text-primary" />
-                      </div>
-                      <span className="text-sm font-medium text-foreground">
-                        À mon domicile
-                      </span>
-                      <span className="text-xs text-text-light text-center">
-                        Le client vient chez vous
-                      </span>
-                    </motion.button>
-
-                    <motion.button
-                      type="button"
-                      onClick={() => setServiceLocation("client_home")}
-                      className={cn(
-                        "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
-                        serviceLocation === "client_home"
-                          ? "border-primary bg-primary/5"
-                          : "border-foreground/10 hover:border-foreground/20"
-                      )}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      <div className="p-3 rounded-full bg-secondary/10">
-                        <MapPin className="w-6 h-6 text-secondary" />
-                      </div>
-                      <span className="text-sm font-medium text-foreground">
-                        Chez le client
-                      </span>
-                      <span className="text-xs text-text-light text-center">
-                        Vous vous déplacez
-                      </span>
-                    </motion.button>
-
-                    <motion.button
-                      type="button"
-                      onClick={() => setServiceLocation("both")}
-                      className={cn(
-                        "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
-                        serviceLocation === "both"
-                          ? "border-primary bg-primary/5"
-                          : "border-foreground/10 hover:border-foreground/20"
-                      )}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      <div className="p-3 rounded-full bg-accent/20">
-                        <div className="flex -space-x-1">
-                          <Home className="w-5 h-5 text-accent" />
-                          <MapPin className="w-5 h-5 text-accent" />
-                        </div>
-                      </div>
-                      <span className="text-sm font-medium text-foreground">
-                        Les deux
-                      </span>
-                      <span className="text-xs text-text-light text-center">
-                        Le client choisit
-                      </span>
-                    </motion.button>
-                  </div>
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={3}
+                    placeholder="Ex: Je propose des séances adaptées à chaque animal avec une approche bienveillante..."
+                    className="w-full px-4 py-3 bg-white border-2 border-foreground/10 rounded-xl text-foreground focus:border-primary focus:ring-1 focus:ring-primary outline-none resize-none placeholder:text-text-light/50"
+                  />
                 </div>
               )}
 
@@ -623,6 +569,7 @@ export default function ServiceForm({
                 autoAddFirst={true}
                 allowOvernightStay={allowOvernightStay}
                 isGardeService={selectedCategory?.allowOvernightStay === true}
+                serviceAnimalTypes={animalTypes}
               />
             </motion.div>
           )}

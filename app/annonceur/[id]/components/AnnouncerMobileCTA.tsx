@@ -9,6 +9,7 @@ import { cn } from "@/app/lib/utils";
 import {
   BookingSummary,
   BookingCalendar,
+  CollectiveSlotPicker,
   type BookingSelection,
   type PriceBreakdown,
   type CalendarEntry,
@@ -47,6 +48,12 @@ interface AnnouncerMobileCTAProps {
   onMonthChange?: (date: Date) => void;
   onBook?: () => void;
   onFinalize?: () => void;
+  // Créneaux collectifs
+  selectedSlotIds?: string[];
+  onSlotsSelected?: (slotIds: string[]) => void;
+  animalCount?: number;
+  onAnimalCountChange?: (count: number) => void;
+  selectedAnimalType?: string;
 }
 
 // Get minimum price for a service
@@ -113,6 +120,12 @@ export default function AnnouncerMobileCTA({
   onMonthChange,
   onBook,
   onFinalize,
+  // Créneaux collectifs
+  selectedSlotIds = [],
+  onSlotsSelected,
+  animalCount = 1,
+  onAnimalCountChange,
+  selectedAnimalType = "chien",
 }: AnnouncerMobileCTAProps) {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isCalendarSheetOpen, setIsCalendarSheetOpen] = useState(false);
@@ -122,11 +135,22 @@ export default function AnnouncerMobileCTA({
   const enableDurationBasedBlocking = Boolean(bookingService?.enableDurationBasedBlocking && bookingVariant?.duration);
   const variantDuration = bookingVariant?.duration || 60;
 
+  // Déterminer si la formule sélectionnée est collective
+  const isCollectiveFormule = bookingVariant?.sessionType === "collective";
+  const collectiveNumberOfSessions = bookingVariant?.numberOfSessions || 1;
+  const collectiveSessionInterval = bookingVariant?.sessionInterval || 7;
+  const collectiveMaxAnimals = bookingVariant?.maxAnimalsPerSession || 5;
+
   // Check if we need time selection for the service (non-range mode services)
-  const needsTimeSelection = bookingService && !isRangeMode;
+  // Pour les formules collectives, pas besoin de sélection de temps
+  const needsTimeSelection = bookingService && !isRangeMode && !isCollectiveFormule;
 
   // Determine if booking can proceed: if needs time, must have time selected
+  // Pour les formules collectives, vérifier si tous les créneaux sont sélectionnés
   const hasRequiredTimeSelection = !needsTimeSelection || (bookingSelection?.startTime !== null);
+  const hasAllSlotsSelected = isCollectiveFormule
+    ? selectedSlotIds.length >= collectiveNumberOfSessions
+    : true;
 
   // Auto-open calendar sheet when a variant is selected for the first time
   useEffect(() => {
@@ -147,7 +171,10 @@ export default function AnnouncerMobileCTA({
   // Check if booking is in progress (variant selected)
   const hasVariantSelected = Boolean(bookingService && bookingVariant);
   const hasDateSelected = Boolean(bookingSelection?.startDate);
-  const hasFullBooking = hasVariantSelected && hasDateSelected && priceBreakdown;
+  // Pour les formules collectives, la réservation est complète quand tous les créneaux sont sélectionnés
+  const hasFullBooking = isCollectiveFormule
+    ? hasVariantSelected && hasAllSlotsSelected
+    : hasVariantSelected && hasDateSelected && priceBreakdown;
 
   // Get price to display
   const { price: minPrice, unit: minUnit } = selectedService
@@ -157,6 +184,18 @@ export default function AnnouncerMobileCTA({
 
   // Handle direct booking
   const handleBookClick = () => {
+    // Cas spécial pour les formules collectives
+    if (isCollectiveFormule && hasVariantSelected) {
+      if (hasAllSlotsSelected) {
+        // Tous les créneaux sont sélectionnés - afficher le récap
+        setIsSheetOpen(true);
+      } else {
+        // Pas assez de créneaux - ouvrir le sheet de sélection
+        setIsCalendarSheetOpen(true);
+      }
+      return;
+    }
+
     if (hasFullBooking && hasRequiredTimeSelection) {
       // If booking is ready with required time, show summary sheet
       setIsSheetOpen(true);
@@ -177,6 +216,14 @@ export default function AnnouncerMobileCTA({
 
   // Handle confirm from calendar sheet
   const handleCalendarConfirm = () => {
+    // Pour les formules collectives, confirmer si tous les créneaux sont sélectionnés
+    if (isCollectiveFormule) {
+      if (hasAllSlotsSelected) {
+        setIsCalendarSheetOpen(false);
+      }
+      return;
+    }
+
     if (hasRequiredTimeSelection && bookingSelection?.startDate) {
       setIsCalendarSheetOpen(false);
     }
@@ -313,6 +360,24 @@ export default function AnnouncerMobileCTA({
 
   // Determine button text
   const getButtonText = () => {
+    // Cas spécial pour les formules collectives
+    if (isCollectiveFormule && hasVariantSelected) {
+      if (hasAllSlotsSelected) {
+        return (
+          <>
+            <ShoppingCart className="w-4 h-4" />
+            Voir le récap
+          </>
+        );
+      }
+      return (
+        <>
+          <Calendar className="w-4 h-4" />
+          Choisir les créneaux
+        </>
+      );
+    }
+
     if (hasFullBooking && hasRequiredTimeSelection) {
       return (
         <>
@@ -532,7 +597,11 @@ export default function AnnouncerMobileCTA({
       {typeof document !== "undefined" &&
         createPortal(
           <AnimatePresence>
-            {isCalendarSheetOpen && calendarMonth && onDateSelect && onEndDateSelect && onTimeSelect && onEndTimeSelect && onOvernightChange && onMonthChange && (
+            {isCalendarSheetOpen && (
+              // Pour les formules collectives, on n'a pas besoin de tous les callbacks calendar
+              (isCollectiveFormule && bookingVariant && onSlotsSelected) ||
+              (calendarMonth && onDateSelect && onEndDateSelect && onTimeSelect && onEndTimeSelect && onOvernightChange && onMonthChange)
+            ) && (
               <>
                 {/* Backdrop */}
                 <motion.div
@@ -555,12 +624,21 @@ export default function AnnouncerMobileCTA({
                   <div className="flex items-center justify-between p-4 border-b border-gray-100 flex-shrink-0">
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900">
-                        {isRangeMode ? "Choisissez vos dates" : "Choisissez votre créneau"}
+                        {isCollectiveFormule
+                          ? "Choisissez vos créneaux"
+                          : isRangeMode
+                          ? "Choisissez vos dates"
+                          : "Choisissez votre créneau"}
                       </h3>
                       {bookingVariant && (
                         <p className="text-sm text-gray-500 flex items-center gap-1">
                           <span>{bookingService?.categoryIcon}</span>
                           {bookingVariant.name}
+                          {isCollectiveFormule && (
+                            <span className="ml-2 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full">
+                              {selectedSlotIds.length}/{collectiveNumberOfSessions} séances
+                            </span>
+                          )}
                         </p>
                       )}
                     </div>
@@ -572,38 +650,89 @@ export default function AnnouncerMobileCTA({
                     </button>
                   </div>
 
-                  {/* Sheet Content - Calendar */}
+                  {/* Sheet Content */}
                   <div className="overflow-y-auto flex-1 p-4">
-                    <BookingCalendar
-                      selectedDate={bookingSelection?.startDate ?? null}
-                      selectedEndDate={bookingSelection?.endDate ?? null}
-                      selectedTime={bookingSelection?.startTime ?? null}
-                      selectedEndTime={bookingSelection?.endTime ?? null}
-                      includeOvernightStay={bookingSelection?.includeOvernightStay ?? false}
-                      calendarMonth={calendarMonth}
-                      availabilityCalendar={availabilityCalendar}
-                      isRangeMode={isRangeMode}
-                      days={days}
-                      nights={nights}
-                      isCapacityBased={isCapacityBased}
-                      maxAnimalsPerSlot={maxAnimalsPerSlot}
-                      enableDurationBasedBlocking={enableDurationBasedBlocking}
-                      variantDuration={variantDuration}
-                      bufferBefore={bufferBefore}
-                      bufferAfter={bufferAfter}
-                      acceptReservationsFrom={acceptReservationsFrom}
-                      acceptReservationsTo={acceptReservationsTo}
-                      allowOvernightStay={bookingService?.allowOvernightStay}
-                      overnightPrice={bookingService?.overnightPrice}
-                      dayStartTime={bookingService?.dayStartTime}
-                      dayEndTime={bookingService?.dayEndTime}
-                      onDateSelect={onDateSelect}
-                      onEndDateSelect={onEndDateSelect}
-                      onTimeSelect={onTimeSelect}
-                      onEndTimeSelect={onEndTimeSelect}
-                      onOvernightChange={onOvernightChange}
-                      onMonthChange={onMonthChange}
-                    />
+                    {isCollectiveFormule && bookingVariant && onSlotsSelected ? (
+                      // Afficher le CollectiveSlotPicker pour les formules collectives
+                      <div className="space-y-4">
+                        {/* Sélecteur du nombre d'animaux */}
+                        {onAnimalCountChange && collectiveMaxAnimals > 1 && (
+                          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                            <div>
+                              <p className="font-medium text-gray-900">Nombre d'animaux</p>
+                              <p className="text-sm text-gray-500">
+                                Maximum {collectiveMaxAnimals} par séance
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <button
+                                type="button"
+                                onClick={() => onAnimalCountChange(Math.max(1, animalCount - 1))}
+                                disabled={animalCount <= 1}
+                                className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                -
+                              </button>
+                              <span className="w-8 text-center font-semibold text-gray-900">
+                                {animalCount}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => onAnimalCountChange(Math.min(collectiveMaxAnimals, animalCount + 1))}
+                                disabled={animalCount >= collectiveMaxAnimals}
+                                className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        <CollectiveSlotPicker
+                          variantId={bookingVariant.id as string}
+                          numberOfSessions={collectiveNumberOfSessions}
+                          sessionInterval={collectiveSessionInterval}
+                          animalCount={animalCount}
+                          animalType={selectedAnimalType}
+                          onSlotsSelected={onSlotsSelected}
+                          selectedSlotIds={selectedSlotIds}
+                        />
+                      </div>
+                    ) : (
+                      // Afficher le calendrier normal
+                      calendarMonth && onDateSelect && onEndDateSelect && onTimeSelect && onEndTimeSelect && onOvernightChange && onMonthChange && (
+                        <BookingCalendar
+                          selectedDate={bookingSelection?.startDate ?? null}
+                          selectedEndDate={bookingSelection?.endDate ?? null}
+                          selectedTime={bookingSelection?.startTime ?? null}
+                          selectedEndTime={bookingSelection?.endTime ?? null}
+                          includeOvernightStay={bookingSelection?.includeOvernightStay ?? false}
+                          calendarMonth={calendarMonth}
+                          availabilityCalendar={availabilityCalendar}
+                          isRangeMode={isRangeMode}
+                          days={days}
+                          nights={nights}
+                          isCapacityBased={isCapacityBased}
+                          maxAnimalsPerSlot={maxAnimalsPerSlot}
+                          enableDurationBasedBlocking={enableDurationBasedBlocking}
+                          variantDuration={variantDuration}
+                          bufferBefore={bufferBefore}
+                          bufferAfter={bufferAfter}
+                          acceptReservationsFrom={acceptReservationsFrom}
+                          acceptReservationsTo={acceptReservationsTo}
+                          allowOvernightStay={bookingService?.allowOvernightStay}
+                          overnightPrice={bookingService?.overnightPrice}
+                          dayStartTime={bookingService?.dayStartTime}
+                          dayEndTime={bookingService?.dayEndTime}
+                          onDateSelect={onDateSelect}
+                          onEndDateSelect={onEndDateSelect}
+                          onTimeSelect={onTimeSelect}
+                          onEndTimeSelect={onEndTimeSelect}
+                          onOvernightChange={onOvernightChange}
+                          onMonthChange={onMonthChange}
+                        />
+                      )
+                    )}
                   </div>
 
                   {/* Confirm button */}
@@ -611,15 +740,28 @@ export default function AnnouncerMobileCTA({
                     <motion.button
                       whileTap={{ scale: 0.98 }}
                       onClick={handleCalendarConfirm}
-                      disabled={!bookingSelection?.startDate || !hasRequiredTimeSelection}
+                      disabled={
+                        isCollectiveFormule
+                          ? !hasAllSlotsSelected
+                          : !bookingSelection?.startDate || !hasRequiredTimeSelection
+                      }
                       className={cn(
                         "w-full py-3.5 font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors",
-                        bookingSelection?.startDate && hasRequiredTimeSelection
+                        (isCollectiveFormule ? hasAllSlotsSelected : (bookingSelection?.startDate && hasRequiredTimeSelection))
                           ? "bg-gradient-to-r from-primary to-primary/90 text-white shadow-lg shadow-primary/25"
                           : "bg-gray-100 text-gray-400 cursor-not-allowed"
                       )}
                     >
-                      {!bookingSelection?.startDate ? (
+                      {isCollectiveFormule ? (
+                        !hasAllSlotsSelected ? (
+                          `Sélectionnez ${collectiveNumberOfSessions - selectedSlotIds.length} créneau(x)`
+                        ) : (
+                          <>
+                            Confirmer
+                            <Check className="w-4 h-4" />
+                          </>
+                        )
+                      ) : !bookingSelection?.startDate ? (
                         "Sélectionnez une date"
                       ) : !hasRequiredTimeSelection ? (
                         "Sélectionnez un horaire"

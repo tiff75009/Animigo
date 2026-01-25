@@ -37,6 +37,42 @@ async function verifyServiceOwnership(
   return service;
 }
 
+// Helper: Vérifier si une formule collective a des créneaux configurés
+async function hasConfiguredSlots(ctx: any, variantId: Id<"serviceVariants">): Promise<boolean> {
+  const today = new Date().toISOString().split("T")[0];
+  const slots = await ctx.db
+    .query("collectiveSlots")
+    .withIndex("by_variant", (q: any) => q.eq("variantId", variantId))
+    .filter((q: any) =>
+      q.and(
+        q.gte(q.field("date"), today),
+        q.eq(q.field("isActive"), true),
+        q.eq(q.field("isCancelled"), false)
+      )
+    )
+    .first();
+
+  return slots !== null;
+}
+
+// Helper: Compter les créneaux futurs actifs pour une formule
+async function countActiveSlots(ctx: any, variantId: Id<"serviceVariants">): Promise<number> {
+  const today = new Date().toISOString().split("T")[0];
+  const slots = await ctx.db
+    .query("collectiveSlots")
+    .withIndex("by_variant", (q: any) => q.eq("variantId", variantId))
+    .filter((q: any) =>
+      q.and(
+        q.gte(q.field("date"), today),
+        q.eq(q.field("isActive"), true),
+        q.eq(q.field("isCancelled"), false)
+      )
+    )
+    .collect();
+
+  return slots.length;
+}
+
 // Helper: Recalculer le basePrice d'un service
 // basePrice = prix total minimum calculé (prix horaire × durée / 60 × nombre de séances)
 async function updateServiceBasePrice(ctx: any, serviceId: Id<"services">) {
@@ -119,6 +155,15 @@ export const addVariant = mutation({
       text: v.string(),
     }))),
     numberOfSessions: v.optional(v.number()),
+    sessionInterval: v.optional(v.number()), // Délai en jours entre chaque séance
+    sessionType: v.optional(v.union(v.literal("individual"), v.literal("collective"))),
+    maxAnimalsPerSession: v.optional(v.number()), // Si collective
+    serviceLocation: v.optional(v.union(
+      v.literal("announcer_home"),
+      v.literal("client_home"),
+      v.literal("both")
+    )), // Lieu de prestation (si collective, forcé à announcer_home)
+    animalTypes: v.optional(v.array(v.string())), // Animaux acceptés pour cette formule
     price: v.number(),
     priceUnit: v.union(
       v.literal("hour"),
@@ -154,19 +199,31 @@ export const addVariant = mutation({
 
     const now = Date.now();
 
+    // Si collective, forcer le lieu à announcer_home
+    const effectiveLocation = args.sessionType === "collective" ? "announcer_home" : args.serviceLocation;
+
+    // Les formules collectives sont inactives par défaut jusqu'à ce que des créneaux soient configurés
+    const isCollective = args.sessionType === "collective";
+
     const variantId = await ctx.db.insert("serviceVariants", {
       serviceId: args.serviceId,
       name: args.name,
       description: args.description,
       objectives: args.objectives,
       numberOfSessions: args.numberOfSessions,
+      sessionInterval: args.sessionInterval,
+      sessionType: args.sessionType,
+      maxAnimalsPerSession: args.maxAnimalsPerSession,
+      serviceLocation: effectiveLocation,
+      animalTypes: args.animalTypes,
       price: args.price,
       priceUnit: args.priceUnit,
       pricing: args.pricing,
       duration: args.duration,
       includedFeatures: args.includedFeatures,
       order: maxOrder + 1,
-      isActive: true,
+      isActive: !isCollective, // Désactivé par défaut si collective (pas de créneaux)
+      needsSlotConfiguration: isCollective, // Flag pour indiquer que des créneaux sont requis
       createdAt: now,
       updatedAt: now,
     });
@@ -198,6 +255,15 @@ export const updateVariant = mutation({
       text: v.string(),
     }))),
     numberOfSessions: v.optional(v.number()),
+    sessionInterval: v.optional(v.number()), // Délai en jours entre chaque séance
+    sessionType: v.optional(v.union(v.literal("individual"), v.literal("collective"))),
+    maxAnimalsPerSession: v.optional(v.number()), // Si collective
+    serviceLocation: v.optional(v.union(
+      v.literal("announcer_home"),
+      v.literal("client_home"),
+      v.literal("both")
+    )), // Lieu de prestation
+    animalTypes: v.optional(v.array(v.string())), // Animaux acceptés
     price: v.optional(v.number()),
     priceUnit: v.optional(
       v.union(
@@ -237,6 +303,17 @@ export const updateVariant = mutation({
     if (args.description !== undefined) updates.description = args.description;
     if (args.objectives !== undefined) updates.objectives = args.objectives;
     if (args.numberOfSessions !== undefined) updates.numberOfSessions = args.numberOfSessions;
+    if (args.sessionInterval !== undefined) updates.sessionInterval = args.sessionInterval;
+    if (args.sessionType !== undefined) updates.sessionType = args.sessionType;
+    if (args.maxAnimalsPerSession !== undefined) updates.maxAnimalsPerSession = args.maxAnimalsPerSession;
+    // Si sessionType change en collective, forcer le lieu à announcer_home
+    if (args.serviceLocation !== undefined) {
+      const newSessionType = args.sessionType ?? variant.sessionType;
+      updates.serviceLocation = newSessionType === "collective" ? "announcer_home" : args.serviceLocation;
+    } else if (args.sessionType === "collective" && variant.serviceLocation !== "announcer_home") {
+      updates.serviceLocation = "announcer_home";
+    }
+    if (args.animalTypes !== undefined) updates.animalTypes = args.animalTypes;
     if (args.price !== undefined) updates.price = args.price;
     if (args.priceUnit !== undefined) updates.priceUnit = args.priceUnit;
     if (args.pricing !== undefined) updates.pricing = args.pricing;

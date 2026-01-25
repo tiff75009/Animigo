@@ -19,6 +19,10 @@ export interface BookingSelection {
   serviceLocation: "announcer_home" | "client_home" | null;
   selectedAddressId: string | null; // ID de l'adresse client sélectionnée (utilisateur connecté)
   guestAddress: GuestAddress | null; // Adresse saisie par un invité
+  // Créneaux collectifs
+  selectedSlotIds: string[]; // IDs des créneaux sélectionnés pour les formules collectives
+  animalCount: number; // Nombre d'animaux pour les séances collectives
+  selectedAnimalType: string; // Type d'animal sélectionné
 }
 
 export interface ClientAddress {
@@ -81,4 +85,8 @@ export const DEFAULT_BOOKING_SELECTION: BookingSelection = {
   serviceLocation: null,
   selectedAddressId: null,
   guestAddress: null,
+  // Créneaux collectifs
+  selectedSlotIds: [],
+  animalCount: 1,
+  selectedAnimalType: "chien",
 };

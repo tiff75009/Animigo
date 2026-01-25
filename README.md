@@ -428,6 +428,61 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.19.0 - Systeme de Creneaux pour Seances Collectives
+
+- **Nouvelle table `collectiveSlots`** dans le schema Convex
+  - Stockage des creneaux pour les formules collectives
+  - Champs : variantId, userId, date, startTime, endTime, maxAnimals, bookedAnimals
+  - Indexes : by_variant, by_user, by_user_date, by_variant_date
+  - Gestion des places disponibles par creneau
+
+- **Gestion des creneaux cote annonceur** (`/dashboard/services`)
+  - Nouveau composant `CollectiveSlotsManager` pour gerer les creneaux
+  - Ajout/modification/suppression de creneaux
+  - Indicateur du nombre de creneaux configures
+  - Badge "Creneaux requis" si formule collective non configuree
+
+- **Selecteur de creneaux client** (`CollectiveSlotPicker`)
+  - 3 modes d'affichage : jour, semaine, mois
+  - Navigation entre periodes avec bouton "Aujourd'hui"
+  - Vue semaine : grille 7 colonnes avec creneaux horaires
+  - Vue jour : liste verticale des creneaux disponibles
+  - Validation de l'intervalle entre seances (`sessionInterval`)
+  - Creneaux grises si pleins ou intervalle non respecte
+
+- **Selection d'animal pour les utilisateurs connectes**
+  - Nouveau selecteur d'animal dans `AnnouncerFormules`
+  - Filtrage par types d'animaux acceptes par la formule
+  - Affichage photo, nom, type et race de l'animal
+  - Integration avec la query `getUserAnimals`
+
+- **Support mobile complet**
+  - `AnnouncerMobileCTA` adapte pour les formules collectives
+  - Bottom sheet avec `CollectiveSlotPicker` integre
+  - Compteur de seances selectionnees
+  - Bouton de validation contextuel
+
+- **Recapitulatif de reservation ameliore** (`BookingSummary`)
+  - Detection automatique des formules collectives
+  - Affichage "Seances selectionnees" avec dates et horaires
+  - Calcul du prix : `(prix horaire x duree / 60) x nb seances x nb animaux x (1 + commission)`
+  - Gestion des cas sans `priceBreakdown`
+
+- **Backend Convex** (`convex/planning/collectiveSlots.ts`)
+  - `addCollectiveSlot` : Creer un creneau collectif
+  - `updateCollectiveSlot` : Modifier un creneau
+  - `deleteCollectiveSlot` : Supprimer un creneau
+  - `getSlotsByVariant` : Recuperer les creneaux d'une formule
+  - `getSlotsByUser` : Recuperer les creneaux d'un annonceur
+  - `getAvailableSlotsForBooking` : Creneaux disponibles pour reservation
+  - `getSlotsByIds` : Recuperer les details de creneaux par IDs
+  - `bookSlot` : Reserver un creneau (incremente bookedAnimals)
+
+- **Types et interfaces**
+  - Nouveaux champs dans `BookingSelection` : selectedSlotIds, animalCount, selectedAnimalType
+  - Interface `CollectiveSlotInfo` pour l'affichage des creneaux
+  - Props additionnelles pour les composants de reservation
+
 ### v0.18.0 - Objectifs et Seances pour les Formules
 
 - **Nouveaux champs pour les formules de service**

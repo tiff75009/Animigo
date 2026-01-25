@@ -7,5 +7,6 @@ export { default as AddressSelector } from "./AddressSelector";
 export { default as GuestAddressSelector } from "./GuestAddressSelector";
 export { default as MobileTimePicker } from "./MobileTimePicker";
 export { default as BookingStepBar, useBookingSteps } from "./BookingStepBar";
+export { default as CollectiveSlotPicker } from "./CollectiveSlotPicker";
 export * from "./types";
 export * from "./pricing";

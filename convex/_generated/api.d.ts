@@ -56,6 +56,7 @@ import type * as notifications_index from "../notifications/index.js";
 import type * as notifications_mutations from "../notifications/mutations.js";
 import type * as notifications_queries from "../notifications/queries.js";
 import type * as planning_availability from "../planning/availability.js";
+import type * as planning_collectiveSlots from "../planning/collectiveSlots.js";
 import type * as planning_missions from "../planning/missions.js";
 import type * as public_announcer from "../public/announcer.js";
 import type * as public_booking from "../public/booking.js";
@@ -134,6 +135,7 @@ declare const fullApi: ApiFromModules<{
   "notifications/mutations": typeof notifications_mutations;
   "notifications/queries": typeof notifications_queries;
   "planning/availability": typeof planning_availability;
+  "planning/collectiveSlots": typeof planning_collectiveSlots;
   "planning/missions": typeof planning_missions;
   "public/announcer": typeof public_announcer;
   "public/booking": typeof public_booking;

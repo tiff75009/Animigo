@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Clock, Calendar, CheckCircle2, Target } from "lucide-react";
+import { Check, Clock, Calendar, CheckCircle2, Target, Users, User, Timer, Home, MapPin } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/app/lib/utils";
 import type { FormuleData } from "../types";
@@ -148,21 +148,77 @@ export default function SelectableFormuleCard({
         <p className="text-sm text-gray-500 mt-2">{formule.description}</p>
       )}
 
-      {/* Durée et nombre de séances */}
+      {/* Badges: Type de séance, lieu, durée, séances */}
       <div className="flex flex-wrap items-center gap-2 mt-2">
+        {/* Type de séance */}
+        {formule.sessionType === "collective" ? (
+          <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full font-medium">
+            <Users className="w-3 h-3" />
+            Collectif{formule.maxAnimalsPerSession ? ` (${formule.maxAnimalsPerSession} max)` : ""}
+          </span>
+        ) : (
+          <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-blue-100 text-blue-600 rounded-full font-medium">
+            <User className="w-3 h-3" />
+            Individuel
+          </span>
+        )}
+        {/* Lieu de prestation */}
+        {formule.serviceLocation && (
+          <span className={cn(
+            "flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium",
+            formule.serviceLocation === "announcer_home" && "bg-primary/10 text-primary",
+            formule.serviceLocation === "client_home" && "bg-secondary/10 text-secondary",
+            formule.serviceLocation === "both" && "bg-purple-100 text-purple-600"
+          )}>
+            {formule.serviceLocation === "announcer_home" && <><Home className="w-3 h-3" /> Chez le pro</>}
+            {formule.serviceLocation === "client_home" && <><MapPin className="w-3 h-3" /> À domicile</>}
+            {formule.serviceLocation === "both" && <><Home className="w-2.5 h-2.5" /><MapPin className="w-2.5 h-2.5" /> Flexible</>}
+          </span>
+        )}
+        {/* Durée */}
         {formule.duration && (
-          <span className="flex items-center gap-1 text-xs text-gray-400">
+          <span className="flex items-center gap-1 text-xs text-gray-500">
             <Clock className="w-3 h-3" />
             {formule.duration} min
           </span>
         )}
+        {/* Nombre de séances */}
         {formule.numberOfSessions && formule.numberOfSessions > 1 && (
-          <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">
+          <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-purple-100 text-purple-600 rounded-full">
             <Calendar className="w-3 h-3" />
             {formule.numberOfSessions} séances
           </span>
         )}
+        {/* Intervalle entre séances */}
+        {formule.sessionInterval && formule.numberOfSessions && formule.numberOfSessions > 1 && (
+          <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
+            <Timer className="w-3 h-3" />
+            {formule.sessionInterval === 7 ? "1/semaine" :
+             formule.sessionInterval === 14 ? "1/2 sem." :
+             formule.sessionInterval === 30 ? "1/mois" :
+             `${formule.sessionInterval}j min`}
+          </span>
+        )}
       </div>
+
+      {/* Animaux acceptés */}
+      {formule.animalTypes && formule.animalTypes.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {formule.animalTypes.map((animal) => (
+            <span key={animal} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+              {animal === "chien" ? "🐕 Chien" :
+               animal === "chat" ? "🐈 Chat" :
+               animal === "lapin" ? "🐰 Lapin" :
+               animal === "rongeur" ? "🐹 Rongeur" :
+               animal === "oiseau" ? "🦜 Oiseau" :
+               animal === "poisson" ? "🐠 Poisson" :
+               animal === "reptile" ? "🦎 Reptile" :
+               animal === "nac" ? "🐾 NAC" :
+               animal}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Objectifs de la prestation */}
       {formule.objectives && formule.objectives.length > 0 && (
