@@ -17,6 +17,7 @@ import {
   Award,
 } from "lucide-react";
 import Image from "next/image";
+import { AboutGopattesSection } from "@/app/components/sections/about-gopattes-section";
 
 interface OtherCity {
   citySlug: string;
@@ -374,48 +375,163 @@ export default function ServiceCityPageClient({ serviceSlug, citySlug }: Props) 
           </div>
         </section>
 
-        {/* Description Cards Section */}
+        {/* Description Cards Section - "Vous allez nous aimer" */}
         {page.servicePage.descriptionCards.length > 0 && (
-          <section className="py-20 md:py-28 bg-white relative">
-            {/* Subtle pattern */}
-            <div
-              className="absolute inset-0 opacity-[0.02]"
-              style={{
-                backgroundImage: `radial-gradient(${categoryColor} 1px, transparent 1px)`,
-                backgroundSize: "24px 24px"
-              }}
-            />
+          <section className="py-24 md:py-32 bg-white relative overflow-hidden">
+            {/* Background decorations */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden">
+              {/* Gradient orb - top only */}
+              <div
+                className="absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full blur-[120px] opacity-10"
+                style={{ backgroundColor: categoryColor }}
+              />
+              {/* Subtle pattern */}
+              <div
+                className="absolute inset-0 opacity-[0.015]"
+                style={{
+                  backgroundImage: `radial-gradient(${categoryColor} 1px, transparent 1px)`,
+                  backgroundSize: "32px 32px"
+                }}
+              />
+            </div>
 
             <div className="max-w-7xl mx-auto px-4 relative z-10">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
+              {/* Section Header */}
+              <motion.div
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                className="text-center mb-16"
+              >
+                {/* Decorative sparkles */}
+                <motion.div
+                  initial={{ opacity: 0, scale: 0 }}
+                  whileInView={{ opacity: 1, scale: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: 0.2, type: "spring" }}
+                  className="flex items-center justify-center gap-2 mb-6"
+                >
+                  <span className="text-2xl">✨</span>
+                  <div
+                    className="px-4 py-1.5 rounded-full text-sm font-medium"
+                    style={{
+                      backgroundColor: `${categoryColor}10`,
+                      color: categoryColor
+                    }}
+                  >
+                    Pourquoi nous choisir
+                  </div>
+                  <span className="text-2xl">✨</span>
+                </motion.div>
+
+                <h2 className="font-love-taking text-4xl sm:text-5xl lg:text-6xl text-foreground mb-6">
+                  Vous allez nous{" "}
+                  <span
+                    className="relative inline-block"
+                    style={{ color: categoryColor }}
+                  >
+                    aimer
+                    {/* Underline decoration */}
+                    <motion.svg
+                      initial={{ pathLength: 0, opacity: 0 }}
+                      whileInView={{ pathLength: 1, opacity: 1 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: 0.5, duration: 0.8 }}
+                      className="absolute -bottom-2 left-0 w-full h-3"
+                      viewBox="0 0 100 10"
+                      preserveAspectRatio="none"
+                    >
+                      <motion.path
+                        d="M0,5 Q25,0 50,5 T100,5"
+                        fill="none"
+                        stroke={categoryColor}
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        initial={{ pathLength: 0 }}
+                        whileInView={{ pathLength: 1 }}
+                        viewport={{ once: true }}
+                        transition={{ delay: 0.5, duration: 0.8 }}
+                      />
+                    </motion.svg>
+                  </span>
+                </h2>
+
+                <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                  Decouvrez ce qui fait de nous le choix prefere des proprietaires d&apos;animaux a {page.city.name}
+                </p>
+              </motion.div>
+
+              {/* Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 {page.servicePage.descriptionCards.map((card: DescriptionCard, index: number) => (
                   <motion.div
                     key={index}
-                    initial={{ opacity: 0, y: 30 }}
+                    initial={{ opacity: 0, y: 40 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, margin: "-50px" }}
-                    transition={{ delay: index * 0.1 }}
-                    whileHover={{ y: -5 }}
-                    className="group bg-background rounded-3xl p-8 border border-slate-100 hover:border-slate-200 hover:shadow-xl transition-all duration-300"
+                    transition={{ delay: index * 0.15, duration: 0.5 }}
+                    whileHover={{ y: -8, scale: 1.02 }}
+                    className="group relative"
                   >
-                    {card.icon && (
-                      <motion.span
-                        whileHover={{ scale: 1.1, rotate: 5 }}
-                        className="text-4xl mb-4 block"
-                      >
-                        {card.icon}
-                      </motion.span>
-                    )}
-                    <h3 className="text-xl font-bold text-foreground mb-3 font-nunito">
-                      {card.title}
-                    </h3>
-                    <p className="text-muted-foreground leading-relaxed">{card.content}</p>
-
-                    {/* Subtle colored accent */}
+                    {/* Card */}
                     <div
-                      className="mt-6 w-12 h-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                      style={{ backgroundColor: categoryColor }}
-                    />
+                      className="relative bg-gradient-to-br from-white to-slate-50 rounded-3xl p-8 border border-slate-100 hover:border-transparent transition-all duration-500 h-full"
+                      style={{
+                        boxShadow: "0 4px 20px -5px rgba(0,0,0,0.05)"
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.boxShadow = `0 25px 50px -15px ${categoryColor}25`;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.boxShadow = "0 4px 20px -5px rgba(0,0,0,0.05)";
+                      }}
+                    >
+                      {/* Number badge */}
+                      <div
+                        className="absolute -top-4 -right-4 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                        style={{ backgroundColor: categoryColor }}
+                      >
+                        0{index + 1}
+                      </div>
+
+                      {/* Icon */}
+                      {card.icon && (
+                        <motion.div
+                          whileHover={{ scale: 1.1, rotate: 5 }}
+                          className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6 transition-all duration-300"
+                          style={{
+                            backgroundColor: `${categoryColor}10`,
+                          }}
+                        >
+                          <span className="text-4xl">{card.icon}</span>
+                        </motion.div>
+                      )}
+
+                      {/* Title */}
+                      <h3 className="text-xl font-bold text-foreground mb-4 font-nunito group-hover:text-foreground transition-colors">
+                        {card.title}
+                      </h3>
+
+                      {/* Content */}
+                      <p className="text-muted-foreground leading-relaxed">
+                        {card.content}
+                      </p>
+
+                      {/* Bottom accent line */}
+                      <div className="mt-6 flex items-center gap-2">
+                        <div
+                          className="h-1 rounded-full transition-all duration-500 group-hover:w-12"
+                          style={{
+                            backgroundColor: categoryColor,
+                            width: "24px"
+                          }}
+                        />
+                        <div
+                          className="w-2 h-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                          style={{ backgroundColor: categoryColor }}
+                        />
+                      </div>
+                    </div>
                   </motion.div>
                 ))}
               </div>
@@ -426,9 +542,9 @@ export default function ServiceCityPageClient({ serviceSlug, citySlug }: Props) 
         {/* Other Services in this City */}
         {filteredOtherServices && filteredOtherServices.length > 0 && (
           <section
-            className="py-20 md:py-28 relative"
+            className="py-16 md:py-24 relative"
             style={{
-              background: `linear-gradient(180deg, transparent 0%, ${categoryColor}08 50%, transparent 100%)`
+              background: `linear-gradient(180deg, rgb(248 250 252) 0%, ${categoryColor}06 50%, rgb(248 250 252) 100%)`
             }}
           >
             <div className="max-w-7xl mx-auto px-4">
@@ -475,70 +591,176 @@ export default function ServiceCityPageClient({ serviceSlug, citySlug }: Props) 
 
         {/* Other Cities for this Service */}
         {filteredOtherCities && filteredOtherCities.length > 0 && (
-          <section className="py-20 md:py-28 bg-white">
-            <div className="max-w-7xl mx-auto px-4">
+          <section className="py-20 md:py-28 bg-slate-50 relative overflow-hidden">
+            {/* Background decorations */}
+            <div className="absolute inset-0 pointer-events-none">
+              <div
+                className="absolute top-20 left-10 w-72 h-72 rounded-full blur-[100px] opacity-20"
+                style={{ backgroundColor: categoryColor }}
+              />
+              <div
+                className="absolute bottom-20 right-10 w-96 h-96 rounded-full blur-[120px] opacity-15"
+                style={{ backgroundColor: categoryColor }}
+              />
+              {/* Dotted pattern */}
+              <div
+                className="absolute inset-0 opacity-[0.03]"
+                style={{
+                  backgroundImage: `radial-gradient(${categoryColor} 1px, transparent 1px)`,
+                  backgroundSize: "30px 30px"
+                }}
+              />
+            </div>
+
+            <div className="max-w-7xl mx-auto px-4 relative z-10">
+              {/* Header */}
+              <motion.div
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                className="text-center mb-16"
+              >
+                <motion.div
+                  initial={{ scale: 0, rotate: -180 }}
+                  whileInView={{ scale: 1, rotate: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ type: "spring", damping: 15 }}
+                  className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg"
+                  style={{
+                    backgroundColor: categoryColor,
+                    boxShadow: `0 20px 40px -15px ${categoryColor}50`
+                  }}
+                >
+                  <MapPin className="w-10 h-10 text-white" />
+                </motion.div>
+                <h2 className="font-love-taking text-4xl sm:text-5xl text-foreground mb-4">
+                  {page.servicePage.title} dans{" "}
+                  <span style={{ color: categoryColor }}>d&apos;autres villes</span>
+                </h2>
+                <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+                  Ce service est egalement disponible dans {filteredOtherCities.length} autres villes
+                </p>
+              </motion.div>
+
+              {/* Featured cities - first 6 as cards */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                className="text-center mb-12"
+                className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-10"
               >
-                <motion.div
-                  initial={{ scale: 0 }}
-                  whileInView={{ scale: 1 }}
-                  viewport={{ once: true }}
-                  className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4"
-                  style={{ backgroundColor: `${categoryColor}15` }}
-                >
-                  <MapPin className="w-6 h-6" style={{ color: categoryColor }} />
-                </motion.div>
-                <h2 className="text-3xl font-bold text-foreground mb-4 font-nunito">
-                  {page.servicePage.title} dans d&apos;autres villes
-                </h2>
-              </motion.div>
-
-              <div className="flex flex-wrap justify-center gap-3">
-                {filteredOtherCities.slice(0, 20).map((city: OtherCity, index: number) => (
+                {filteredOtherCities.slice(0, 6).map((city: OtherCity, index: number) => (
                   <motion.div
                     key={city.citySlug}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    whileInView={{ opacity: 1, scale: 1 }}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true }}
-                    transition={{ delay: index * 0.02 }}
+                    transition={{ delay: index * 0.05 }}
                   >
                     <Link
                       href={`/services/${serviceSlug}/${city.citySlug}`}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-background rounded-full border border-slate-200 text-sm text-foreground hover:shadow-md transition-all"
+                      className="group block bg-white rounded-2xl p-5 border border-slate-200 hover:border-transparent hover:shadow-xl transition-all duration-300 text-center relative overflow-hidden"
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = categoryColor;
-                        e.currentTarget.style.color = categoryColor;
+                        e.currentTarget.style.boxShadow = `0 20px 40px -15px ${categoryColor}30`;
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = "";
-                        e.currentTarget.style.color = "";
+                        e.currentTarget.style.boxShadow = "";
                       }}
                     >
-                      <MapPin className="w-3 h-3" />
-                      {city.cityName}
+                      {/* Hover background */}
+                      <div
+                        className="absolute inset-0 opacity-0 group-hover:opacity-5 transition-opacity duration-300"
+                        style={{ backgroundColor: categoryColor }}
+                      />
+
+                      {/* Icon */}
+                      <div
+                        className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-3 transition-transform duration-300 group-hover:scale-110"
+                        style={{ backgroundColor: `${categoryColor}10` }}
+                      >
+                        <MapPin
+                          className="w-6 h-6 transition-colors duration-300"
+                          style={{ color: categoryColor }}
+                        />
+                      </div>
+
+                      {/* City name */}
+                      <h3 className="font-semibold text-foreground group-hover:text-foreground transition-colors">
+                        {city.cityName}
+                      </h3>
+
+                      {/* Region */}
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {city.region}
+                      </p>
+
+                      {/* Arrow on hover */}
+                      <div
+                        className="absolute bottom-3 right-3 w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0"
+                        style={{ backgroundColor: categoryColor }}
+                      >
+                        <ArrowRight className="w-3 h-3 text-white" />
+                      </div>
                     </Link>
                   </motion.div>
                 ))}
-                {filteredOtherCities.length > 20 && (
-                  <Link
-                    href={`/services/${serviceSlug}`}
-                    className="px-4 py-2 rounded-full text-sm font-medium transition-colors"
-                    style={{
-                      backgroundColor: `${categoryColor}15`,
-                      color: categoryColor
-                    }}
-                  >
-                    +{filteredOtherCities.length - 20} villes
-                  </Link>
-                )}
-              </div>
+              </motion.div>
+
+              {/* Other cities as pills */}
+              {filteredOtherCities.length > 6 && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  whileInView={{ opacity: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: 0.3 }}
+                  className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200 shadow-sm"
+                >
+                  <p className="text-sm font-medium text-muted-foreground mb-4 text-center">
+                    Et aussi disponible dans :
+                  </p>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {filteredOtherCities.slice(6, 24).map((city: OtherCity, index: number) => (
+                      <motion.div
+                        key={city.citySlug}
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        whileInView={{ opacity: 1, scale: 1 }}
+                        viewport={{ once: true }}
+                        transition={{ delay: 0.3 + index * 0.02 }}
+                      >
+                        <Link
+                          href={`/services/${serviceSlug}/${city.citySlug}`}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm transition-all duration-200 bg-slate-100 text-slate-700 hover:text-white"
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = categoryColor;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = "";
+                            e.currentTarget.style.color = "";
+                          }}
+                        >
+                          <MapPin className="w-3 h-3" />
+                          {city.cityName}
+                        </Link>
+                      </motion.div>
+                    ))}
+                    {filteredOtherCities.length > 24 && (
+                      <Link
+                        href={`/services/${serviceSlug}`}
+                        className="inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold text-white"
+                        style={{ backgroundColor: categoryColor }}
+                      >
+                        +{filteredOtherCities.length - 24} autres villes
+                      </Link>
+                    )}
+                  </div>
+                </motion.div>
+              )}
             </div>
           </section>
         )}
+
+        {/* About Gopattes Section */}
+        <AboutGopattesSection categoryColor={categoryColor} />
 
         {/* Final CTA Section */}
         <section

@@ -64,11 +64,8 @@ export function SeoServicesSection() {
           transition={{ duration: 0.6 }}
           className="text-center mb-16"
         >
-          <span className="text-4xl mb-4 block">
-            <Sparkles className="w-10 h-10 text-primary mx-auto" />
-          </span>
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-foreground mb-4 font-nunito">
-            Nos <span className="text-primary">services</span>
+          <h2 className="font-love-taking text-4xl sm:text-5xl md:text-6xl text-foreground mb-4">
+            Decouvrez nos <span className="text-primary">services</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
             Des professionnels qualifies pour prendre soin de vos compagnons.

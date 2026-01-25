@@ -19,12 +19,11 @@ export function Services() {
           transition={{ duration: 0.6 }}
           className="text-center mb-16"
         >
-          <span className="text-4xl mb-4 block">🐾</span>
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-foreground mb-4">
-            Tous les services pour vos{" "}
-            <span className="text-primary">compagnons</span>
+          <h2 className="font-love-taking text-4xl sm:text-5xl md:text-6xl text-foreground mb-4">
+            Des services pensés pour{" "}
+            <span className="text-primary">eux</span>
           </h2>
-          <p className="text-text-light text-lg max-w-2xl mx-auto">
+          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
             Que vous ayez besoin d&apos;une garde ponctuelle ou régulière, nous avons
             la solution adaptée à chaque situation.
           </p>
