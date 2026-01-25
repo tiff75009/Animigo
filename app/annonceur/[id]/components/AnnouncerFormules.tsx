@@ -445,11 +445,11 @@ export default function AnnouncerFormules({
                     const acceptedTypes = selectedFormule.animalTypes || service?.animalTypes || [];
                     return acceptedTypes.length === 0 || acceptedTypes.includes(animal.type);
                   })
-                  .map((animal) => {
+                  .map((animal, idx) => {
                     const isSelected = selectedAnimalId === animal.id;
                     return (
                       <button
-                        key={animal.id}
+                        key={animal.id || `animal-${idx}`}
                         type="button"
                         onClick={() => onAnimalSelect(animal.id, animal.type)}
                         className={cn(
