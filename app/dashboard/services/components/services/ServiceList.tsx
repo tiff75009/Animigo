@@ -1,11 +1,10 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Briefcase, Plus } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import ServiceCard from "./ServiceCard";
 import EmptyState from "../shared/EmptyState";
-import { containerVariants, itemVariants } from "@/app/lib/animations";
 
 interface ServiceCategory {
   slug: string;
@@ -86,24 +85,28 @@ export default function ServiceList({
   }
 
   return (
-    <motion.div
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-      className="space-y-4"
-    >
-      {services.map((service) => (
-        <motion.div key={service.id} variants={itemVariants}>
-          <ServiceCard
-            service={service}
-            categoryData={getCategoryData(service.category)}
-            token={token}
-            onEdit={() => onEditService(service.id)}
-            onToggle={() => onToggleService(service.id, service.isActive)}
-            onDelete={() => onDeleteService(service.id)}
-          />
-        </motion.div>
-      ))}
-    </motion.div>
+    <div className="space-y-4">
+      <AnimatePresence mode="popLayout">
+        {services.map((service) => (
+          <motion.div
+            key={service.id}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            layout
+          >
+            <ServiceCard
+              service={service}
+              categoryData={getCategoryData(service.category)}
+              token={token}
+              onEdit={() => onEditService(service.id)}
+              onToggle={() => onToggleService(service.id, service.isActive)}
+              onDelete={() => onDeleteService(service.id)}
+            />
+          </motion.div>
+        ))}
+      </AnimatePresence>
+    </div>
   );
 }

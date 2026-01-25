@@ -9,7 +9,7 @@ import ServicesTab from "./components/tabs/ServicesTab";
 export default function ServicesPage() {
   const { token } = useAuth();
 
-  // Use the custom hook for all data management
+  // Use the custom hook for all data management (avec polling automatique après création)
   const {
     services,
     categories,

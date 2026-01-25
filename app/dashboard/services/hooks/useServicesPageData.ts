@@ -1,9 +1,9 @@
 "use client";
 
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useConvex } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 
 // Types
 export interface OwnedAnimal {
@@ -78,19 +78,30 @@ const DEFAULT_CATEGORIES: ServiceCategory[] = [
   { slug: "autre", name: "Autre", icon: "✨" },
 ];
 
+// Type for services - on utilise any pour éviter les problèmes de types avec Convex
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ServiceData = any[] | undefined;
+
 export function useServicesPageData(token: string | undefined) {
   // Local states
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Queries
+  // Convex client pour les requêtes manuelles
+  const convex = useConvex();
+
+  // État local pour les services (permet le refetch manuel)
+  const [localServices, setLocalServices] = useState<ServiceData | undefined>(undefined);
+  const isRefetchingRef = useRef(false);
+
+  // Queries Convex (subscriptions)
   const profileData = useQuery(
     api.services.profile.getProfile,
     token ? { token } : "skip"
   );
 
-  const services = useQuery(
+  const servicesSubscription = useQuery(
     api.services.services.getMyServices,
     token ? { token } : "skip"
   );
@@ -101,6 +112,43 @@ export function useServicesPageData(token: string | undefined) {
   );
 
   const categoriesData = useQuery(api.admin.serviceCategories.getActiveCategories, {}) as CategoriesData | undefined;
+
+  // Synchroniser localServices avec la subscription Convex
+  // Mais seulement si on n'est pas en train de refetch manuellement
+  useEffect(() => {
+    if (servicesSubscription !== undefined && !isRefetchingRef.current) {
+      setLocalServices(servicesSubscription);
+    }
+  }, [servicesSubscription]);
+
+  // Fonction de refetch manuel
+  const refetchServices = useCallback(async () => {
+    if (!token) return;
+
+    isRefetchingRef.current = true;
+
+    try {
+      // Attendre un peu que Convex commit la transaction
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Faire une requête directe (pas de subscription)
+      const freshServices = await convex.query(api.services.services.getMyServices, { token });
+
+      if (freshServices) {
+        setLocalServices(freshServices);
+      }
+    } catch (err) {
+      console.error("Erreur refetch services:", err);
+    } finally {
+      // Réactiver la sync avec la subscription après un délai
+      setTimeout(() => {
+        isRefetchingRef.current = false;
+      }, 500);
+    }
+  }, [token, convex]);
+
+  // Utiliser localServices comme source de données
+  const services = localServices;
 
   // Extraire toutes les sous-catégories (les seules sélectionnables pour les services)
   const categories: ServiceCategory[] = (() => {
@@ -209,7 +257,12 @@ export function useServicesPageData(token: string | undefined) {
         initialVariants: data.initialVariants,
         initialOptions: data.initialOptions?.length ? data.initialOptions : undefined,
       });
+
       setSuccessMessage("Service créé avec succès");
+
+      // Refetch manuel pour s'assurer que le nouveau service apparaît
+      await refetchServices();
+
       return true;
     } catch (err) {
       console.error("Erreur:", err);
@@ -222,7 +275,7 @@ export function useServicesPageData(token: string | undefined) {
     } finally {
       setIsSaving(false);
     }
-  }, [token, addServiceMutation]);
+  }, [token, addServiceMutation, refetchServices]);
 
   const updateService = useCallback(async (
     serviceId: Id<"services">,
@@ -323,5 +376,8 @@ export function useServicesPageData(token: string | undefined) {
     toggleService,
     uploadPhoto,
     deletePhoto,
+
+    // Manual refetch
+    refetchServices,
   };
 }
