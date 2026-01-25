@@ -94,7 +94,12 @@ const priceUnitLabels: Record<string, string> = {
 
 // Helpers
 function formatPrice(cents: number): string {
-  return (cents / 100).toFixed(0) + "€";
+  const euros = cents / 100;
+  // Show decimals only if not a whole number
+  if (euros % 1 === 0) {
+    return euros.toFixed(0) + "€";
+  }
+  return euros.toFixed(2).replace(".", ",") + "€";
 }
 
 function extractCity(location: string): string {
@@ -114,6 +119,13 @@ function formatDistance(distance?: number): string | null {
   const fuzzyDistance = Math.ceil(distance * 2) / 2;
   if (fuzzyDistance < 1) return "< 1 km";
   return `${fuzzyDistance.toFixed(1)} km`;
+}
+
+// Commission rate (15%) - same as /recherche page
+const COMMISSION_RATE = 15;
+function calculatePriceWithCommission(basePriceCents: number): number {
+  const commission = Math.round((basePriceCents * COMMISSION_RATE) / 100);
+  return basePriceCents + commission;
 }
 
 // =============================================
@@ -284,6 +296,7 @@ function HomeServiceCard({
 }) {
   const router = useRouter();
   const [isFavorite, setIsFavorite] = useState(false);
+  const priceWithCommission = calculatePriceWithCommission(service.basePrice);
   const city = extractCity(service.location);
   const distanceText = formatDistance(service.distance);
 
@@ -375,7 +388,7 @@ function HomeServiceCard({
               )}
             </div>
             <div className="text-right">
-              <span className="text-lg font-bold text-primary">{formatPrice(service.basePrice)}</span>
+              <span className="text-lg font-bold text-primary">{formatPrice(priceWithCommission)}</span>
               <span className="text-sm text-text-light">{priceUnitLabels[service.basePriceUnit] || ""}</span>
             </div>
           </div>
@@ -420,6 +433,7 @@ export function SearchMapSection() {
   const [location, setLocation] = useState<LocationData>({ text: "" });
   const [radius, setRadius] = useState(10);
   const [date, setDate] = useState<string | null>(null);
+  const [time, setTime] = useState<string | null>(null);
   const [startDate, setStartDate] = useState<string | null>(null);
   const [endDate, setEndDate] = useState<string | null>(null);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -462,6 +476,7 @@ export function SearchMapSection() {
       coordinates?: { lat: number; lng: number };
       radiusKm?: number;
       date?: string;
+      time?: string;
       startDate?: string;
       endDate?: string;
     } = {};
@@ -488,14 +503,17 @@ export function SearchMapSection() {
       args.radiusKm = radius;
     }
 
-    if (date) args.date = date;
+    if (date) {
+      args.date = date;
+      if (time) args.time = time;
+    }
     if (startDate && endDate) {
       args.startDate = startDate;
       args.endDate = endDate;
     }
 
     return args;
-  }, [searchMode, selectedCategory, selectedAnimal, location, clientLocation, radius, date, startDate, endDate]);
+  }, [searchMode, selectedCategory, selectedAnimal, location, clientLocation, radius, date, time, startDate, endDate]);
 
   // Fetch services
   const results = useQuery(api.public.search.searchServices, queryArgs);
@@ -505,6 +523,7 @@ export function SearchMapSection() {
     setSearchMode(mode);
     setSelectedCategory(null);
     setDate(null);
+    setTime(null);
     setStartDate(null);
     setEndDate(null);
     setSelectedService(null);
@@ -516,10 +535,15 @@ export function SearchMapSection() {
     setEndDate(null);
   }, []);
 
+  const handleTimeChange = useCallback((t: string | null) => {
+    setTime(t);
+  }, []);
+
   const handleDateRangeChange = useCallback((start: string | null, end: string | null) => {
     setStartDate(start);
     setEndDate(end);
     setDate(null);
+    setTime(null);
   }, []);
 
   const resetFilters = useCallback(() => {
@@ -528,12 +552,13 @@ export function SearchMapSection() {
     setLocation({ text: "" });
     setRadius(10);
     setDate(null);
+    setTime(null);
     setStartDate(null);
     setEndDate(null);
     setSelectedService(null);
   }, []);
 
-  const hasActiveFilters = selectedAnimal || selectedCategory || location.text || date || startDate;
+  const hasActiveFilters = selectedAnimal || selectedCategory || location.text || date || time || startDate;
   const isLoading = results === undefined;
   const services = (results ?? []) as ServiceSearchResult[];
 
@@ -731,30 +756,21 @@ export function SearchMapSection() {
           </div>
 
           {/* Advanced filters */}
-          <AnimatePresence>
-            {showAdvancedFilters && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden"
-              >
-                <div className="mt-6 pt-6 border-t border-gray-100 flex flex-wrap gap-4 justify-center">
-                  <DateSelector
-                    billingType={searchMode === "garde" ? "daily" : "hourly"}
-                    date={date}
-                    time={null}
-                    onDateChange={handleDateChange}
-                    onTimeChange={() => {}}
-                    startDate={startDate}
-                    endDate={endDate}
-                    onDateRangeChange={handleDateRangeChange}
-                    allowRangeBooking={searchMode === "garde"}
-                  />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {showAdvancedFilters && (
+            <div className="mt-6 pt-6 border-t border-gray-100 flex flex-wrap gap-4 justify-center relative z-20">
+              <DateSelector
+                billingType={searchMode === "garde" ? "daily" : "hourly"}
+                date={date}
+                time={time}
+                onDateChange={handleDateChange}
+                onTimeChange={handleTimeChange}
+                startDate={startDate}
+                endDate={endDate}
+                onDateRangeChange={handleDateRangeChange}
+                allowRangeBooking={searchMode === "garde"}
+              />
+            </div>
+          )}
 
           {hasActiveFilters && (
             <div className="mt-4 flex justify-center">
@@ -808,7 +824,7 @@ export function SearchMapSection() {
           className="grid grid-cols-1 lg:grid-cols-2 gap-6"
         >
           {/* Results List */}
-          <div className="order-2 lg:order-1">
+          <div className="lg:order-1">
             <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent">
               {services.length === 0 && !isLoading ? (
                 <div className="bg-white rounded-2xl p-8 text-center shadow-md">
@@ -852,9 +868,9 @@ export function SearchMapSection() {
             </div>
           </div>
 
-          {/* Map */}
-          <div className="order-1 lg:order-2">
-            <div className="h-[400px] lg:h-[600px] rounded-2xl overflow-hidden shadow-lg sticky top-24">
+          {/* Map - hidden on mobile */}
+          <div className="hidden lg:block order-1 lg:order-2">
+            <div className="h-[600px] rounded-2xl overflow-hidden shadow-lg sticky top-24">
               <MapComponent
                 sitters={mapSitters as any}
                 selectedSitter={selectedService ? mapSitters.find(s => s.announcerId === (selectedService.announcerId as string)) as any : null}

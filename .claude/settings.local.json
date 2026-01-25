@@ -14,9 +14,11 @@
       "mcp__chrome-devtools__evaluate_script",
       "mcp__chrome-devtools__click",
       "Bash(npx tsc:*)",
-      "Bash(wc:*)",
-      "Bash(taskkill:*)",
-      "Bash(bunx convex dev:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+      "Bash(bunx tsc:*)",
+      "Bash(git reset:*)",
       "Bash(npm run build:*)"
     ]
   }

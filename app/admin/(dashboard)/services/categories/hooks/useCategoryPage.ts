@@ -129,6 +129,7 @@ export function useCategoryPage(
       name: category.name,
       description: category.description || "",
       icon: category.icon || "",
+      color: category.color || "#FF6B6B",
       parentCategoryId: category.parentCategoryId || null,
       billingType: category.billingType || "hourly",
       defaultHourlyPrice: category.defaultHourlyPrice
@@ -165,6 +166,7 @@ export function useCategoryPage(
         name: formData.name,
         description: formData.description || undefined,
         icon: formData.icon || undefined,
+        color: formData.color || undefined,
         parentCategoryId: formData.parentCategoryId || undefined,
         // Champs pour les catégories parentes
         displayFormat: !isSubcategory ? formData.displayFormat : undefined,
@@ -223,6 +225,7 @@ export function useCategoryPage(
         name: formData.name || undefined,
         description: formData.description || undefined,
         icon: formData.icon || undefined,
+        color: formData.color || undefined,
       };
 
       // N'envoyer parentCategoryId que si changé

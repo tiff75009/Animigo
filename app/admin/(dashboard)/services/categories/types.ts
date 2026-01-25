@@ -23,6 +23,7 @@ export interface CategoryFormData {
   name: string;
   description: string;
   icon: string;
+  color: string; // Couleur HEX (ex: "#FF6B6B")
   parentCategoryId: Id<"serviceCategories"> | null;
   billingType: BillingType;
   defaultHourlyPrice: number;
@@ -47,6 +48,7 @@ export interface Category {
   name: string;
   description?: string;
   icon?: string;
+  color?: string; // Couleur HEX
   imageUrl?: string | null;
   parentCategoryId?: Id<"serviceCategories">;
   parentName?: string;
@@ -149,12 +151,29 @@ export const DISPLAY_FORMATS: {
   },
 ];
 
+// Couleurs prédéfinies pour les catégories
+export const CATEGORY_COLORS = [
+  { value: "#FF6B6B", label: "Corail" },
+  { value: "#4ECDC4", label: "Turquoise" },
+  { value: "#45B7D1", label: "Bleu ciel" },
+  { value: "#96CEB4", label: "Menthe" },
+  { value: "#FFEAA7", label: "Jaune" },
+  { value: "#DDA0DD", label: "Lavande" },
+  { value: "#98D8C8", label: "Vert d'eau" },
+  { value: "#F7DC6F", label: "Or" },
+  { value: "#BB8FCE", label: "Violet" },
+  { value: "#85C1E9", label: "Bleu clair" },
+  { value: "#F8B500", label: "Orange" },
+  { value: "#58D68D", label: "Vert" },
+];
+
 // Valeurs par défaut du formulaire
 export const DEFAULT_FORM_DATA: CategoryFormData = {
   slug: "",
   name: "",
   description: "",
   icon: "",
+  color: "#FF6B6B", // Corail par défaut (couleur primaire Animigo)
   parentCategoryId: null,
   billingType: "hourly",
   defaultHourlyPrice: 0,
@@ -175,6 +194,7 @@ export function categoryToFormData(category: Category): CategoryFormData {
     name: category.name,
     description: category.description || "",
     icon: category.icon || "",
+    color: category.color || "#FF6B6B",
     parentCategoryId: category.parentCategoryId || null,
     billingType: category.billingType || "hourly",
     defaultHourlyPrice: category.defaultHourlyPrice

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import Image from "next/image";
@@ -156,6 +157,13 @@ const priceUnitLabels: Record<string, string> = {
   flat: "",
 };
 
+// Commission rate (15%) - same as /recherche page
+const COMMISSION_RATE = 15;
+function calculatePriceWithCommission(basePriceCents: number): number {
+  const commission = Math.round((basePriceCents * COMMISSION_RATE) / 100);
+  return basePriceCents + commission;
+}
+
 // Format fuzzy distance with 1km margin of error
 function formatFuzzyDistance(distance?: number): string | null {
   if (distance === undefined) return null;
@@ -175,7 +183,9 @@ interface GroupedService {
 }
 
 // Popup content component - handles grouped services
-function SitterPopup({ sitter }: { sitter: SitterLocation }) {
+function SitterPopup({ sitter }: { sitter: SitterLocation & { announcerSlug?: string } }) {
+  const router = useRouter();
+
   // Déterminer le label du badge de statut
   const getStatusLabel = () => {
     switch (sitter.statusType) {
@@ -270,7 +280,7 @@ function SitterPopup({ sitter }: { sitter: SitterLocation }) {
                 <span>{service.categoryName}</span>
               </span>
               <span className="text-sm font-semibold text-primary">
-                {formatPrice(service.basePrice)}{priceUnitLabels[service.basePriceUnit] || ""}
+                {formatPrice(calculatePriceWithCommission(service.basePrice))}{priceUnitLabels[service.basePriceUnit] || ""}
               </span>
             </div>
           ))}
@@ -320,11 +330,18 @@ function SitterPopup({ sitter }: { sitter: SitterLocation }) {
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm text-text-light">À partir de</span>
             <span className="text-lg font-bold text-primary">
-              {minPrice ? formatPrice(minPrice) : `${sitter.hourlyRate}€`}
+              {minPrice ? formatPrice(calculatePriceWithCommission(minPrice)) : `${sitter.hourlyRate}€`}
             </span>
           </div>
         )}
-        <button className="w-full py-2.5 bg-gradient-to-r from-primary to-secondary text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-all shadow-sm">
+        <button
+          onClick={() => {
+            const slug = sitter.announcerSlug || sitter.id;
+            const serviceParam = groupedServices?.[0]?.categorySlug;
+            router.push(`/annonceur/${slug}${serviceParam ? `?service=${serviceParam}` : ""}`);
+          }}
+          className="w-full py-2.5 bg-gradient-to-r from-primary to-secondary text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-all shadow-sm"
+        >
           {groupedServices && groupedServices.length > 1 ? "Voir les prestations" : "Voir la prestation"}
         </button>
       </div>

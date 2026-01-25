@@ -139,7 +139,7 @@ export function detectPhoneNumber(text: string): {
   return {
     found: matches.length > 0,
     confidence,
-    matches: [...new Set(matches)], // Dédupliquer
+    matches: Array.from(new Set(matches)), // Dédupliquer
   };
 }
 
@@ -187,7 +187,7 @@ export function detectEmail(text: string): {
   return {
     found: matches.length > 0,
     confidence,
-    matches: [...new Set(matches)],
+    matches: Array.from(new Set(matches)),
   };
 }
 

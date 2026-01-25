@@ -12,7 +12,7 @@ import type {
   DisplayFormat,
   DefaultVariant,
 } from "../../types";
-import { generateSlug } from "../../types";
+import { generateSlug, CATEGORY_COLORS } from "../../types";
 
 import CategoryTypeSelector from "./CategoryTypeSelector";
 import BillingTypeSelector from "./BillingTypeSelector";
@@ -183,21 +183,86 @@ export default function CategoryForm({
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1">
-              Description
+              Couleur
             </label>
-            <input
-              type="text"
-              value={formData.description}
-              onChange={(e) =>
-                onFormDataChange((prev) => ({
-                  ...prev,
-                  description: e.target.value,
-                }))
-              }
-              placeholder="Ex: Soins et hygiène"
-              className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-            />
+            <div className="flex items-center gap-3">
+              {/* Color picker natif */}
+              <div className="relative">
+                <input
+                  type="color"
+                  value={formData.color}
+                  onChange={(e) =>
+                    onFormDataChange((prev) => ({ ...prev, color: e.target.value }))
+                  }
+                  className="w-10 h-10 rounded-lg cursor-pointer border-2 border-slate-600 bg-transparent"
+                  style={{ padding: 0 }}
+                />
+              </div>
+              {/* Code HEX */}
+              <input
+                type="text"
+                value={formData.color.toUpperCase()}
+                onChange={(e) => {
+                  let value = e.target.value;
+                  if (!value.startsWith("#")) value = "#" + value;
+                  if (/^#[0-9A-Fa-f]{0,6}$/.test(value)) {
+                    onFormDataChange((prev) => ({ ...prev, color: value }));
+                  }
+                }}
+                placeholder="#FF6B6B"
+                className="w-24 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm font-mono focus:border-blue-500 outline-none"
+              />
+              {/* Couleurs prédéfinies */}
+              <div className="flex flex-wrap gap-1.5">
+                {CATEGORY_COLORS.map((c) => (
+                  <button
+                    key={c.value}
+                    type="button"
+                    onClick={() =>
+                      onFormDataChange((prev) => ({ ...prev, color: c.value }))
+                    }
+                    className={`w-6 h-6 rounded-full border-2 transition-all ${
+                      formData.color.toUpperCase() === c.value.toUpperCase()
+                        ? "border-white scale-110"
+                        : "border-transparent hover:border-slate-400"
+                    }`}
+                    style={{ backgroundColor: c.value }}
+                    title={c.label}
+                  />
+                ))}
+              </div>
+              {/* Aperçu */}
+              <div
+                className="px-3 py-1 rounded-full text-sm font-medium"
+                style={{
+                  backgroundColor: formData.color + "20",
+                  color: formData.color,
+                  border: `1px solid ${formData.color}`,
+                }}
+              >
+                {formData.name || "Aperçu"}
+              </div>
+            </div>
           </div>
+        </div>
+
+        {/* Description */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-slate-300 mb-1">
+            Description
+          </label>
+          <input
+            type="text"
+            value={formData.description}
+            onChange={(e) =>
+              onFormDataChange((prev) => ({
+                ...prev,
+                description: e.target.value,
+              }))
+            }
+            placeholder="Ex: Soins et hygiène"
+            className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+          />
         </div>
 
         {/* Sélection type de catégorie */}

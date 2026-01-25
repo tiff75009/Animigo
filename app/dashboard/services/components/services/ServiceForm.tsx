@@ -119,7 +119,6 @@ export default function ServiceForm({
   const [allowOvernightStay, setAllowOvernightStay] = useState(false);
   const [dayStartTime, setDayStartTime] = useState("08:00");
   const [dayEndTime, setDayEndTime] = useState("20:00");
-  const [overnightPrice, setOvernightPrice] = useState<number>(0); // En euros
 
   const selectedCategory = categories.find((c) => c.slug === category);
 
@@ -135,7 +134,8 @@ export default function ServiceForm({
       case 2:
         return animalTypes.length > 0;
       case 3:
-        return localVariants.length > 0;
+        // Au moins une formule avec une durée définie
+        return localVariants.length > 0 && localVariants.every(v => v.duration && v.duration > 0);
       case 4:
         return true; // Options are optional
       default:
@@ -176,12 +176,14 @@ export default function ServiceForm({
     }));
 
     // Préparer les données overnight si la catégorie le permet
+    // Le prix nuit est maintenant dans chaque variant (pricing.nightly)
+    const firstVariantNightlyPrice = localVariants[0]?.pricing?.nightly;
     const overnightData = selectedCategory?.allowOvernightStay
       ? {
           allowOvernightStay,
           dayStartTime,
           dayEndTime,
-          overnightPrice: allowOvernightStay ? Math.round(overnightPrice * 100) : undefined, // Convertir en centimes
+          overnightPrice: allowOvernightStay && firstVariantNightlyPrice ? firstVariantNightlyPrice : undefined,
         }
       : {};
 
@@ -553,33 +555,6 @@ export default function ServiceForm({
                     </div>
                   </label>
 
-                  {/* Prix de la nuit - seulement si garde de nuit activée */}
-                  {allowOvernightStay && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                    >
-                      <label className="block text-sm font-medium text-foreground mb-2">
-                        Prix de la nuit
-                      </label>
-                      <div className="relative w-48">
-                        <input
-                          type="number"
-                          value={overnightPrice || ""}
-                          onChange={(e) => setOvernightPrice(parseFloat(e.target.value) || 0)}
-                          placeholder="20"
-                          step="0.50"
-                          min="0"
-                          className="w-full px-4 py-2.5 pr-12 bg-white border-2 border-foreground/10 rounded-xl text-foreground focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
-                        />
-                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-text-light">€</span>
-                      </div>
-                      <p className="text-xs text-text-light mt-2">
-                        Ce prix sera ajouté pour chaque nuit lors d&apos;une réservation multi-jours
-                      </p>
-                    </motion.div>
-                  )}
                 </div>
               )}
             </motion.div>
@@ -628,10 +603,10 @@ export default function ServiceForm({
             >
               <div>
                 <h4 className="font-medium text-foreground mb-1">
-                  Définissez vos prestations
+                  Définissez vos tarifs
                 </h4>
                 <p className="text-sm text-text-light">
-                  Créez au moins une prestation avec son prix (ex: Standard, Premium...)
+                  Ajustez le prix de chaque formule selon vos prestations
                 </p>
               </div>
 
@@ -645,13 +620,10 @@ export default function ServiceForm({
                 defaultVariants={selectedCategory?.defaultVariants}
                 allowedPriceUnits={selectedCategory?.allowedPriceUnits}
                 allowCustomVariants={selectedCategory?.allowCustomVariants}
+                autoAddFirst={true}
+                allowOvernightStay={allowOvernightStay}
+                isGardeService={selectedCategory?.allowOvernightStay === true}
               />
-
-              {localVariants.length === 0 && (
-                <p className="text-xs text-amber-500">
-                  Ajoutez au moins une prestation
-                </p>
-              )}
             </motion.div>
           )}
 

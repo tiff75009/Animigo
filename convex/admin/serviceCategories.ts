@@ -60,6 +60,7 @@ export const listCategories = query({
           name: cat.name,
           description: cat.description,
           icon: cat.icon,
+          color: cat.color,
           imageUrl,
           order: cat.order,
           isActive: cat.isActive,
@@ -167,6 +168,7 @@ export const getActiveCategories = query({
               name: child.name,
               description: child.description,
               icon: child.icon,
+              color: child.color,
               imageUrl: childImageUrl,
               parentCategoryId: child.parentCategoryId,
               billingType: child.billingType,
@@ -186,6 +188,7 @@ export const getActiveCategories = query({
           name: parent.name,
           description: parent.description,
           icon: parent.icon,
+          color: parent.color,
           imageUrl,
           isParent: true,
           displayFormat: parent.displayFormat,
@@ -207,6 +210,7 @@ export const getActiveCategories = query({
           name: cat.name,
           description: cat.description,
           icon: cat.icon,
+          color: cat.color,
           imageUrl,
           billingType: cat.billingType,
           allowRangeBooking: cat.allowRangeBooking,
@@ -243,6 +247,7 @@ export const createCategory = mutation({
     name: v.string(),
     description: v.optional(v.string()),
     icon: v.optional(v.string()),
+    color: v.optional(v.string()), // Couleur HEX
     imageStorageId: v.optional(v.id("_storage")),
     // Référence vers la catégorie parente (undefined = catégorie parente)
     parentCategoryId: v.optional(v.id("serviceCategories")),
@@ -314,6 +319,7 @@ export const createCategory = mutation({
       name: args.name,
       description: args.description,
       icon: args.icon,
+      color: args.color,
       imageStorageId: args.imageStorageId,
       parentCategoryId: args.parentCategoryId,
       // Champs métier (ignorés pour les catégories parentes)
@@ -348,6 +354,7 @@ export const updateCategory = mutation({
     name: v.optional(v.string()),
     description: v.optional(v.string()),
     icon: v.optional(v.string()),
+    color: v.optional(v.string()), // Couleur HEX
     imageStorageId: v.optional(v.id("_storage")),
     isActive: v.optional(v.boolean()),
     // Changer le parent (null = devient catégorie parente, Id = devient sous-catégorie)
@@ -430,6 +437,7 @@ export const updateCategory = mutation({
     if (args.name !== undefined) updates.name = args.name;
     if (args.description !== undefined) updates.description = args.description;
     if (args.icon !== undefined) updates.icon = args.icon;
+    if (args.color !== undefined) updates.color = args.color;
     if (args.imageStorageId !== undefined) updates.imageStorageId = args.imageStorageId;
     if (args.isActive !== undefined) updates.isActive = args.isActive;
 
