@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Check, Home, MapPin, Clock, ChevronDown, Calendar, CheckCircle2 } from "lucide-react";
+import { Check, Home, MapPin, Clock, ChevronDown, Calendar, CheckCircle2, Target, Users, PawPrint, Info } from "lucide-react";
 import { cn } from "@/app/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
 
 // Types
 export interface ServiceVariant {
@@ -11,6 +12,10 @@ export interface ServiceVariant {
   description?: string;
   objectives?: { icon: string; text: string }[];
   numberOfSessions?: number;
+  sessionInterval?: number; // Intervalle minimum entre séances (en jours)
+  sessionType?: "individual" | "collective"; // Type de séance
+  animalTypes?: string[]; // Types d'animaux acceptés
+  maxAnimalsPerSession?: number; // Pour les séances collectives
   price: number;
   priceUnit: string;
   duration?: number;
@@ -88,6 +93,225 @@ function formatDuration(minutes: number): string {
     return `${hours}h`;
   }
   return `${hours}h${remainingMinutes}`;
+}
+
+// Labels pour les types d'animaux
+const animalLabels: Record<string, { emoji: string; label: string }> = {
+  chien: { emoji: "🐕", label: "Chien" },
+  chat: { emoji: "🐈", label: "Chat" },
+  lapin: { emoji: "🐰", label: "Lapin" },
+  rongeur: { emoji: "🐹", label: "Rongeur" },
+  oiseau: { emoji: "🦜", label: "Oiseau" },
+  poisson: { emoji: "🐠", label: "Poisson" },
+  reptile: { emoji: "🦎", label: "Reptile" },
+  nac: { emoji: "🐾", label: "NAC" },
+};
+
+// Composant panneau de détails de la formule sélectionnée
+function SelectedFormuleDetails({
+  variant,
+  service,
+  commissionRate,
+}: {
+  variant: ServiceVariant;
+  service: ServiceDetail;
+  commissionRate: number;
+}) {
+  const isCollective = variant.sessionType === "collective";
+  const isMultiSession = (variant.numberOfSessions || 1) > 1;
+  const numberOfSessions = variant.numberOfSessions || 1;
+  const sessionInterval = variant.sessionInterval || 0;
+  const acceptedAnimals = variant.animalTypes || service.animalTypes || [];
+
+  const pricing = variant.pricing;
+  const basePrice = pricing?.daily || pricing?.hourly || variant.price || 0;
+  const displayPrice = calculatePriceWithCommission(basePrice, commissionRate);
+  const priceUnit = pricing?.daily ? "/jour" : pricing?.hourly ? "/h" : "";
+
+  // Déterminer le lieu de prestation
+  const getLocationInfo = () => {
+    const location = service.serviceLocation;
+    if (isCollective) {
+      return { icon: MapPin, label: "Chez le prestataire", description: "Les séances collectives ont lieu chez le professionnel" };
+    }
+    if (location === "announcer_home") {
+      return { icon: MapPin, label: "Chez le prestataire", description: "La prestation a lieu chez le professionnel" };
+    }
+    if (location === "client_home") {
+      return { icon: Home, label: "À domicile", description: "Le prestataire se déplace chez vous" };
+    }
+    return { icon: MapPin, label: "Flexible", description: "Chez vous ou chez le prestataire" };
+  };
+
+  const locationInfo = getLocationInfo();
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: "auto" }}
+      exit={{ opacity: 0, height: 0 }}
+      transition={{ duration: 0.3 }}
+      className="mt-4 overflow-hidden"
+    >
+      <div className={cn(
+        "rounded-xl border-2 p-4",
+        isCollective
+          ? "bg-purple-50 border-purple-200"
+          : isMultiSession
+            ? "bg-primary/5 border-primary/20"
+            : "bg-gray-50 border-gray-200"
+      )}>
+        {/* En-tête avec type de formule */}
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="font-bold text-foreground text-lg">{variant.name}</h3>
+              {isCollective ? (
+                <span className="px-2 py-0.5 bg-purple-200 text-purple-700 text-xs rounded-full font-medium flex items-center gap-1">
+                  <Users className="w-3 h-3" />
+                  Collectif
+                </span>
+              ) : isMultiSession ? (
+                <span className="px-2 py-0.5 bg-primary/20 text-primary text-xs rounded-full font-medium">
+                  {numberOfSessions} séances
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 bg-gray-200 text-gray-600 text-xs rounded-full font-medium">
+                  Séance unique
+                </span>
+              )}
+            </div>
+            {variant.description && (
+              <p className="text-sm text-text-light">{variant.description}</p>
+            )}
+          </div>
+          <div className="text-right">
+            <p className="text-xl font-bold text-primary">
+              {formatPrice(displayPrice)}
+              <span className="text-xs font-normal text-text-light">{priceUnit}</span>
+            </p>
+            {variant.duration && (
+              <p className="text-xs text-text-light">{formatDuration(variant.duration)}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Grille d'informations */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Objectifs */}
+          {variant.objectives && variant.objectives.length > 0 && (
+            <div className="p-3 bg-white/80 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <Target className="w-4 h-4 text-secondary" />
+                <span className="text-sm font-medium text-foreground">Objectifs</span>
+              </div>
+              <div className="space-y-1.5">
+                {variant.objectives.map((obj, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-sm text-text-light">
+                    <span className="text-base">{obj.icon}</span>
+                    <span>{obj.text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Lieu de prestation */}
+          <div className="p-3 bg-white/80 rounded-lg">
+            <div className="flex items-center gap-2 mb-2">
+              <locationInfo.icon className="w-4 h-4 text-blue-600" />
+              <span className="text-sm font-medium text-foreground">{locationInfo.label}</span>
+            </div>
+            <p className="text-xs text-text-light">{locationInfo.description}</p>
+          </div>
+
+          {/* Nombre de séances (si multi-session) */}
+          {isMultiSession && (
+            <div className="p-3 bg-white/80 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <Calendar className="w-4 h-4 text-primary" />
+                <span className="text-sm font-medium text-foreground">
+                  {numberOfSessions} séances
+                </span>
+              </div>
+              {sessionInterval > 0 && (
+                <p className="text-xs text-text-light">
+                  Intervalle minimum : {sessionInterval} jour{sessionInterval > 1 ? "s" : ""} entre chaque séance
+                </p>
+              )}
+              {isCollective && variant.maxAnimalsPerSession && (
+                <p className="text-xs text-text-light">
+                  Jusqu'à {variant.maxAnimalsPerSession} animaux par séance
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Animaux acceptés */}
+          {acceptedAnimals.length > 0 && (
+            <div className="p-3 bg-white/80 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <PawPrint className="w-4 h-4 text-amber-600" />
+                <span className="text-sm font-medium text-foreground">Animaux acceptés</span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {acceptedAnimals.map((animal) => {
+                  const info = animalLabels[animal] || { emoji: "🐾", label: animal };
+                  return (
+                    <span
+                      key={animal}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full"
+                    >
+                      {info.emoji} {info.label}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Features incluses */}
+          {variant.includedFeatures && variant.includedFeatures.length > 0 && (
+            <div className="p-3 bg-white/80 rounded-lg sm:col-span-2">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle2 className="w-4 h-4 text-green-600" />
+                <span className="text-sm font-medium text-foreground">Inclus</span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {variant.includedFeatures.map((feature, idx) => (
+                  <span
+                    key={idx}
+                    className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full"
+                  >
+                    {feature}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Message d'information selon le type */}
+        <div className={cn(
+          "mt-4 p-3 rounded-lg flex items-start gap-2 text-sm",
+          isCollective
+            ? "bg-purple-100 text-purple-700"
+            : isMultiSession
+              ? "bg-primary/10 text-primary"
+              : "bg-blue-50 text-blue-700"
+        )}>
+          <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <p>
+            {isCollective
+              ? `Vous devrez sélectionner ${numberOfSessions} créneau${numberOfSessions > 1 ? "x" : ""} parmi les disponibilités du prestataire.`
+              : isMultiSession
+                ? `Vous devrez sélectionner ${numberOfSessions} dates pour vos séances${sessionInterval > 0 ? ` (minimum ${sessionInterval} jour${sessionInterval > 1 ? "s" : ""} d'intervalle)` : ""}.`
+                : "Vous pourrez choisir une date et un horaire à l'étape suivante."}
+          </p>
+        </div>
+      </div>
+    </motion.div>
+  );
 }
 
 // Composant indicateur de prix
@@ -712,6 +936,18 @@ export default function FormulaStep({
           </div>
         ))}
       </div>
+
+      {/* Panneau de détails de la formule sélectionnée */}
+      <AnimatePresence>
+        {selectedService && selectedVariant && (
+          <SelectedFormuleDetails
+            key={selectedVariant.id}
+            variant={selectedVariant}
+            service={selectedService}
+            commissionRate={commissionRate}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Choix du lieu de prestation (affiché seulement si service = "both") */}
       {showLocationChoice && (

@@ -428,6 +428,49 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.20.0 - Refonte Page Reservation Step-by-Step (4 etapes)
+
+- **Etape 1 : Choix de la prestation ameliore** (`FormulaStep.tsx`)
+  - Nouveau composant `SelectedFormuleDetails` apres selection d'une formule
+  - Affiche : nom, description, objectifs avec icones, lieu de prestation
+  - Type de formule (individuel/collectif) + nombre de seances
+  - Liste des animaux acceptes avec badges
+  - Couleurs distinctes selon le type :
+    - Violet pour formules collectives
+    - Primary pour formules multi-seances
+    - Gris pour formules uni-seance
+  - Message d'information contextuel sur la prochaine etape
+
+- **Etape 2 : Date et horaire avec en-tetes contextuels** (`DateTimeStep.tsx`)
+  - En-tetes adaptes au type de formule :
+    - Uni-seance : "Choisissez votre creneau" (icone Calendar)
+    - Multi-seances : "Planifiez vos seances" avec intervalle minimum
+    - Collective : "Choisissez vos creneaux" avec nombre requis
+  - Barre de progression visuelle pour multi-seances et collectives
+  - Compteur X/Y des seances/creneaux selectionnes
+  - Messages d'aide contextuels pour guider l'utilisateur
+  - Badge recap formule avec type et nombre de seances
+
+- **Etape 4 : Recapitulatif en mode plan/detaille** (`SummaryStep.tsx`)
+  - Affichage des dates adapte selon le type :
+    - Uni-seance : date + heure unique
+    - Multi-seances : liste numerotee des seances avec dates/heures
+    - Collective : liste numerotee des creneaux + nombre d'animaux
+  - Prix en mode plan avec breakdown complet :
+    - Formule (nom + calcul detaille : prix x seances x animaux)
+    - Options avec prix unitaires
+    - Sous-total
+    - Frais de service (pourcentage)
+    - Total final
+
+- **Page principale (`page.tsx`)** support des 3 types
+  - Nouveaux types `SelectedSession` et `CollectiveSlotInfo`
+  - Extension de `BookingData` : selectedSessions, selectedSlotIds, animalCount
+  - Detection automatique du type de formule
+  - Nouveaux handlers : handleSessionsChange, handleSlotsSelected
+  - Validation etape 2 adaptee selon le type
+  - Props mises a jour pour DateTimeStep et SummaryStep
+
 ### v0.19.0 - Systeme de Creneaux pour Seances Collectives
 
 - **Nouvelle table `collectiveSlots`** dans le schema Convex

@@ -36,6 +36,22 @@ interface GuestAddressData {
   coordinates: { lat: number; lng: number } | null;
 }
 
+// Type pour les séances multi-sessions
+interface SelectedSession {
+  date: string;
+  startTime: string;
+  endTime: string;
+}
+
+// Type pour les créneaux collectifs sélectionnés
+interface CollectiveSlotInfo {
+  _id: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  availableSpots: number;
+}
+
 interface BookingData {
   serviceId: string;
   variantId: string;
@@ -47,6 +63,12 @@ interface BookingData {
   selectedOptionIds: string[];
   serviceLocation: "announcer_home" | "client_home" | null;
   guestAddress: GuestAddressData | null;
+  // Support formules multi-séances
+  selectedSessions: SelectedSession[];
+  // Support formules collectives
+  selectedSlotIds: string[];
+  selectedCollectiveSlots: CollectiveSlotInfo[];
+  animalCount: number;
 }
 
 // Step labels
@@ -347,6 +369,12 @@ export default function ReserverPage({
     selectedOptionIds: preSelectedOptionIds,
     serviceLocation: preSelectedLocation,
     guestAddress: preSelectedGuestAddress,
+    // Formules multi-séances
+    selectedSessions: [],
+    // Formules collectives
+    selectedSlotIds: [],
+    selectedCollectiveSlots: [],
+    animalCount: 1,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -424,6 +452,12 @@ export default function ReserverPage({
 
   // Mutation
   const createPendingBooking = useMutation(api.public.booking.createPendingBooking);
+
+  // Déterminer le type de formule (collective, multi-session, uni-séance)
+  const isCollectiveFormula = selectedVariant?.sessionType === "collective";
+  const isMultiSessionIndividual = !isCollectiveFormula && (selectedVariant?.numberOfSessions || 1) > 1;
+  const numberOfSessions = selectedVariant?.numberOfSessions || 1;
+  const sessionInterval = selectedVariant?.sessionInterval || 0;
 
   // Determine if range mode (daily/weekly/monthly services)
   // Categories that use daily pricing and allow date range selection
@@ -605,6 +639,15 @@ export default function ReserverPage({
         if (selectedService?.serviceLocation === "both" && !bookingData.serviceLocation) return false;
         return true;
       case 2:
+        // Formule collective: vérifier que le nombre de créneaux requis est sélectionné
+        if (isCollectiveFormula) {
+          return bookingData.selectedSlotIds.length >= numberOfSessions;
+        }
+        // Formule multi-séances individuelle: vérifier que toutes les séances sont planifiées
+        if (isMultiSessionIndividual) {
+          return bookingData.selectedSessions.length >= numberOfSessions;
+        }
+        // Formule uni-séance
         if (isRangeMode) {
           // Range mode: start date required (end date optional for single day)
           return bookingData.selectedDate !== null;
@@ -671,6 +714,35 @@ export default function ReserverPage({
 
   const handleOvernightChange = (include: boolean) => {
     setBookingData((prev) => ({ ...prev, includeOvernightStay: include }));
+  };
+
+  // Handler pour les séances multi-sessions (formules individuelles multi-séances)
+  const handleSessionsChange = (sessions: SelectedSession[]) => {
+    setBookingData((prev) => ({
+      ...prev,
+      selectedSessions: sessions,
+      // Mettre à jour la première date sélectionnée pour la compatibilité
+      selectedDate: sessions.length > 0 ? sessions[0].date : null,
+      selectedTime: sessions.length > 0 ? sessions[0].startTime : null,
+      selectedEndTime: sessions.length > 0 ? sessions[0].endTime : null,
+    }));
+  };
+
+  // Handler pour les créneaux collectifs
+  const handleSlotsSelected = (slotIds: string[]) => {
+    // Récupérer les infos des créneaux sélectionnés depuis availabilityCalendar si disponible
+    // Pour l'instant, on stocke juste les IDs
+    setBookingData((prev) => ({
+      ...prev,
+      selectedSlotIds: slotIds,
+      // Mettre à jour la première date sélectionnée pour la compatibilité
+      selectedDate: slotIds.length > 0 ? prev.selectedDate || new Date().toISOString().split('T')[0] : null,
+    }));
+  };
+
+  // Handler pour le nombre d'animaux (formules collectives)
+  const handleAnimalCountChange = (count: number) => {
+    setBookingData((prev) => ({ ...prev, animalCount: count }));
   };
 
   const handleToggleOption = (optionId: string) => {
@@ -890,6 +962,15 @@ export default function ReserverPage({
                 bufferAfter={availabilityCalendar?.bufferAfter}
                 acceptReservationsFrom={availabilityCalendar?.acceptReservationsFrom}
                 acceptReservationsTo={availabilityCalendar?.acceptReservationsTo}
+                // Support formules collectives
+                isCollectiveFormula={isCollectiveFormula}
+                collectiveSlots={(availabilityCalendar as { collectiveSlots?: CollectiveSlotInfo[] } | undefined)?.collectiveSlots}
+                selectedSlotIds={bookingData.selectedSlotIds}
+                onSlotsSelected={handleSlotsSelected}
+                // Support formules multi-séances
+                isMultiSessionIndividual={isMultiSessionIndividual}
+                selectedSessions={bookingData.selectedSessions}
+                onSessionsChange={handleSessionsChange}
                 onDateSelect={handleDateSelect}
                 onEndDateSelect={handleEndDateSelect}
                 onTimeSelect={handleTimeSelect}
@@ -909,7 +990,7 @@ export default function ReserverPage({
             )}
 
             {/* Step 4: Summary */}
-            {step === 4 && selectedService && selectedVariant && bookingData.selectedDate && priceCalculation && (
+            {step === 4 && selectedService && selectedVariant && (bookingData.selectedDate || isCollectiveFormula || isMultiSessionIndividual) && priceCalculation && (
               <SummaryStep
                 announcer={{
                   firstName: announcerData.firstName,
@@ -919,7 +1000,7 @@ export default function ReserverPage({
                 }}
                 selectedService={selectedService}
                 selectedVariant={selectedVariant}
-                selectedDate={bookingData.selectedDate}
+                selectedDate={bookingData.selectedDate || ""}
                 selectedEndDate={bookingData.selectedEndDate}
                 selectedTime={bookingData.selectedTime}
                 selectedEndTime={bookingData.selectedEndTime}
@@ -929,6 +1010,13 @@ export default function ReserverPage({
                 priceBreakdown={priceCalculation}
                 serviceLocation={bookingData.serviceLocation}
                 commissionRate={commissionRate}
+                // Support formules collectives
+                isCollectiveFormula={isCollectiveFormula}
+                collectiveSlots={bookingData.selectedCollectiveSlots}
+                animalCount={bookingData.animalCount}
+                // Support formules multi-séances
+                isMultiSessionIndividual={isMultiSessionIndividual}
+                selectedSessions={bookingData.selectedSessions}
                 error={error}
               />
             )}

@@ -1,9 +1,26 @@
 "use client";
 
 import Image from "next/image";
-import { AlertCircle, Clock, MapPin, Moon, Sun, Home } from "lucide-react";
+import { AlertCircle, Clock, MapPin, Moon, Sun, Home, CalendarCheck, Users, CreditCard, Package, Plus } from "lucide-react";
+import { cn } from "@/app/lib/utils";
 import type { ServiceDetail, ServiceVariant } from "./FormulaStep";
 import type { ServiceOption } from "./OptionsStep";
+
+// Type pour les séances multi-sessions
+interface SelectedSession {
+  date: string;
+  startTime: string;
+  endTime: string;
+}
+
+// Type pour les créneaux collectifs
+interface CollectiveSlotInfo {
+  _id: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  availableSpots: number;
+}
 
 // Price calculation result interface (must match page.tsx)
 interface PriceBreakdown {
@@ -45,6 +62,13 @@ interface SummaryStepProps {
   priceBreakdown: PriceBreakdown;
   serviceLocation: "announcer_home" | "client_home" | null;
   commissionRate?: number; // Taux de commission en %
+  // Support pour les formules collectives
+  isCollectiveFormula?: boolean;
+  collectiveSlots?: CollectiveSlotInfo[];
+  animalCount?: number;
+  // Support pour les formules individuelles multi-séances
+  isMultiSessionIndividual?: boolean;
+  selectedSessions?: SelectedSession[];
   error: string | null;
 }
 
@@ -84,9 +108,21 @@ export default function SummaryStep({
   priceBreakdown,
   serviceLocation,
   commissionRate = 15,
+  // Formules collectives
+  isCollectiveFormula = false,
+  collectiveSlots = [],
+  animalCount = 1,
+  // Formules multi-séances
+  isMultiSessionIndividual = false,
+  selectedSessions = [],
   error,
 }: SummaryStepProps) {
   const isMultiDay = selectedEndDate && selectedEndDate !== selectedDate;
+
+  // Déterminer le type de formule
+  const isCollective = isCollectiveFormula || selectedVariant.sessionType === "collective";
+  const isMultiSession = isMultiSessionIndividual || (!isCollective && (selectedVariant.numberOfSessions || 1) > 1);
+  const numberOfSessions = selectedVariant.numberOfSessions || 1;
 
   // Formater l'heure (9:00 -> 9h, 14:30 -> 14h30)
   const formatTime = (time: string) => {
@@ -184,8 +220,18 @@ export default function SummaryStep({
         </div>
         <div className="flex justify-between text-sm">
           <span className="text-text-light">Prestation</span>
-          <span className="font-medium text-foreground">
+          <span className="font-medium text-foreground flex items-center gap-2">
             {selectedVariant.name}
+            {isCollective && (
+              <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full">
+                Collectif
+              </span>
+            )}
+            {isMultiSession && !isCollective && (
+              <span className="px-1.5 py-0.5 bg-primary/10 text-primary text-xs rounded-full">
+                {numberOfSessions} séances
+              </span>
+            )}
           </span>
         </div>
         {getLocationLabel() && (
@@ -201,212 +247,218 @@ export default function SummaryStep({
             </span>
           </div>
         )}
-        {/* Affichage des dates et horaires - format combiné */}
-        <div className="text-sm">
-          <span className="text-text-light block mb-1">Date et horaire</span>
-          <div className="font-medium text-foreground">
-            {isMultiDay && selectedTime && selectedEndTime ? (
-              // Multi-jours avec heures
-              <span>
-                Du {formatDate(selectedDate)} à {formatTime(selectedTime)} jusqu&apos;au {formatDate(selectedEndDate)} à {formatTime(selectedEndTime)}
+
+        {/* Affichage des dates selon le type de formule */}
+        {isCollective && collectiveSlots.length > 0 ? (
+          // Formule collective: liste numérotée des créneaux
+          <div className="p-3 bg-purple-50 rounded-xl">
+            <div className="flex items-center gap-2 mb-2">
+              <CalendarCheck className="w-4 h-4 text-purple-600" />
+              <span className="text-sm font-medium text-purple-800">
+                Créneaux sélectionnés ({collectiveSlots.length}/{numberOfSessions})
               </span>
-            ) : selectedTime && selectedEndTime ? (
-              // Même jour avec plage horaire
-              <span>
-                {formatDate(selectedDate)} de {formatTime(selectedTime)} à {formatTime(selectedEndTime)}
-              </span>
-            ) : selectedTime ? (
-              // Même jour avec heure de début seulement
-              <span>
-                {formatDate(selectedDate)} à {formatTime(selectedTime)}
-              </span>
-            ) : isMultiDay ? (
-              // Multi-jours sans heures
-              <span>
-                Du {formatDate(selectedDate)} au {formatDate(selectedEndDate)}
-              </span>
-            ) : (
-              // Date simple
-              <span>{formatDate(selectedDate)}</span>
+            </div>
+            <div className="space-y-1.5">
+              {collectiveSlots
+                .sort((a, b) => a.date.localeCompare(b.date))
+                .map((slot, index) => (
+                <div
+                  key={slot._id}
+                  className="flex items-center gap-2 text-sm"
+                >
+                  <span className="w-5 h-5 rounded-full bg-purple-200 text-purple-700 text-xs flex items-center justify-center font-semibold">
+                    {index + 1}
+                  </span>
+                  <span className="text-gray-700 capitalize">
+                    {formatDate(slot.date)}
+                  </span>
+                  <span className="text-gray-500">•</span>
+                  <span className="text-purple-700 font-medium">
+                    {slot.startTime} - {slot.endTime}
+                  </span>
+                </div>
+              ))}
+            </div>
+            {animalCount > 1 && (
+              <div className="mt-2 pt-2 border-t border-purple-200 flex items-center gap-2">
+                <Users className="w-4 h-4 text-purple-600" />
+                <span className="text-sm text-purple-700">
+                  {animalCount} animal{animalCount > 1 ? "aux" : ""}
+                </span>
+              </div>
             )}
           </div>
-          {/* Durée */}
-          {(days > 1 || totalHours > 0) && (
-            <div className="flex items-center gap-1 mt-1.5 text-xs text-text-light">
-              <Clock className="w-3 h-3" />
-              {days > 1 ? (
-                <span>
-                  {days} jour{days > 1 ? "s" : ""} · {totalHours > 0 ? `${totalHours.toFixed(1).replace(".0", "")}h au total` : ""}
-                  {totalHours > 0 && days > 1 && (
-                    <span className="text-gray-400"> ({(totalHours / days).toFixed(1).replace(".0", "")}h/jour)</span>
-                  )}
-                </span>
-              ) : totalHours > 0 ? (
-                <span>Durée : {totalHours.toFixed(1).replace(".0", "")}h</span>
-              ) : null}
+        ) : isMultiSession && selectedSessions.length > 0 ? (
+          // Formule multi-séances: liste numérotée des séances
+          <div className="p-3 bg-primary/5 rounded-xl">
+            <div className="flex items-center gap-2 mb-2">
+              <CalendarCheck className="w-4 h-4 text-primary" />
+              <span className="text-sm font-medium text-foreground">
+                Séances planifiées ({selectedSessions.length}/{numberOfSessions})
+              </span>
             </div>
-          )}
-        </div>
+            <div className="space-y-1.5">
+              {selectedSessions
+                .sort((a, b) => a.date.localeCompare(b.date))
+                .map((session, index) => (
+                <div
+                  key={`${session.date}-${session.startTime}`}
+                  className="flex items-center gap-2 text-sm"
+                >
+                  <span className="w-5 h-5 rounded-full bg-primary/20 text-primary text-xs flex items-center justify-center font-semibold">
+                    {index + 1}
+                  </span>
+                  <span className="text-gray-700 capitalize">
+                    {formatDate(session.date)}
+                  </span>
+                  <span className="text-gray-500">•</span>
+                  <span className="text-primary font-medium">
+                    {session.startTime} - {session.endTime}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          // Formule uni-séance: affichage classique
+          <div className="text-sm">
+            <span className="text-text-light block mb-1">Date et horaire</span>
+            <div className="font-medium text-foreground">
+              {isMultiDay && selectedTime && selectedEndTime ? (
+                // Multi-jours avec heures
+                <span>
+                  Du {formatDate(selectedDate)} à {formatTime(selectedTime)} jusqu&apos;au {formatDate(selectedEndDate)} à {formatTime(selectedEndTime)}
+                </span>
+              ) : selectedTime && selectedEndTime ? (
+                // Même jour avec plage horaire
+                <span>
+                  {formatDate(selectedDate)} de {formatTime(selectedTime)} à {formatTime(selectedEndTime)}
+                </span>
+              ) : selectedTime ? (
+                // Même jour avec heure de début seulement
+                <span>
+                  {formatDate(selectedDate)} à {formatTime(selectedTime)}
+                </span>
+              ) : isMultiDay ? (
+                // Multi-jours sans heures
+                <span>
+                  Du {formatDate(selectedDate)} au {formatDate(selectedEndDate)}
+                </span>
+              ) : (
+                // Date simple
+                <span>{formatDate(selectedDate)}</span>
+              )}
+            </div>
+            {/* Durée */}
+            {(days > 1 || totalHours > 0) && (
+              <div className="flex items-center gap-1 mt-1.5 text-xs text-text-light">
+                <Clock className="w-3 h-3" />
+                {days > 1 ? (
+                  <span>
+                    {days} jour{days > 1 ? "s" : ""} · {totalHours > 0 ? `${totalHours.toFixed(1).replace(".0", "")}h au total` : ""}
+                    {totalHours > 0 && days > 1 && (
+                      <span className="text-gray-400"> ({(totalHours / days).toFixed(1).replace(".0", "")}h/jour)</span>
+                    )}
+                  </span>
+                ) : totalHours > 0 ? (
+                  <span>Durée : {totalHours.toFixed(1).replace(".0", "")}h</span>
+                ) : null}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Price Breakdown - Detailed - Tous les prix incluent la commission */}
+      {/* Price Breakdown - Mode Plan/Détaillé */}
       <div className="border-t border-gray-200 pt-4 space-y-3">
-        {/* Tarifs de base */}
-        <div className="bg-gray-50 rounded-xl p-3 space-y-2">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Détail des tarifs</p>
+        {/* En-tête avec icône */}
+        <div className="flex items-center gap-2 mb-2">
+          <CreditCard className="w-4 h-4 text-gray-600" />
+          <span className="text-sm font-semibold text-foreground">Détail du prix</span>
+        </div>
 
-          {/* Helper: appliquer la commission */}
-          {(() => {
-            const withCommission = (amount: number) => Math.round(amount * (1 + commissionRate / 100));
-            const firstDayWithComm = withCommission(priceBreakdown.firstDayAmount);
-            const fullDaysWithComm = withCommission(priceBreakdown.fullDaysAmount);
-            const dailyRateWithComm = withCommission(priceBreakdown.dailyRate);
-            const hourlyRateWithComm = withCommission(priceBreakdown.hourlyRate);
-            const lastDayWithComm = withCommission(priceBreakdown.lastDayAmount);
-
-            return (
-              <>
-                {/* Prestation journalière */}
-                {isMultiDay ? (
-                  <>
-                    {/* Premier jour - toujours afficher les heures réelles */}
-                    <div className="flex justify-between text-sm">
-                      <span className="text-text-light flex items-center gap-2">
-                        <Sun className="w-4 h-4 text-amber-500" />
-                        <span>
-                          {formatDate(selectedDate)}
-                          <span className="text-gray-400 ml-1">
-                            {selectedTime ? (
-                              `(${formatTime(selectedTime)} → 20h · ${formatHours(priceBreakdown.firstDayHours)})`
-                            ) : (
-                              `(${formatHours(priceBreakdown.firstDayHours)})`
-                            )}
-                          </span>
-                        </span>
-                      </span>
-                      <span className="font-medium">{formatPrice(firstDayWithComm)}</span>
-                    </div>
-
-                    {/* Jours complets intermédiaires - avec dates */}
-                    {priceBreakdown.fullDays > 0 && (() => {
-                      // Calculer les dates des jours intermédiaires
-                      const startDateObj = new Date(selectedDate);
-                      const firstMiddleDay = new Date(startDateObj);
-                      firstMiddleDay.setDate(startDateObj.getDate() + 1);
-                      const lastMiddleDay = new Date(firstMiddleDay);
-                      lastMiddleDay.setDate(firstMiddleDay.getDate() + priceBreakdown.fullDays - 1);
-
-                      const formatShortDate = (date: Date) => date.toLocaleDateString("fr-FR", {
-                        day: "numeric",
-                        month: "short",
-                      });
-
-                      return (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-text-light flex items-center gap-2">
-                            <Sun className="w-4 h-4 text-amber-500" />
-                            <span>
-                              {priceBreakdown.fullDays === 1 ? (
-                                formatShortDate(firstMiddleDay)
-                              ) : (
-                                `${formatShortDate(firstMiddleDay)} → ${formatShortDate(lastMiddleDay)}`
-                              )}
-                              <span className="text-gray-400 ml-1">
-                                ({priceBreakdown.fullDays} jour{priceBreakdown.fullDays > 1 ? "s" : ""} · {formatPrice(dailyRateWithComm)}/jour)
-                              </span>
-                            </span>
-                          </span>
-                          <span className="font-medium">{formatPrice(fullDaysWithComm)}</span>
-                        </div>
-                      );
-                    })()}
-
-                    {/* Dernier jour - toujours afficher les heures réelles */}
-                    {priceBreakdown.lastDayHours > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-text-light flex items-center gap-2">
-                          <Sun className="w-4 h-4 text-amber-500" />
-                          <span>
-                            {formatDate(selectedEndDate)}
-                            <span className="text-gray-400 ml-1">
-                              {selectedEndTime ? (
-                                `(8h → ${formatTime(selectedEndTime)} · ${formatHours(priceBreakdown.lastDayHours)})`
-                              ) : (
-                                `(${formatHours(priceBreakdown.lastDayHours)})`
-                              )}
-                            </span>
-                          </span>
-                        </span>
-                        <span className="font-medium">{formatPrice(lastDayWithComm)}</span>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  /* Même jour - afficher les heures réelles */
-                  priceBreakdown.firstDayHours > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-text-light flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-blue-500" />
-                        <span>
-                          {selectedTime && selectedEndTime ? (
-                            <>
-                              {formatTime(selectedTime)} → {formatTime(selectedEndTime)}
-                              <span className="text-gray-400 ml-1">
-                                ({formatHours(priceBreakdown.firstDayHours)}
-                                {priceBreakdown.firstDayIsFullDay || priceBreakdown.firstDayAmount === priceBreakdown.dailyRate
-                                  ? ` · ${formatPrice(dailyRateWithComm)}/jour`
-                                  : priceBreakdown.hourlyRate > 0
-                                    ? ` · ${formatPrice(hourlyRateWithComm)}/h`
-                                    : ""
-                                })
-                              </span>
-                            </>
-                          ) : (
-                            <>
-                              {formatHours(priceBreakdown.firstDayHours)} de prestation
-                              <span className="text-gray-400 ml-1">
-                                ({priceBreakdown.firstDayIsFullDay || priceBreakdown.firstDayAmount === priceBreakdown.dailyRate
-                                  ? `${formatPrice(dailyRateWithComm)}/jour`
-                                  : priceBreakdown.hourlyRate > 0
-                                    ? `${formatPrice(hourlyRateWithComm)}/h`
-                                    : ""
-                                })
-                              </span>
-                            </>
-                          )}
-                        </span>
-                      </span>
-                      <span className="font-medium">{formatPrice(firstDayWithComm)}</span>
-                    </div>
-                  )
-                )}
-              </>
-            );
-          })()}
-
-          {/* Nuits - prix avec commission incluse */}
-          {includeOvernightStay && priceBreakdown.nights > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-indigo-700 flex items-center gap-2">
-                <Moon className="w-4 h-4" />
-                <span>
-                  {priceBreakdown.nights} nuit{priceBreakdown.nights > 1 ? "s" : ""}
-                  {priceBreakdown.nightlyRate > 0 && (
-                    <span className="text-indigo-400 ml-1">
-                      ({formatPrice(Math.round(priceBreakdown.nightlyRate * (1 + commissionRate / 100)))}/nuit)
-                    </span>
-                  )}
+        {/* Formule de base */}
+        <div className={cn(
+          "rounded-xl p-4 space-y-3",
+          isCollective ? "bg-purple-50" : isMultiSession ? "bg-primary/5" : "bg-gray-50"
+        )}>
+          {/* Ligne formule */}
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <Package className={cn(
+                  "w-4 h-4",
+                  isCollective ? "text-purple-600" : isMultiSession ? "text-primary" : "text-gray-600"
+                )} />
+                <span className="font-medium text-foreground">
+                  Formule : {selectedVariant.name}
                 </span>
+              </div>
+
+              {/* Détail du calcul selon le type */}
+              {isCollective ? (
+                // Formule collective: prix × séances × animaux
+                <p className="text-xs text-gray-500 ml-6">
+                  └ {formatPrice(Math.round(selectedVariant.price * (1 + commissionRate / 100)))} × {numberOfSessions} séance{numberOfSessions > 1 ? "s" : ""}
+                  {animalCount > 1 && ` × ${animalCount} animaux`}
+                </p>
+              ) : isMultiSession ? (
+                // Formule multi-séances: prix × séances
+                <p className="text-xs text-gray-500 ml-6">
+                  └ {formatPrice(Math.round(selectedVariant.price * (1 + commissionRate / 100)))} × {numberOfSessions} séance{numberOfSessions > 1 ? "s" : ""}
+                </p>
+              ) : (
+                // Formule uni-séance: détail existant
+                <p className="text-xs text-gray-500 ml-6">
+                  └ {days > 1
+                    ? `${days} jours × ${formatPrice(Math.round(priceBreakdown.dailyRate * (1 + commissionRate / 100)))}/jour`
+                    : priceBreakdown.firstDayHours > 0
+                      ? `${formatHours(priceBreakdown.firstDayHours)} × ${formatPrice(Math.round(priceBreakdown.hourlyRate * (1 + commissionRate / 100)))}/h`
+                      : formatPrice(Math.round(priceBreakdown.firstDayAmount * (1 + commissionRate / 100)))
+                  }
+                </p>
+              )}
+            </div>
+            <span className={cn(
+              "font-bold text-lg",
+              isCollective ? "text-purple-700" : isMultiSession ? "text-primary" : "text-foreground"
+            )}>
+              {isCollective ? (
+                formatPrice(Math.round(selectedVariant.price * numberOfSessions * animalCount * (1 + commissionRate / 100)))
+              ) : isMultiSession ? (
+                formatPrice(Math.round(selectedVariant.price * numberOfSessions * (1 + commissionRate / 100)))
+              ) : (
+                formatPrice(Math.round((priceBreakdown.firstDayAmount + priceBreakdown.fullDaysAmount + priceBreakdown.lastDayAmount) * (1 + commissionRate / 100)))
+              )}
+            </span>
+          </div>
+
+          {/* Nuits (si applicable et pas formule collective/multi-session) */}
+          {!isCollective && !isMultiSession && includeOvernightStay && priceBreakdown.nights > 0 && (
+            <div className="flex items-start justify-between pt-2 border-t border-gray-200/50">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <Moon className="w-4 h-4 text-indigo-600" />
+                  <span className="font-medium text-indigo-800">Nuits</span>
+                </div>
+                <p className="text-xs text-indigo-600 ml-6">
+                  └ {priceBreakdown.nights} nuit{priceBreakdown.nights > 1 ? "s" : ""} × {formatPrice(Math.round(priceBreakdown.nightlyRate * (1 + commissionRate / 100)))}/nuit
+                </p>
+              </div>
+              <span className="font-medium text-indigo-700">
+                +{formatPrice(Math.round(priceBreakdown.nightsAmount * (1 + commissionRate / 100)))}
               </span>
-              <span className="font-medium text-indigo-700">+{formatPrice(Math.round(priceBreakdown.nightsAmount * (1 + commissionRate / 100)))}</span>
             </div>
           )}
         </div>
 
-        {/* Options - prix avec commission incluse */}
+        {/* Options */}
         {selectedOptionIds.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Options</p>
+          <div className="bg-secondary/5 rounded-xl p-4 space-y-2">
+            <div className="flex items-center gap-2 mb-2">
+              <Plus className="w-4 h-4 text-secondary" />
+              <span className="font-medium text-foreground">Options</span>
+            </div>
             {selectedOptionIds.map((optId) => {
               const opt = selectedService.options.find(
                 (o: ServiceOption) => o.id === optId
@@ -416,30 +468,80 @@ export default function SummaryStep({
               return (
                 <div
                   key={optId}
-                  className="flex justify-between text-sm text-secondary"
+                  className="flex justify-between text-sm ml-6"
                 >
-                  <span className="flex items-center gap-2">
-                    <span className="w-4 h-4 flex items-center justify-center text-xs">✓</span>
-                    {opt.name}
-                  </span>
-                  <span className="font-medium">+{formatPrice(optPriceWithCommission)}</span>
+                  <span className="text-gray-600">└ {opt.name}</span>
+                  <span className="font-medium text-secondary">+{formatPrice(optPriceWithCommission)}</span>
                 </div>
               );
             })}
           </div>
         )}
 
-        {/* Total - frais de service inclus */}
-        <div className="pt-3 border-t border-gray-200 mt-2">
-          <div className="flex justify-between text-lg font-bold">
-            <span>Total à payer</span>
-            <span className="text-primary">
-              {formatPrice(totalWithCommission)}
+        {/* Sous-total + Frais de service + Total */}
+        <div className="bg-gray-100 rounded-xl p-4 space-y-2">
+          {/* Sous-total */}
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">Sous-total</span>
+            <span className="font-medium text-foreground">
+              {isCollective ? (
+                formatPrice(Math.round(selectedVariant.price * numberOfSessions * animalCount) + selectedOptionIds.reduce((sum, optId) => {
+                  const opt = selectedService.options.find((o: ServiceOption) => o.id === optId);
+                  return sum + (opt?.price || 0);
+                }, 0))
+              ) : isMultiSession ? (
+                formatPrice(Math.round(selectedVariant.price * numberOfSessions) + selectedOptionIds.reduce((sum, optId) => {
+                  const opt = selectedService.options.find((o: ServiceOption) => o.id === optId);
+                  return sum + (opt?.price || 0);
+                }, 0))
+              ) : (
+                formatPrice(priceBreakdown.totalAmount - Math.round(priceBreakdown.totalAmount * commissionRate / 100 / (1 + commissionRate / 100)))
+              )}
             </span>
           </div>
-          <p className="text-xs text-gray-400 mt-1 text-right">
-            Frais de service inclus
-          </p>
+
+          {/* Frais de service */}
+          <div className="flex justify-between text-sm text-gray-500">
+            <span>Frais de service ({commissionRate}%)</span>
+            <span>
+              {isCollective ? (
+                formatPrice(Math.round((selectedVariant.price * numberOfSessions * animalCount + selectedOptionIds.reduce((sum, optId) => {
+                  const opt = selectedService.options.find((o: ServiceOption) => o.id === optId);
+                  return sum + (opt?.price || 0);
+                }, 0)) * commissionRate / 100))
+              ) : isMultiSession ? (
+                formatPrice(Math.round((selectedVariant.price * numberOfSessions + selectedOptionIds.reduce((sum, optId) => {
+                  const opt = selectedService.options.find((o: ServiceOption) => o.id === optId);
+                  return sum + (opt?.price || 0);
+                }, 0)) * commissionRate / 100))
+              ) : (
+                formatPrice(commissionAmount)
+              )}
+            </span>
+          </div>
+
+          {/* Ligne de séparation */}
+          <div className="border-t-2 border-primary/20 my-2" />
+
+          {/* Total */}
+          <div className="flex justify-between">
+            <span className="font-bold text-lg text-foreground">Total</span>
+            <span className="font-bold text-xl text-primary">
+              {isCollective ? (
+                formatPrice(Math.round((selectedVariant.price * numberOfSessions * animalCount + selectedOptionIds.reduce((sum, optId) => {
+                  const opt = selectedService.options.find((o: ServiceOption) => o.id === optId);
+                  return sum + (opt?.price || 0);
+                }, 0)) * (1 + commissionRate / 100)))
+              ) : isMultiSession ? (
+                formatPrice(Math.round((selectedVariant.price * numberOfSessions + selectedOptionIds.reduce((sum, optId) => {
+                  const opt = selectedService.options.find((o: ServiceOption) => o.id === optId);
+                  return sum + (opt?.price || 0);
+                }, 0)) * (1 + commissionRate / 100)))
+              ) : (
+                formatPrice(totalWithCommission)
+              )}
+            </span>
+          </div>
         </div>
       </div>
     </div>

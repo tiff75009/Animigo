@@ -1,9 +1,26 @@
 "use client";
 
 import { useMemo } from "react";
-import { ArrowLeft, ArrowRight, Calendar, Clock, Moon, Sun, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, Calendar, Clock, Moon, Sun, Users, Info, CalendarCheck, CalendarDays } from "lucide-react";
 import { cn } from "@/app/lib/utils";
+import { motion } from "framer-motion";
 import type { ServiceDetail, ServiceVariant } from "./FormulaStep";
+
+// Type pour les séances multi-sessions
+interface SelectedSession {
+  date: string;
+  startTime: string;
+  endTime: string;
+}
+
+// Type pour les créneaux collectifs
+interface CollectiveSlotInfo {
+  _id: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  availableSpots: number;
+}
 
 // Type pour les entrées du calendrier avec capacité
 interface CalendarEntry {
@@ -42,6 +59,15 @@ interface DateTimeStepProps {
   // Horaires de disponibilité de l'annonceur
   acceptReservationsFrom?: string; // "08:00"
   acceptReservationsTo?: string;   // "20:00"
+  // Support pour les formules collectives
+  isCollectiveFormula?: boolean;
+  collectiveSlots?: CollectiveSlotInfo[]; // Créneaux disponibles pour formules collectives
+  selectedSlotIds?: string[];
+  onSlotsSelected?: (slotIds: string[]) => void;
+  // Support pour les formules individuelles multi-séances
+  isMultiSessionIndividual?: boolean;
+  selectedSessions?: SelectedSession[];
+  onSessionsChange?: (sessions: SelectedSession[]) => void;
   onDateSelect: (date: string) => void;
   onEndDateSelect: (date: string | null) => void;
   onTimeSelect: (time: string) => void;
@@ -145,6 +171,15 @@ export default function DateTimeStep({
   bufferAfter = 0,
   acceptReservationsFrom = "08:00",
   acceptReservationsTo = "20:00",
+  // Formules collectives
+  isCollectiveFormula = false,
+  collectiveSlots = [],
+  selectedSlotIds = [],
+  onSlotsSelected,
+  // Formules multi-séances
+  isMultiSessionIndividual = false,
+  selectedSessions = [],
+  onSessionsChange,
   onDateSelect,
   onEndDateSelect,
   onTimeSelect,
@@ -152,6 +187,11 @@ export default function DateTimeStep({
   onOvernightChange,
   onMonthChange,
 }: DateTimeStepProps) {
+  // Déterminer le type de formule
+  const isCollective = isCollectiveFormula || selectedVariant.sessionType === "collective";
+  const isMultiSession = isMultiSessionIndividual || (!isCollective && (selectedVariant.numberOfSessions || 1) > 1);
+  const numberOfSessions = selectedVariant.numberOfSessions || 1;
+  const sessionInterval = selectedVariant.sessionInterval || 0;
   // Calculate end time based on variant duration (for duration-based blocking)
   const variantDuration = selectedVariant.duration || 60;
   const calculatedEndTime = selectedTime
@@ -321,20 +361,134 @@ export default function DateTimeStep({
     return elements;
   };
 
+  // Déterminer le titre et le message d'aide selon le type
+  const getStepInfo = () => {
+    if (isCollective) {
+      return {
+        title: "Choisissez vos créneaux",
+        icon: CalendarCheck,
+        iconColor: "text-purple-600",
+        bgColor: "bg-purple-50",
+        borderColor: "border-purple-200",
+        message: `Sélectionnez ${numberOfSessions} créneau${numberOfSessions > 1 ? "x" : ""} parmi les disponibilités proposées par le prestataire.`,
+      };
+    }
+    if (isMultiSession) {
+      return {
+        title: "Planifiez vos séances",
+        icon: CalendarDays,
+        iconColor: "text-primary",
+        bgColor: "bg-primary/5",
+        borderColor: "border-primary/20",
+        message: sessionInterval > 0
+          ? `Sélectionnez ${numberOfSessions} dates pour vos séances (minimum ${sessionInterval} jour${sessionInterval > 1 ? "s" : ""} d'intervalle entre chaque).`
+          : `Sélectionnez ${numberOfSessions} dates pour vos séances.`,
+      };
+    }
+    return {
+      title: isRangeMode ? "Choisissez vos dates" : "Choisissez votre créneau",
+      icon: Calendar,
+      iconColor: "text-blue-600",
+      bgColor: "bg-blue-50",
+      borderColor: "border-blue-200",
+      message: isRangeMode
+        ? "Sélectionnez une période de garde pour votre animal."
+        : "Choisissez une date et un horaire pour votre séance.",
+    };
+  };
+
+  const stepInfo = getStepInfo();
+  const StepIcon = stepInfo.icon;
+
   return (
     <div className="bg-white rounded-2xl p-5 shadow-sm">
-      <h2 className="text-lg font-bold text-foreground mb-4">
-        {isRangeMode ? "Choisissez vos dates" : "Choisissez votre créneau"}
-      </h2>
+      {/* En-tête contextuel selon le type de formule */}
+      <div className="flex items-center gap-3 mb-4">
+        <div className={cn("p-2 rounded-lg", stepInfo.bgColor)}>
+          <StepIcon className={cn("w-5 h-5", stepInfo.iconColor)} />
+        </div>
+        <h2 className="text-lg font-bold text-foreground">
+          {stepInfo.title}
+        </h2>
+      </div>
 
-      {/* Selected Formula Recap */}
-      <div className="mb-4 p-3 bg-primary/5 rounded-xl">
+      {/* Message d'aide contextuel */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={cn(
+          "mb-4 p-3 rounded-xl border flex items-start gap-2",
+          stepInfo.bgColor,
+          stepInfo.borderColor
+        )}
+      >
+        <Info className={cn("w-4 h-4 mt-0.5 flex-shrink-0", stepInfo.iconColor)} />
+        <p className="text-sm text-foreground">{stepInfo.message}</p>
+      </motion.div>
+
+      {/* Récap formule sélectionnée */}
+      <div className="mb-4 p-3 bg-gray-50 rounded-xl">
         <p className="text-sm text-text-light">Prestation sélectionnée</p>
         <p className="font-semibold text-foreground">
           {selectedService.categoryIcon} {selectedService.categoryName} -{" "}
           {selectedVariant.name}
         </p>
+        {isMultiSession && (
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
+              {numberOfSessions} séances
+            </span>
+            {sessionInterval > 0 && (
+              <span className="text-xs text-text-light">
+                (intervalle min. {sessionInterval}j)
+              </span>
+            )}
+          </div>
+        )}
+        {isCollective && (
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full flex items-center gap-1">
+              <Users className="w-3 h-3" />
+              Séance collective
+            </span>
+            <span className="text-xs text-text-light">
+              {numberOfSessions} créneau{numberOfSessions > 1 ? "x" : ""} à choisir
+            </span>
+          </div>
+        )}
       </div>
+
+      {/* Progression de sélection pour multi-séances et collectives */}
+      {(isMultiSession || isCollective) && (
+        <div className="mb-4 p-3 bg-gray-50 rounded-xl">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-foreground">
+              {isCollective ? "Créneaux sélectionnés" : "Séances planifiées"}
+            </span>
+            <span className={cn(
+              "text-sm font-bold",
+              (isCollective ? selectedSlotIds.length : selectedSessions.length) >= numberOfSessions
+                ? "text-green-600"
+                : "text-primary"
+            )}>
+              {isCollective ? selectedSlotIds.length : selectedSessions.length} / {numberOfSessions}
+            </span>
+          </div>
+          <div className="flex gap-1">
+            {Array.from({ length: numberOfSessions }).map((_, idx) => (
+              <div
+                key={idx}
+                className={cn(
+                  "flex-1 h-2 rounded-full transition-colors",
+                  idx < (isCollective ? selectedSlotIds.length : selectedSessions.length)
+                    ? isCollective ? "bg-purple-500" : "bg-primary"
+                    : "bg-gray-200"
+                )}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Info capacité pour les catégories de garde */}
       {isCapacityBased && maxAnimalsPerSlot && (
