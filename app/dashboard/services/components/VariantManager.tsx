@@ -7,6 +7,7 @@ import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import {
   Plus,
+  Minus,
   Trash2,
   GripVertical,
   Check,
@@ -16,7 +17,6 @@ import {
   AlertTriangle,
   Info,
   Sparkles,
-  Settings,
   X,
   Moon,
   Home,
@@ -296,16 +296,6 @@ function SimpleVariantCard({
   allowOvernightStay?: boolean;
   serviceAnimalTypes: string[];
 }) {
-  // Déterminer quels prix afficher
-  const showHourly = allowedPriceUnits.some(u => u.id === "hour");
-  const showHalfDaily = allowedPriceUnits.some(u => u.id === "half_day");
-  const showDaily = allowedPriceUnits.some(u => u.id === "day");
-  const showWeekly = allowedPriceUnits.some(u => u.id === "week");
-  const showMonthly = allowedPriceUnits.some(u => u.id === "month");
-
-  // L'unité principale pour l'affichage (la première autorisée)
-  const primaryUnit = allowedPriceUnits[0] || { id: "hour" as PriceUnit, label: "par heure", shortLabel: "/h" };
-  const [showAdvanced, setShowAdvanced] = useState(true);
   const [newFeature, setNewFeature] = useState("");
   const [newObjectiveText, setNewObjectiveText] = useState("");
   const [newObjectiveIcon, setNewObjectiveIcon] = useState("🎯");
@@ -341,17 +331,15 @@ function SimpleVariantCard({
 
   // Récupérer le prix nuit actuel
   const getNightlyPrice = () => {
-    if (!variant.pricing?.nightly) return Math.round(dailyRecommendedPrice * 0.5) / 100; // 50% du jour par défaut
+    if (!variant.pricing?.nightly) return Math.round(dailyRecommendedPrice * 0.5) / 100;
     return variant.pricing.nightly / 100;
   };
-
 
   // Handler pour le prix journée (garde)
   const handleDailyPriceChange = (newDailyPriceEuros: number) => {
     const dailyInCents = Math.round(newDailyPriceEuros * 100);
-    const hourlyInCents = Math.round(dailyInCents / 8); // Prix horaire = journée / 8
+    const hourlyInCents = Math.round(dailyInCents / 8);
 
-    // S'assurer que le prix nuit ne dépasse pas le prix jour
     const currentNightly = variant.pricing?.nightly || 0;
     const newNightly = currentNightly > dailyInCents ? dailyInCents : currentNightly;
 
@@ -370,8 +358,6 @@ function SimpleVariantCard({
   const handleNightlyPriceChange = (newNightlyPriceEuros: number) => {
     const nightlyInCents = Math.round(newNightlyPriceEuros * 100);
     const dailyInCents = variant.pricing?.daily || dailyRecommendedPrice;
-
-    // Le prix nuit ne peut pas dépasser le prix jour
     const clampedNightly = Math.min(nightlyInCents, dailyInCents);
 
     onUpdate({
@@ -382,34 +368,17 @@ function SimpleVariantCard({
     });
   };
 
-  // Handler générique pour chaque type de prix
-  const handlePriceChangeByUnit = (unit: PriceUnit, newPriceEuros: number) => {
+  // Handler pour le prix horaire (services)
+  const handleHourlyPriceChange = (newPriceEuros: number) => {
     const priceInCents = Math.round(newPriceEuros * 100);
-    const newPricing: Pricing = { ...variant.pricing };
-
-    switch (unit) {
-      case "hour": newPricing.hourly = priceInCents; break;
-      case "half_day": newPricing.halfDaily = priceInCents; break;
-      case "day": newPricing.daily = priceInCents; break;
-      case "week": newPricing.weekly = priceInCents; break;
-      case "month": newPricing.monthly = priceInCents; break;
-    }
-
-    // Le prix principal est celui de la première unité autorisée
-    const mainPrice = newPricing[primaryUnit.id === "hour" ? "hourly" :
-                                  primaryUnit.id === "half_day" ? "halfDaily" :
-                                  primaryUnit.id === "day" ? "daily" :
-                                  primaryUnit.id === "week" ? "weekly" :
-                                  primaryUnit.id === "month" ? "monthly" : "hourly"] || priceInCents;
-
-    onUpdate({ pricing: newPricing, price: mainPrice });
+    onUpdate({
+      pricing: { ...variant.pricing, hourly: priceInCents },
+      price: priceInCents,
+    });
   };
 
-  // Helpers pour obtenir les prix actuels
+  // Helpers pour obtenir les prix
   const getHourlyPrice = () => (variant.pricing?.hourly || recommendedPrice) / 100;
-  const getHalfDailyPrice = () => (variant.pricing?.halfDaily || recommendedPrice * 4) / 100;
-  const getWeeklyPrice = () => (variant.pricing?.weekly || recommendedPrice * 40) / 100;
-  const getMonthlyPrice = () => (variant.pricing?.monthly || recommendedPrice * 160) / 100;
 
   const handleAddFeature = () => {
     if (newFeature.trim()) {
@@ -424,12 +393,9 @@ function SimpleVariantCard({
     onUpdate({ includedFeatures: currentFeatures.filter((_, i) => i !== idx) });
   };
 
-  // Vérifier si des options avancées sont remplies
-  const hasAdvancedOptions = variant.description || variant.duration || (variant.includedFeatures && variant.includedFeatures.length > 0);
-
-  // Prix horaire calculé automatiquement pour les gardes
-  const calculatedHourlyPrice = isGardeService && variant.pricing?.daily
-    ? Math.round(variant.pricing.daily / 8) / 100
+  // Calculer les prix auto pour les gardes
+  const calculatedHourlyFromDaily = isGardeService && variant.pricing?.daily
+    ? (variant.pricing.daily / 8 / 100).toFixed(2).replace(".", ",")
     : null;
 
   return (
@@ -437,307 +403,100 @@ function SimpleVariantCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="bg-white rounded-2xl border-2 border-primary/20 overflow-hidden shadow-sm"
+      className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm"
     >
-      {/* Header avec nom auto-généré */}
-      <div className="flex items-center justify-between p-4 bg-primary/5 border-b border-primary/10">
+      {/* Header compact */}
+      <div className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-primary/5 to-secondary/5 border-b border-gray-100">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
-            <Sparkles className="w-5 h-5 text-primary" />
+          <div className="w-9 h-9 rounded-xl bg-white shadow-sm flex items-center justify-center">
+            <Sparkles className="w-4 h-4 text-primary" />
           </div>
-          <div>
-            <h4 className="font-semibold text-foreground">{variant.name}</h4>
-            <p className="text-xs text-text-light">Formule {index + 1}</p>
-          </div>
+          <span className="text-sm font-medium text-text-light">Formule {index + 1}</span>
         </div>
         {canDelete && (
           <button
             onClick={onDelete}
-            className="p-2 text-text-light hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-            title="Supprimer cette formule"
+            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
           >
             <Trash2 className="w-4 h-4" />
           </button>
         )}
       </div>
 
-      {/* Prix - Affiche tous les types de prix autorisés */}
-      <div className="p-4 space-y-4">
-        {/* Prix par heure */}
-        {showHourly && (
-          <PriceSlider
-            label="Prix par heure"
-            value={getHourlyPrice()}
-            onChange={(value) => handlePriceChangeByUnit("hour", value)}
-            recommendedPrice={recommendedPrice}
-            unit="/h"
-            isLoading={isLoadingPrice}
-          />
-        )}
+      <div className="p-5 space-y-6">
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {/* SECTION 1: IDENTITÉ */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs text-primary">1</div>
+            Identité de la formule
+          </div>
 
-        {/* Prix par demi-journée */}
-        {showHalfDaily && (
-          <PriceSlider
-            label="Prix par demi-journée"
-            value={getHalfDailyPrice()}
-            onChange={(value) => handlePriceChangeByUnit("half_day", value)}
-            recommendedPrice={recommendedPrice * 4}
-            unit="/demi-j"
-            isLoading={isLoadingPrice}
-          />
-        )}
-
-        {/* Prix par jour */}
-        {showDaily && (
-          <PriceSlider
-            label="Prix par jour"
-            value={getDailyPrice()}
-            onChange={(value) => handlePriceChangeByUnit("day", value)}
-            recommendedPrice={recommendedPrice * 8}
-            unit="/jour"
-            isLoading={isLoadingPrice}
-          />
-        )}
-
-        {/* Prix par semaine */}
-        {showWeekly && (
-          <PriceSlider
-            label="Prix par semaine"
-            value={getWeeklyPrice()}
-            onChange={(value) => handlePriceChangeByUnit("week", value)}
-            recommendedPrice={recommendedPrice * 40}
-            unit="/sem"
-            isLoading={isLoadingPrice}
-          />
-        )}
-
-        {/* Prix par mois */}
-        {showMonthly && (
-          <PriceSlider
-            label="Prix par mois"
-            value={getMonthlyPrice()}
-            onChange={(value) => handlePriceChangeByUnit("month", value)}
-            recommendedPrice={recommendedPrice * 160}
-            unit="/mois"
-            isLoading={isLoadingPrice}
-          />
-        )}
-
-        {/* Prix nuit si garde de nuit activée */}
-        {isGardeService && allowOvernightStay && (
-          <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-200">
-            <div className="flex items-center gap-2 mb-3">
-              <Moon className="w-5 h-5 text-indigo-500" />
-              <span className="font-medium text-indigo-800">Tarif de nuit</span>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {/* Nom */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                Nom de la formule
+              </label>
+              <input
+                type="text"
+                value={variant.name}
+                onChange={(e) => onUpdate({ name: e.target.value })}
+                placeholder="Ex: Formule découverte"
+                className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 focus:bg-white text-sm transition-all"
+              />
             </div>
 
-            {/* Slider pour le prix nuit */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-center gap-1">
-                <span className="text-2xl font-bold text-indigo-600">
-                  {getNightlyPrice().toFixed(2).replace(".", ",")}
-                </span>
-                <span className="text-lg text-indigo-400">€/nuit</span>
-              </div>
-
+            {/* Description */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                Description <span className="text-gray-400">(optionnel)</span>
+              </label>
               <input
-                type="range"
-                min={0}
-                max={getDailyPrice()}
-                step={0.5}
-                value={getNightlyPrice()}
-                onChange={(e) => handleNightlyPriceChange(parseFloat(e.target.value))}
-                className="w-full h-2 bg-indigo-200 rounded-full appearance-none cursor-pointer
-                  [&::-webkit-slider-thumb]:appearance-none
-                  [&::-webkit-slider-thumb]:w-5
-                  [&::-webkit-slider-thumb]:h-5
-                  [&::-webkit-slider-thumb]:rounded-full
-                  [&::-webkit-slider-thumb]:bg-indigo-500
-                  [&::-webkit-slider-thumb]:shadow-lg
-                  [&::-webkit-slider-thumb]:cursor-pointer
-                  [&::-moz-range-thumb]:w-5
-                  [&::-moz-range-thumb]:h-5
-                  [&::-moz-range-thumb]:rounded-full
-                  [&::-moz-range-thumb]:bg-indigo-500
-                  [&::-moz-range-thumb]:border-0"
+                type="text"
+                value={variant.description || ""}
+                onChange={(e) => onUpdate({ description: e.target.value || undefined })}
+                placeholder="Ce qui est inclus..."
+                className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 focus:bg-white text-sm transition-all"
               />
-
-              <div className="flex justify-between text-xs text-indigo-400">
-                <span>0 €</span>
-                <span>Max: {getDailyPrice().toFixed(0)} € (= prix jour)</span>
-              </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
 
-      {/* Bouton options avancées */}
-      <div className="px-4 pb-4">
-        <button
-          type="button"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-          className={cn(
-            "w-full flex items-center justify-between p-3 rounded-xl transition-all text-sm",
-            showAdvanced || hasAdvancedOptions
-              ? "bg-secondary/10 text-secondary"
-              : "bg-gray-50 text-text-light hover:bg-gray-100"
-          )}
-        >
-          <span className="flex items-center gap-2">
-            <Settings className="w-4 h-4" />
-            Options avancées
-            {hasAdvancedOptions && !showAdvanced && (
-              <span className="px-2 py-0.5 bg-secondary/20 text-secondary text-xs rounded-full">
-                Configuré
-              </span>
-            )}
-          </span>
-          {showAdvanced ? (
-            <ChevronUp className="w-4 h-4" />
-          ) : (
-            <ChevronDown className="w-4 h-4" />
-          )}
-        </button>
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {/* SECTION 2: ORGANISATION (services uniquement) */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {!isGardeService && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <div className="w-6 h-6 rounded-full bg-secondary/10 flex items-center justify-center text-xs text-secondary">2</div>
+              Organisation
+            </div>
 
-        {/* Options avancées dépliables */}
-        <AnimatePresence>
-          {showAdvanced && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="overflow-hidden"
-            >
-              <div className="pt-4 space-y-4">
-                {/* Nom de la formule */}
+            {/* Grid de mini-cards */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              {/* Card 1: Durée + Séances */}
+              <div className="p-4 bg-gray-50/50 rounded-xl border border-gray-100 space-y-4">
+                {/* Durée */}
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">
-                    Nom de la formule
+                  <label className="block text-xs font-medium text-gray-500 mb-2">
+                    Durée <span className="text-primary">*</span>
                   </label>
-                  <input
-                    type="text"
-                    value={variant.name}
-                    onChange={(e) => onUpdate({ name: e.target.value })}
-                    placeholder="Ex: Formule découverte, Pack 5 séances..."
-                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                  />
-                </div>
-
-                {/* Description */}
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">
-                    Description <span className="text-text-light font-normal">(optionnel)</span>
-                  </label>
-                  <textarea
-                    value={variant.description || ""}
-                    onChange={(e) => onUpdate({ description: e.target.value || undefined })}
-                    placeholder="Décrivez ce qui est inclus dans cette formule..."
-                    rows={2}
-                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm resize-none"
-                  />
-                </div>
-
-                {/* Objectifs / Activités proposées */}
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">
-                    {isGardeService ? "Activités proposées" : "Objectifs de la prestation"} <span className="text-text-light font-normal">(optionnel)</span>
-                  </label>
-                  <p className="text-xs text-text-light mb-2">
-                    {isGardeService
-                      ? "Décrivez les activités incluses dans cette garde (promenades, jeux, soins...)"
-                      : "Décrivez les objectifs que vous souhaitez atteindre avec cette formule"}
-                  </p>
-                  <div className="flex gap-2 mb-2">
-                    {/* Sélecteur d'icône */}
-                    <div className="relative">
+                  <div className="flex items-center gap-2">
+                    <div className={cn(
+                      "flex items-center rounded-xl overflow-hidden transition-all",
+                      !variant.duration
+                        ? "bg-white border-2 border-primary/30"
+                        : "bg-white border border-gray-200"
+                    )}>
                       <button
                         type="button"
-                        onClick={() => setShowIconPicker(!showIconPicker)}
-                        className="w-10 h-10 flex items-center justify-center bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-xl"
+                        onClick={() => onUpdate({ duration: Math.max(30, (variant.duration || 60) - 30) })}
+                        className="px-2.5 py-2 text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
                       >
-                        {newObjectiveIcon}
+                        <Minus className="w-4 h-4" />
                       </button>
-                      {showIconPicker && (
-                        <div className="absolute top-12 left-0 z-10 p-2 bg-white border border-gray-200 rounded-lg shadow-lg">
-                          <div className="grid grid-cols-5 gap-1">
-                            {objectiveIcons.map((icon) => (
-                              <button
-                                key={icon}
-                                type="button"
-                                onClick={() => {
-                                  setNewObjectiveIcon(icon);
-                                  setShowIconPicker(false);
-                                }}
-                                className={cn(
-                                  "w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-lg",
-                                  newObjectiveIcon === icon && "bg-primary/10"
-                                )}
-                              >
-                                {icon}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <input
-                      type="text"
-                      value={newObjectiveText}
-                      onChange={(e) => setNewObjectiveText(e.target.value)}
-                      onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddObjective())}
-                      placeholder={isGardeService ? "Ex: Promenades quotidiennes, Jeux..." : "Ex: Améliorer le rappel, Socialisation..."}
-                      className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddObjective}
-                      disabled={!newObjectiveText.trim()}
-                      className="px-3 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-                  {variant.objectives && variant.objectives.length > 0 && (
-                    <div className="space-y-2">
-                      {variant.objectives.map((objective, idx) => (
-                        <div
-                          key={idx}
-                          className={cn(
-                            "flex items-center gap-2 px-3 py-2 rounded-lg",
-                            isGardeService
-                              ? "bg-emerald-50 border border-emerald-200"
-                              : "bg-purple-50 border border-purple-200"
-                          )}
-                        >
-                          <span className="text-lg">{objective.icon}</span>
-                          <span className={cn(
-                            "flex-1 text-sm",
-                            isGardeService ? "text-emerald-800" : "text-purple-800"
-                          )}>{objective.text}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveObjective(idx)}
-                            className={cn(
-                              "p-1 hover:text-red-500 rounded",
-                              isGardeService ? "text-emerald-400" : "text-purple-400"
-                            )}
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Durée - masqué pour les services de garde */}
-                {!isGardeService && (
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">
-                      Durée estimée <span className="text-primary">*</span>
-                    </label>
-                    <div className="flex items-center gap-2">
                       <input
                         type="number"
                         value={variant.duration || ""}
@@ -745,283 +504,454 @@ function SimpleVariantCard({
                         min="30"
                         step="30"
                         placeholder="60"
-                        required
-                        className={cn(
-                          "w-24 px-3 py-2 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm",
-                          !variant.duration ? "border-primary/50 bg-primary/5" : "border-gray-300"
-                        )}
+                        className="w-12 py-2 bg-transparent text-sm text-center font-semibold text-foreground focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
-                      <span className="text-sm text-text-light">minutes</span>
-                      {!variant.duration && (
-                        <span className="text-xs text-primary">Requis</span>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => onUpdate({ duration: (variant.duration || 30) + 30 })}
+                        className="px-2.5 py-2 text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
                     </div>
+                    <span className="text-sm text-gray-500">min</span>
                   </div>
-                )}
+                </div>
 
-                {/* Nombre de séances - masqué pour les services de garde */}
-                {!isGardeService && (
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">
-                      Nombre de séances <span className="text-text-light font-normal">(optionnel)</span>
-                    </label>
-                    <div className="flex items-center gap-2">
+                {/* Séances */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-2">
+                    Séances
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center bg-white border border-gray-200 rounded-xl overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => onUpdate({ numberOfSessions: Math.max(1, (variant.numberOfSessions || 1) - 1) })}
+                        className="px-2.5 py-2 text-gray-400 hover:text-secondary hover:bg-secondary/10 transition-colors"
+                      >
+                        <Minus className="w-4 h-4" />
+                      </button>
                       <input
                         type="number"
                         value={variant.numberOfSessions || 1}
                         onChange={(e) => onUpdate({ numberOfSessions: parseInt(e.target.value) || 1 })}
                         min="1"
                         max="50"
-                        className="w-20 px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                        className="w-10 py-2 bg-transparent text-sm text-center font-semibold text-foreground focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
-                      <span className="text-sm text-text-light">séance(s)</span>
-                    </div>
-                    {(variant.numberOfSessions || 1) > 1 && (
-                      <p className="text-xs text-text-light mt-1">
-                        Prix total = prix × durée × {variant.numberOfSessions} séances
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {/* Délai entre séances - visible si plusieurs séances et pas garde */}
-                {!isGardeService && (variant.numberOfSessions || 1) > 1 && (
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">
-                      Délai entre chaque séance
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={variant.sessionInterval || ""}
-                        onChange={(e) => onUpdate({ sessionInterval: e.target.value ? parseInt(e.target.value) : undefined })}
-                        className="px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                      <button
+                        type="button"
+                        onClick={() => onUpdate({ numberOfSessions: Math.min(50, (variant.numberOfSessions || 1) + 1) })}
+                        className="px-2.5 py-2 text-gray-400 hover:text-secondary hover:bg-secondary/10 transition-colors"
                       >
-                        <option value="">Pas de délai minimum</option>
-                        <option value="1">1 jour minimum</option>
-                        <option value="2">2 jours minimum</option>
-                        <option value="3">3 jours minimum</option>
-                        <option value="7">1 semaine minimum</option>
-                        <option value="14">2 semaines minimum</option>
-                        <option value="30">1 mois minimum</option>
-                      </select>
+                        <Plus className="w-4 h-4" />
+                      </button>
                     </div>
-                    {variant.sessionInterval && (
-                      <p className="text-xs text-text-light mt-1">
-                        Les {variant.numberOfSessions} séances seront espacées d'au moins {variant.sessionInterval} jour(s)
-                      </p>
-                    )}
+                    <span className="text-sm text-gray-500">séance{(variant.numberOfSessions || 1) > 1 ? "s" : ""}</span>
                   </div>
-                )}
+                </div>
 
-                {/* Type de séance - masqué pour les services de garde */}
-                {!isGardeService && (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-1">
-                        Type de séance
-                      </label>
-                      <div className="flex gap-3">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name={`sessionType-${variant.localId}`}
-                            value="individual"
-                            checked={(variant.sessionType || "individual") === "individual"}
-                            onChange={() => onUpdate({ sessionType: "individual", maxAnimalsPerSession: undefined })}
-                            className="w-4 h-4 text-primary focus:ring-primary"
-                          />
-                          <span className="text-sm">Individuelle</span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name={`sessionType-${variant.localId}`}
-                            value="collective"
-                            checked={variant.sessionType === "collective"}
-                            onChange={() => onUpdate({ sessionType: "collective", maxAnimalsPerSession: 5 })}
-                            className="w-4 h-4 text-primary focus:ring-primary"
-                          />
-                          <span className="text-sm">Collective</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Nombre max d'animaux - visible si séance collective */}
-                    {variant.sessionType === "collective" && (
-                      <>
-                        <div>
-                          <label className="block text-sm font-medium text-foreground mb-1">
-                            Nombre max d'animaux par séance
-                          </label>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="number"
-                              value={variant.maxAnimalsPerSession || 5}
-                              onChange={(e) => onUpdate({ maxAnimalsPerSession: parseInt(e.target.value) || 5 })}
-                              min="2"
-                              max="20"
-                              className="w-20 px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                            />
-                            <span className="text-sm text-text-light">animaux max</span>
-                          </div>
-                        </div>
-                        {/* Info créneaux collectifs */}
-                        <div className="flex items-start gap-2 p-3 bg-orange-50 rounded-xl border border-orange-200">
-                          <Info className="w-4 h-4 text-orange-500 mt-0.5 flex-shrink-0" />
-                          <p className="text-xs text-orange-700">
-                            <strong>Créneaux à configurer :</strong> Après avoir créé le service, vous pourrez définir les créneaux disponibles pour cette formule collective depuis la page de gestion du service.
-                          </p>
-                        </div>
-                      </>
-                    )}
-
-                    {/* Lieu de prestation */}
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">
-                        Lieu de prestation
-                      </label>
-                      {variant.sessionType === "collective" && (
-                        <p className="text-xs text-orange-600 mb-2">Les séances collectives se déroulent obligatoirement à votre domicile.</p>
-                      )}
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => variant.sessionType !== "collective" && onUpdate({ serviceLocation: "announcer_home" })}
-                          disabled={variant.sessionType === "collective" && variant.serviceLocation !== "announcer_home"}
-                          className={cn(
-                            "flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all text-sm",
-                            (variant.serviceLocation || "announcer_home") === "announcer_home"
-                              ? "border-primary bg-primary/5 text-primary"
-                              : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50",
-                            variant.sessionType === "collective" && (variant.serviceLocation || "announcer_home") !== "announcer_home" && "opacity-50 cursor-not-allowed"
-                          )}
-                        >
-                          <Home className="w-4 h-4" />
-                          Mon domicile
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => variant.sessionType !== "collective" && onUpdate({ serviceLocation: "client_home" })}
-                          disabled={variant.sessionType === "collective"}
-                          className={cn(
-                            "flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all text-sm",
-                            variant.serviceLocation === "client_home"
-                              ? "border-secondary bg-secondary/5 text-secondary"
-                              : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50",
-                            variant.sessionType === "collective" && "opacity-50 cursor-not-allowed"
-                          )}
-                        >
-                          <MapPin className="w-4 h-4" />
-                          À domicile
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => variant.sessionType !== "collective" && onUpdate({ serviceLocation: "both" })}
-                          disabled={variant.sessionType === "collective"}
-                          className={cn(
-                            "flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all text-sm",
-                            variant.serviceLocation === "both"
-                              ? "border-purple-500 bg-purple-50 text-purple-600"
-                              : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50",
-                            variant.sessionType === "collective" && "opacity-50 cursor-not-allowed"
-                          )}
-                        >
-                          <Home className="w-3.5 h-3.5" />
-                          <MapPin className="w-3.5 h-3.5" />
-                          Les deux
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Animaux acceptés pour cette formule */}
-                {serviceAnimalTypes.length > 0 && (
+                {/* Délai (si plusieurs séances) */}
+                {(variant.numberOfSessions || 1) > 1 && (
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Animaux acceptés pour cette formule
+                    <label className="block text-xs font-medium text-gray-500 mb-2">
+                      Délai entre séances
                     </label>
-                    <div className="flex flex-wrap gap-2">
-                      {serviceAnimalTypes.map((animal) => {
-                        const isSelected = (variant.animalTypes || serviceAnimalTypes).includes(animal);
-                        return (
-                          <button
-                            key={animal}
-                            type="button"
-                            onClick={() => {
-                              const currentAnimals = variant.animalTypes || serviceAnimalTypes;
-                              if (isSelected) {
-                                onUpdate({ animalTypes: currentAnimals.filter(a => a !== animal) });
-                              } else {
-                                onUpdate({ animalTypes: [...currentAnimals, animal] });
-                              }
-                            }}
-                            className={cn(
-                              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all",
-                              isSelected
-                                ? "bg-primary/10 text-primary border-2 border-primary"
-                                : "bg-gray-100 text-gray-500 border-2 border-transparent hover:bg-gray-200"
-                            )}
-                          >
-                            {animalLabels[animal] || animal}
-                            {isSelected && <Check className="w-3 h-3" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {(variant.animalTypes || []).length === 0 && (
-                      <p className="text-xs text-red-500 mt-1">Sélectionnez au moins un type d'animal</p>
-                    )}
+                    <select
+                      value={variant.sessionInterval || ""}
+                      onChange={(e) => onUpdate({ sessionInterval: e.target.value ? parseInt(e.target.value) : undefined })}
+                      className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl focus:border-primary/50 text-sm transition-all cursor-pointer"
+                    >
+                      <option value="">Aucun</option>
+                      <option value="1">1 jour min</option>
+                      <option value="2">2 jours min</option>
+                      <option value="7">1 semaine min</option>
+                      <option value="14">2 semaines min</option>
+                    </select>
                   </div>
                 )}
+              </div>
 
-                {/* Caractéristiques incluses */}
+              {/* Card 2: Type + Lieu */}
+              <div className="p-4 bg-gray-50/50 rounded-xl border border-gray-100 space-y-4">
+                {/* Type */}
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">
-                    Caractéristiques incluses <span className="text-text-light font-normal">(optionnel)</span>
-                  </label>
-                  <div className="flex gap-2 mb-2">
-                    <input
-                      type="text"
-                      value={newFeature}
-                      onChange={(e) => setNewFeature(e.target.value)}
-                      onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddFeature())}
-                      placeholder="Ex: Promenade incluse..."
-                      className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                    />
+                  <label className="block text-xs font-medium text-gray-500 mb-2">Type de séance</label>
+                  <div className="flex gap-2">
                     <button
                       type="button"
-                      onClick={handleAddFeature}
-                      disabled={!newFeature.trim()}
-                      className="px-3 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => onUpdate({ sessionType: "individual", maxAnimalsPerSession: undefined })}
+                      className={cn(
+                        "flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-all",
+                        (variant.sessionType || "individual") === "individual"
+                          ? "bg-primary text-white shadow-sm"
+                          : "bg-white border border-gray-200 text-gray-600 hover:border-gray-300"
+                      )}
                     >
-                      <Plus className="w-4 h-4" />
+                      👤 Individuelle
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onUpdate({ sessionType: "collective", maxAnimalsPerSession: 5, serviceLocation: "announcer_home" })}
+                      className={cn(
+                        "flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-all",
+                        variant.sessionType === "collective"
+                          ? "bg-orange-500 text-white shadow-sm"
+                          : "bg-white border border-gray-200 text-gray-600 hover:border-gray-300"
+                      )}
+                    >
+                      👥 Collective
                     </button>
                   </div>
-                  {variant.includedFeatures && variant.includedFeatures.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {variant.includedFeatures.map((feature, idx) => (
-                        <span
-                          key={idx}
-                          className="flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary text-sm rounded-full"
+                </div>
+
+                {/* Lieu */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-2">Lieu de prestation</label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => variant.sessionType !== "collective" && onUpdate({ serviceLocation: "announcer_home" })}
+                      disabled={variant.sessionType === "collective"}
+                      className={cn(
+                        "flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-sm transition-all",
+                        (variant.serviceLocation || "announcer_home") === "announcer_home"
+                          ? "bg-secondary/10 text-secondary border-2 border-secondary/30 font-medium"
+                          : "bg-white border border-gray-200 text-gray-500 hover:border-gray-300",
+                        variant.sessionType === "collective" && "opacity-60"
+                      )}
+                    >
+                      <Home className="w-3.5 h-3.5" />
+                      Chez moi
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => variant.sessionType !== "collective" && onUpdate({ serviceLocation: "client_home" })}
+                      disabled={variant.sessionType === "collective"}
+                      className={cn(
+                        "flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-sm transition-all",
+                        variant.serviceLocation === "client_home"
+                          ? "bg-secondary/10 text-secondary border-2 border-secondary/30 font-medium"
+                          : "bg-white border border-gray-200 text-gray-500 hover:border-gray-300",
+                        variant.sessionType === "collective" && "opacity-60 cursor-not-allowed"
+                      )}
+                    >
+                      <MapPin className="w-3.5 h-3.5" />
+                      À domicile
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => variant.sessionType !== "collective" && onUpdate({ serviceLocation: "both" })}
+                      disabled={variant.sessionType === "collective"}
+                      className={cn(
+                        "flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-sm transition-all",
+                        variant.serviceLocation === "both"
+                          ? "bg-purple-100 text-purple-600 border-2 border-purple-200 font-medium"
+                          : "bg-white border border-gray-200 text-gray-500 hover:border-gray-300",
+                        variant.sessionType === "collective" && "opacity-60 cursor-not-allowed"
+                      )}
+                    >
+                      Les deux
+                    </button>
+                  </div>
+                </div>
+
+                {/* Max animaux (si collectif) */}
+                {variant.sessionType === "collective" && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-2">Max animaux par séance</label>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center bg-white border border-gray-200 rounded-xl overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => onUpdate({ maxAnimalsPerSession: Math.max(2, (variant.maxAnimalsPerSession || 5) - 1) })}
+                          className="px-2.5 py-2 text-gray-400 hover:text-orange-500 hover:bg-orange-50 transition-colors"
                         >
-                          {feature}
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveFeature(idx)}
-                            className="hover:text-red-500"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
+                          <Minus className="w-4 h-4" />
+                        </button>
+                        <input
+                          type="number"
+                          value={variant.maxAnimalsPerSession || 5}
+                          onChange={(e) => onUpdate({ maxAnimalsPerSession: parseInt(e.target.value) || 5 })}
+                          min="2"
+                          max="20"
+                          className="w-10 py-2 bg-transparent text-sm text-center font-semibold text-foreground focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => onUpdate({ maxAnimalsPerSession: Math.min(20, (variant.maxAnimalsPerSession || 5) + 1) })}
+                          className="px-2.5 py-2 text-gray-400 hover:text-orange-500 hover:bg-orange-50 transition-colors"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <span className="text-sm text-gray-500">animaux</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Info collectif */}
+                {variant.sessionType === "collective" && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-orange-50 rounded-lg text-xs text-orange-700">
+                    <Info className="w-3.5 h-3.5 flex-shrink-0" />
+                    Créneaux à configurer après création
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {/* SECTION 3: PERSONNALISATION */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <div className="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center text-xs text-purple-600">
+              {isGardeService ? "2" : "3"}
+            </div>
+            Personnalisation <span className="text-xs font-normal text-gray-400">(optionnel)</span>
+          </div>
+
+          {/* Objectifs / Activités */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-2">
+              {isGardeService ? "Activités proposées" : "Objectifs"}
+            </label>
+            <div className="flex gap-2">
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowIconPicker(!showIconPicker)}
+                  className="w-10 h-10 flex items-center justify-center bg-gray-50 border border-gray-200 rounded-xl hover:bg-gray-100 text-lg"
+                >
+                  {newObjectiveIcon}
+                </button>
+                {showIconPicker && (
+                  <div className="absolute top-12 left-0 z-10 p-2 bg-white border border-gray-200 rounded-xl shadow-lg">
+                    <div className="grid grid-cols-5 gap-1">
+                      {objectiveIcons.map((icon) => (
+                        <button
+                          key={icon}
+                          type="button"
+                          onClick={() => { setNewObjectiveIcon(icon); setShowIconPicker(false); }}
+                          className={cn(
+                            "w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-lg",
+                            newObjectiveIcon === icon && "bg-primary/10"
+                          )}
+                        >
+                          {icon}
+                        </button>
                       ))}
                     </div>
-                  )}
+                  </div>
+                )}
+              </div>
+              <input
+                type="text"
+                value={newObjectiveText}
+                onChange={(e) => setNewObjectiveText(e.target.value)}
+                onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddObjective())}
+                placeholder={isGardeService ? "Ex: Promenades quotidiennes..." : "Ex: Améliorer le rappel..."}
+                className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:border-primary/50 text-sm transition-all"
+              />
+              <button
+                type="button"
+                onClick={handleAddObjective}
+                disabled={!newObjectiveText.trim()}
+                className="px-3 py-2 bg-primary text-white rounded-xl hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+            {variant.objectives && variant.objectives.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {variant.objectives.map((objective, idx) => (
+                  <span
+                    key={idx}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm",
+                      isGardeService ? "bg-emerald-50 text-emerald-700" : "bg-purple-50 text-purple-700"
+                    )}
+                  >
+                    {objective.icon} {objective.text}
+                    <button type="button" onClick={() => handleRemoveObjective(idx)} className="hover:text-red-500 ml-1">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Caractéristiques incluses */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-2">
+              Caractéristiques incluses
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newFeature}
+                onChange={(e) => setNewFeature(e.target.value)}
+                onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddFeature())}
+                placeholder="Ex: Rapport photo quotidien..."
+                className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:border-primary/50 text-sm transition-all"
+              />
+              <button
+                type="button"
+                onClick={handleAddFeature}
+                disabled={!newFeature.trim()}
+                className="px-3 py-2 bg-primary text-white rounded-xl hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+            {variant.includedFeatures && variant.includedFeatures.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {variant.includedFeatures.map((feature, idx) => (
+                  <span key={idx} className="flex items-center gap-1 px-3 py-1.5 bg-primary/10 text-primary text-sm rounded-full">
+                    {feature}
+                    <button type="button" onClick={() => handleRemoveFeature(idx)} className="hover:text-red-500 ml-1">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {/* SECTION TARIFS (EN BAS) */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        <div className="pt-4 border-t border-gray-100">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
+            <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center text-xs text-amber-600">
+              {isGardeService ? "3" : "4"}
+            </div>
+            Tarification
+          </div>
+
+          {isLoadingPrice ? (
+            <div className="h-20 bg-gray-100 rounded-xl animate-pulse" />
+          ) : isGardeService ? (
+            /* ═══ TARIFS GARDE ═══ */
+            <div className="space-y-4">
+              {/* Prix journée */}
+              <div className="p-4 bg-gradient-to-br from-primary/5 to-orange-50 rounded-xl border border-primary/10">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-medium text-foreground">Prix par jour</span>
+                  <span className="text-xs px-2 py-0.5 bg-white rounded-full text-gray-500">
+                    {getDailyPrice() <= dailyRecommendedPrice / 100 * 0.9 ? "Compétitif" :
+                     getDailyPrice() >= dailyRecommendedPrice / 100 * 1.1 ? "Premium" : "Standard"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex-1">
+                    <input
+                      type="range"
+                      min={Math.round(dailyRecommendedPrice * 0.8 / 100)}
+                      max={Math.round(dailyRecommendedPrice * 1.2 / 100)}
+                      step={1}
+                      value={getDailyPrice()}
+                      onChange={(e) => handleDailyPriceChange(parseFloat(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-full appearance-none cursor-pointer
+                        [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5
+                        [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-md
+                        [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110"
+                    />
+                    <div className="flex justify-between text-xs text-gray-400 mt-1">
+                      <span>{Math.round(dailyRecommendedPrice * 0.8 / 100)}€</span>
+                      <span className="text-primary">Conseillé: {Math.round(dailyRecommendedPrice / 100)}€</span>
+                      <span>{Math.round(dailyRecommendedPrice * 1.2 / 100)}€</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-2xl font-bold text-primary">{getDailyPrice().toFixed(0)}</span>
+                    <span className="text-sm text-gray-500">€/jour</span>
+                  </div>
+                </div>
+                {/* Prix horaire calculé auto */}
+                {calculatedHourlyFromDaily && (
+                  <div className="mt-3 pt-3 border-t border-primary/10 text-xs text-gray-500">
+                    Prix horaire auto : <span className="font-medium text-primary">{calculatedHourlyFromDaily}€/h</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Prix nuit (si activé) */}
+              {allowOvernightStay && (
+                <div className="p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border border-indigo-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Moon className="w-4 h-4 text-indigo-500" />
+                    <span className="text-sm font-medium text-indigo-800">Supplément nuit</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                      <input
+                        type="range"
+                        min={0}
+                        max={getDailyPrice()}
+                        step={1}
+                        value={getNightlyPrice()}
+                        onChange={(e) => handleNightlyPriceChange(parseFloat(e.target.value))}
+                        className="w-full h-2 bg-indigo-200 rounded-full appearance-none cursor-pointer
+                          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5
+                          [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-indigo-500 [&::-webkit-slider-thumb]:shadow-md"
+                      />
+                      <div className="flex justify-between text-xs text-indigo-400 mt-1">
+                        <span>0€</span>
+                        <span>Max: {getDailyPrice().toFixed(0)}€</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-2xl font-bold text-indigo-600">{getNightlyPrice().toFixed(0)}</span>
+                      <span className="text-sm text-indigo-400">€/nuit</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* ═══ TARIFS SERVICES ═══ */
+            <div className="p-4 bg-gradient-to-br from-primary/5 to-secondary/5 rounded-xl border border-primary/10">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-medium text-foreground">Prix par heure</span>
+                <span className="text-xs px-2 py-0.5 bg-white rounded-full text-gray-500">
+                  {getHourlyPrice() <= recommendedPrice / 100 * 0.9 ? "Compétitif" :
+                   getHourlyPrice() >= recommendedPrice / 100 * 1.1 ? "Premium" : "Standard"}
+                </span>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <input
+                    type="range"
+                    min={Math.round(recommendedPrice * 0.8 / 100)}
+                    max={Math.round(recommendedPrice * 1.2 / 100)}
+                    step={0.5}
+                    value={getHourlyPrice()}
+                    onChange={(e) => handleHourlyPriceChange(parseFloat(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-full appearance-none cursor-pointer
+                      [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5
+                      [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-md
+                      [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110"
+                  />
+                  <div className="flex justify-between text-xs text-gray-400 mt-1">
+                    <span>{Math.round(recommendedPrice * 0.8 / 100)}€</span>
+                    <span className="text-primary">Conseillé: {(recommendedPrice / 100).toFixed(0)}€</span>
+                    <span>{Math.round(recommendedPrice * 1.2 / 100)}€</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-2xl font-bold text-primary">{getHourlyPrice().toFixed(0)}</span>
+                  <span className="text-sm text-gray-500">€/h</span>
                 </div>
               </div>
-            </motion.div>
+            </div>
           )}
-        </AnimatePresence>
+        </div>
       </div>
     </motion.div>
   );

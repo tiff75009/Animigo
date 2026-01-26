@@ -15,6 +15,7 @@ Marketplace de services animaliers. Next.js 16 + Convex Self-Hosted + Tailwind v
 
 ```bash
 bun run dev          # Next.js :3000
+bun run build        # Build production
 bunx convex dev      # Backend Convex
 ```
 
