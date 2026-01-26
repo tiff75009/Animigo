@@ -4,7 +4,7 @@
  * Prix en centimes
  */
 
-type PriceUnit = "hour" | "day" | "week" | "month" | "flat";
+type PriceUnit = "hour" | "half_day" | "day" | "week" | "month" | "flat";
 
 interface PriceRange {
   min: number;  // Prix minimum en centimes

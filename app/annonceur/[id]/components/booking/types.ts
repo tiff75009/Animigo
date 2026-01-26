@@ -53,11 +53,13 @@ export interface PriceBreakdown {
   firstDayAmount: number;
   firstDayHours: number;
   firstDayIsFullDay: boolean;
+  firstDayIsHalfDay?: boolean;
   fullDays: number;
   fullDaysAmount: number;
   lastDayAmount: number;
   lastDayHours: number;
   lastDayIsFullDay: boolean;
+  lastDayIsHalfDay?: boolean;
   nightsAmount: number;
   nights: number;
   optionsAmount: number;
@@ -67,8 +69,10 @@ export interface PriceBreakdown {
   daysCount: number;
   hoursCount: number;
   hourlyRate: number;
+  halfDailyRate?: number;
   dailyRate: number;
   nightlyRate: number;
+  billingUnit?: "hour" | "half_day" | "day" | "fixed";
 }
 
 export interface CalendarEntry {

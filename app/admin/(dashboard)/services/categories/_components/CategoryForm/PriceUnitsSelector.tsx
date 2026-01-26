@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, Calendar, CalendarDays, CalendarRange } from "lucide-react";
+import { Clock, Sun, Calendar, CalendarDays, CalendarRange } from "lucide-react";
 import type { PriceUnit } from "../../types";
 
 interface PriceUnitsSelectorProps {
@@ -19,6 +19,12 @@ const PRICE_UNITS_CONFIG: {
     label: "Horaire",
     icon: <Clock className="w-4 h-4" />,
     description: "Prix à l'heure",
+  },
+  {
+    value: "half_day",
+    label: "Demi-journée",
+    icon: <Sun className="w-4 h-4" />,
+    description: "Prix à la demi-journée",
   },
   {
     value: "day",
@@ -69,20 +75,16 @@ export default function PriceUnitsSelector({
           const isSelected = value.includes(unit.value);
 
           return (
-            <label
+            <button
               key={unit.value}
-              className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+              type="button"
+              onClick={() => toggleUnit(unit.value)}
+              className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-0 ${
                 isSelected
                   ? "border-blue-500 bg-blue-500/10"
                   : "border-slate-700 bg-slate-800 hover:border-slate-600"
               }`}
             >
-              <input
-                type="checkbox"
-                checked={isSelected}
-                onChange={() => toggleUnit(unit.value)}
-                className="sr-only"
-              />
               <div
                 className={`p-2 rounded-lg ${
                   isSelected
@@ -92,13 +94,13 @@ export default function PriceUnitsSelector({
               >
                 {unit.icon}
               </div>
-              <div>
-                <span className="font-medium text-white text-sm">
+              <div className="text-left">
+                <span className="font-medium text-white text-sm block">
                   {unit.label}
                 </span>
                 <p className="text-xs text-slate-400">{unit.description}</p>
               </div>
-            </label>
+            </button>
           );
         })}
       </div>

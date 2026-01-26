@@ -23,7 +23,7 @@ import OptionManager, { LocalOption } from "../OptionManager";
 import { cn } from "@/app/lib/utils";
 
 type ServiceLocation = "announcer_home" | "client_home" | "both";
-type PriceUnit = "hour" | "day" | "week" | "month";
+type PriceUnit = "hour" | "half_day" | "day" | "week" | "month";
 
 interface DefaultVariant {
   name: string;
@@ -44,6 +44,8 @@ interface ServiceCategory {
   defaultVariants?: DefaultVariant[];
   allowCustomVariants?: boolean;
   allowOvernightStay?: boolean;
+  allowRangeBooking?: boolean;
+  isCapacityBased?: boolean; // Mode garde (propagé depuis le parent)
 }
 
 type FormStep = 1 | 2 | 3 | 4;
@@ -72,10 +74,11 @@ interface ServiceFormProps {
       description?: string;
       objectives?: Array<{ icon: string; text: string }>;
       price: number;
-      priceUnit: "hour" | "day" | "week" | "month" | "flat";
+      priceUnit: "hour" | "half_day" | "day" | "week" | "month" | "flat";
       // Multi-tarification
       pricing?: {
         hourly?: number;
+        halfDaily?: number;
         daily?: number;
         weekly?: number;
         monthly?: number;
@@ -568,7 +571,7 @@ export default function ServiceForm({
                 allowCustomVariants={selectedCategory?.allowCustomVariants}
                 autoAddFirst={true}
                 allowOvernightStay={allowOvernightStay}
-                isGardeService={selectedCategory?.allowOvernightStay === true}
+                isGardeService={selectedCategory?.isCapacityBased === true}
                 serviceAnimalTypes={animalTypes}
               />
             </motion.div>

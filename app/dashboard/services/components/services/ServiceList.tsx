@@ -13,7 +13,7 @@ interface ServiceCategory {
   billingType?: "hourly" | "daily" | "flexible";
 }
 
-type PriceUnit = "hour" | "day" | "week" | "month" | "flat";
+type PriceUnit = "hour" | "half_day" | "day" | "week" | "month" | "flat";
 
 interface Service {
   id: Id<"services">;

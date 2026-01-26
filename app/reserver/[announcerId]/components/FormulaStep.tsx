@@ -189,12 +189,12 @@ function SelectedFormuleDetails({
 
         {/* Grille d'informations */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {/* Objectifs */}
+          {/* Objectifs / Activités proposées */}
           {variant.objectives && variant.objectives.length > 0 && (
             <div className="p-3 bg-white/80 rounded-lg">
               <div className="flex items-center gap-2 mb-2">
                 <Target className="w-4 h-4 text-secondary" />
-                <span className="text-sm font-medium text-foreground">Objectifs</span>
+                <span className="text-sm font-medium text-foreground">{service.category.includes("garde") ? "Activités proposées" : "Objectifs"}</span>
               </div>
               <div className="space-y-1.5">
                 {variant.objectives.map((obj, idx) => (
@@ -498,12 +498,12 @@ export default function FormulaStep({
               <p className="text-sm text-text-light mb-3">{selectedVariant.description}</p>
             )}
 
-            {/* Objectifs */}
+            {/* Objectifs / Activités proposées */}
             {selectedVariant.objectives && selectedVariant.objectives.length > 0 && (
               <div className="mb-3 p-3 bg-white/80 rounded-lg">
                 <div className="flex items-center gap-2 mb-2">
                   <Target className="w-4 h-4 text-secondary" />
-                  <span className="text-sm font-medium text-foreground">Objectifs de la prestation</span>
+                  <span className="text-sm font-medium text-foreground">{selectedService?.category.includes("garde") ? "Activités proposées" : "Objectifs de la prestation"}</span>
                 </div>
                 <div className="space-y-1.5">
                   {selectedVariant.objectives.map((obj, idx) => (

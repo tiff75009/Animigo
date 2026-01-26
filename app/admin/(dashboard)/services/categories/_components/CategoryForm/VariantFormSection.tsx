@@ -9,6 +9,7 @@ interface VariantFormSectionProps {
   allowCustomVariants: boolean;
   onVariantsChange: (variants: DefaultVariant[]) => void;
   onAllowCustomChange: (allow: boolean) => void;
+  isGardeMode?: boolean;
 }
 
 export default function VariantFormSection({
@@ -16,6 +17,7 @@ export default function VariantFormSection({
   allowCustomVariants,
   onVariantsChange,
   onAllowCustomChange,
+  isGardeMode = false,
 }: VariantFormSectionProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [variantForm, setVariantForm] = useState<DefaultVariant>({
@@ -213,7 +215,7 @@ export default function VariantFormSection({
             : "Nouvelle prestation"}
         </p>
 
-        <div className="grid grid-cols-2 gap-3 mb-3">
+        <div className={`grid ${isGardeMode ? 'grid-cols-1' : 'grid-cols-2'} gap-3 mb-3`}>
           <div>
             <label className="block text-xs text-slate-400 mb-1">
               Nom de la prestation *
@@ -228,26 +230,28 @@ export default function VariantFormSection({
               className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
             />
           </div>
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">
-              Durée suggérée (min)
-            </label>
-            <input
-              type="number"
-              value={variantForm.suggestedDuration || ""}
-              onChange={(e) =>
-                setVariantForm({
-                  ...variantForm,
-                  suggestedDuration: e.target.value
-                    ? parseInt(e.target.value)
-                    : undefined,
-                })
-              }
-              placeholder="Ex: 60"
-              min="0"
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-            />
-          </div>
+          {!isGardeMode && (
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">
+                Durée suggérée (min)
+              </label>
+              <input
+                type="number"
+                value={variantForm.suggestedDuration || ""}
+                onChange={(e) =>
+                  setVariantForm({
+                    ...variantForm,
+                    suggestedDuration: e.target.value
+                      ? parseInt(e.target.value)
+                      : undefined,
+                  })
+                }
+                placeholder="Ex: 60"
+                min="0"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              />
+            </div>
+          )}
         </div>
 
         <div className="mb-3">
@@ -265,10 +269,10 @@ export default function VariantFormSection({
           />
         </div>
 
-        {/* Caractéristiques incluses */}
+        {/* Caractéristiques incluses / Activités prévues */}
         <div className="mb-3">
           <label className="block text-xs text-slate-400 mb-1">
-            Caractéristiques incluses
+            {isGardeMode ? "Activités prévues" : "Caractéristiques incluses"}
           </label>
           <div className="flex gap-2 mb-2">
             <input
@@ -281,7 +285,7 @@ export default function VariantFormSection({
                   addFeature();
                 }
               }}
-              placeholder="Ex: Promenade quotidienne"
+              placeholder={isGardeMode ? "Ex: Promenades quotidiennes" : "Ex: Promenade quotidienne"}
               className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
             />
             <button

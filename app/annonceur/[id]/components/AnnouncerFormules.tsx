@@ -525,6 +525,8 @@ export default function AnnouncerFormules({
                   onSelect={() => onVariantSelect?.(service.id.toString(), formule.id.toString())}
                   showAttentionPulse={!hasVariantSelected}
                   animationDelay={index * 0.1}
+                  allowOvernightStay={service.allowOvernightStay}
+                  overnightPrice={service.overnightPrice}
                 />
               ))}
             </div>

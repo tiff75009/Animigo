@@ -238,12 +238,12 @@ export default function AnnouncerServices({ services, initialExpandedService, co
                               )}
                             </div>
 
-                            {/* Objectifs de la prestation */}
+                            {/* Objectifs / Activités proposées */}
                             {formule.objectives && formule.objectives.length > 0 && (
                               <div className="mt-3 pt-2 border-t border-gray-200/50">
                                 <p className="flex items-center gap-1 text-xs font-medium text-purple-700 mb-1.5">
                                   <Target className="w-3 h-3" />
-                                  Objectifs de la prestation
+                                  {isGarde ? "Activités proposées" : "Objectifs de la prestation"}
                                 </p>
                                 <div className="space-y-1.5">
                                   {formule.objectives.map((objective, idx) => (

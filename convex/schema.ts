@@ -234,6 +234,7 @@ export default defineSchema({
     price: v.optional(v.number()), // Ancien: prix en centimes
     priceUnit: v.optional(v.union(
       v.literal("hour"),
+      v.literal("half_day"),
       v.literal("day"),
       v.literal("week"),
       v.literal("month"),
@@ -292,6 +293,7 @@ export default defineSchema({
     price: v.number(), // Prix principal en centimes
     priceUnit: v.union(
       v.literal("hour"),
+      v.literal("half_day"),
       v.literal("day"),
       v.literal("week"),
       v.literal("month"),
@@ -300,11 +302,12 @@ export default defineSchema({
     // Nouveau système - multi-tarification par unité de temps
     // Permet de définir un prix différent pour chaque unité (heure, jour, semaine, mois)
     pricing: v.optional(v.object({
-      hourly: v.optional(v.number()),  // Prix à l'heure en centimes
-      daily: v.optional(v.number()),   // Prix à la journée en centimes
-      weekly: v.optional(v.number()),  // Prix à la semaine en centimes
-      monthly: v.optional(v.number()), // Prix au mois en centimes
-      nightly: v.optional(v.number()), // Prix de la nuit en centimes
+      hourly: v.optional(v.number()),   // Prix à l'heure en centimes
+      halfDaily: v.optional(v.number()), // Prix à la demi-journée en centimes
+      daily: v.optional(v.number()),    // Prix à la journée en centimes
+      weekly: v.optional(v.number()),   // Prix à la semaine en centimes
+      monthly: v.optional(v.number()),  // Prix au mois en centimes
+      nightly: v.optional(v.number()),  // Prix de la nuit en centimes
     })),
     duration: v.optional(v.number()), // Durée en minutes
     includedFeatures: v.optional(v.array(v.string())), // ["Brossage", "Lavage", "Séchage"]
@@ -369,6 +372,7 @@ export default defineSchema({
     // Si vide ou undefined, tous les types sont autorisés
     allowedPriceUnits: v.optional(v.array(v.union(
       v.literal("hour"),
+      v.literal("half_day"),
       v.literal("day"),
       v.literal("week"),
       v.literal("month")

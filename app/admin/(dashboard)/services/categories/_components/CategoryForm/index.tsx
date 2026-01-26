@@ -357,6 +357,7 @@ export default function CategoryForm({
               allowCustomVariants={formData.allowCustomVariants}
               onVariantsChange={handleVariantsChange}
               onAllowCustomChange={handleAllowCustomChange}
+              isGardeMode={parentCategories?.find(p => p.id === formData.parentCategoryId)?.isCapacityBased}
             />
           </div>
         )}

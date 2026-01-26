@@ -45,14 +45,16 @@ interface ServiceCategory {
   name: string;
   icon?: string;
   billingType?: "hourly" | "daily" | "flexible";
-  allowedPriceUnits?: ("hour" | "day" | "week" | "month")[];
+  allowedPriceUnits?: ("hour" | "half_day" | "day" | "week" | "month")[];
   allowOvernightStay?: boolean;
+  allowRangeBooking?: boolean;
 }
 
-type PriceUnit = "hour" | "day" | "week" | "month" | "flat";
+type PriceUnit = "hour" | "half_day" | "day" | "week" | "month" | "flat";
 
 interface Pricing {
   hourly?: number;
+  halfDaily?: number;
   daily?: number;
   weekly?: number;
   monthly?: number;
@@ -149,25 +151,64 @@ const formatPrice = (cents: number) => {
   return (cents / 100).toFixed(2).replace(".", ",") + " €";
 };
 
-const getVariantPrices = (variant: Variant) => {
+const UNIT_LABELS: Record<string, string> = {
+  hour: "/h",
+  half_day: "/demi-j",
+  day: "/jour",
+  week: "/sem",
+  month: "/mois",
+  nightly: "/nuit",
+  flat: ""
+};
+
+const getVariantPrices = (variant: Variant, allowedPriceUnits?: string[], allowOvernightStay?: boolean) => {
   const prices: { value: number; unit: string; label: string }[] = [];
+
   if (variant.pricing) {
-    if (variant.pricing.hourly) prices.push({ value: variant.pricing.hourly, unit: "hour", label: "/h" });
-    if (variant.pricing.daily) prices.push({ value: variant.pricing.daily, unit: "day", label: "/jour" });
-    if (variant.pricing.weekly) prices.push({ value: variant.pricing.weekly, unit: "week", label: "/sem" });
-    if (variant.pricing.monthly) prices.push({ value: variant.pricing.monthly, unit: "month", label: "/mois" });
+    // Collecter tous les prix disponibles
+    const availablePrices: { value: number; unit: string; label: string }[] = [];
+    if (variant.pricing.hourly) availablePrices.push({ value: variant.pricing.hourly, unit: "hour", label: UNIT_LABELS.hour });
+    if (variant.pricing.halfDaily) availablePrices.push({ value: variant.pricing.halfDaily, unit: "half_day", label: UNIT_LABELS.half_day });
+    if (variant.pricing.daily) availablePrices.push({ value: variant.pricing.daily, unit: "day", label: UNIT_LABELS.day });
+    if (variant.pricing.weekly) availablePrices.push({ value: variant.pricing.weekly, unit: "week", label: UNIT_LABELS.week });
+    if (variant.pricing.monthly) availablePrices.push({ value: variant.pricing.monthly, unit: "month", label: UNIT_LABELS.month });
+    if (variant.pricing.nightly && allowOvernightStay) availablePrices.push({ value: variant.pricing.nightly, unit: "nightly", label: UNIT_LABELS.nightly });
+
+    // Si allowedPriceUnits est défini, trier selon cet ordre
+    if (allowedPriceUnits && allowedPriceUnits.length > 0) {
+      for (const unit of allowedPriceUnits) {
+        const found = availablePrices.find(p => p.unit === unit);
+        if (found) prices.push(found);
+      }
+      // Ajouter nightly à la fin si présent et non dans allowedPriceUnits
+      const nightlyPrice = availablePrices.find(p => p.unit === "nightly");
+      if (nightlyPrice && !prices.find(p => p.unit === "nightly")) {
+        prices.push(nightlyPrice);
+      }
+    } else {
+      prices.push(...availablePrices);
+    }
   }
+
   if (prices.length === 0 && variant.price > 0) {
-    const unitLabels: Record<string, string> = { hour: "/h", day: "/jour", week: "/sem", month: "/mois", flat: "" };
-    prices.push({ value: variant.price, unit: variant.priceUnit, label: unitLabels[variant.priceUnit] || "" });
+    prices.push({ value: variant.price, unit: variant.priceUnit, label: UNIT_LABELS[variant.priceUnit] || "" });
   }
   return prices;
 };
 
-const getMinPrice = (variant: Variant) => {
-  const prices = getVariantPrices(variant);
+const getMinPrice = (variant: Variant, allowedPriceUnits?: string[], allowOvernightStay?: boolean) => {
+  const prices = getVariantPrices(variant, allowedPriceUnits, allowOvernightStay);
   if (prices.length === 0) return null;
-  return prices.reduce((min, p) => (p.value < min.value ? p : min), prices[0]);
+  // Retourner le premier prix (celui avec la plus haute priorité selon allowedPriceUnits)
+  // plutôt que le prix minimum, pour refléter le prix de référence configuré
+  return prices[0];
+};
+
+const getPrimaryPrice = (variant: Variant, allowedPriceUnits?: string[], allowOvernightStay?: boolean) => {
+  const prices = getVariantPrices(variant, allowedPriceUnits, allowOvernightStay);
+  if (prices.length === 0) return null;
+  // Retourner le premier prix selon l'ordre de priorité des allowedPriceUnits
+  return prices[0];
 };
 
 export default function ServiceCard({
@@ -226,9 +267,12 @@ export default function ServiceCard({
     setPreviewFilterAnimal("all");
   };
 
-  const allMinPrices = activeVariants.map((v) => getMinPrice(v)).filter((p): p is NonNullable<typeof p> => p !== null);
-  const globalMinPrice = allMinPrices.length > 0
-    ? allMinPrices.reduce((min, p) => (p.value < min.value ? p : min), allMinPrices[0])
+  const allowedPriceUnits = categoryData?.allowedPriceUnits;
+  const allowOvernightStay = categoryData?.allowOvernightStay;
+
+  const allPrimaryPrices = activeVariants.map((v) => getPrimaryPrice(v, allowedPriceUnits, allowOvernightStay)).filter((p): p is NonNullable<typeof p> => p !== null);
+  const globalMinPrice = allPrimaryPrices.length > 0
+    ? allPrimaryPrices.reduce((min, p) => (p.value < min.value ? p : min), allPrimaryPrices[0])
     : null;
 
   return (
@@ -586,7 +630,7 @@ export default function ServiceCard({
                         </div>
                       ) : (
                         filteredActiveVariants.map((variant) => {
-                          const prices = getVariantPrices(variant);
+                          const prices = getVariantPrices(variant, allowedPriceUnits, allowOvernightStay);
                           return (
                             <div
                               key={variant.id}
@@ -688,9 +732,11 @@ export default function ServiceCard({
                                     <span key={idx} className={cn(
                                       "text-xs font-bold px-2 py-1 rounded-lg",
                                       price.unit === "hour" && "bg-primary/10 text-primary",
+                                      price.unit === "half_day" && "bg-orange-100 text-orange-600",
                                       price.unit === "day" && "bg-secondary/10 text-secondary",
                                       price.unit === "week" && "bg-purple-100 text-purple-600",
-                                      price.unit === "month" && "bg-amber-100 text-amber-600"
+                                      price.unit === "month" && "bg-amber-100 text-amber-600",
+                                      price.unit === "nightly" && "bg-indigo-100 text-indigo-600"
                                     )}>
                                       {formatPrice(price.value)}{price.label}
                                     </span>
@@ -1072,6 +1118,8 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
                 }}
                 canDelete={variants.length > 1}
                 onManageSlots={onManageSlots}
+                allowedPriceUnits={categoryData?.allowedPriceUnits}
+                allowOvernightStay={categoryData?.allowOvernightStay}
               />
             )}
           </motion.div>
@@ -1142,6 +1190,8 @@ function VariantPreviewCard({
   onDelete,
   canDelete,
   onManageSlots,
+  allowedPriceUnits,
+  allowOvernightStay,
 }: {
   variant: Variant;
   index: number;
@@ -1149,8 +1199,10 @@ function VariantPreviewCard({
   onDelete: () => void;
   canDelete: boolean;
   onManageSlots?: (variant: Variant) => void;
+  allowedPriceUnits?: string[];
+  allowOvernightStay?: boolean;
 }) {
-  const prices = getVariantPrices(variant);
+  const prices = getVariantPrices(variant, allowedPriceUnits, allowOvernightStay);
 
   return (
     <div className={cn(
@@ -1188,18 +1240,15 @@ function VariantPreviewCard({
                 <span key={idx} className={cn(
                   "text-sm font-bold px-2.5 py-1 rounded-lg",
                   price.unit === "hour" && "bg-primary/10 text-primary",
+                  price.unit === "half_day" && "bg-orange-100 text-orange-600",
                   price.unit === "day" && "bg-secondary/10 text-secondary",
                   price.unit === "week" && "bg-purple-100 text-purple-600",
-                  price.unit === "month" && "bg-amber-100 text-amber-600"
+                  price.unit === "month" && "bg-amber-100 text-amber-600",
+                  price.unit === "nightly" && "bg-indigo-100 text-indigo-600"
                 )}>
                   {formatPrice(price.value)}{price.label}
                 </span>
               ))}
-              {variant.pricing?.nightly && (
-                <span className="text-sm font-bold px-2.5 py-1 rounded-lg bg-indigo-100 text-indigo-600">
-                  {formatPrice(variant.pricing.nightly)}/nuit
-                </span>
-              )}
               {variant.numberOfSessions && variant.numberOfSessions > 1 && (
                 <span className="text-sm font-bold px-2.5 py-1 rounded-lg bg-blue-100 text-blue-600">
                   {variant.numberOfSessions} séances
@@ -1344,7 +1393,7 @@ function VariantEditForm({
   recommendedPrice: number;
   isGardeService: boolean;
   allowOvernightStay?: boolean;
-  allowedPriceUnits?: ("hour" | "day" | "week" | "month")[];
+  allowedPriceUnits?: ("hour" | "half_day" | "day" | "week" | "month")[];
   serviceAnimalTypes: string[];
   onSave: (data: {
     name?: string;
@@ -1390,10 +1439,14 @@ function VariantEditForm({
   const effectiveServiceLocation = isCollective ? "announcer_home" : serviceLocation;
 
   // Déterminer quels prix afficher selon allowedPriceUnits
-  const showHourly = !allowedPriceUnits || allowedPriceUnits.includes("hour");
-  const showDaily = !allowedPriceUnits || allowedPriceUnits.includes("day") || isGardeService;
-  const showWeekly = allowedPriceUnits?.includes("week");
-  const showMonthly = allowedPriceUnits?.includes("month");
+  // Si allowedPriceUnits est défini et non vide, on utilise uniquement ces types
+  // Sinon, on utilise les valeurs par défaut
+  const hasConfiguredPriceUnits = allowedPriceUnits && allowedPriceUnits.length > 0;
+  const showHourly = hasConfiguredPriceUnits ? allowedPriceUnits.includes("hour") : true;
+  const showHalfDaily = hasConfiguredPriceUnits ? allowedPriceUnits.includes("half_day") : false;
+  const showDaily = hasConfiguredPriceUnits ? allowedPriceUnits.includes("day") : true;
+  const showWeekly = hasConfiguredPriceUnits ? allowedPriceUnits.includes("week") : false;
+  const showMonthly = hasConfiguredPriceUnits ? allowedPriceUnits.includes("month") : false;
 
   const handleAddObjective = () => {
     if (newObjectiveText.trim()) {
@@ -1481,9 +1534,9 @@ function VariantEditForm({
         />
       </div>
 
-      {/* Objectifs */}
+      {/* Objectifs / Activités */}
       <div>
-        <label className="block text-sm font-medium text-foreground mb-1">Objectifs (optionnel)</label>
+        <label className="block text-sm font-medium text-foreground mb-1">{isGardeService ? "Activités proposées (optionnel)" : "Objectifs (optionnel)"}</label>
         <div className="flex gap-2 mb-2">
           <select
             value={newObjectiveIcon}
@@ -1508,7 +1561,7 @@ function VariantEditForm({
             value={newObjectiveText}
             onChange={(e) => setNewObjectiveText(e.target.value)}
             onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddObjective())}
-            placeholder="Ajouter un objectif..."
+            placeholder={isGardeService ? "Ajouter une activité..." : "Ajouter un objectif..."}
             className="flex-1 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
           />
           <button
@@ -1541,33 +1594,35 @@ function VariantEditForm({
         )}
       </div>
 
-      {/* Duration & Nombre de séances */}
-      <div className="flex flex-wrap gap-4">
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1">Durée (minutes)</label>
-          <input
-            type="number"
-            value={duration}
-            onChange={(e) => setDuration(parseInt(e.target.value) || 0)}
-            min={30}
-            step={30}
-            className="w-24 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-          />
+      {/* Duration & Nombre de séances - masqué pour les services de garde */}
+      {!isGardeService && (
+        <div className="flex flex-wrap gap-4">
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">Durée (minutes)</label>
+            <input
+              type="number"
+              value={duration}
+              onChange={(e) => setDuration(parseInt(e.target.value) || 0)}
+              min={30}
+              step={30}
+              className="w-24 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">Nombre de séances</label>
+            <input
+              type="number"
+              value={numberOfSessions}
+              onChange={(e) => setNumberOfSessions(Math.max(1, parseInt(e.target.value) || 1))}
+              min={1}
+              className="w-24 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+            />
+          </div>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1">Nombre de séances</label>
-          <input
-            type="number"
-            value={numberOfSessions}
-            onChange={(e) => setNumberOfSessions(Math.max(1, parseInt(e.target.value) || 1))}
-            min={1}
-            className="w-24 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-          />
-        </div>
-      </div>
+      )}
 
-      {/* Délai entre séances - visible si plusieurs séances */}
-      {numberOfSessions > 1 && (
+      {/* Délai entre séances - visible si plusieurs séances (non garde) */}
+      {!isGardeService && numberOfSessions > 1 && (
         <div>
           <label className="block text-sm font-medium text-foreground mb-1">Délai entre chaque séance</label>
           <select
@@ -1591,43 +1646,45 @@ function VariantEditForm({
         </div>
       )}
 
-      {/* Type de séance */}
-      <div>
-        <label className="block text-sm font-medium text-foreground mb-1">Type de séance</label>
-        <div className="flex gap-4">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name={`sessionType-edit-${variant.id}`}
-              value="individual"
-              checked={sessionType === "individual"}
-              onChange={() => {
-                setSessionType("individual");
-                setMaxAnimalsPerSession(undefined);
-              }}
-              className="w-4 h-4 text-primary focus:ring-primary"
-            />
-            <span className="text-sm">Individuelle</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name={`sessionType-edit-${variant.id}`}
-              value="collective"
-              checked={sessionType === "collective"}
-              onChange={() => {
-                setSessionType("collective");
-                setMaxAnimalsPerSession(5);
-              }}
-              className="w-4 h-4 text-primary focus:ring-primary"
-            />
-            <span className="text-sm">Collective</span>
-          </label>
+      {/* Type de séance - masqué pour les services de garde */}
+      {!isGardeService && (
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1">Type de séance</label>
+          <div className="flex gap-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name={`sessionType-edit-${variant.id}`}
+                value="individual"
+                checked={sessionType === "individual"}
+                onChange={() => {
+                  setSessionType("individual");
+                  setMaxAnimalsPerSession(undefined);
+                }}
+                className="w-4 h-4 text-primary focus:ring-primary"
+              />
+              <span className="text-sm">Individuelle</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name={`sessionType-edit-${variant.id}`}
+                value="collective"
+                checked={sessionType === "collective"}
+                onChange={() => {
+                  setSessionType("collective");
+                  setMaxAnimalsPerSession(5);
+                }}
+                className="w-4 h-4 text-primary focus:ring-primary"
+              />
+              <span className="text-sm">Collective</span>
+            </label>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Nombre max d'animaux - visible si séance collective */}
-      {sessionType === "collective" && (
+      {/* Nombre max d'animaux - visible si séance collective (et non garde) */}
+      {!isGardeService && sessionType === "collective" && (
         <div>
           <label className="block text-sm font-medium text-foreground mb-1">Nombre max d'animaux par séance</label>
           <div className="flex items-center gap-2">
@@ -1644,8 +1701,8 @@ function VariantEditForm({
         </div>
       )}
 
-      {/* Lieu de prestation */}
-      <div>
+      {/* Lieu de prestation - masqué pour les services de garde (toujours chez l'annonceur) */}
+      {!isGardeService && <div>
         <label className="block text-sm font-medium text-foreground mb-2">Lieu de prestation</label>
         {isCollective && (
           <p className="text-xs text-orange-600 mb-2">Les séances collectives se déroulent obligatoirement à votre domicile.</p>
@@ -1698,7 +1755,7 @@ function VariantEditForm({
             Les deux
           </button>
         </div>
-      </div>
+      </div>}
 
       {/* Animaux acceptés */}
       <div>
@@ -1739,131 +1796,117 @@ function VariantEditForm({
       <div className="space-y-3">
         <label className="block text-sm font-medium text-foreground">Tarifs</label>
 
-        {isGardeService ? (
-          <>
-            {/* Daily price */}
-            <div className="flex items-center gap-3">
-              <div className="flex-1">
-                <label className="block text-xs text-text-light mb-1">Prix par jour</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={(pricing.daily || dailyPrice) / 100}
-                    onChange={(e) => {
-                      const daily = Math.round(parseFloat(e.target.value) * 100) || 0;
-                      const hourly = Math.round(daily / 8);
-                      setPricing({ ...pricing, daily, hourly });
-                    }}
-                    step={0.5}
-                    className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
-                </div>
-              </div>
-              <div className="flex-1">
-                <label className="block text-xs text-text-light mb-1">Prix par heure (auto)</label>
-                <div className="px-3 py-2 bg-foreground/5 rounded-lg text-foreground">
-                  {((pricing.hourly || hourlyPrice) / 100).toFixed(2)} €
-                </div>
+        <div className="grid grid-cols-2 gap-3">
+          {showHourly && (
+            <div>
+              <label className="block text-xs text-text-light mb-1">Par heure</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={(pricing.hourly || 0) / 100}
+                  onChange={(e) => setPricing({ ...pricing, hourly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                  step={0.5}
+                  placeholder="--"
+                  className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
               </div>
             </div>
-
-            {/* Nightly price */}
-            {allowOvernightStay && (
-              <div>
-                <label className="block text-xs text-text-light mb-1">Prix par nuit</label>
-                <div className="relative w-40">
-                  <input
-                    type="number"
-                    value={(pricing.nightly || nightlyPrice) / 100}
-                    onChange={(e) => setPricing({ ...pricing, nightly: Math.round(parseFloat(e.target.value) * 100) || 0 })}
-                    step={0.5}
-                    className="w-full px-3 py-2 pr-8 bg-white border border-indigo-200 rounded-lg focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-400 text-sm">€</span>
-                </div>
+          )}
+          {showHalfDaily && (
+            <div>
+              <label className="block text-xs text-text-light mb-1">Par demi-journée</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={(pricing.halfDaily || 0) / 100}
+                  onChange={(e) => setPricing({ ...pricing, halfDaily: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                  step={0.5}
+                  placeholder="--"
+                  className="w-full px-3 py-2 pr-8 bg-white border border-cyan-200 rounded-lg focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
               </div>
-            )}
-          </>
-        ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {showHourly && (
-              <div>
-                <label className="block text-xs text-text-light mb-1">Par heure</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={(pricing.hourly || 0) / 100}
-                    onChange={(e) => setPricing({ ...pricing, hourly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                    step={0.5}
-                    placeholder="--"
-                    className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
-                </div>
+            </div>
+          )}
+          {showDaily && (
+            <div>
+              <label className="block text-xs text-text-light mb-1">Par jour</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={(pricing.daily || 0) / 100}
+                  onChange={(e) => setPricing({ ...pricing, daily: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                  step={0.5}
+                  placeholder="--"
+                  className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
               </div>
-            )}
-            {showDaily && (
-              <div>
-                <label className="block text-xs text-text-light mb-1">Par jour</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={(pricing.daily || 0) / 100}
-                    onChange={(e) => setPricing({ ...pricing, daily: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                    step={0.5}
-                    placeholder="--"
-                    className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
-                </div>
+            </div>
+          )}
+          {showWeekly && (
+            <div>
+              <label className="block text-xs text-text-light mb-1">Par semaine</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={(pricing.weekly || 0) / 100}
+                  onChange={(e) => setPricing({ ...pricing, weekly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                  step={0.5}
+                  placeholder="--"
+                  className="w-full px-3 py-2 pr-8 bg-white border border-purple-200 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
               </div>
-            )}
-            {showWeekly && (
-              <div>
-                <label className="block text-xs text-text-light mb-1">Par semaine</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={(pricing.weekly || 0) / 100}
-                    onChange={(e) => setPricing({ ...pricing, weekly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                    step={0.5}
-                    placeholder="--"
-                    className="w-full px-3 py-2 pr-8 bg-white border border-purple-200 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
-                </div>
+            </div>
+          )}
+          {showMonthly && (
+            <div>
+              <label className="block text-xs text-text-light mb-1">Par mois</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={(pricing.monthly || 0) / 100}
+                  onChange={(e) => setPricing({ ...pricing, monthly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                  step={0.5}
+                  placeholder="--"
+                  className="w-full px-3 py-2 pr-8 bg-white border border-amber-200 rounded-lg focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
               </div>
-            )}
-            {showMonthly && (
-              <div>
-                <label className="block text-xs text-text-light mb-1">Par mois</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={(pricing.monthly || 0) / 100}
-                    onChange={(e) => setPricing({ ...pricing, monthly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                    step={0.5}
-                    placeholder="--"
-                    className="w-full px-3 py-2 pr-8 bg-white border border-amber-200 rounded-lg focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
-                </div>
+            </div>
+          )}
+          {/* Nightly price - only for garde services with overnight stay */}
+          {isGardeService && allowOvernightStay && (
+            <div>
+              <label className="block text-xs text-text-light mb-1">Par nuit</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={(pricing.nightly || 0) / 100}
+                  onChange={(e) => setPricing({ ...pricing, nightly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                  step={0.5}
+                  placeholder="--"
+                  className="w-full px-3 py-2 pr-8 bg-white border border-indigo-200 rounded-lg focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-400 text-sm">€</span>
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
 
         {/* Prix conseillé */}
         <PriceRecommendationCompact
           token={token}
           category={category}
-          priceUnit={isGardeService ? "day" : (showHourly ? "hour" : "day")}
-          currentPrice={isGardeService ? (pricing.daily || 0) : (showHourly ? (pricing.hourly || 0) : (pricing.daily || 0))}
+          priceUnit={showDaily ? "day" : (showHalfDaily ? "half_day" : "hour")}
+          currentPrice={showDaily ? (pricing.daily || 0) : (showHalfDaily ? (pricing.halfDaily || 0) : (pricing.hourly || 0))}
           onSelectPrice={(price) => {
-            if (isGardeService || !showHourly) {
-              const hourly = Math.round(price / 8);
-              setPricing({ ...pricing, daily: price, hourly });
+            if (showDaily) {
+              setPricing({ ...pricing, daily: price });
+            } else if (showHalfDaily) {
+              setPricing({ ...pricing, halfDaily: price });
             } else {
               setPricing({ ...pricing, hourly: price });
             }
@@ -1871,16 +1914,16 @@ function VariantEditForm({
         />
       </div>
 
-      {/* Caractéristiques incluses */}
+      {/* Caractéristiques incluses / Activités prévues */}
       <div>
-        <label className="block text-sm font-medium text-foreground mb-1">Caractéristiques incluses</label>
+        <label className="block text-sm font-medium text-foreground mb-1">{isGardeService ? "Activités prévues" : "Caractéristiques incluses"}</label>
         <div className="flex gap-2 mb-2">
           <input
             type="text"
             value={newFeature}
             onChange={(e) => setNewFeature(e.target.value)}
             onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddFeature())}
-            placeholder="Ajouter une caractéristique..."
+            placeholder={isGardeService ? "Ajouter une activité..." : "Ajouter une caractéristique..."}
             className="flex-1 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
           />
           <button
@@ -1954,7 +1997,7 @@ function VariantAddForm({
   recommendedPrice: number;
   isGardeService: boolean;
   allowOvernightStay?: boolean;
-  allowedPriceUnits?: ("hour" | "day" | "week" | "month")[];
+  allowedPriceUnits?: ("hour" | "half_day" | "day" | "week" | "month")[];
   serviceAnimalTypes: string[];
   existingCount: number;
   onSave: (data: {
@@ -2006,10 +2049,14 @@ function VariantAddForm({
   const effectiveServiceLocation = isCollective ? "announcer_home" : serviceLocation;
 
   // Déterminer quels prix afficher selon allowedPriceUnits
-  const showHourly = !allowedPriceUnits || allowedPriceUnits.includes("hour");
-  const showDaily = !allowedPriceUnits || allowedPriceUnits.includes("day") || isGardeService;
-  const showWeekly = allowedPriceUnits?.includes("week");
-  const showMonthly = allowedPriceUnits?.includes("month");
+  // Si allowedPriceUnits est défini et non vide, on utilise uniquement ces types
+  // Sinon, on utilise les valeurs par défaut
+  const hasConfiguredPriceUnits = allowedPriceUnits && allowedPriceUnits.length > 0;
+  const showHourly = hasConfiguredPriceUnits ? allowedPriceUnits.includes("hour") : true;
+  const showHalfDaily = hasConfiguredPriceUnits ? allowedPriceUnits.includes("half_day") : false;
+  const showDaily = hasConfiguredPriceUnits ? allowedPriceUnits.includes("day") : true;
+  const showWeekly = hasConfiguredPriceUnits ? allowedPriceUnits.includes("week") : false;
+  const showMonthly = hasConfiguredPriceUnits ? allowedPriceUnits.includes("month") : false;
 
   const handleAddObjective = () => {
     if (newObjectiveText.trim()) {
@@ -2088,9 +2135,9 @@ function VariantAddForm({
         />
       </div>
 
-      {/* Objectifs */}
+      {/* Objectifs / Activités */}
       <div>
-        <label className="block text-sm font-medium text-foreground mb-1">Objectifs (optionnel)</label>
+        <label className="block text-sm font-medium text-foreground mb-1">{isGardeService ? "Activités proposées (optionnel)" : "Objectifs (optionnel)"}</label>
         <div className="flex gap-2 mb-2">
           <select
             value={newObjectiveIcon}
@@ -2115,7 +2162,7 @@ function VariantAddForm({
             value={newObjectiveText}
             onChange={(e) => setNewObjectiveText(e.target.value)}
             onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddObjective())}
-            placeholder="Ajouter un objectif..."
+            placeholder={isGardeService ? "Ajouter une activité..." : "Ajouter un objectif..."}
             className="flex-1 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
           />
           <button
@@ -2148,33 +2195,35 @@ function VariantAddForm({
         )}
       </div>
 
-      {/* Duration & Nombre de séances */}
-      <div className="flex flex-wrap gap-4">
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1">Durée (minutes)</label>
-          <input
-            type="number"
-            value={duration}
-            onChange={(e) => setDuration(parseInt(e.target.value) || 0)}
-            min={30}
-            step={30}
-            className="w-24 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
-          />
+      {/* Duration & Nombre de séances - masqué pour les services de garde */}
+      {!isGardeService && (
+        <div className="flex flex-wrap gap-4">
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">Durée (minutes)</label>
+            <input
+              type="number"
+              value={duration}
+              onChange={(e) => setDuration(parseInt(e.target.value) || 0)}
+              min={30}
+              step={30}
+              className="w-24 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">Nombre de séances</label>
+            <input
+              type="number"
+              value={numberOfSessions}
+              onChange={(e) => setNumberOfSessions(Math.max(1, parseInt(e.target.value) || 1))}
+              min={1}
+              className="w-24 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
+            />
+          </div>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1">Nombre de séances</label>
-          <input
-            type="number"
-            value={numberOfSessions}
-            onChange={(e) => setNumberOfSessions(Math.max(1, parseInt(e.target.value) || 1))}
-            min={1}
-            className="w-24 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
-          />
-        </div>
-      </div>
+      )}
 
-      {/* Délai entre séances - visible si plusieurs séances */}
-      {numberOfSessions > 1 && (
+      {/* Délai entre séances - visible si plusieurs séances (non garde) */}
+      {!isGardeService && numberOfSessions > 1 && (
         <div>
           <label className="block text-sm font-medium text-foreground mb-1">Délai entre chaque séance</label>
           <select
@@ -2198,43 +2247,45 @@ function VariantAddForm({
         </div>
       )}
 
-      {/* Type de séance */}
-      <div>
-        <label className="block text-sm font-medium text-foreground mb-1">Type de séance</label>
-        <div className="flex gap-4">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="sessionType-add"
-              value="individual"
-              checked={sessionType === "individual"}
-              onChange={() => {
-                setSessionType("individual");
-                setMaxAnimalsPerSession(undefined);
-              }}
-              className="w-4 h-4 text-secondary focus:ring-secondary"
-            />
-            <span className="text-sm">Individuelle</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="sessionType-add"
-              value="collective"
-              checked={sessionType === "collective"}
-              onChange={() => {
-                setSessionType("collective");
-                setMaxAnimalsPerSession(5);
-              }}
-              className="w-4 h-4 text-secondary focus:ring-secondary"
-            />
-            <span className="text-sm">Collective</span>
-          </label>
+      {/* Type de séance - masqué pour les services de garde */}
+      {!isGardeService && (
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1">Type de séance</label>
+          <div className="flex gap-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="sessionType-add"
+                value="individual"
+                checked={sessionType === "individual"}
+                onChange={() => {
+                  setSessionType("individual");
+                  setMaxAnimalsPerSession(undefined);
+                }}
+                className="w-4 h-4 text-secondary focus:ring-secondary"
+              />
+              <span className="text-sm">Individuelle</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="sessionType-add"
+                value="collective"
+                checked={sessionType === "collective"}
+                onChange={() => {
+                  setSessionType("collective");
+                  setMaxAnimalsPerSession(5);
+                }}
+                className="w-4 h-4 text-secondary focus:ring-secondary"
+              />
+              <span className="text-sm">Collective</span>
+            </label>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Nombre max d'animaux - visible si séance collective */}
-      {sessionType === "collective" && (
+      {/* Nombre max d'animaux - visible si séance collective (et non garde) */}
+      {!isGardeService && sessionType === "collective" && (
         <div>
           <label className="block text-sm font-medium text-foreground mb-1">Nombre max d'animaux par séance</label>
           <div className="flex items-center gap-2">
@@ -2251,8 +2302,8 @@ function VariantAddForm({
         </div>
       )}
 
-      {/* Lieu de prestation */}
-      <div>
+      {/* Lieu de prestation - masqué pour les services de garde (toujours chez l'annonceur) */}
+      {!isGardeService && <div>
         <label className="block text-sm font-medium text-foreground mb-2">Lieu de prestation</label>
         {isCollective && (
           <p className="text-xs text-orange-600 mb-2">Les séances collectives se déroulent obligatoirement à votre domicile.</p>
@@ -2305,7 +2356,7 @@ function VariantAddForm({
             Les deux
           </button>
         </div>
-      </div>
+      </div>}
 
       {/* Animaux acceptés */}
       <div>
@@ -2346,129 +2397,117 @@ function VariantAddForm({
       <div className="space-y-3">
         <label className="block text-sm font-medium text-foreground">Tarifs</label>
 
-        {isGardeService ? (
-          <>
-            <div className="flex items-center gap-3">
-              <div className="flex-1">
-                <label className="block text-xs text-text-light mb-1">Prix par jour</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={(pricing.daily || dailyPrice) / 100}
-                    onChange={(e) => {
-                      const daily = Math.round(parseFloat(e.target.value) * 100) || 0;
-                      const hourly = Math.round(daily / 8);
-                      setPricing({ ...pricing, daily, hourly });
-                    }}
-                    step={0.5}
-                    className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
-                </div>
-              </div>
-              <div className="flex-1">
-                <label className="block text-xs text-text-light mb-1">Prix par heure (auto)</label>
-                <div className="px-3 py-2 bg-foreground/5 rounded-lg text-foreground">
-                  {((pricing.hourly || hourlyPrice) / 100).toFixed(2)} €
-                </div>
+        <div className="grid grid-cols-2 gap-3">
+          {showHourly && (
+            <div>
+              <label className="block text-xs text-text-light mb-1">Par heure</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={(pricing.hourly || 0) / 100}
+                  onChange={(e) => setPricing({ ...pricing, hourly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                  step={0.5}
+                  placeholder="--"
+                  className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
               </div>
             </div>
-
-            {allowOvernightStay && (
-              <div>
-                <label className="block text-xs text-text-light mb-1">Prix par nuit</label>
-                <div className="relative w-40">
-                  <input
-                    type="number"
-                    value={(pricing.nightly || nightlyPrice) / 100}
-                    onChange={(e) => setPricing({ ...pricing, nightly: Math.round(parseFloat(e.target.value) * 100) || 0 })}
-                    step={0.5}
-                    className="w-full px-3 py-2 pr-8 bg-white border border-indigo-200 rounded-lg focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-400 text-sm">€</span>
-                </div>
+          )}
+          {showHalfDaily && (
+            <div>
+              <label className="block text-xs text-text-light mb-1">Par demi-journée</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={(pricing.halfDaily || 0) / 100}
+                  onChange={(e) => setPricing({ ...pricing, halfDaily: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                  step={0.5}
+                  placeholder="--"
+                  className="w-full px-3 py-2 pr-8 bg-white border border-cyan-200 rounded-lg focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
               </div>
-            )}
-          </>
-        ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {showHourly && (
-              <div>
-                <label className="block text-xs text-text-light mb-1">Par heure</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={(pricing.hourly || 0) / 100}
-                    onChange={(e) => setPricing({ ...pricing, hourly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                    step={0.5}
-                    placeholder="--"
-                    className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
-                </div>
+            </div>
+          )}
+          {showDaily && (
+            <div>
+              <label className="block text-xs text-text-light mb-1">Par jour</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={(pricing.daily || 0) / 100}
+                  onChange={(e) => setPricing({ ...pricing, daily: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                  step={0.5}
+                  placeholder="--"
+                  className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
               </div>
-            )}
-            {showDaily && (
-              <div>
-                <label className="block text-xs text-text-light mb-1">Par jour</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={(pricing.daily || 0) / 100}
-                    onChange={(e) => setPricing({ ...pricing, daily: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                    step={0.5}
-                    placeholder="--"
-                    className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
-                </div>
+            </div>
+          )}
+          {showWeekly && (
+            <div>
+              <label className="block text-xs text-text-light mb-1">Par semaine</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={(pricing.weekly || 0) / 100}
+                  onChange={(e) => setPricing({ ...pricing, weekly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                  step={0.5}
+                  placeholder="--"
+                  className="w-full px-3 py-2 pr-8 bg-white border border-purple-200 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
               </div>
-            )}
-            {showWeekly && (
-              <div>
-                <label className="block text-xs text-text-light mb-1">Par semaine</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={(pricing.weekly || 0) / 100}
-                    onChange={(e) => setPricing({ ...pricing, weekly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                    step={0.5}
-                    placeholder="--"
-                    className="w-full px-3 py-2 pr-8 bg-white border border-purple-200 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
-                </div>
+            </div>
+          )}
+          {showMonthly && (
+            <div>
+              <label className="block text-xs text-text-light mb-1">Par mois</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={(pricing.monthly || 0) / 100}
+                  onChange={(e) => setPricing({ ...pricing, monthly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                  step={0.5}
+                  placeholder="--"
+                  className="w-full px-3 py-2 pr-8 bg-white border border-amber-200 rounded-lg focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
               </div>
-            )}
-            {showMonthly && (
-              <div>
-                <label className="block text-xs text-text-light mb-1">Par mois</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={(pricing.monthly || 0) / 100}
-                    onChange={(e) => setPricing({ ...pricing, monthly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                    step={0.5}
-                    placeholder="--"
-                    className="w-full px-3 py-2 pr-8 bg-white border border-amber-200 rounded-lg focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
-                </div>
+            </div>
+          )}
+          {/* Nightly price - only for garde services with overnight stay */}
+          {isGardeService && allowOvernightStay && (
+            <div>
+              <label className="block text-xs text-text-light mb-1">Par nuit</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={(pricing.nightly || 0) / 100}
+                  onChange={(e) => setPricing({ ...pricing, nightly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                  step={0.5}
+                  placeholder="--"
+                  className="w-full px-3 py-2 pr-8 bg-white border border-indigo-200 rounded-lg focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-400 text-sm">€</span>
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
 
         {/* Prix conseillé */}
         <PriceRecommendationCompact
           token={token}
           category={category}
-          priceUnit={isGardeService ? "day" : (showHourly ? "hour" : "day")}
-          currentPrice={isGardeService ? (pricing.daily || 0) : (showHourly ? (pricing.hourly || 0) : (pricing.daily || 0))}
+          priceUnit={showDaily ? "day" : (showHalfDaily ? "half_day" : "hour")}
+          currentPrice={showDaily ? (pricing.daily || 0) : (showHalfDaily ? (pricing.halfDaily || 0) : (pricing.hourly || 0))}
           onSelectPrice={(price) => {
-            if (isGardeService || !showHourly) {
-              const hourly = Math.round(price / 8);
-              setPricing({ ...pricing, daily: price, hourly });
+            if (showDaily) {
+              setPricing({ ...pricing, daily: price });
+            } else if (showHalfDaily) {
+              setPricing({ ...pricing, halfDaily: price });
             } else {
               setPricing({ ...pricing, hourly: price });
             }
@@ -2476,16 +2515,16 @@ function VariantAddForm({
         />
       </div>
 
-      {/* Caractéristiques incluses */}
+      {/* Caractéristiques incluses / Activités prévues */}
       <div>
-        <label className="block text-sm font-medium text-foreground mb-1">Caractéristiques incluses</label>
+        <label className="block text-sm font-medium text-foreground mb-1">{isGardeService ? "Activités prévues" : "Caractéristiques incluses"}</label>
         <div className="flex gap-2 mb-2">
           <input
             type="text"
             value={newFeature}
             onChange={(e) => setNewFeature(e.target.value)}
             onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddFeature())}
-            placeholder="Ajouter une caractéristique..."
+            placeholder={isGardeService ? "Ajouter une activité..." : "Ajouter une caractéristique..."}
             className="flex-1 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
           />
           <button

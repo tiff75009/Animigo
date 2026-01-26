@@ -177,6 +177,9 @@ export function getServiceMinPrice(service: ServiceData): { price: number; unit:
   return { price: minPrice === Infinity ? 0 : minPrice, unit: minUnit };
 }
 
+// Types de prix autorisés
+export type PriceUnit = "hour" | "half_day" | "day" | "week" | "month";
+
 // Calculate smart price with partial day support
 interface SmartPriceParams {
   startDate: string;
@@ -187,14 +190,18 @@ interface SmartPriceParams {
   dayStartTime: string;
   dayEndTime: string;
   workdayHours: number;
+  halfDayHours?: number; // Par défaut workdayHours / 2
   pricing: {
     hourly?: number;
+    halfDaily?: number;
     daily?: number;
     nightly?: number;
   };
   optionsTotal: number;
   fixedServicePrice?: number;
   serviceDurationMinutes?: number;
+  // Types de prix autorisés - si défini, on arrondit au type le plus proche
+  allowedPriceUnits?: PriceUnit[];
 }
 
 export function calculateSmartPrice(params: SmartPriceParams): Omit<PriceBreakdown, "subtotal" | "commission" | "total"> {
@@ -207,16 +214,64 @@ export function calculateSmartPrice(params: SmartPriceParams): Omit<PriceBreakdo
     dayStartTime,
     dayEndTime,
     workdayHours,
+    halfDayHours: customHalfDayHours,
     pricing,
     optionsTotal,
     fixedServicePrice,
     serviceDurationMinutes,
+    allowedPriceUnits,
   } = params;
+
+  // Calculate half-day hours (default to workdayHours / 2)
+  const halfDayHours = customHalfDayHours || workdayHours / 2;
+
+  // Check which price units are allowed
+  const allowHourly = !allowedPriceUnits || allowedPriceUnits.includes("hour");
+  const allowHalfDay = allowedPriceUnits?.includes("half_day") ?? false;
+  const allowDaily = !allowedPriceUnits || allowedPriceUnits.includes("day");
 
   // Determine rates
   const hourlyRate = pricing.hourly || (pricing.daily ? Math.round(pricing.daily / workdayHours) : 0);
+  const halfDailyRate = pricing.halfDaily || (pricing.daily ? Math.round(pricing.daily / 2) : (hourlyRate ? hourlyRate * halfDayHours : 0));
   const dailyRate = pricing.daily || (hourlyRate ? hourlyRate * workdayHours : 0);
   const nightlyRate = pricing.nightly || 0;
+
+  // Helper: Calculate amount for a partial day based on allowed price units
+  const calculatePartialDayAmount = (hours: number): { amount: number; isFullDay: boolean; isHalfDay: boolean } => {
+    // Si le nombre d'heures dépasse la journée de travail, c'est une journée complète
+    if (hours >= workdayHours) {
+      return { amount: dailyRate, isFullDay: true, isHalfDay: false };
+    }
+
+    // Si la facturation horaire n'est PAS autorisée, on arrondit
+    if (!allowHourly) {
+      // Si demi-journée est autorisée
+      if (allowHalfDay && halfDailyRate > 0) {
+        if (hours <= halfDayHours) {
+          // Moins d'une demi-journée → facturer demi-journée
+          return { amount: halfDailyRate, isFullDay: false, isHalfDay: true };
+        } else {
+          // Plus d'une demi-journée mais moins d'une journée → facturer journée
+          return { amount: dailyRate, isFullDay: true, isHalfDay: false };
+        }
+      }
+      // Si seulement la journée est autorisée, facturer la journée
+      if (allowDaily && dailyRate > 0) {
+        return { amount: dailyRate, isFullDay: true, isHalfDay: false };
+      }
+    }
+
+    // Facturation horaire autorisée
+    if (hourlyRate > 0) {
+      const hourlyAmount = Math.round(hourlyRate * hours);
+      // Cap hourly amount at daily rate to avoid paying more for fewer hours
+      const cappedAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
+      return { amount: cappedAmount, isFullDay: cappedAmount >= dailyRate, isHalfDay: false };
+    }
+
+    // Fallback: journée complète
+    return { amount: dailyRate, isFullDay: true, isHalfDay: false };
+  };
 
   // Calculate total days
   const effectiveEndDate = endDate || startDate;
@@ -227,6 +282,7 @@ export function calculateSmartPrice(params: SmartPriceParams): Omit<PriceBreakdo
     let firstDayHours: number;
     let firstDayAmount: number;
     let firstDayIsFullDay = false;
+    let firstDayIsHalfDay = false;
 
     // Duration-based blocking: use fixed price
     if (fixedServicePrice !== undefined && serviceDurationMinutes !== undefined) {
@@ -238,56 +294,65 @@ export function calculateSmartPrice(params: SmartPriceParams): Omit<PriceBreakdo
         firstDayAmount,
         firstDayHours,
         firstDayIsFullDay: false,
+        firstDayIsHalfDay: false,
         fullDays: 0,
         fullDaysAmount: 0,
         lastDayAmount: 0,
         lastDayHours: 0,
         lastDayIsFullDay: false,
+        lastDayIsHalfDay: false,
         nightsAmount: 0,
         nights: 0,
         optionsAmount: optionsTotal,
         daysCount: 1,
         hoursCount: firstDayHours,
         hourlyRate: 0,
+        halfDailyRate: 0,
         dailyRate: 0,
         nightlyRate,
+        billingUnit: "fixed",
       };
     }
 
     if (startTime && endTime) {
       firstDayHours = calculateHoursBetween(startTime, endTime);
-      if (firstDayHours >= workdayHours && dailyRate > 0) {
-        firstDayAmount = dailyRate;
-        firstDayIsFullDay = true;
-      } else {
-        // Cap hourly amount at daily rate to avoid paying more for fewer hours
-        const hourlyAmount = Math.round(hourlyRate * firstDayHours);
-        firstDayAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
-      }
+      const partialDayResult = calculatePartialDayAmount(firstDayHours);
+      firstDayAmount = partialDayResult.amount;
+      firstDayIsFullDay = partialDayResult.isFullDay;
+      firstDayIsHalfDay = partialDayResult.isHalfDay;
     } else {
       firstDayHours = workdayHours;
       firstDayAmount = dailyRate || (hourlyRate * workdayHours);
       firstDayIsFullDay = true;
     }
 
+    // Determine billing unit for display
+    let billingUnit: "hour" | "half_day" | "day" | "fixed" = "hour";
+    if (firstDayIsFullDay) billingUnit = "day";
+    else if (firstDayIsHalfDay) billingUnit = "half_day";
+
     return {
       baseAmount: firstDayAmount,
       firstDayAmount,
       firstDayHours,
       firstDayIsFullDay,
+      firstDayIsHalfDay,
       fullDays: 0,
       fullDaysAmount: 0,
       lastDayAmount: 0,
       lastDayHours: 0,
       lastDayIsFullDay: false,
+      lastDayIsHalfDay: false,
       nightsAmount: 0,
       nights: 0,
       optionsAmount: optionsTotal,
       daysCount: 1,
       hoursCount: firstDayHours,
       hourlyRate,
+      halfDailyRate,
       dailyRate,
       nightlyRate,
+      billingUnit,
     };
   }
 
@@ -295,38 +360,20 @@ export function calculateSmartPrice(params: SmartPriceParams): Omit<PriceBreakdo
   const effectiveStartTime = startTime || dayStartTime;
   const firstDayEndTime = dayEndTime;
   let firstDayHours = calculateHoursBetween(effectiveStartTime, firstDayEndTime);
-  let firstDayAmount: number;
-  let firstDayIsFullDay = false;
 
-  if (firstDayHours >= workdayHours && dailyRate > 0) {
-    firstDayAmount = dailyRate;
-    firstDayIsFullDay = true;
-  } else if (hourlyRate > 0) {
-    // Cap hourly amount at daily rate to avoid paying more for fewer hours
-    const hourlyAmount = Math.round(hourlyRate * firstDayHours);
-    firstDayAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
-  } else {
-    firstDayAmount = dailyRate;
-    firstDayIsFullDay = true;
-  }
+  const firstDayResult = calculatePartialDayAmount(firstDayHours);
+  let firstDayAmount = firstDayResult.amount;
+  let firstDayIsFullDay = firstDayResult.isFullDay;
+  let firstDayIsHalfDay = firstDayResult.isHalfDay;
 
   const lastDayStartTime = dayStartTime;
   const effectiveEndTime = endTime || dayEndTime;
   let lastDayHours = calculateHoursBetween(lastDayStartTime, effectiveEndTime);
-  let lastDayAmount: number;
-  let lastDayIsFullDay = false;
 
-  if (lastDayHours >= workdayHours && dailyRate > 0) {
-    lastDayAmount = dailyRate;
-    lastDayIsFullDay = true;
-  } else if (hourlyRate > 0) {
-    // Cap hourly amount at daily rate to avoid paying more for fewer hours
-    const hourlyAmount = Math.round(hourlyRate * lastDayHours);
-    lastDayAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
-  } else {
-    lastDayAmount = dailyRate;
-    lastDayIsFullDay = true;
-  }
+  const lastDayResult = calculatePartialDayAmount(lastDayHours);
+  let lastDayAmount = lastDayResult.amount;
+  let lastDayIsFullDay = lastDayResult.isFullDay;
+  let lastDayIsHalfDay = lastDayResult.isHalfDay;
 
   const fullDays = Math.max(0, totalDays - 2);
   const fullDaysAmount = fullDays * dailyRate;
@@ -336,24 +383,36 @@ export function calculateSmartPrice(params: SmartPriceParams): Omit<PriceBreakdo
 
   const baseAmount = firstDayAmount + fullDaysAmount + lastDayAmount;
 
+  // Determine primary billing unit for display
+  let billingUnit: "hour" | "half_day" | "day" | "fixed" = "day";
+  if (!firstDayIsFullDay && !firstDayIsHalfDay && !lastDayIsFullDay && !lastDayIsHalfDay) {
+    billingUnit = "hour";
+  } else if ((firstDayIsHalfDay || lastDayIsHalfDay) && fullDays === 0) {
+    billingUnit = "half_day";
+  }
+
   return {
     baseAmount,
     firstDayAmount,
     firstDayHours,
     firstDayIsFullDay,
+    firstDayIsHalfDay,
     fullDays,
     fullDaysAmount,
     lastDayAmount,
     lastDayHours,
     lastDayIsFullDay,
+    lastDayIsHalfDay,
     nightsAmount,
     nights,
     optionsAmount: optionsTotal,
     daysCount: totalDays,
     hoursCount: firstDayHours + (fullDays * workdayHours) + lastDayHours,
     hourlyRate,
+    halfDailyRate,
     dailyRate,
     nightlyRate,
+    billingUnit,
   };
 }
 
@@ -367,7 +426,8 @@ export function calculatePriceBreakdown(
   dayStartTime: string = "08:00",
   dayEndTime: string = "20:00",
   overnightPrice?: number,
-  enableDurationBasedBlocking?: boolean
+  enableDurationBasedBlocking?: boolean,
+  allowedPriceUnits?: PriceUnit[]
 ): PriceBreakdown | null {
   if (!service || !variant || !selection.startDate) {
     return null;
@@ -384,6 +444,7 @@ export function calculatePriceBreakdown(
 
   // Get pricing values
   const hourlyPrice = pricing.hourly || variant.price || 0;
+  const halfDailyPrice = (pricing as { halfDaily?: number }).halfDaily || 0;
   const dailyPrice = pricing.daily || (isGarde ? variant.price : 0) || 0;
   const nightlyPrice = (pricing as { nightly?: number }).nightly || overnightPrice || 0;
 
@@ -409,12 +470,14 @@ export function calculatePriceBreakdown(
     workdayHours,
     pricing: {
       hourly: hourlyPrice,
+      halfDaily: halfDailyPrice,
       daily: dailyPrice,
       nightly: nightlyPrice,
     },
     optionsTotal,
     fixedServicePrice,
     serviceDurationMinutes,
+    allowedPriceUnits,
   });
 
   const subtotal = smartPrice.baseAmount + smartPrice.nightsAmount + smartPrice.optionsAmount;

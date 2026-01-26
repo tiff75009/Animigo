@@ -2,7 +2,7 @@ import { query } from "../_generated/server";
 import { v } from "convex/values";
 import { getDefaultPricing } from "../utils/defaultPricing";
 
-type PriceUnit = "hour" | "day" | "week" | "month" | "flat";
+type PriceUnit = "hour" | "half_day" | "day" | "week" | "month" | "flat";
 type ScopeUsed = "city" | "department" | "region" | "national" | "default";
 
 interface PriceRecommendation {
@@ -41,6 +41,7 @@ export const getPriceRecommendation = query({
     category: v.string(),
     priceUnit: v.union(
       v.literal("hour"),
+      v.literal("half_day"),
       v.literal("day"),
       v.literal("week"),
       v.literal("month"),

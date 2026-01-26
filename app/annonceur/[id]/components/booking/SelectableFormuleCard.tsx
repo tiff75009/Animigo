@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Clock, Calendar, CheckCircle2, Target, Users, User, Timer, Home, MapPin } from "lucide-react";
+import { Check, Clock, Calendar, CheckCircle2, Target, Users, User, Timer, Home, MapPin, Moon } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/app/lib/utils";
 import type { FormuleData } from "../types";
@@ -14,6 +14,8 @@ interface SelectableFormuleCardProps {
   onSelect: () => void;
   showAttentionPulse?: boolean;
   animationDelay?: number;
+  allowOvernightStay?: boolean;
+  overnightPrice?: number;
 }
 
 // Calculer le prix total avec durée et nombre de séances
@@ -35,6 +37,8 @@ export default function SelectableFormuleCard({
   onSelect,
   showAttentionPulse = false,
   animationDelay = 0,
+  allowOvernightStay,
+  overnightPrice,
 }: SelectableFormuleCardProps) {
   const { price: formulePrice, unit: formuleUnit } = getFormuleBestPrice(formule, isGarde);
 
@@ -199,6 +203,13 @@ export default function SelectableFormuleCard({
              `${formule.sessionInterval}j min`}
           </span>
         )}
+        {/* Garde de nuit acceptée */}
+        {isGarde && allowOvernightStay && overnightPrice && overnightPrice > 0 && (
+          <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-indigo-100 text-indigo-600 rounded-full font-medium">
+            <Moon className="w-3 h-3" />
+            Nuit dispo +{formatPriceWithCommission(overnightPrice, commissionRate)}€
+          </span>
+        )}
       </div>
 
       {/* Animaux acceptés */}
@@ -220,12 +231,12 @@ export default function SelectableFormuleCard({
         </div>
       )}
 
-      {/* Objectifs de la prestation */}
+      {/* Objectifs / Activités proposées */}
       {formule.objectives && formule.objectives.length > 0 && (
         <div className="mt-3 pt-2 border-t border-gray-200/50 relative z-10">
           <p className="flex items-center gap-1 text-xs font-medium text-purple-700 mb-1.5">
             <Target className="w-3 h-3" />
-            Objectifs de la prestation
+            {isGarde ? "Activités proposées" : "Objectifs de la prestation"}
           </p>
           <div className="space-y-1.5">
             {formule.objectives.map((objective, idx) => (

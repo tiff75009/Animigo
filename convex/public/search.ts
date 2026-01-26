@@ -945,49 +945,15 @@ export const getAnnouncerAvailabilityCalendar = query({
             continue;
           }
 
-          // Extraire les créneaux occupés pour information
-          const missionBookedSlots = dayMissions
-            .filter((m) => m.startTime && m.endTime && m.startDate === m.endDate)
-            .map((m) => {
-              const adjustedSlot = applyBuffersToTimeSlot(
-                m.startTime!,
-                m.endTime!,
-                bufferBefore,
-                bufferAfter
-              );
-              return {
-                startTime: adjustedSlot.startTime,
-                endTime: adjustedSlot.endTime,
-                originalStartTime: adjustedSlot.originalStartTime,
-                originalEndTime: adjustedSlot.originalEndTime,
-              };
-            });
-
-          // Ajouter les créneaux collectifs comme slots bloqués
-          const dayCollectiveSlotsCapacity = collectiveSlotsInRange
-            .filter((slot) => slot.date === date)
-            .map((slot) => {
-              const adjustedSlot = applyBuffersToTimeSlot(
-                slot.startTime,
-                slot.endTime,
-                bufferBefore,
-                bufferAfter
-              );
-              return {
-                startTime: adjustedSlot.startTime,
-                endTime: adjustedSlot.endTime,
-                originalStartTime: adjustedSlot.originalStartTime,
-                originalEndTime: adjustedSlot.originalEndTime,
-              };
-            });
-
-          const bookedSlots = [...missionBookedSlots, ...dayCollectiveSlotsCapacity];
+          // Pour les catégories capacity-based (garde), on ne bloque PAS les créneaux horaires
+          // Seule la capacité d'animaux compte - les utilisateurs peuvent réserver n'importe quel créneau
+          // tant que la capacité maximale n'est pas atteinte
 
           // Disponible avec capacité restante
           calendar.push({
             date,
             status: remainingCapacity < maxAnimalsPerSlot ? "partial" : "available",
-            bookedSlots: bookedSlots.length > 0 ? bookedSlots : undefined,
+            // Pas de bookedSlots pour les services garde - créneaux libres tant que capacité disponible
             capacity: {
               current: currentAnimalsCount,
               max: maxAnimalsPerSlot,

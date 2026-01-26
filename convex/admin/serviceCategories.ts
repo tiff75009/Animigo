@@ -115,6 +115,7 @@ export const listParentCategories = query({
           name: cat.name,
           icon: cat.icon,
           imageUrl,
+          isCapacityBased: cat.isCapacityBased,
         };
       })
     );
@@ -178,6 +179,8 @@ export const getActiveCategories = query({
               allowCustomVariants: child.allowCustomVariants,
               allowOvernightStay: child.allowOvernightStay,
               enableDurationBasedBlocking: child.enableDurationBasedBlocking,
+              // Propagé depuis le parent
+              isCapacityBased: parent.isCapacityBased,
             };
           })
         );
@@ -261,6 +264,7 @@ export const createCategory = mutation({
     allowRangeBooking: v.optional(v.boolean()),
     allowedPriceUnits: v.optional(v.array(v.union(
       v.literal("hour"),
+      v.literal("half_day"),
       v.literal("day"),
       v.literal("week"),
       v.literal("month")
@@ -368,6 +372,7 @@ export const updateCategory = mutation({
     allowRangeBooking: v.optional(v.boolean()),
     allowedPriceUnits: v.optional(v.array(v.union(
       v.literal("hour"),
+      v.literal("half_day"),
       v.literal("day"),
       v.literal("week"),
       v.literal("month")

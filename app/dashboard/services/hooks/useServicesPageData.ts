@@ -48,7 +48,7 @@ export interface ServiceCategory {
   parentName?: string;
   isParent?: boolean;
   billingType?: "hourly" | "daily" | "flexible";
-  allowedPriceUnits?: ("hour" | "day" | "week" | "month")[];
+  allowedPriceUnits?: ("hour" | "half_day" | "day" | "week" | "month")[];
   defaultVariants?: Array<{
     name: string;
     description?: string;
@@ -58,6 +58,7 @@ export interface ServiceCategory {
   allowCustomVariants?: boolean;
   allowRangeBooking?: boolean;
   allowOvernightStay?: boolean;
+  isCapacityBased?: boolean; // Mode garde (propagé depuis le parent)
 }
 
 // Structure hiérarchique retournée par getActiveCategories
@@ -220,10 +221,11 @@ export function useServicesPageData(token: string | undefined) {
       name: string;
       description?: string;
       price: number;
-      priceUnit: "hour" | "day" | "week" | "month" | "flat";
+      priceUnit: "hour" | "half_day" | "day" | "week" | "month" | "flat";
       // Multi-tarification
       pricing?: {
         hourly?: number;
+        halfDaily?: number;
         daily?: number;
         weekly?: number;
         monthly?: number;

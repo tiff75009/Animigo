@@ -12,7 +12,7 @@ interface ServiceCategory {
   name: string;
   icon?: string;
   billingType?: "hourly" | "daily" | "flexible";
-  allowedPriceUnits?: ("hour" | "day" | "week" | "month")[];
+  allowedPriceUnits?: ("hour" | "half_day" | "day" | "week" | "month")[];
   defaultVariants?: Array<{
     name: string;
     description?: string;
@@ -20,9 +20,11 @@ interface ServiceCategory {
     includedFeatures?: string[];
   }>;
   allowCustomVariants?: boolean;
+  allowRangeBooking?: boolean;
+  allowOvernightStay?: boolean;
 }
 
-type PriceUnit = "hour" | "day" | "week" | "month" | "flat";
+type PriceUnit = "hour" | "half_day" | "day" | "week" | "month" | "flat";
 
 type ServiceLocation = "announcer_home" | "client_home" | "both";
 
@@ -77,10 +79,11 @@ interface ServicesTabProps {
       name: string;
       description?: string;
       price: number;
-      priceUnit: "hour" | "day" | "week" | "month" | "flat";
+      priceUnit: "hour" | "half_day" | "day" | "week" | "month" | "flat";
       // Multi-tarification
       pricing?: {
         hourly?: number;
+        halfDaily?: number;
         daily?: number;
         weekly?: number;
         monthly?: number;

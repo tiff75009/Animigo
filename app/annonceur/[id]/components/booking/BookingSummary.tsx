@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   Calendar,
@@ -15,6 +16,7 @@ import {
   Eye,
   Users,
   CalendarCheck,
+  Info,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import type { ServiceData, FormuleData, OptionData } from "../types";
@@ -664,123 +666,100 @@ export default function BookingSummary({
           </div>
         )}
 
-        {/* Détail du prix - mode plan */}
+        {/* Détail du prix - avec commission incluse */}
         <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
           <div className="flex items-center gap-2 mb-3">
             <CreditCard className="w-4 h-4 text-gray-600" />
             <span className="text-sm font-semibold text-gray-900">Détail du prix</span>
+            <span className="text-xs text-gray-400 ml-auto">(commission incluse)</span>
           </div>
 
           <div className="space-y-2 text-sm">
-            {/* Formule de base */}
+            {/* Formule de base - prix avec commission */}
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <span className="text-gray-700">Formule : {variant.name}</span>
                 {(isCollectiveFormule || isMultiSessionIndividual) && (
                   <p className="text-xs text-gray-500 mt-0.5 pl-4">
-                    └ {formatPrice(variant.price)}€ × {numberOfSessions} séance{numberOfSessions > 1 ? "s" : ""}
+                    └ {formatPrice(Math.round(variant.price * (1 + commissionRate / 100)))}€ × {numberOfSessions} séance{numberOfSessions > 1 ? "s" : ""}
                     {isCollectiveFormule && animalCount > 1 && ` × ${animalCount} animaux`}
                   </p>
                 )}
                 {!isCollectiveFormule && !isMultiSessionIndividual && priceBreakdown && (
-                  <p className="text-xs text-gray-500 mt-0.5 pl-4">
-                    └ {priceBreakdown.daysCount > 1
-                      ? `${priceBreakdown.daysCount} jours × ${formatPrice(priceBreakdown.dailyRate)}€/jour`
-                      : `${priceBreakdown.hoursCount.toFixed(1).replace(".0", "")}h × ${formatPrice(priceBreakdown.hourlyRate)}€/h`
-                    }
-                  </p>
+                  <>
+                    <p className="text-xs text-gray-500 mt-0.5 pl-4">
+                      {priceBreakdown.billingUnit === "half_day" ? (
+                        // Facturation à la demi-journée
+                        <>└ {priceBreakdown.daysCount > 1
+                          ? `${priceBreakdown.daysCount} jours`
+                          : "1 demi-journée"} × {formatPrice(Math.round((priceBreakdown.halfDailyRate || priceBreakdown.dailyRate) * (1 + commissionRate / 100)))}€
+                          {priceBreakdown.hoursCount < 4 && <span className="text-amber-600">*</span>}
+                        </>
+                      ) : priceBreakdown.billingUnit === "day" ? (
+                        // Facturation à la journée
+                        <>└ {priceBreakdown.daysCount} jour{priceBreakdown.daysCount > 1 ? "s" : ""} × {formatPrice(Math.round(priceBreakdown.dailyRate * (1 + commissionRate / 100)))}€/jour
+                          {priceBreakdown.hoursCount < 8 && priceBreakdown.daysCount === 1 && <span className="text-amber-600">*</span>}
+                        </>
+                      ) : (
+                        // Facturation à l'heure
+                        <>└ {priceBreakdown.hoursCount.toFixed(1).replace(".0", "")}h × {formatPrice(Math.round(priceBreakdown.hourlyRate * (1 + commissionRate / 100)))}€/h</>
+                      )}
+                    </p>
+                    {/* Indication de facturation arrondie */}
+                    {((priceBreakdown.billingUnit === "half_day" && priceBreakdown.hoursCount < 4) ||
+                      (priceBreakdown.billingUnit === "day" && priceBreakdown.hoursCount < 8 && priceBreakdown.daysCount === 1)) && (
+                      <p className="text-xs text-amber-600 mt-1 pl-4 flex items-center gap-1">
+                        <Info className="w-3 h-3" />
+                        <span>* Facturation minimale : {priceBreakdown.billingUnit === "half_day" ? "demi-journée" : "journée"}</span>
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
               <span className="font-medium text-gray-900">
                 {isCollectiveFormule && variant ? (
                   formatPrice(
-                    Math.round((variant.price * (variant.duration || 60) / 60) * numberOfSessions * animalCount)
+                    Math.round((variant.price * (variant.duration || 60) / 60) * numberOfSessions * animalCount * (1 + commissionRate / 100))
                   )
                 ) : isMultiSessionIndividual && variant ? (
-                  formatPrice(variant.price * numberOfSessions)
+                  formatPrice(Math.round(variant.price * numberOfSessions * (1 + commissionRate / 100)))
                 ) : priceBreakdown ? (
-                  formatPrice(priceBreakdown.baseAmount)
+                  formatPrice(Math.round(priceBreakdown.baseAmount * (1 + commissionRate / 100)))
                 ) : "---"}€
               </span>
             </div>
 
-            {/* Nuits si applicable */}
+            {/* Nuits si applicable - prix avec commission */}
             {!isCollectiveFormule && priceBreakdown && selection.includeOvernightStay && priceBreakdown.nights > 0 && (
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <span className="text-gray-700">Nuits</span>
                   <p className="text-xs text-gray-500 mt-0.5 pl-4">
-                    └ {priceBreakdown.nights} nuit{priceBreakdown.nights > 1 ? "s" : ""} × {formatPrice(priceBreakdown.nightlyRate)}€/nuit
+                    └ {priceBreakdown.nights} nuit{priceBreakdown.nights > 1 ? "s" : ""} × {formatPrice(Math.round(priceBreakdown.nightlyRate * (1 + commissionRate / 100)))}€/nuit
                   </p>
                 </div>
                 <span className="font-medium text-gray-900">
-                  +{formatPrice(priceBreakdown.nightsAmount)}€
+                  +{formatPrice(Math.round(priceBreakdown.nightsAmount * (1 + commissionRate / 100)))}€
                 </span>
               </div>
             )}
 
-            {/* Options */}
+            {/* Options - prix avec commission */}
             {selectedOptions.length > 0 && (
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <span className="text-gray-700">Options</span>
                   {selectedOptions.map((opt) => (
                     <p key={opt.id.toString()} className="text-xs text-gray-500 mt-0.5 pl-4">
-                      └ {opt.name} : +{formatPrice(opt.price)}€
+                      └ {opt.name} : +{formatPrice(Math.round(opt.price * (1 + commissionRate / 100)))}€
                     </p>
                   ))}
                 </div>
                 <span className="font-medium text-gray-900">
-                  +{formatPrice(selectedOptions.reduce((sum, opt) => sum + opt.price, 0))}€
+                  +{formatPrice(Math.round(selectedOptions.reduce((sum, opt) => sum + opt.price, 0) * (1 + commissionRate / 100)))}€
                 </span>
               </div>
             )}
-
-            {/* Sous-total */}
-            <div className="pt-2 mt-2 border-t border-gray-200">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Sous-total</span>
-                <span className="font-medium text-gray-900">
-                  {isCollectiveFormule && variant ? (
-                    formatPrice(
-                      Math.round((variant.price * (variant.duration || 60) / 60) * numberOfSessions * animalCount) +
-                      selectedOptions.reduce((sum, opt) => sum + opt.price, 0)
-                    )
-                  ) : isMultiSessionIndividual && variant ? (
-                    formatPrice(
-                      variant.price * numberOfSessions +
-                      selectedOptions.reduce((sum, opt) => sum + opt.price, 0)
-                    )
-                  ) : priceBreakdown ? (
-                    formatPrice(priceBreakdown.subtotal)
-                  ) : "---"}€
-                </span>
-              </div>
-            </div>
-
-            {/* Frais de service */}
-            <div className="flex justify-between text-gray-500">
-              <span>Frais de service ({commissionRate}%)</span>
-              <span>
-                {isCollectiveFormule && variant ? (
-                  formatPrice(
-                    Math.round(
-                      ((variant.price * (variant.duration || 60) / 60) * numberOfSessions * animalCount +
-                      selectedOptions.reduce((sum, opt) => sum + opt.price, 0)) * commissionRate / 100
-                    )
-                  )
-                ) : isMultiSessionIndividual && variant ? (
-                  formatPrice(
-                    Math.round(
-                      (variant.price * numberOfSessions +
-                      selectedOptions.reduce((sum, opt) => sum + opt.price, 0)) * commissionRate / 100
-                    )
-                  )
-                ) : priceBreakdown ? (
-                  formatPrice(priceBreakdown.commission)
-                ) : "---"}€
-              </span>
-            </div>
           </div>
         </div>
 

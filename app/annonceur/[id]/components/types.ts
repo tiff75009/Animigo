@@ -58,6 +58,8 @@ export interface ServiceData {
   dayStartTime?: string;
   dayEndTime?: string;
   enableDurationBasedBlocking?: boolean;
+  // Pricing configuration from category
+  allowedPriceUnits?: ("hour" | "half_day" | "day" | "week" | "month")[];
 }
 
 export interface FormuleData {
@@ -76,10 +78,12 @@ export interface FormuleData {
   duration?: number;
   unit?: string;
   pricing?: {
-    hourly?: number;  // Prix à l'heure en centimes
-    daily?: number;   // Prix à la journée en centimes
-    weekly?: number;  // Prix à la semaine en centimes
-    monthly?: number; // Prix au mois en centimes
+    hourly?: number;   // Prix à l'heure en centimes
+    halfDaily?: number; // Prix à la demi-journée en centimes
+    daily?: number;    // Prix à la journée en centimes
+    weekly?: number;   // Prix à la semaine en centimes
+    monthly?: number;  // Prix au mois en centimes
+    nightly?: number;  // Prix de la nuit en centimes
   } | null;
 }
 

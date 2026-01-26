@@ -226,6 +226,7 @@ export const addService = mutation({
       price: v.number(), // En centimes (prix principal)
       priceUnit: v.union(
         v.literal("hour"),
+        v.literal("half_day"),
         v.literal("day"),
         v.literal("week"),
         v.literal("month"),
@@ -234,6 +235,7 @@ export const addService = mutation({
       // Multi-tarification par unité de temps
       pricing: v.optional(v.object({
         hourly: v.optional(v.number()),
+        halfDaily: v.optional(v.number()),
         daily: v.optional(v.number()),
         weekly: v.optional(v.number()),
         monthly: v.optional(v.number()),

@@ -82,10 +82,19 @@ export const getAnnouncerProfile = query({
         return {
           id: service._id,
           categoryId: service.category,
+          categorySlug: service.category,
           categoryName: category?.name || "Service",
           categoryIcon: category?.icon || "🐾",
           description: service.description || category?.description || "",
           animalTypes: service.animalTypes || [],
+          // Booking settings from category and service
+          serviceLocation: service.serviceLocation as "announcer_home" | "client_home" | "both" | undefined,
+          allowOvernightStay: category?.allowOvernightStay,
+          overnightPrice: service.overnightPrice,
+          dayStartTime: service.dayStartTime,
+          dayEndTime: service.dayEndTime,
+          enableDurationBasedBlocking: category?.enableDurationBasedBlocking,
+          allowedPriceUnits: category?.allowedPriceUnits as ("hour" | "half_day" | "day" | "week" | "month")[] | undefined,
           formules: formules.map((f) => ({
             id: f._id,
             name: f.name,
@@ -101,7 +110,7 @@ export const getAnnouncerProfile = query({
             price: f.price, // en centimes
             duration: f.duration || 0,
             unit: f.priceUnit,
-            pricing: f.pricing || null, // Multi-tarification {hourly, daily, weekly, monthly}
+            pricing: f.pricing || null, // Multi-tarification {hourly, daily, weekly, monthly, halfDaily, nightly}
           })),
           options: options.map((o) => ({
             id: o._id,
@@ -358,6 +367,7 @@ export const getAnnouncerBySlug = query({
           dayStartTime: service.dayStartTime,
           dayEndTime: service.dayEndTime,
           enableDurationBasedBlocking: category?.enableDurationBasedBlocking,
+          allowedPriceUnits: category?.allowedPriceUnits as ("hour" | "half_day" | "day" | "week" | "month")[] | undefined,
           formules: formules.map((f) => ({
             id: f._id,
             name: f.name,
@@ -373,7 +383,7 @@ export const getAnnouncerBySlug = query({
             price: f.price, // en centimes
             duration: f.duration || 0,
             unit: f.priceUnit,
-            pricing: f.pricing || null, // Multi-tarification {hourly, daily, weekly, monthly}
+            pricing: f.pricing || null, // Multi-tarification {hourly, daily, weekly, monthly, halfDaily, nightly}
           })),
           options: options.map((o) => ({
             id: o._id,

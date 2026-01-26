@@ -342,7 +342,8 @@ export default function AnnouncerProfilePage() {
       dayStartTime,
       dayEndTime,
       overnightPrice,
-      enableDurationBasedBlocking
+      enableDurationBasedBlocking,
+      bookingService.allowedPriceUnits
     );
   }, [bookingService, bookingVariant, bookingSelection, commissionRate, workdayHours, announcerPreferences]);
 

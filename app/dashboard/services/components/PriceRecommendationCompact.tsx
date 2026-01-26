@@ -8,7 +8,7 @@ import { Target, TrendingUp, TrendingDown, Check, Loader2 } from "lucide-react";
 interface PriceRecommendationCompactProps {
   token: string;
   category: string;
-  priceUnit: "hour" | "day" | "week" | "month" | "flat";
+  priceUnit: "hour" | "half_day" | "day" | "week" | "month" | "flat";
   currentPrice: number; // en centimes
   onSelectPrice?: (price: number) => void;
   className?: string;

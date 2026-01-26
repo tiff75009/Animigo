@@ -167,6 +167,7 @@ export const addVariant = mutation({
     price: v.number(),
     priceUnit: v.union(
       v.literal("hour"),
+      v.literal("half_day"),
       v.literal("day"),
       v.literal("week"),
       v.literal("month"),
@@ -175,6 +176,7 @@ export const addVariant = mutation({
     // Multi-tarification par unité de temps
     pricing: v.optional(v.object({
       hourly: v.optional(v.number()),
+      halfDaily: v.optional(v.number()),
       daily: v.optional(v.number()),
       weekly: v.optional(v.number()),
       monthly: v.optional(v.number()),
@@ -268,6 +270,7 @@ export const updateVariant = mutation({
     priceUnit: v.optional(
       v.union(
         v.literal("hour"),
+        v.literal("half_day"),
         v.literal("day"),
         v.literal("week"),
         v.literal("month"),
@@ -277,6 +280,7 @@ export const updateVariant = mutation({
     // Multi-tarification par unité de temps
     pricing: v.optional(v.object({
       hourly: v.optional(v.number()),
+      halfDaily: v.optional(v.number()),
       daily: v.optional(v.number()),
       weekly: v.optional(v.number()),
       monthly: v.optional(v.number()),

@@ -4,7 +4,7 @@ import { Id } from "@/convex/_generated/dataModel";
 export type BillingType = "hourly" | "daily" | "flexible";
 
 // Unités de prix
-export type PriceUnit = "hour" | "day" | "week" | "month";
+export type PriceUnit = "hour" | "half_day" | "day" | "week" | "month";
 
 // Format d'affichage des catégories
 export type DisplayFormat = "hierarchy" | "subcategory" | "badge";
@@ -76,6 +76,7 @@ export interface ParentCategory {
   name: string;
   icon?: string;
   imageUrl?: string | null;
+  isCapacityBased?: boolean;
 }
 
 // Props communes pour les sélecteurs
@@ -92,6 +93,7 @@ export const PRICE_UNITS: {
   description: string;
 }[] = [
   { value: "hour", label: "Horaire", description: "Prix à l'heure" },
+  { value: "half_day", label: "Demi-journée", description: "Prix à la demi-journée" },
   { value: "day", label: "Journalier", description: "Prix à la journée" },
   { value: "week", label: "Hebdomadaire", description: "Prix à la semaine" },
   { value: "month", label: "Mensuel", description: "Prix au mois" },
