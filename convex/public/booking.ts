@@ -60,6 +60,8 @@ export const createPendingBooking = mutation({
     collectiveSlotIds: v.optional(v.array(v.id("collectiveSlots"))),
     animalCount: v.optional(v.number()),
     selectedAnimalType: v.optional(v.string()),
+    // Animaux sélectionnés par l'utilisateur
+    selectedAnimalIds: v.optional(v.array(v.string())),
     // Séances multi-sessions (pour formules individuelles multi-séances)
     sessions: v.optional(v.array(v.object({
       date: v.string(),
@@ -202,6 +204,8 @@ export const createPendingBooking = mutation({
       collectiveSlotIds: args.collectiveSlotIds,
       animalCount: args.animalCount,
       selectedAnimalType: args.selectedAnimalType,
+      // Animaux sélectionnés
+      selectedAnimalIds: args.selectedAnimalIds,
       // Séances multi-sessions
       sessions: args.sessions,
       // Garde de nuit
@@ -371,6 +375,7 @@ export const getPendingBooking = query({
         lastName: announcer.lastName,
         profileImage: profileImageUrl,
         location: profile?.location ?? profile?.city ?? "",
+        coordinates: profile?.coordinates,
         verified: announcer.accountType === "annonceur_pro",
         accountType: announcer.accountType,
         companyType: announcer.companyType,
@@ -420,11 +425,15 @@ export const getPendingBooking = query({
       },
       // Lieu de prestation
       serviceLocation: pendingBooking.serviceLocation,
+      // Adresse guest (pour utilisateurs non connectés)
+      guestAddress: pendingBooking.guestAddress,
       // Support formules collectives
       collectiveSlotIds: pendingBooking.collectiveSlotIds,
       collectiveSlots, // Détails complets des créneaux
       animalCount: pendingBooking.animalCount,
       selectedAnimalType: pendingBooking.selectedAnimalType,
+      // Animaux sélectionnés par l'utilisateur
+      selectedAnimalIds: pendingBooking.selectedAnimalIds,
       // Support formules multi-séances
       sessions: pendingBooking.sessions,
       userId: pendingBooking.userId,
@@ -635,12 +644,51 @@ export const finalizeBooking = mutation({
       dayEndTime: service.dayEndTime,
       // Lieu de prestation
       serviceLocation: pendingBooking.serviceLocation,
+      // Type de formule et multi-séances
+      sessionType: variant.sessionType,
+      numberOfSessions: variant.numberOfSessions,
+      // Créneaux collectifs
+      collectiveSlotIds: pendingBooking.collectiveSlotIds,
+      animalCount: pendingBooking.animalCount,
+      // Séances multi-sessions
+      sessions: pendingBooking.sessions,
       createdAt: now,
       updatedAt: now,
     });
 
     // Supprimer la réservation en attente
     await ctx.db.delete(args.bookingId);
+
+    // Créer les entrées collectiveSlotBookings pour les formules collectives
+    if (pendingBooking.collectiveSlotIds && pendingBooking.collectiveSlotIds.length > 0) {
+      const animalCount = pendingBooking.animalCount || 1;
+
+      for (let i = 0; i < pendingBooking.collectiveSlotIds.length; i++) {
+        const slotId = pendingBooking.collectiveSlotIds[i];
+
+        // Créer l'entrée de réservation
+        await ctx.db.insert("collectiveSlotBookings", {
+          slotId,
+          missionId,
+          clientId: session.userId,
+          animalId: args.animalId,
+          animalCount,
+          sessionNumber: i + 1,
+          status: "booked",
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        // Mettre à jour le compteur bookedAnimals du créneau
+        const slot = await ctx.db.get(slotId);
+        if (slot) {
+          await ctx.db.patch(slotId, {
+            bookedAnimals: slot.bookedAnimals + animalCount,
+            updatedAt: now,
+          });
+        }
+      }
+    }
 
     // Sauvegarder/mettre à jour profil client avec localisation
     const existingClientProfile = await ctx.db
@@ -897,6 +945,21 @@ export const finalizeBookingAsGuest = mutation({
       coordinates: args.coordinates,
       updatedAt: now,
     });
+
+    // 2bis. Créer l'adresse dans la table clientAddresses (pour "Mes adresses")
+    if (args.location) {
+      await ctx.db.insert("clientAddresses", {
+        userId,
+        label: "Domicile",
+        address: args.location,
+        city: args.city,
+        postalCode: undefined, // On peut extraire le code postal de l'adresse si besoin
+        coordinates: args.coordinates,
+        isDefault: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
 
     // 3. Créer la fiche animal
     const animalType = ANIMAL_TYPES.find((t) => t.id === args.animalData.type);

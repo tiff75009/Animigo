@@ -99,14 +99,7 @@ export default function ClientProfilePage() {
             isSaving={isSaving}
           />
 
-          <ClientLocationSection
-            location={profile.location}
-            city={profile.city}
-            postalCode={profile.postalCode}
-            coordinates={profile.coordinates}
-            onSave={updateLocation}
-            isSaving={isSaving}
-          />
+          <ClientLocationSection sessionToken={token!} />
         </div>
       </div>
     </div>

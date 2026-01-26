@@ -901,12 +901,6 @@ export const getAnnouncerAvailabilityCalendar = query({
         continue;
       }
 
-      // Vérifier indisponibilité manuelle
-      if (unavailableDatesSet.has(date)) {
-        calendar.push({ date, status: "unavailable" });
-        continue;
-      }
-
       // Trouver TOUTES les missions pour ce jour (toutes catégories)
       const dayMissions = missions.filter((m) =>
         datesOverlap(m.startDate, m.endDate, date, date)
@@ -919,6 +913,14 @@ export const getAnnouncerAvailabilityCalendar = query({
 
       // Trouver les créneaux collectifs pour ce jour
       const dayCollectiveSlots = collectiveSlotsInRange.filter((slot) => slot.date === date);
+
+      // Vérifier indisponibilité manuelle SAUF si il y a des créneaux collectifs ou des missions
+      // (les créneaux collectifs/missions doivent être visibles même sur les jours "indisponibles")
+      const isInUnavailableSet = unavailableDatesSet.has(date);
+      if (isInUnavailableSet && dayMissions.length === 0 && dayCollectiveSlots.length === 0) {
+        calendar.push({ date, status: "unavailable" });
+        continue;
+      }
 
       // S'il y a des missions ou des créneaux collectifs ce jour
       if (dayMissions.length > 0 || dayCollectiveSlots.length > 0) {
@@ -995,72 +997,125 @@ export const getAnnouncerAvailabilityCalendar = query({
           continue;
         }
 
-        // Mode standard: vérifier si une mission bloque toute la journée
-        const hasFullDayBlock = dayMissions.some((m) => {
-          const isMultiDay = m.startDate !== m.endDate;
-          const hasNoTimeSlot = !m.startTime || !m.endTime;
-          return isMultiDay || hasNoTimeSlot;
+        // Mode standard: Filtrer les missions réellement actives sur cette date
+        // Les missions collectives multi-jours ne sont actives que sur les dates avec créneaux collectifs
+        const missionsActiveOnThisDate = dayMissions.filter((m) => {
+          // Mission uni-jour: toujours active
+          if (m.startDate === m.endDate) return true;
+
+          // Mission collective multi-jours: active SEULEMENT si un créneau collectif existe ce jour
+          if (m.sessionType === "collective") {
+            return dayCollectiveSlots.length > 0;
+          }
+
+          // Mission individuelle multi-séances: active si une séance est programmée ce jour
+          if (m.sessions && m.sessions.length > 0) {
+            return m.sessions.some((s: { date: string }) => s.date === date);
+          }
+
+          // Autres missions multi-jours (garde, etc.): actives chaque jour
+          return true;
         });
 
-        if (hasFullDayBlock) {
-          calendar.push({ date, status: "unavailable" });
+        // S'il n'y a plus de missions actives ni de créneaux collectifs, sortir du bloc
+        if (missionsActiveOnThisDate.length === 0 && dayCollectiveSlots.length === 0) {
+          // Ce jour n'a pas de missions actives ni de créneaux collectifs
+          // Continuer vers le code qui gère les jours sans activité (en bas de la boucle)
+        } else {
+          // Vérifier si une mission bloque toute la journée
+          const hasFullDayBlock = missionsActiveOnThisDate.some((m) => {
+            const isMultiDay = m.startDate !== m.endDate;
+            const hasNoTimeSlot = !m.startTime || !m.endTime;
+
+            // Mission collective avec créneaux ne bloque pas toute la journée
+            if (m.sessionType === "collective" && m.startTime && m.endTime) return false;
+
+            // Mission multi-séances avec créneaux ne bloque pas toute la journée
+            if (m.sessions && m.sessions.length > 0 && m.startTime && m.endTime) return false;
+
+            return isMultiDay || hasNoTimeSlot;
+          });
+
+          if (hasFullDayBlock) {
+            calendar.push({ date, status: "unavailable" });
+            continue;
+          }
+
+          // Extraire les créneaux occupés AVEC les buffers
+          const missionBookedSlots: Array<{
+            startTime: string;
+            endTime: string;
+            originalStartTime: string;
+            originalEndTime: string;
+          }> = [];
+
+          for (const m of missionsActiveOnThisDate) {
+            if (!m.startTime || !m.endTime) continue;
+
+            // Cas 1: Mission uni-jour standard
+            if (m.startDate === m.endDate) {
+              const adjustedSlot = applyBuffersToTimeSlot(m.startTime, m.endTime, bufferBefore, bufferAfter);
+              missionBookedSlots.push({
+                startTime: adjustedSlot.startTime,
+                endTime: adjustedSlot.endTime,
+                originalStartTime: adjustedSlot.originalStartTime,
+                originalEndTime: adjustedSlot.originalEndTime,
+              });
+              continue;
+            }
+
+            // Cas 2: Mission collective avec créneaux
+            if (m.sessionType === "collective") {
+              const adjustedSlot = applyBuffersToTimeSlot(m.startTime, m.endTime, bufferBefore, bufferAfter);
+              missionBookedSlots.push({
+                startTime: adjustedSlot.startTime,
+                endTime: adjustedSlot.endTime,
+                originalStartTime: adjustedSlot.originalStartTime,
+                originalEndTime: adjustedSlot.originalEndTime,
+              });
+              continue;
+            }
+
+            // Cas 3: Mission individuelle multi-séances
+            if (m.sessions && m.sessions.length > 0) {
+              const sessionOnDate = m.sessions.find((s: { date: string; startTime: string; endTime: string }) => s.date === date);
+              if (sessionOnDate) {
+                const adjustedSlot = applyBuffersToTimeSlot(sessionOnDate.startTime, sessionOnDate.endTime, bufferBefore, bufferAfter);
+                missionBookedSlots.push({
+                  startTime: adjustedSlot.startTime,
+                  endTime: adjustedSlot.endTime,
+                  originalStartTime: adjustedSlot.originalStartTime,
+                  originalEndTime: adjustedSlot.originalEndTime,
+                });
+              }
+            }
+          }
+
+          // Ajouter les créneaux collectifs comme slots bloqués
+          const collectiveSlotsForDay = dayCollectiveSlots.map((slot) => {
+            const adjustedSlot = applyBuffersToTimeSlot(slot.startTime, slot.endTime, bufferBefore, bufferAfter);
+            return {
+              startTime: adjustedSlot.startTime,
+              endTime: adjustedSlot.endTime,
+              originalStartTime: adjustedSlot.originalStartTime,
+              originalEndTime: adjustedSlot.originalEndTime,
+            };
+          });
+
+          // Combiner missions et créneaux collectifs
+          const bookedSlots = [...missionBookedSlots, ...collectiveSlotsForDay];
+
+          // Vérifier disponibilité partielle manuelle
+          const partialAvail = unavailabilities.find((a) => a.date === date && a.status === "partial");
+
+          calendar.push({
+            date,
+            status: "partial",
+            timeSlots: partialAvail?.timeSlots,
+            bookedSlots,
+          });
           continue;
         }
-
-        // Sinon, ce sont des missions avec créneaux horaires spécifiques
-        // Extraire les créneaux occupés AVEC les buffers (temps de préparation)
-        const missionBookedSlots = dayMissions
-          .filter((m) => m.startTime && m.endTime && m.startDate === m.endDate)
-          .map((m) => {
-            // Appliquer les buffers pour bloquer le temps de préparation avant/après
-            const adjustedSlot = applyBuffersToTimeSlot(
-              m.startTime!,
-              m.endTime!,
-              bufferBefore,
-              bufferAfter
-            );
-            return {
-              startTime: adjustedSlot.startTime,
-              endTime: adjustedSlot.endTime,
-              // Garder les heures originales pour affichage
-              originalStartTime: adjustedSlot.originalStartTime,
-              originalEndTime: adjustedSlot.originalEndTime,
-            };
-          });
-
-        // Ajouter les créneaux collectifs comme slots bloqués (même sans réservation)
-        const dayCollectiveSlots = collectiveSlotsInRange
-          .filter((slot) => slot.date === date)
-          .map((slot) => {
-            const adjustedSlot = applyBuffersToTimeSlot(
-              slot.startTime,
-              slot.endTime,
-              bufferBefore,
-              bufferAfter
-            );
-            return {
-              startTime: adjustedSlot.startTime,
-              endTime: adjustedSlot.endTime,
-              originalStartTime: adjustedSlot.originalStartTime,
-              originalEndTime: adjustedSlot.originalEndTime,
-            };
-          });
-
-        // Combiner les missions et les créneaux collectifs
-        const bookedSlots = [...missionBookedSlots, ...dayCollectiveSlots];
-
-        // Vérifier aussi les disponibilités partielles définies manuellement
-        const partialAvail = unavailabilities.find(
-          (a) => a.date === date && a.status === "partial"
-        );
-
-        calendar.push({
-          date,
-          status: "partial",
-          timeSlots: partialAvail?.timeSlots,
-          bookedSlots,
-        });
-        continue;
       }
 
       // Mapper les créneaux collectifs avec buffers pour les bookedSlots

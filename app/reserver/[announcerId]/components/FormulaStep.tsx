@@ -105,6 +105,7 @@ const animalLabels: Record<string, { emoji: string; label: string }> = {
   poisson: { emoji: "🐠", label: "Poisson" },
   reptile: { emoji: "🦎", label: "Reptile" },
   nac: { emoji: "🐾", label: "NAC" },
+  autre: { emoji: "🐾", label: "Autre" },
 };
 
 // Composant panneau de détails de la formule sélectionnée

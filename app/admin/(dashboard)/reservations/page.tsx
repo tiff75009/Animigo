@@ -249,6 +249,8 @@ export default function ReservationsPage() {
 
   const deleteReservation = useMutation(api.admin.reservations.deleteReservation);
   const deleteMultiple = useMutation(api.admin.reservations.deleteMultipleReservations);
+  const recalculateSlotCounts = useMutation(api.admin.reservations.recalculateSlotCounts);
+  const [isRecalculating, setIsRecalculating] = useState(false);
 
   const handleDeleteClick = (reservation: Reservation) => {
     setReservationToDelete(reservation);
@@ -309,6 +311,21 @@ export default function ReservationsPage() {
       setSelectedIds(new Set());
     } else {
       setSelectedIds(new Set(reservations.reservations.map((r: Reservation) => r._id)));
+    }
+  };
+
+  const handleRecalculateSlots = async () => {
+    if (!token) return;
+
+    setIsRecalculating(true);
+    try {
+      const result = await recalculateSlotCounts({ token });
+      alert(`${result.slotsUpdated} créneau(x) mis à jour sur ${result.totalSlots} total`);
+    } catch (error) {
+      console.error("Erreur lors du recalcul:", error);
+      alert("Erreur lors du recalcul des créneaux");
+    } finally {
+      setIsRecalculating(false);
     }
   };
 
@@ -428,6 +445,21 @@ export default function ReservationsPage() {
               Supprimer ({selectedIds.size})
             </button>
           )}
+
+          {/* Recalculate slot counts button */}
+          <button
+            onClick={handleRecalculateSlots}
+            disabled={isRecalculating}
+            className="flex items-center gap-2 px-4 py-2.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+            title="Recalculer les compteurs des créneaux collectifs"
+          >
+            {isRecalculating ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <RefreshCw className="w-5 h-5" />
+            )}
+            Recalculer créneaux
+          </button>
         </div>
       </div>
 

@@ -81,6 +81,8 @@ export interface CalendarEntry {
   };
   timeSlots?: Array<{ startTime: string; endTime: string }>;
   bookedSlots?: Array<{ startTime: string; endTime: string }>;
+  // Créneaux collectifs définis par l'annonceur (bloquent aussi les individuels)
+  collectiveSlots?: Array<{ startTime: string; endTime: string }>;
 }
 
 export const DEFAULT_BOOKING_SELECTION: BookingSelection = {

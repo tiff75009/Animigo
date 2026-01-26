@@ -120,6 +120,17 @@ export function MonthView({
   const getMissionsForDate = (day: number): Mission[] => {
     const dateStr = formatDateStr(year, month, day);
     return missions.filter((mission) => {
+      // Pour les missions collectives, utiliser les dates des créneaux réservés
+      if (mission.sessionType === "collective" && mission.collectiveSlotDates) {
+        return mission.collectiveSlotDates.includes(dateStr);
+      }
+
+      // Pour les missions multi-séances, utiliser les dates des séances
+      if (mission.sessions && mission.sessions.length > 0) {
+        return mission.sessions.some((s) => s.date === dateStr);
+      }
+
+      // Pour les missions standard (uni-séance), utiliser la plage startDate-endDate
       return mission.startDate <= dateStr && mission.endDate >= dateStr;
     });
   };
@@ -227,43 +238,92 @@ export function MonthView({
 
               {/* Missions et créneaux collectifs */}
               <div className="space-y-0.5 overflow-hidden">
-                {/* Créneaux collectifs */}
-                {daySlots.slice(0, 1).map((slot) => (
-                  <motion.div
-                    key={slot._id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSlotClick?.(slot);
-                    }}
-                    className="text-[10px] md:text-xs bg-purple-500 text-white px-1.5 py-0.5 rounded truncate flex items-center gap-0.5"
-                    whileHover={{ scale: 1.05 }}
-                  >
-                    <Users className="w-2.5 h-2.5" />
-                    <span className="truncate">{slot.bookedAnimals}/{slot.maxAnimals}</span>
-                  </motion.div>
-                ))}
-                {/* Missions */}
-                {dayMissions.slice(0, daySlots.length > 0 ? 1 : 2).map((mission) => (
-                  <motion.div
-                    key={mission.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onMissionClick(mission);
-                    }}
-                    className={cn(
-                      "text-[10px] md:text-xs text-white px-1.5 py-0.5 rounded truncate",
-                      statusColors[mission.status]
-                    )}
-                    whileHover={{ scale: 1.05 }}
-                  >
-                    {mission.animal.emoji} {mission.animal.name}
-                  </motion.div>
-                ))}
-                {(dayMissions.length + daySlots.length > 2) && (
-                  <p className="text-[10px] text-text-light">
-                    +{dayMissions.length + daySlots.length - 2} autres
-                  </p>
-                )}
+                {/* Créneaux collectifs - n'afficher que ceux avec réservations, sinon 1 seul */}
+                {(() => {
+                  // Séparer les créneaux avec et sans réservations
+                  const slotsWithBookings = daySlots.filter((s) => s.bookings && s.bookings.length > 0);
+                  const slotsWithoutBookings = daySlots.filter((s) => !s.bookings || s.bookings.length === 0);
+
+                  // Afficher tous les créneaux avec réservations (max 2), sinon 1 créneau vide
+                  const slotsToShow = slotsWithBookings.length > 0
+                    ? slotsWithBookings.slice(0, 2)
+                    : slotsWithoutBookings.slice(0, 1);
+
+                  return slotsToShow.map((slot) => (
+                    <motion.div
+                      key={slot._id}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSlotClick?.(slot);
+                      }}
+                      className={cn(
+                        "text-[10px] md:text-xs text-white px-1.5 py-0.5 rounded truncate flex items-center gap-0.5 cursor-pointer",
+                        slot.bookings && slot.bookings.length > 0
+                          ? "bg-purple-600"
+                          : "bg-purple-400"
+                      )}
+                      whileHover={{ scale: 1.05 }}
+                    >
+                      <Users className="w-2.5 h-2.5" />
+                      <span className="truncate">
+                        {slot.bookings && slot.bookings.length > 0
+                          ? `${slot.bookings[0].animalEmoji} ${slot.bookings.length} résa`
+                          : `${slot.bookedAnimals}/${slot.maxAnimals}`
+                        }
+                      </span>
+                    </motion.div>
+                  ));
+                })()}
+                {/* Missions (filtrer les missions collectives qui sont déjà affichées dans les créneaux) */}
+                {(() => {
+                  const slotsWithBookings = daySlots.filter((s) => s.bookings && s.bookings.length > 0);
+                  const displayedSlots = slotsWithBookings.length > 0
+                    ? Math.min(slotsWithBookings.length, 2)
+                    : daySlots.length > 0 ? 1 : 0;
+                  const maxMissions = Math.max(0, 2 - displayedSlots);
+
+                  return dayMissions
+                    .filter((m) => m.sessionType !== "collective")
+                    .slice(0, maxMissions)
+                    .map((mission) => (
+                      <motion.div
+                        key={mission.id}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onMissionClick(mission);
+                        }}
+                        className={cn(
+                          "text-[10px] md:text-xs text-white px-1.5 py-0.5 rounded truncate cursor-pointer",
+                          statusColors[mission.status]
+                        )}
+                        whileHover={{ scale: 1.05 }}
+                      >
+                        {mission.animal.emoji} {mission.animal.name}
+                      </motion.div>
+                    ));
+                })()}
+                {(() => {
+                  const slotsWithBookings = daySlots.filter((s) => s.bookings && s.bookings.length > 0);
+                  const nonCollectiveMissions = dayMissions.filter((m) => m.sessionType !== "collective");
+
+                  const displayedSlots = slotsWithBookings.length > 0
+                    ? Math.min(slotsWithBookings.length, 2)
+                    : daySlots.length > 0 ? 1 : 0;
+                  const displayedMissions = Math.min(nonCollectiveMissions.length, Math.max(0, 2 - displayedSlots));
+
+                  // Compter les items non affichés
+                  const remainingSlots = slotsWithBookings.length > 2 ? slotsWithBookings.length - 2 : 0;
+                  const remainingMissions = nonCollectiveMissions.length - displayedMissions;
+                  const remaining = remainingSlots + remainingMissions;
+
+                  return remaining > 0 ? (
+                    <p className="text-[10px] text-text-light">
+                      +{remaining} autre{remaining > 1 ? "s" : ""}
+                    </p>
+                  ) : null;
+                })()}
               </div>
             </motion.div>
           );

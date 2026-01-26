@@ -32,10 +32,32 @@ export function YearView({
     const counts: number[] = Array(12).fill(0);
 
     missions.forEach((mission) => {
+      // Pour les missions collectives, utiliser les dates des créneaux réservés
+      if (mission.sessionType === "collective" && mission.collectiveSlotDates) {
+        mission.collectiveSlotDates.forEach((dateStr) => {
+          const date = new Date(dateStr);
+          if (date.getFullYear() === year) {
+            counts[date.getMonth()]++;
+          }
+        });
+        return;
+      }
+
+      // Pour les missions multi-séances, utiliser les dates des séances
+      if (mission.sessions && mission.sessions.length > 0) {
+        mission.sessions.forEach((session) => {
+          const date = new Date(session.date);
+          if (date.getFullYear() === year) {
+            counts[date.getMonth()]++;
+          }
+        });
+        return;
+      }
+
+      // Pour les missions standard (uni-séance), utiliser la plage startDate-endDate
       const startDate = new Date(mission.startDate);
       const endDate = new Date(mission.endDate);
 
-      // Count mission in each month it spans
       for (let m = 0; m < 12; m++) {
         const monthStart = new Date(year, m, 1);
         const monthEnd = new Date(year, m + 1, 0);
@@ -84,7 +106,20 @@ export function YearView({
     // Check if a day has missions
     const hasMission = (day: number): boolean => {
       const dateStr = formatDateStr(year, month, day);
-      return missions.some((m) => m.startDate <= dateStr && m.endDate >= dateStr);
+      return missions.some((m) => {
+        // Pour les missions collectives, utiliser les dates des créneaux réservés
+        if (m.sessionType === "collective" && m.collectiveSlotDates) {
+          return m.collectiveSlotDates.includes(dateStr);
+        }
+
+        // Pour les missions multi-séances, utiliser les dates des séances
+        if (m.sessions && m.sessions.length > 0) {
+          return m.sessions.some((s) => s.date === dateStr);
+        }
+
+        // Pour les missions standard (uni-séance), utiliser la plage startDate-endDate
+        return m.startDate <= dateStr && m.endDate >= dateStr;
+      });
     };
 
     // Check if a day is unavailable

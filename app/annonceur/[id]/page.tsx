@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQueryState } from "nuqs";
 import { useQuery } from "convex/react";
@@ -55,7 +55,7 @@ function calculateDistance(
 export default function AnnouncerProfilePage() {
   const params = useParams();
   const router = useRouter();
-  const { token } = useAuth();
+  const { token, refreshToken } = useAuth();
   const [isFavorite, setIsFavorite] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("formules");
 
@@ -102,16 +102,43 @@ export default function AnnouncerProfilePage() {
       : "skip"
   );
 
-  // Calendar availability - query for current calendar month
-  const startOfMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
-  const endOfMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0);
-
+  // Calendar availability - query for date range
+  // For MultiSessionCalendar: 4 weeks from calendarMonth
+  // For regular calendar: current month
   const formatDateLocal = (date: Date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const day = String(date.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   };
+
+  // Memoize date range calculation to avoid recreating on every render
+  const { calendarStartDateStr, calendarEndDateStr } = useMemo(() => {
+    const getMonday = (date: Date): Date => {
+      const d = new Date(date);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      return new Date(d.setDate(diff));
+    };
+
+    // Calculate date range that covers both calendar views
+    const startOfMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
+    const endOfMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0);
+
+    // For MultiSessionCalendar: get Monday of current week + 4 weeks
+    const multiSessionStart = getMonday(calendarMonth);
+    const multiSessionEnd = new Date(multiSessionStart);
+    multiSessionEnd.setDate(multiSessionStart.getDate() + 27); // 4 weeks = 28 days
+
+    // Use the broader range to cover both calendar types
+    const calendarStartDate = startOfMonth < multiSessionStart ? startOfMonth : multiSessionStart;
+    const calendarEndDate = endOfMonth > multiSessionEnd ? endOfMonth : multiSessionEnd;
+
+    return {
+      calendarStartDateStr: formatDateLocal(calendarStartDate),
+      calendarEndDateStr: formatDateLocal(calendarEndDate),
+    };
+  }, [calendarMonth]);
 
   // Get selected service for calendar query
   const selectedServiceForCalendar = announcerData?.id && bookingSelection.selectedServiceId
@@ -133,8 +160,8 @@ export default function AnnouncerProfilePage() {
       ? {
           announcerId: announcerData.id as Id<"users">,
           serviceCategory: selectedServiceCategory,
-          startDate: formatDateLocal(startOfMonth),
-          endDate: formatDateLocal(endOfMonth),
+          startDate: calendarStartDateStr,
+          endDate: calendarEndDateStr,
         }
       : "skip"
   );
@@ -506,10 +533,14 @@ export default function AnnouncerProfilePage() {
     if (bookingSelection.selectedSessions.length > 0) {
       params.set("sessions", JSON.stringify(bookingSelection.selectedSessions));
     }
+    // Animaux sélectionnés
+    if (selectedAnimalIds.length > 0) {
+      params.set("animalIds", selectedAnimalIds.join(","));
+    }
 
     const queryString = params.toString();
     router.push(`/reserver/${announcerData.id}${queryString ? `?${queryString}` : ""}`);
-  }, [announcerData, announcer, bookingSelection, router]);
+  }, [announcerData, announcer, bookingSelection, selectedAnimalIds, router]);
 
   // Handler pour aller directement à la finalisation
   const handleFinalize = useCallback(() => {
@@ -576,13 +607,17 @@ export default function AnnouncerProfilePage() {
     if (bookingSelection.selectedSessions.length > 0) {
       params.set("sessions", JSON.stringify(bookingSelection.selectedSessions));
     }
+    // Animaux sélectionnés
+    if (selectedAnimalIds.length > 0) {
+      params.set("animalIds", selectedAnimalIds.join(","));
+    }
 
     // Paramètre pour aller directement à la finalisation
     params.set("finalize", "true");
 
     const queryString = params.toString();
     router.push(`/reserver/${announcerData.id}${queryString ? `?${queryString}` : ""}`);
-  }, [announcerData, announcer, bookingSelection, router]);
+  }, [announcerData, announcer, bookingSelection, selectedAnimalIds, router]);
 
   // Early returns APRÈS tous les hooks
   if (announcerData === undefined) {
@@ -701,6 +736,8 @@ export default function AnnouncerProfilePage() {
                 // Infos annonceur pour la section lieu
                 announcerCity={announcer.location ?? undefined}
                 announcerFirstName={announcer.firstName}
+                // Callback connexion inline
+                onLoginSuccess={refreshToken}
               />
             )}
 

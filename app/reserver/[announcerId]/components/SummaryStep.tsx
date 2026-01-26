@@ -1,10 +1,13 @@
 "use client";
 
 import Image from "next/image";
-import { AlertCircle, Clock, MapPin, Moon, Sun, Home, CalendarCheck, Users, CreditCard, Package, Plus, PawPrint } from "lucide-react";
+import { AlertCircle, Clock, MapPin, Moon, Sun, Home, CalendarCheck, Users, CreditCard, Package, Plus, PawPrint, Edit2 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import type { ServiceDetail, ServiceVariant } from "./FormulaStep";
 import type { ServiceOption } from "./OptionsStep";
+import AddressSection from "./AddressSection";
+import { GuestAddressSelector } from "@/app/annonceur/[id]/components/booking";
+import type { GuestAddress } from "@/app/annonceur/[id]/components/booking/types";
 
 // Type pour les séances multi-sessions
 interface SelectedSession {
@@ -82,6 +85,19 @@ interface SummaryStepProps {
   // Animaux de l'utilisateur
   userAnimals?: UserAnimal[] | null;
   selectedAnimalIds?: string[];
+  // Gestion des adresses
+  sessionToken?: string | null;
+  selectedAddressId?: string | null;
+  onAddressSelect?: (addressId: string | null, addressData?: {
+    address: string;
+    city?: string;
+    postalCode?: string;
+    coordinates?: { lat: number; lng: number };
+  }) => void;
+  // Adresse guest pour utilisateurs non connectés
+  guestAddress?: GuestAddress | null;
+  onGuestAddressChange?: (address: GuestAddress | null) => void;
+  announcerCoordinates?: { lat: number; lng: number };
   error: string | null;
 }
 
@@ -131,6 +147,14 @@ export default function SummaryStep({
   // Animaux de l'utilisateur
   userAnimals = null,
   selectedAnimalIds = [],
+  // Gestion des adresses
+  sessionToken = null,
+  selectedAddressId = null,
+  onAddressSelect,
+  // Adresse guest
+  guestAddress = null,
+  onGuestAddressChange,
+  announcerCoordinates,
   error,
 }: SummaryStepProps) {
   const isMultiDay = selectedEndDate && selectedEndDate !== selectedDate;
@@ -254,15 +278,67 @@ export default function SummaryStep({
             )}
           </span>
         </div>
-        {getLocationLabel() && (
+        {/* Section Adresse de la prestation */}
+        {serviceLocation === "client_home" && sessionToken && onAddressSelect && (
+          <AddressSection
+            sessionToken={sessionToken}
+            serviceLocation={serviceLocation}
+            announcerLocation={announcer.location}
+            selectedAddressId={selectedAddressId}
+            onAddressSelect={onAddressSelect}
+          />
+        )}
+
+        {/* Adresse guest pour utilisateurs non connectés */}
+        {serviceLocation === "client_home" && !sessionToken && onGuestAddressChange && (
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-text-light">Lieu de prestation</span>
+              <span className="font-medium text-foreground flex items-center gap-1">
+                <Home className="w-3 h-3" />
+                À votre domicile
+              </span>
+            </div>
+            {guestAddress?.address ? (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-xl">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2">
+                    <MapPin className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-green-800">{guestAddress.address}</p>
+                      {(guestAddress.city || guestAddress.postalCode) && (
+                        <p className="text-xs text-green-600">
+                          {[guestAddress.postalCode, guestAddress.city].filter(Boolean).join(" ")}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onGuestAddressChange(null)}
+                    className="p-1.5 text-green-600 hover:bg-green-100 rounded-lg transition-colors"
+                    title="Modifier l'adresse"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <GuestAddressSelector
+                guestAddress={guestAddress}
+                announcerCoordinates={announcerCoordinates}
+                onAddressChange={onGuestAddressChange}
+              />
+            )}
+          </div>
+        )}
+
+        {/* Lieu chez l'annonceur */}
+        {serviceLocation === "announcer_home" && (
           <div className="flex justify-between text-sm">
             <span className="text-text-light">Lieu</span>
             <span className="font-medium text-foreground flex items-center gap-1">
-              {serviceLocation === "client_home" ? (
-                <Home className="w-3 h-3" />
-              ) : (
-                <MapPin className="w-3 h-3" />
-              )}
+              <MapPin className="w-3 h-3" />
               {getLocationLabel()}
             </span>
           </div>

@@ -40,6 +40,29 @@ interface CollectiveSlotPickerProps {
   className?: string;
 }
 
+// Délai minimum de réservation (en heures)
+const MIN_BOOKING_LEAD_TIME_HOURS = 2;
+
+// Vérifier si un créneau est réservable (pas passé + délai minimum 2h)
+function isSlotBookable(dateStr: string, startTime: string): boolean {
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+  // Date passée = non réservable
+  if (dateStr < todayStr) return false;
+
+  // Date future = réservable
+  if (dateStr > todayStr) return true;
+
+  // Date = aujourd'hui : vérifier l'heure avec délai minimum
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const [hours, minutes] = startTime.split(":").map(Number);
+  const slotMinutes = hours * 60 + minutes;
+  const minBookableMinutes = currentMinutes + (MIN_BOOKING_LEAD_TIME_HOURS * 60);
+
+  return slotMinutes >= minBookableMinutes;
+}
+
 // Formater la date complète
 const formatDateFull = (dateStr: string): string => {
   const date = new Date(dateStr);
@@ -172,10 +195,13 @@ export default function CollectiveSlotPicker({
 
   const availableSlots = availableSlotsQuery || [];
 
-  // Grouper les créneaux par date
+  // Grouper les créneaux par date (avec filtrage des créneaux non réservables)
   const slotsByDate = useMemo(() => {
     const map = new Map<string, CollectiveSlot[]>();
     for (const slot of availableSlots) {
+      // Filtrer les créneaux passés ou trop proches (moins de 2h)
+      if (!isSlotBookable(slot.date, slot.startTime)) continue;
+
       const existing = map.get(slot.date) || [];
       existing.push(slot as CollectiveSlot);
       map.set(slot.date, existing);

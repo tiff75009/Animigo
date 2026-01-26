@@ -1,7 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Package, Sparkles, Plus, MousePointerClick, Filter, PawPrint, Check, MapPin, Home, Users, Target, Clock, Info, CalendarDays } from "lucide-react";
+import { Package, Sparkles, Plus, MousePointerClick, Filter, PawPrint, Check, MapPin, Home, Users, Target, Clock, Info, CalendarDays, Mail, Lock, Loader2, X, LogIn } from "lucide-react";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { cn } from "@/app/lib/utils";
 import { ServiceData, FormuleData } from "./types";
@@ -83,6 +86,8 @@ interface AnnouncerFormulesProps {
   // Infos annonceur pour la section lieu
   announcerCity?: string;
   announcerFirstName?: string;
+  // Callback quand l'utilisateur se connecte (pour mettre à jour l'état parent)
+  onLoginSuccess?: (token: string) => void;
   className?: string;
 }
 
@@ -133,8 +138,52 @@ export default function AnnouncerFormules({
   maxSelectableAnimals = 1,
   announcerCity,
   announcerFirstName,
+  onLoginSuccess,
   className,
 }: AnnouncerFormulesProps) {
+  // États pour le formulaire de connexion inline
+  const [showLoginForm, setShowLoginForm] = useState(false);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  // Mutation de connexion
+  const login = useMutation(api.auth.login.login);
+
+  // Handler de connexion
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError(null);
+    setIsLoggingIn(true);
+
+    try {
+      const result = await login({
+        email: loginEmail.trim().toLowerCase(),
+        password: loginPassword,
+      });
+
+      if (result.success && result.token) {
+        // Stocker le token
+        localStorage.setItem("auth_token", result.token);
+        // Notifier le parent
+        onLoginSuccess?.(result.token);
+        // Réinitialiser le formulaire
+        setShowLoginForm(false);
+        setLoginEmail("");
+        setLoginPassword("");
+      }
+    } catch (err) {
+      if (err instanceof Error) {
+        setLoginError(err.message);
+      } else {
+        setLoginError("Une erreur est survenue");
+      }
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
   // Aucun service sélectionné
   if (!service) {
     return (
@@ -578,7 +627,7 @@ export default function AnnouncerFormules({
       )}
 
       {/* Section Nombre d'animaux - pour les invités avec formule collective */}
-      {hasVariantSelected && !isLoggedIn && isCollectiveFormule && onAnimalCountChange && collectiveMaxAnimals > 1 && (
+      {hasVariantSelected && !isLoggedIn && isCollectiveFormule && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -590,32 +639,157 @@ export default function AnnouncerFormules({
             </span>
             Nombre d'animaux
           </h3>
+          {/* Affichage: 1 animal pour les non connectés */}
           <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
             <p className="text-sm text-gray-500">
-              Maximum {collectiveMaxAnimals} par séance
+              {collectiveMaxAnimals > 1
+                ? `Maximum ${collectiveMaxAnimals} par séance`
+                : "1 animal par séance"
+              }
             </p>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => onAnimalCountChange(Math.max(1, animalCount - 1))}
-                disabled={animalCount <= 1}
-                className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                -
-              </button>
-              <span className="w-8 text-center font-semibold text-gray-900">
-                {animalCount}
-              </span>
-              <button
-                type="button"
-                onClick={() => onAnimalCountChange(Math.min(collectiveMaxAnimals, animalCount + 1))}
-                disabled={animalCount >= collectiveMaxAnimals}
-                className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                +
-              </button>
-            </div>
+            <span className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">
+              1
+            </span>
           </div>
+
+          {/* Message et formulaire de connexion pour plusieurs animaux */}
+          {collectiveMaxAnimals > 1 && !showLoginForm && (
+            <div className="mt-3 p-3 sm:p-4 bg-amber-50 border border-amber-200 rounded-xl">
+              <p className="text-sm text-amber-800 flex flex-col sm:flex-row sm:items-center gap-2">
+                <span className="flex items-start gap-2">
+                  <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  <span>Pour inscrire <strong>plusieurs animaux</strong> :</span>
+                </span>
+                <span className="flex flex-wrap gap-2 ml-6 sm:ml-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginForm(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    Se connecter
+                  </button>
+                  <Link
+                    href="/register"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Créer un compte
+                  </Link>
+                </span>
+              </p>
+            </div>
+          )}
+
+          {/* Formulaire de connexion inline */}
+          {collectiveMaxAnimals > 1 && showLoginForm && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="mt-3"
+            >
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <LogIn className="w-4 h-4 text-primary" />
+                    Connexion
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLoginForm(false);
+                      setLoginError(null);
+                    }}
+                    className="p-1 hover:bg-gray-200 rounded-lg transition-colors"
+                  >
+                    <X className="w-4 h-4 text-gray-500" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleLogin} className="space-y-3">
+                  {/* Email */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Email
+                    </label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="email"
+                        value={loginEmail}
+                        onChange={(e) => setLoginEmail(e.target.value)}
+                        placeholder="votre@email.com"
+                        required
+                        className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Mot de passe */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Mot de passe
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="password"
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        placeholder="••••••••"
+                        required
+                        className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Erreur */}
+                  {loginError && (
+                    <p className="text-sm text-red-600 bg-red-50 p-2 rounded-lg">
+                      {loginError}
+                    </p>
+                  )}
+
+                  {/* Boutons */}
+                  <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                    <button
+                      type="submit"
+                      disabled={isLoggingIn}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {isLoggingIn ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Connexion...
+                        </>
+                      ) : (
+                        <>
+                          <LogIn className="w-4 h-4" />
+                          Se connecter
+                        </>
+                      )}
+                    </button>
+                    <Link
+                      href="/register"
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors text-center"
+                    >
+                      Créer un compte
+                    </Link>
+                  </div>
+
+                  {/* Mot de passe oublié */}
+                  <div className="text-center pt-1">
+                    <Link
+                      href="/forgot-password"
+                      className="text-xs text-gray-500 hover:text-primary transition-colors"
+                    >
+                      Mot de passe oublié ?
+                    </Link>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          )}
         </motion.div>
       )}
 

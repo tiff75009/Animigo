@@ -107,6 +107,17 @@ export function WeekView({
   const getMissionsForDate = (date: Date): Mission[] => {
     const dateStr = formatDateLocal(date);
     return missions.filter((mission) => {
+      // Pour les missions collectives, utiliser les dates des créneaux réservés
+      if (mission.sessionType === "collective" && mission.collectiveSlotDates) {
+        return mission.collectiveSlotDates.includes(dateStr);
+      }
+
+      // Pour les missions multi-séances, utiliser les dates des séances
+      if (mission.sessions && mission.sessions.length > 0) {
+        return mission.sessions.some((s) => s.date === dateStr);
+      }
+
+      // Pour les missions standard (uni-séance), utiliser la plage startDate-endDate
       return mission.startDate <= dateStr && mission.endDate >= dateStr;
     });
   };
@@ -117,10 +128,16 @@ export function WeekView({
     return availability.find((a) => a.date === dateStr) || null;
   };
 
-  // Get collective slots for a specific date
+  // Get collective slots for a specific date (prioriser ceux avec réservations)
   const getSlotsForDate = (date: Date): CollectiveSlot[] => {
     const dateStr = formatDateLocal(date);
-    return collectiveSlots.filter((slot) => slot.date === dateStr);
+    const daySlots = collectiveSlots.filter((slot) => slot.date === dateStr);
+    // Trier les créneaux: ceux avec réservations en premier
+    return daySlots.sort((a, b) => {
+      const aHasBookings = a.bookings && a.bookings.length > 0 ? 1 : 0;
+      const bHasBookings = b.bookings && b.bookings.length > 0 ? 1 : 0;
+      return bHasBookings - aHasBookings;
+    });
   };
 
   // Check if date is today
@@ -229,18 +246,28 @@ export function WeekView({
 
               const top = (startHour - 8) * 48;
               const height = Math.max((endHour - startHour) * 48, 32);
+              const hasBookings = slot.bookings && slot.bookings.length > 0;
 
               return (
                 <motion.div
                   key={`slot-${slot._id}-${dayIndex}`}
-                  onClick={() => onSlotClick?.(slot)}
-                  className="absolute rounded-lg p-2 bg-purple-500 text-white text-xs cursor-pointer overflow-hidden border-l-4 border-purple-700"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSlotClick?.(slot);
+                  }}
+                  className={cn(
+                    "absolute rounded-lg p-2 text-white text-xs cursor-pointer overflow-hidden border-l-4",
+                    hasBookings
+                      ? "bg-purple-600 border-purple-800"
+                      : "bg-purple-400 border-purple-600"
+                  )}
                   style={{
                     top: `${top}px`,
                     left: `calc(64px + ${dayIndex * ((100 - 8) / 7)}% + 2px)`,
                     width: `calc(${(100 - 8) / 7}% - 4px)`,
                     height: `${height}px`,
-                    zIndex: 15 + slotIndex,
+                    zIndex: hasBookings ? 20 + slotIndex : 15 + slotIndex,
                   }}
                   whileHover={{ scale: 1.02, zIndex: 50 }}
                 >
@@ -248,17 +275,22 @@ export function WeekView({
                     <Users className="w-3 h-3 flex-shrink-0" />
                     <span className="truncate">{slot.variantName}</span>
                   </div>
-                  <div className="truncate opacity-80">
-                    {slot.bookedAnimals}/{slot.maxAnimals} reservés
+                  <div className="truncate opacity-90">
+                    {hasBookings
+                      ? `${slot.bookings![0].animalEmoji} ${slot.bookings!.length} résa`
+                      : `${slot.bookedAnimals}/${slot.maxAnimals}`
+                    }
                   </div>
                 </motion.div>
               );
             });
           })}
 
-          {/* Mission overlays */}
+          {/* Mission overlays (filtrer les missions collectives) */}
           {weekDates.map((date, dayIndex) => {
-            const dayMissions = getMissionsForDate(date);
+            const dayMissions = getMissionsForDate(date).filter(
+              (m) => m.sessionType !== "collective"
+            );
             const daySlots = getSlotsForDate(date);
             const slotOffset = daySlots.length * 4;
 
@@ -276,7 +308,11 @@ export function WeekView({
               return (
                 <motion.div
                   key={`${mission.id}-${dayIndex}`}
-                  onClick={() => onMissionClick(mission)}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onMissionClick(mission);
+                  }}
                   className={cn(
                     "absolute rounded-lg p-2 text-white text-xs cursor-pointer overflow-hidden",
                     statusColors[mission.status]

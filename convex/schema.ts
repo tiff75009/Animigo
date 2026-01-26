@@ -525,6 +525,21 @@ export default defineSchema({
     completedByClientAt: v.optional(v.number()), // Date de confirmation par le client
     autoCaptureScheduledAt: v.optional(v.number()), // Date prévue pour l'auto-capture (+48h)
 
+    // Type de formule
+    sessionType: v.optional(v.union(v.literal("individual"), v.literal("collective"))),
+    numberOfSessions: v.optional(v.number()), // Nombre de séances (1 = uni-séance, >1 = multi-séances)
+
+    // Créneaux collectifs (pour formules collectives)
+    collectiveSlotIds: v.optional(v.array(v.id("collectiveSlots"))),
+    animalCount: v.optional(v.number()), // Nombre d'animaux (formules collectives)
+
+    // Séances multi-sessions (pour formules individuelles multi-séances)
+    sessions: v.optional(v.array(v.object({
+      date: v.string(),
+      startTime: v.string(),
+      endTime: v.string(),
+    }))),
+
     // Timestamps
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -649,6 +664,8 @@ export default defineSchema({
     animalCount: v.optional(v.number()),
     // Type d'animal sélectionné
     selectedAnimalType: v.optional(v.string()),
+    // Animaux sélectionnés par l'utilisateur (IDs)
+    selectedAnimalIds: v.optional(v.array(v.string())),
 
     // Séances multi-sessions (pour formules individuelles multi-séances)
     sessions: v.optional(v.array(v.object({

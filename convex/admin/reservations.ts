@@ -146,6 +146,20 @@ export const deleteReservation = mutation({
       throw new Error("Réservation non trouvée");
     }
 
+    // Libérer les places dans les créneaux collectifs si applicable
+    if (mission.sessionType === "collective" && mission.collectiveSlotIds && mission.collectiveSlotIds.length > 0) {
+      const animalCount = mission.animalCount || 1;
+      for (const slotId of mission.collectiveSlotIds) {
+        const slot = await ctx.db.get(slotId);
+        if (slot) {
+          await ctx.db.patch(slotId, {
+            bookedAnimals: Math.max(0, slot.bookedAnimals - animalCount),
+            updatedAt: Date.now(),
+          });
+        }
+      }
+    }
+
     // Supprimer le paiement associé si présent
     if (mission.stripePaymentId) {
       await ctx.db.delete(mission.stripePaymentId);
@@ -179,6 +193,20 @@ export const deleteMultipleReservations = mutation({
       try {
         const mission = await ctx.db.get(missionId);
         if (mission) {
+          // Libérer les places dans les créneaux collectifs si applicable
+          if (mission.sessionType === "collective" && mission.collectiveSlotIds && mission.collectiveSlotIds.length > 0) {
+            const animalCount = mission.animalCount || 1;
+            for (const slotId of mission.collectiveSlotIds) {
+              const slot = await ctx.db.get(slotId);
+              if (slot) {
+                await ctx.db.patch(slotId, {
+                  bookedAnimals: Math.max(0, slot.bookedAnimals - animalCount),
+                  updatedAt: Date.now(),
+                });
+              }
+            }
+          }
+
           // Supprimer le paiement associé si présent
           if (mission.stripePaymentId) {
             await ctx.db.delete(mission.stripePaymentId);
@@ -229,5 +257,58 @@ export const updateReservationStatus = mutation({
     });
 
     return { success: true };
+  },
+});
+
+/**
+ * Recalculer les compteurs bookedAnimals pour tous les créneaux collectifs
+ * Utile pour corriger les données après un bug ou une migration
+ */
+export const recalculateSlotCounts = mutation({
+  args: {
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const auth = await checkAdmin(ctx, args.token);
+    if (!auth.success) {
+      throw new Error(auth.error);
+    }
+
+    // Récupérer tous les créneaux collectifs
+    const slots = await ctx.db.query("collectiveSlots").collect();
+
+    // Récupérer toutes les missions collectives actives (pas cancelled/refused)
+    const missions = await ctx.db.query("missions").collect();
+    const activeMissions = missions.filter(
+      (m) =>
+        m.sessionType === "collective" &&
+        m.collectiveSlotIds &&
+        m.collectiveSlotIds.length > 0 &&
+        m.status !== "cancelled" &&
+        m.status !== "refused"
+    );
+
+    let updated = 0;
+
+    for (const slot of slots) {
+      // Compter les animaux réservés pour ce créneau
+      let bookedCount = 0;
+      for (const mission of activeMissions) {
+        if (mission.collectiveSlotIds?.some((id) => String(id) === String(slot._id))) {
+          bookedCount += mission.animalCount || 1;
+        }
+      }
+
+      // Mettre à jour si différent
+      if (slot.bookedAnimals !== bookedCount) {
+        await ctx.db.patch(slot._id, {
+          bookedAnimals: bookedCount,
+          updatedAt: Date.now(),
+        });
+        updated++;
+      }
+    }
+
+    return { success: true, slotsUpdated: updated, totalSlots: slots.length };
   },
 });

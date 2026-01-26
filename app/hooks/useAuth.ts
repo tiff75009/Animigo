@@ -107,6 +107,13 @@ export function useAuth() {
     router.push("/connexion");
   }, [token, logoutAllMutation, router]);
 
+  // Fonction pour rafraîchir le token depuis le localStorage
+  // Utile après une connexion inline (sans rechargement de page)
+  const refreshToken = useCallback(() => {
+    const storedToken = localStorage.getItem("auth_token");
+    setToken(storedToken);
+  }, []);
+
   return {
     user,
     isLoading,
@@ -114,5 +121,6 @@ export function useAuth() {
     logout,
     logoutAllDevices,
     token,
+    refreshToken,
   };
 }

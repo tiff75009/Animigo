@@ -38,13 +38,30 @@ export function DayView({
 }: DayViewProps) {
   const dateStr = formatDateLocal(currentDate);
 
-  // Get day's missions
+  // Get day's missions (filtrer les missions collectives qui sont affichées dans les créneaux)
   const dayMissions = missions.filter((mission) => {
+    // Ne pas afficher les missions collectives comme missions séparées
+    if (mission.sessionType === "collective") {
+      return false;
+    }
+
+    // Pour les missions multi-séances, utiliser les dates des séances
+    if (mission.sessions && mission.sessions.length > 0) {
+      return mission.sessions.some((s) => s.date === dateStr);
+    }
+
+    // Pour les missions standard (uni-séance), utiliser la plage startDate-endDate
     return mission.startDate <= dateStr && mission.endDate >= dateStr;
   });
 
-  // Get day's collective slots
-  const daySlots = collectiveSlots.filter((slot) => slot.date === dateStr);
+  // Get day's collective slots (prioriser ceux avec réservations)
+  const daySlots = collectiveSlots
+    .filter((slot) => slot.date === dateStr)
+    .sort((a, b) => {
+      const aHasBookings = a.bookings && a.bookings.length > 0 ? 1 : 0;
+      const bHasBookings = b.bookings && b.bookings.length > 0 ? 1 : 0;
+      return bHasBookings - aHasBookings;
+    });
 
   // Get day's availability
   const dayAvailability = availability.find((a) => a.date === dateStr);
@@ -135,16 +152,22 @@ export function DayView({
             const height = Math.max((endHour - startHour) * 48, 60);
 
             const isFull = slot.bookedAnimals >= slot.maxAnimals;
+            const hasBookings = slot.bookings && slot.bookings.length > 0;
 
             return (
               <motion.div
                 key={slot._id}
-                onClick={() => onSlotClick?.(slot)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSlotClick?.(slot);
+                }}
                 className={cn(
                   "absolute left-2 right-2 rounded-xl p-3 text-white cursor-pointer overflow-hidden shadow-lg border-l-4",
-                  isFull
+                  hasBookings
                     ? "bg-purple-600 border-purple-800"
-                    : "bg-purple-500 border-purple-700"
+                    : isFull
+                      ? "bg-purple-500 border-purple-700"
+                      : "bg-purple-400 border-purple-600"
                 )}
                 style={{
                   top: `${top}px`,
@@ -170,9 +193,14 @@ export function DayView({
                   </div>
                   <span className={cn(
                     "text-xs px-2 py-1 rounded-full flex-shrink-0",
-                    isFull ? "bg-white/30" : "bg-white/20"
+                    hasBookings ? "bg-white/40 font-semibold" : isFull ? "bg-white/30" : "bg-white/20"
                   )}>
-                    {isFull ? "Complet" : `${slot.availableSpots} place${slot.availableSpots > 1 ? "s" : ""}`}
+                    {hasBookings
+                      ? `${slot.bookings![0].animalEmoji} ${slot.bookings!.length} résa`
+                      : isFull
+                        ? "Complet"
+                        : `${slot.availableSpots} place${slot.availableSpots > 1 ? "s" : ""}`
+                    }
                   </span>
                 </div>
 
@@ -182,10 +210,27 @@ export function DayView({
                       <Clock className="w-3 h-3" />
                       <span>{slot.startTime} - {slot.endTime}</span>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Users className="w-3 h-3" />
-                      <span>{slot.bookedAnimals}/{slot.maxAnimals} réservés</span>
-                    </div>
+                    {hasBookings ? (
+                      <div className="mt-1">
+                        <span className="font-medium">{slot.bookings!.length} réservation{slot.bookings!.length > 1 ? "s" : ""}:</span>
+                        <div className="mt-1 space-y-0.5">
+                          {slot.bookings!.slice(0, 2).map((booking) => (
+                            <div key={booking._id} className="flex items-center gap-1 bg-white/10 rounded px-1 py-0.5">
+                              <span>{booking.animalEmoji}</span>
+                              <span className="truncate">{booking.animalName}</span>
+                            </div>
+                          ))}
+                          {slot.bookings!.length > 2 && (
+                            <p className="text-xs opacity-70">+{slot.bookings!.length - 2} autres</p>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <Users className="w-3 h-3" />
+                        <span>{slot.bookedAnimals}/{slot.maxAnimals} réservés</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </motion.div>
@@ -207,7 +252,10 @@ export function DayView({
             return (
               <motion.div
                 key={mission.id}
-                onClick={() => onMissionClick(mission)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMissionClick(mission);
+                }}
                 className={cn(
                   "absolute left-2 right-2 rounded-xl p-3 text-white cursor-pointer overflow-hidden shadow-lg",
                   statusColors[mission.status]

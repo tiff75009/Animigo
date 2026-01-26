@@ -18,6 +18,18 @@ import {
 import { cn } from "@/app/lib/utils";
 import Link from "next/link";
 
+interface SlotBooking {
+  _id: string;
+  clientName: string;
+  clientEmail?: string;
+  animalName: string;
+  animalEmoji?: string;
+  animalType?: string;
+  animalCount?: number;
+  sessionNumber?: number;
+  status?: string;
+}
+
 interface CollectiveSlotModalProps {
   slot: {
     _id: string;
@@ -41,6 +53,13 @@ export function CollectiveSlotModal({
   onClose,
 }: CollectiveSlotModalProps) {
   const [isClosing, setIsClosing] = useState(false);
+
+  // Reset isClosing when slot changes (new modal opens)
+  useEffect(() => {
+    if (slot) {
+      setIsClosing(false);
+    }
+  }, [slot]);
 
   // Fetch bookings for this slot
   const bookings = useQuery(
@@ -188,7 +207,7 @@ export function CollectiveSlotModal({
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {bookings.map((booking) => (
+                  {bookings.map((booking: SlotBooking) => (
                     <motion.div
                       key={booking._id}
                       initial={{ opacity: 0, y: 10 }}

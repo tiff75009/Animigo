@@ -39,10 +39,32 @@ interface BookingCalendarProps {
   onMonthChange: (date: Date) => void;
 }
 
+// Délai minimum de réservation (en heures)
+const MIN_BOOKING_LEAD_TIME_HOURS = 2;
+
 // Helper functions
 function parseTimeToMinutes(time: string): number {
   const [hours, minutes] = time.split(":").map(Number);
   return hours * 60 + minutes;
+}
+
+// Vérifier si un créneau est réservable (pas passé + délai minimum)
+function isSlotBookable(dateStr: string, startTime: string): boolean {
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+  // Date passée = non réservable
+  if (dateStr < todayStr) return false;
+
+  // Date future = réservable
+  if (dateStr > todayStr) return true;
+
+  // Date = aujourd'hui : vérifier l'heure avec délai minimum
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const slotMinutes = parseTimeToMinutes(startTime);
+  const minBookableMinutes = currentMinutes + (MIN_BOOKING_LEAD_TIME_HOURS * 60);
+
+  return slotMinutes >= minBookableMinutes;
 }
 
 function calculateDuration(startTime: string, endTime: string): string {
@@ -301,6 +323,11 @@ export default function BookingCalendar({
 
   // Check if a time slot is available
   const isTimeSlotAvailable = (startTime: string, duration: number = variantDuration) => {
+    // Vérifier d'abord si le créneau est réservable (pas passé + délai minimum 2h)
+    if (selectedDate && !isSlotBookable(selectedDate, startTime)) {
+      return false;
+    }
+
     const startMinutes = parseTimeToMinutes(startTime);
     const endMinutes = startMinutes + duration;
 

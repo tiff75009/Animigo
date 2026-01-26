@@ -2,6 +2,21 @@
 
 import { useState, useCallback, useMemo } from "react";
 
+// Type pour les réservations dans un créneau collectif
+export interface SlotBooking {
+  _id: string;
+  missionId: string;
+  clientId: string;
+  clientName: string;
+  animalName: string;
+  animalEmoji: string;
+  animalType: string;
+  animalCount: number;
+  sessionNumber: number;
+  status: "booked" | "completed" | "cancelled" | "slot_cancelled";
+  missionStatus?: string;
+}
+
 // Type pour les créneaux collectifs transformés
 export interface CollectiveSlot {
   _id: string;
@@ -16,6 +31,7 @@ export interface CollectiveSlot {
   availableSpots: number;
   isActive: boolean;
   isCancelled: boolean;
+  bookings?: SlotBooking[];
 }
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -61,6 +77,13 @@ export interface Mission {
   clientNotes?: string;
   announcerNotes?: string;
   cancellationReason?: string;
+  // Type de formule et données multi-séances/collectives
+  sessionType?: "individual" | "collective";
+  numberOfSessions?: number;
+  sessions?: Array<{ date: string; startTime: string; endTime: string }>;
+  collectiveSlotIds?: string[];
+  collectiveSlotDates?: string[]; // Dates des créneaux pour les formules collectives
+  animalCount?: number;
 }
 
 export interface Availability {
@@ -161,8 +184,8 @@ export function usePlanning({
   const collectiveSlots = useMemo(() => {
     if (!collectiveSlotsRaw) return [];
     return collectiveSlotsRaw
-      .filter((slot) => !slot.isCancelled && slot.isActive)
-      .map((slot) => ({
+      .filter((slot: { isCancelled: boolean; isActive: boolean }) => !slot.isCancelled && slot.isActive)
+      .map((slot: { maxAnimals: number; bookedAnimals: number }) => ({
         ...slot,
         availableSpots: slot.maxAnimals - slot.bookedAnimals,
       }));
@@ -359,7 +382,20 @@ export function usePlanning({
   const getMissionsForDay = useCallback(
     (date: string): Mission[] => {
       if (!missions) return [];
-      return missions.filter((m: Mission) => m.startDate <= date && m.endDate >= date);
+      return missions.filter((m: Mission) => {
+        // Pour les missions collectives, utiliser les dates des créneaux réservés
+        if (m.sessionType === "collective" && m.collectiveSlotDates) {
+          return m.collectiveSlotDates.includes(date);
+        }
+
+        // Pour les missions multi-séances, utiliser les dates des séances
+        if (m.sessions && m.sessions.length > 0) {
+          return m.sessions.some((s) => s.date === date);
+        }
+
+        // Pour les missions standard (uni-séance), utiliser la plage startDate-endDate
+        return m.startDate <= date && m.endDate >= date;
+      });
     },
     [missions]
   );
@@ -377,7 +413,7 @@ export function usePlanning({
   const getCollectiveSlotsForDay = useCallback(
     (date: string): CollectiveSlot[] => {
       if (!collectiveSlots) return [];
-      return collectiveSlots.filter((slot) => slot.date === date);
+      return collectiveSlots.filter((slot: CollectiveSlot) => slot.date === date);
     },
     [collectiveSlots]
   );

@@ -109,10 +109,17 @@ export default function BookingSummary({
         ? Boolean(selection.startDate && selection.endDate && selection.startTime && selection.endTime)
         : Boolean(selection.startDate && selection.startTime);
 
+  // Vérifier si l'adresse est requise et saisie
+  const isAddressRequired = selection.serviceLocation === "client_home";
+  const hasAddress = isAddressRequired
+    ? Boolean(clientAddress || selection.guestAddress?.address)
+    : true;
+
   const isReadyToBook = Boolean(
     selection.selectedServiceId &&
     selection.selectedVariantId &&
     isDateTimeComplete &&
+    hasAddress &&
     (isCollectiveFormule || isMultiSessionIndividual || priceBreakdown)
   );
 
@@ -134,6 +141,10 @@ export default function BookingSummary({
       if (isRangeMode && !selection.endDate) missing.push("date de fin");
       if (!selection.startTime) missing.push("heure de début");
       if (isRangeMode && !selection.endTime) missing.push("heure de fin");
+    }
+    // Vérifier l'adresse pour les services à domicile
+    if (isAddressRequired && !hasAddress) {
+      missing.push("adresse de prestation");
     }
     return missing;
   };

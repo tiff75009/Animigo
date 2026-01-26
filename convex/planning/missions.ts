@@ -46,26 +46,54 @@ export const getMissionsByDateRange = query({
       return m.startDate <= args.endDate && m.endDate >= args.startDate;
     });
 
-    return filteredMissions.map((m) => ({
-      id: m._id,
-      clientId: m.clientId,
-      clientName: m.clientName,
-      clientPhone: m.clientPhone,
-      animal: m.animal,
-      serviceName: m.serviceName,
-      serviceCategory: m.serviceCategory,
-      startDate: m.startDate,
-      endDate: m.endDate,
-      startTime: m.startTime,
-      endTime: m.endTime,
-      status: m.status,
-      amount: m.amount,
-      paymentStatus: m.paymentStatus,
-      location: m.location,
-      clientNotes: m.clientNotes,
-      announcerNotes: m.announcerNotes,
-      cancellationReason: m.cancellationReason,
-    }));
+    // Enrichir avec les dates des créneaux collectifs si applicable
+    const enrichedMissions = await Promise.all(
+      filteredMissions.map(async (m) => {
+        let collectiveSlotDates: string[] | undefined;
+
+        // Pour les missions collectives, récupérer les dates des créneaux réservés
+        if (m.sessionType === "collective" && m.collectiveSlotIds && m.collectiveSlotIds.length > 0) {
+          const slotDates: string[] = [];
+          for (const slotId of m.collectiveSlotIds) {
+            const slot = await ctx.db.get(slotId);
+            if (slot) {
+              slotDates.push(slot.date);
+            }
+          }
+          collectiveSlotDates = slotDates;
+        }
+
+        return {
+          id: m._id,
+          clientId: m.clientId,
+          clientName: m.clientName,
+          clientPhone: m.clientPhone,
+          animal: m.animal,
+          serviceName: m.serviceName,
+          serviceCategory: m.serviceCategory,
+          startDate: m.startDate,
+          endDate: m.endDate,
+          startTime: m.startTime,
+          endTime: m.endTime,
+          status: m.status,
+          amount: m.amount,
+          paymentStatus: m.paymentStatus,
+          location: m.location,
+          clientNotes: m.clientNotes,
+          announcerNotes: m.announcerNotes,
+          cancellationReason: m.cancellationReason,
+          // Type de formule et données multi-séances/collectives
+          sessionType: m.sessionType,
+          numberOfSessions: m.numberOfSessions,
+          sessions: m.sessions,
+          collectiveSlotIds: m.collectiveSlotIds,
+          collectiveSlotDates, // Dates des créneaux pour les formules collectives
+          animalCount: m.animalCount,
+        };
+      })
+    );
+
+    return enrichedMissions;
   },
 });
 
@@ -183,36 +211,66 @@ export const getMissionsByStatus = query({
       ? await missionsQuery.take(args.limit)
       : await missionsQuery.collect();
 
-    return missions.map((m) => ({
-      id: m._id,
-      clientId: m.clientId,
-      clientName: m.clientName,
-      clientPhone: m.clientPhone,
-      animal: m.animal,
-      animalId: m.animalId,
-      serviceName: m.serviceName,
-      serviceCategory: m.serviceCategory,
-      variantId: m.variantId,
-      variantName: m.variantName,
-      optionIds: m.optionIds,
-      optionNames: m.optionNames,
-      basePrice: m.basePrice,
-      optionsPrice: m.optionsPrice,
-      platformFee: m.platformFee,
-      announcerEarnings: m.announcerEarnings,
-      startDate: m.startDate,
-      endDate: m.endDate,
-      startTime: m.startTime,
-      endTime: m.endTime,
-      status: m.status,
-      amount: m.amount,
-      paymentStatus: m.paymentStatus,
-      location: m.location,
-      city: m.city,
-      clientCoordinates: m.clientCoordinates,
-      clientNotes: m.clientNotes,
-      announcerNotes: m.announcerNotes,
-    }));
+    // Enrichir avec les dates des créneaux collectifs si applicable
+    const enrichedMissions = await Promise.all(
+      missions.map(async (m) => {
+        let collectiveSlotDates: string[] | undefined;
+
+        // Pour les missions collectives, récupérer les dates des créneaux réservés
+        if (m.sessionType === "collective" && m.collectiveSlotIds && m.collectiveSlotIds.length > 0) {
+          const slotDates: string[] = [];
+          for (const slotId of m.collectiveSlotIds) {
+            const slot = await ctx.db.get(slotId);
+            if (slot) {
+              slotDates.push(slot.date);
+            }
+          }
+          collectiveSlotDates = slotDates;
+        }
+
+        return {
+          id: m._id,
+          clientId: m.clientId,
+          clientName: m.clientName,
+          clientPhone: m.clientPhone,
+          animal: m.animal,
+          animalId: m.animalId,
+          serviceName: m.serviceName,
+          serviceCategory: m.serviceCategory,
+          variantId: m.variantId,
+          variantName: m.variantName,
+          optionIds: m.optionIds,
+          optionNames: m.optionNames,
+          basePrice: m.basePrice,
+          optionsPrice: m.optionsPrice,
+          platformFee: m.platformFee,
+          announcerEarnings: m.announcerEarnings,
+          startDate: m.startDate,
+          endDate: m.endDate,
+          startTime: m.startTime,
+          endTime: m.endTime,
+          status: m.status,
+          amount: m.amount,
+          paymentStatus: m.paymentStatus,
+          location: m.location,
+          city: m.city,
+          clientCoordinates: m.clientCoordinates,
+          clientNotes: m.clientNotes,
+          announcerNotes: m.announcerNotes,
+          // Type de formule
+          sessionType: m.sessionType,
+          numberOfSessions: m.numberOfSessions,
+          // Créneaux collectifs
+          collectiveSlotIds: m.collectiveSlotIds,
+          collectiveSlotDates, // Dates des créneaux pour l'affichage
+          animalCount: m.animalCount,
+          // Séances multi-sessions
+          sessions: m.sessions,
+        };
+      })
+    );
+
+    return enrichedMissions;
   },
 });
 
@@ -409,6 +467,20 @@ export const refuseMission = mutation({
       throw new ConvexError("Cette mission ne peut pas être refusée");
     }
 
+    // Libérer les places dans les créneaux collectifs si applicable
+    if (mission.sessionType === "collective" && mission.collectiveSlotIds && mission.collectiveSlotIds.length > 0) {
+      const animalCount = mission.animalCount || 1;
+      for (const slotId of mission.collectiveSlotIds) {
+        const slot = await ctx.db.get(slotId);
+        if (slot) {
+          await ctx.db.patch(slotId, {
+            bookedAnimals: Math.max(0, slot.bookedAnimals - animalCount),
+            updatedAt: Date.now(),
+          });
+        }
+      }
+    }
+
     await ctx.db.patch(args.missionId, {
       status: "refused",
       cancellationReason: args.reason,
@@ -450,6 +522,20 @@ export const cancelMission = mutation({
     // On ne peut annuler que les missions confirmées ou à venir
     if (mission.status !== "upcoming" && mission.status !== "in_progress") {
       throw new ConvexError("Cette mission ne peut pas être annulée");
+    }
+
+    // Libérer les places dans les créneaux collectifs si applicable
+    if (mission.sessionType === "collective" && mission.collectiveSlotIds && mission.collectiveSlotIds.length > 0) {
+      const animalCount = mission.animalCount || 1;
+      for (const slotId of mission.collectiveSlotIds) {
+        const slot = await ctx.db.get(slotId);
+        if (slot) {
+          await ctx.db.patch(slotId, {
+            bookedAnimals: Math.max(0, slot.bookedAnimals - animalCount),
+            updatedAt: Date.now(),
+          });
+        }
+      }
     }
 
     await ctx.db.patch(args.missionId, {

@@ -37,6 +37,8 @@ import { Id } from "@/convex/_generated/dataModel";
 import { AnimalSelector, GuestAnimalForm, type GuestAnimalData } from "@/app/components/animals";
 import AddressAutocomplete from "@/app/components/ui/AddressAutocomplete";
 import ConfirmationModal from "@/app/components/ui/ConfirmationModal";
+import AddressSectionBooking from "./components/AddressSectionBooking";
+import CollectiveAnimalSelector from "./components/CollectiveAnimalSelector";
 
 // Types
 interface ServiceOption {
@@ -71,6 +73,7 @@ interface PendingBookingData {
     lastName: string;
     profileImage: string | null;
     location: string;
+    coordinates?: { lat: number; lng: number };
     verified: boolean;
     accountType: string;
     companyType?: string;
@@ -124,11 +127,20 @@ interface PendingBookingData {
     overnightAmount?: number;
   };
   serviceLocation?: "announcer_home" | "client_home";
+  // Adresse guest (pour utilisateurs non connectés)
+  guestAddress?: {
+    address: string;
+    city?: string;
+    postalCode?: string;
+    coordinates?: { lat: number; lng: number };
+  };
   // Support formules collectives
   collectiveSlotIds?: Id<"collectiveSlots">[];
   collectiveSlots?: CollectiveSlotData[];
   animalCount?: number;
   selectedAnimalType?: string;
+  // Animaux sélectionnés par l'utilisateur
+  selectedAnimalIds?: string[];
   // Support formules multi-séances
   sessions?: SessionData[];
   userId?: Id<"users">;
@@ -167,6 +179,34 @@ interface PriceCalculationResult {
 function parseTimeToMinutes(time: string): number {
   const [hours, minutes] = time.split(":").map(Number);
   return hours * 60 + minutes;
+}
+
+// Helper: Calculate distance between two coordinates (Haversine formula)
+function calculateDistance(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number
+): number {
+  const R = 6371; // Rayon de la Terre en km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+// Helper: Format distance for display
+function formatDistance(distance: number): string {
+  if (distance < 1) {
+    return "moins d'1 km";
+  }
+  return `${Math.round(distance)} km`;
 }
 
 // Helper: Calculate hours between two times
@@ -452,6 +492,7 @@ export default function ReservationPage({
   const [token, setToken] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [selectedAnimalId, setSelectedAnimalId] = useState<Id<"animals"> | null>(null);
+  const [selectedAnimalIds, setSelectedAnimalIds] = useState<Id<"animals">[]>([]); // Pour formules collectives
   const [address, setAddress] = useState("");
   const [city, setCity] = useState<string | null>(null);
   const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(null);
@@ -548,6 +589,19 @@ export default function ReservationPage({
     }
   }, [bookingData?.options]);
 
+  // Pré-sélectionner l'animal depuis les données de réservation
+  useEffect(() => {
+    if (
+      bookingData?.selectedAnimalIds &&
+      bookingData.selectedAnimalIds.length > 0 &&
+      !selectedAnimalId &&
+      isLoggedIn
+    ) {
+      // Sélectionner le premier animal de la liste
+      setSelectedAnimalId(bookingData.selectedAnimalIds[0] as Id<"animals">);
+    }
+  }, [bookingData?.selectedAnimalIds, selectedAnimalId, isLoggedIn]);
+
   // Pré-remplir l'adresse depuis le profil utilisateur si réservation à domicile
   useEffect(() => {
     if (
@@ -559,6 +613,25 @@ export default function ReservationPage({
       setAddressPreFilled(true);
     }
   }, [sessionData?.user?.location, bookingData?.serviceLocation, addressPreFilled]);
+
+  // Pré-remplir l'adresse depuis guestAddress (saisie dans la page annonceur) pour les guests
+  useEffect(() => {
+    if (
+      bookingData?.guestAddress?.address &&
+      bookingData?.serviceLocation === "client_home" &&
+      !addressPreFilled &&
+      !isLoggedIn
+    ) {
+      setAddress(bookingData.guestAddress.address);
+      if (bookingData.guestAddress.city) {
+        setCity(bookingData.guestAddress.city);
+      }
+      if (bookingData.guestAddress.coordinates) {
+        setCoordinates(bookingData.guestAddress.coordinates);
+      }
+      setAddressPreFilled(true);
+    }
+  }, [bookingData?.guestAddress, bookingData?.serviceLocation, addressPreFilled, isLoggedIn]);
 
   // Détecter le type de formule
   const isCollectiveFormula = bookingData?.variant?.sessionType === "collective" ||
@@ -700,8 +773,16 @@ export default function ReservationPage({
 
     if (isLoggedIn) {
       // Validation utilisateur connecté
-      if (!selectedAnimalId) {
-        errors.animal = "Veuillez sélectionner un animal";
+      if (isCollectiveFormula) {
+        // Pour les formules collectives, au moins un animal doit être sélectionné
+        if (selectedAnimalIds.length === 0) {
+          errors.animal = "Veuillez selectionner au moins un animal";
+        }
+      } else {
+        // Pour les autres formules, un seul animal
+        if (!selectedAnimalId) {
+          errors.animal = "Veuillez selectionner un animal";
+        }
       }
     } else {
       // Validation invité
@@ -733,8 +814,9 @@ export default function ReservationPage({
       }
     }
 
-    // Validation commune
-    if (!address.trim()) {
+    // Validation adresse - seulement si prestation à domicile du client (pas pour les formules collectives)
+    const needsClientAddress = bookingData?.serviceLocation === "client_home" && !isCollectiveFormula;
+    if (needsClientAddress && !address.trim()) {
       errors.address = "L'adresse est requise";
     }
 
@@ -780,15 +862,40 @@ export default function ReservationPage({
     setError(null);
 
     try {
-      if (isLoggedIn && token && selectedAnimalId) {
+      // Déterminer l'adresse à utiliser selon le lieu de prestation
+      // Pour les formules collectives ou chez l'annonceur, utiliser l'adresse de l'annonceur
+      const useAnnouncerLocation = bookingData.serviceLocation === "announcer_home" || isCollectiveFormula;
+      const effectiveLocation = useAnnouncerLocation
+        ? bookingData.announcer.location
+        : address;
+      const effectiveCity = useAnnouncerLocation
+        ? null // La ville est incluse dans la localisation de l'annonceur
+        : city;
+      const effectiveCoordinates = useAnnouncerLocation
+        ? null
+        : coordinates;
+
+      // Déterminer l'animal à utiliser
+      // Priorité: selectedAnimalIds (formules collectives) > selectedAnimalId (formules standard)
+      const effectiveAnimalId = selectedAnimalIds.length > 0
+        ? selectedAnimalIds[0]
+        : selectedAnimalId;
+
+      if (isLoggedIn && token) {
         // Utilisateur connecté
+        if (!effectiveAnimalId) {
+          setError("Veuillez sélectionner un animal");
+          setShowConfirmationModal(false);
+          return;
+        }
+
         const result = await finalizeBooking({
           token,
           bookingId: bookingId as Id<"pendingBookings">,
-          animalId: selectedAnimalId,
-          location: address,
-          city: city || undefined,
-          coordinates: coordinates || undefined,
+          animalId: effectiveAnimalId,
+          location: effectiveLocation,
+          city: effectiveCity || undefined,
+          coordinates: effectiveCoordinates || undefined,
           notes: notes || undefined,
           updatedOptionIds: selectedOptionIds,
           updatedAmount: totalAmount, // Prix du service (sans commission) - la commission sera calculée côté backend
@@ -798,7 +905,7 @@ export default function ReservationPage({
           setShowConfirmationModal(false);
           router.push(`/dashboard?tab=missions&success=booking`);
         }
-      } else {
+      } else if (!isLoggedIn) {
         // Invité
         const result = await finalizeAsGuest({
           bookingId: bookingId as Id<"pendingBookings">,
@@ -823,9 +930,9 @@ export default function ReservationPage({
             specialNeeds: guestAnimalData.specialNeeds?.trim() || undefined,
             medicalConditions: guestAnimalData.medicalConditions?.trim() || undefined,
           },
-          location: address.trim(),
-          city: city || undefined,
-          coordinates: coordinates || undefined,
+          location: effectiveLocation.trim(),
+          city: effectiveCity || undefined,
+          coordinates: effectiveCoordinates || undefined,
           notes: notes?.trim() || undefined,
           updatedOptionIds: selectedOptionIds,
           updatedAmount: totalAmount, // Prix du service (sans commission) - la commission sera calculée côté backend
@@ -1167,30 +1274,63 @@ export default function ReservationPage({
               <div className="bg-gradient-to-r from-secondary to-secondary/80 px-6 py-4">
                 <h2 className="text-lg font-semibold text-white flex items-center gap-2">
                   <PawPrint className="w-5 h-5" />
-                  Votre animal
+                  {isCollectiveFormula ? "Vos animaux" : "Votre animal"}
                 </h2>
               </div>
               <div className="p-6">
                 {isLoggedIn && token ? (
                   <>
-                    <AnimalSelector
-                      token={token}
-                      selectedAnimalId={selectedAnimalId}
-                      onSelect={setSelectedAnimalId}
-                      compact
-                    />
-                    {fieldErrors.animal && (
-                      <p className="mt-3 text-sm text-red-500 flex items-center gap-1">
-                        <AlertCircle className="w-4 h-4" />
-                        {fieldErrors.animal}
-                      </p>
+                    {isCollectiveFormula && bookingData.collectiveSlots ? (
+                      <CollectiveAnimalSelector
+                        token={token}
+                        preSelectedAnimalIds={bookingData.selectedAnimalIds || []}
+                        acceptedAnimalTypes={bookingData.variant?.animalTypes || []}
+                        collectiveSlots={bookingData.collectiveSlots}
+                        maxAnimalsPerSlot={10}
+                        onSelectionChange={(ids) => {
+                          setSelectedAnimalIds(ids);
+                          // Aussi mettre à jour le premier ID pour la compatibilité
+                          setSelectedAnimalId(ids.length > 0 ? ids[0] : null);
+                        }}
+                        error={fieldErrors.animal}
+                      />
+                    ) : (
+                      <>
+                        <AnimalSelector
+                          token={token}
+                          selectedAnimalId={selectedAnimalId}
+                          onSelect={setSelectedAnimalId}
+                          compact
+                        />
+                        {fieldErrors.animal && (
+                          <p className="mt-3 text-sm text-red-500 flex items-center gap-1">
+                            <AlertCircle className="w-4 h-4" />
+                            {fieldErrors.animal}
+                          </p>
+                        )}
+                      </>
                     )}
                   </>
                 ) : (
                   <>
+                    {/* Message pour utilisateurs non connectés */}
+                    <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                      <p className="text-sm text-amber-800 flex items-start gap-2">
+                        <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <span>
+                          En tant que nouvel utilisateur, vous pouvez inscrire <strong>un seul animal</strong> pour cette réservation.
+                          {isCollectiveFormula && (
+                            <span className="block mt-1 text-amber-700">
+                              Pour inscrire plusieurs animaux aux séances collectives, veuillez d&apos;abord créer un compte et vous connecter.
+                            </span>
+                          )}
+                        </span>
+                      </p>
+                    </div>
                     <GuestAnimalForm
                       data={guestAnimalData}
                       onChange={setGuestAnimalData}
+                      acceptedAnimalTypes={bookingData.variant?.animalTypes}
                     />
                     {(fieldErrors.animalName || fieldErrors.animalType) && (
                       <p className="mt-3 text-sm text-red-500 flex items-center gap-1">
@@ -1288,37 +1428,20 @@ export default function ReservationPage({
                 </h2>
               </div>
               <div className="p-6">
-                <AddressAutocomplete
-                  value={address}
-                  onChange={(data) => {
-                    if (data) {
-                      // Construire l'adresse complète depuis les données structurées
-                      const fullAddress = [
-                        data.address,
-                        data.postalCode,
-                        data.city,
-                      ]
-                        .filter(Boolean)
-                        .join(", ");
-                      setAddress(fullAddress);
-                      setCity(data.city);
-                      setCoordinates(data.coordinates);
-                    } else {
-                      setCity(null);
-                      setCoordinates(null);
-                    }
+                <AddressSectionBooking
+                  sessionToken={token}
+                  isLoggedIn={isLoggedIn}
+                  serviceLocation={bookingData.serviceLocation}
+                  announcerLocation={bookingData.announcer.location}
+                  isCollectiveFormula={isCollectiveFormula}
+                  currentAddress={address}
+                  currentCity={city}
+                  currentCoordinates={coordinates}
+                  onAddressChange={(data) => {
+                    setAddress(data.address);
+                    setCity(data.city);
+                    setCoordinates(data.coordinates);
                   }}
-                  onInputChange={(value) => setAddress(value)}
-                  onManualChange={(value) => {
-                    setAddress(value);
-                    // En mode manuel, on ne peut pas avoir les coordonnées
-                    setCity(null);
-                    setCoordinates(null);
-                  }}
-                  placeholder="Rechercher une adresse exacte..."
-                  allowManualEntry={true}
-                  searchType="address"
-                  helperText="Saisissez l'adresse où aura lieu la prestation"
                   error={fieldErrors.address}
                 />
               </div>
@@ -1421,18 +1544,54 @@ export default function ReservationPage({
                       {bookingData.variant && (
                         <p className="text-sm text-text-light">{bookingData.variant.name}</p>
                       )}
-                      {/* Badge type de formule */}
-                      {(isCollectiveFormula || isMultiSessionFormula) && (
-                        <div className="flex items-center gap-2 mt-1">
-                          {isCollectiveFormula ? (
-                            <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full flex items-center gap-1">
-                              <Users className="w-3 h-3" />
-                              Collective
-                            </span>
-                          ) : (
-                            <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
-                              {numberOfSessions} séances
-                            </span>
+                      {/* Badge type de formule et lieu */}
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
+                        {isCollectiveFormula && (
+                          <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full flex items-center gap-1">
+                            <Users className="w-3 h-3" />
+                            Collective
+                          </span>
+                        )}
+                        {isMultiSessionFormula && !isCollectiveFormula && (
+                          <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
+                            {numberOfSessions} séances
+                          </span>
+                        )}
+                        {bookingData.serviceLocation === "client_home" && (
+                          <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            À domicile
+                          </span>
+                        )}
+                        {bookingData.serviceLocation === "announcer_home" && (
+                          <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            Chez le prestataire
+                          </span>
+                        )}
+                      </div>
+                      {/* Adresse de prestation pour services à domicile */}
+                      {bookingData.serviceLocation === "client_home" && address && (
+                        <div className="mt-2 p-2 bg-blue-50 rounded-lg">
+                          <p className="text-sm text-blue-800 font-medium">{address}</p>
+                          {(city || bookingData.guestAddress?.postalCode) && (
+                            <p className="text-xs text-blue-600">
+                              {[bookingData.guestAddress?.postalCode, city].filter(Boolean).join(" ")}
+                            </p>
+                          )}
+                          {/* Distance entre le pet-sitter et le client */}
+                          {coordinates && bookingData.announcer.coordinates && (
+                            <p className="text-xs text-blue-500 mt-1 flex items-center gap-1">
+                              <MapPin className="w-3 h-3" />
+                              {formatDistance(
+                                calculateDistance(
+                                  bookingData.announcer.coordinates.lat,
+                                  bookingData.announcer.coordinates.lng,
+                                  coordinates.lat,
+                                  coordinates.lng
+                                )
+                              )} du pet-sitter
+                            </p>
                           )}
                         </div>
                       )}

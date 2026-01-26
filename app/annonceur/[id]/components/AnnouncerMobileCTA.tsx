@@ -191,13 +191,20 @@ export default function AnnouncerMobileCTA({
   // Check if booking is in progress (variant selected)
   const hasVariantSelected = Boolean(bookingService && bookingVariant);
   const hasDateSelected = Boolean(bookingSelection?.startDate);
+
+  // Vérifier si l'adresse est requise et saisie
+  const isAddressRequired = bookingSelection?.serviceLocation === "client_home";
+  const hasAddress = isAddressRequired
+    ? Boolean(bookingSelection?.guestAddress?.address)
+    : true;
+
   // Pour les formules collectives, la réservation est complète quand tous les créneaux sont sélectionnés
   // Pour les formules multi-séances individuelles, quand toutes les séances sont sélectionnées
   const hasFullBooking = isCollectiveFormule
-    ? hasVariantSelected && hasAllSlotsSelected
+    ? hasVariantSelected && hasAllSlotsSelected && hasAddress
     : isMultiSessionIndividual
-      ? hasVariantSelected && hasAllSessionsSelected
-      : hasVariantSelected && hasDateSelected && priceBreakdown;
+      ? hasVariantSelected && hasAllSessionsSelected && hasAddress
+      : hasVariantSelected && hasDateSelected && priceBreakdown && hasAddress;
 
   // Get price to display
   const { price: minPrice, unit: minUnit } = selectedService

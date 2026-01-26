@@ -72,6 +72,14 @@ interface BookingData {
   selectedAnimalType: string;
   // Animaux sélectionnés par l'utilisateur
   selectedAnimalIds: string[];
+  // Adresse sélectionnée pour la prestation
+  selectedAddressId: string | null;
+  selectedAddressData: {
+    address: string;
+    city?: string;
+    postalCode?: string;
+    coordinates?: { lat: number; lng: number };
+  } | null;
 }
 
 // Step labels
@@ -336,6 +344,9 @@ export default function ReserverPage({
   // Direct finalization param (skip to step 4)
   const shouldFinalize = searchParams.get("finalize") === "true";
 
+  // Address param
+  const preSelectedAddressId = searchParams.get("addressId");
+
   // Créneaux collectifs et multi-sessions params
   const preSelectedSlotIds = searchParams.get("slotIds")?.split(",").filter(Boolean) || [];
   const preSelectedAnimalCount = parseInt(searchParams.get("animalCount") || "1", 10);
@@ -410,6 +421,9 @@ export default function ReserverPage({
     selectedAnimalType: preSelectedAnimalType,
     // Animaux sélectionnés
     selectedAnimalIds: preSelectedAnimalIds,
+    // Adresse sélectionnée
+    selectedAddressId: preSelectedAddressId,
+    selectedAddressData: null,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -821,6 +835,8 @@ export default function ReserverPage({
           : undefined,
         animalCount: isCollectiveFormula ? bookingData.animalCount : undefined,
         selectedAnimalType: isCollectiveFormula ? bookingData.selectedAnimalType : undefined,
+        // Animaux sélectionnés par l'utilisateur
+        selectedAnimalIds: bookingData.selectedAnimalIds.length > 0 ? bookingData.selectedAnimalIds : undefined,
         // Séances multi-sessions
         sessions: isMultiSessionIndividual && bookingData.selectedSessions.length > 0
           ? bookingData.selectedSessions
@@ -882,6 +898,9 @@ export default function ReserverPage({
         if (!bookingData.serviceId || !bookingData.variantId) return false;
         // Si le service propose "both", le lieu doit être sélectionné
         if (selectedService?.serviceLocation === "both" && !bookingData.serviceLocation) return false;
+        // Si le lieu est à domicile et utilisateur non connecté, vérifier l'adresse guest
+        const effectiveLocation = bookingData.serviceLocation || selectedService?.serviceLocation;
+        if (effectiveLocation === "client_home" && !authToken && !bookingData.guestAddress?.address) return false;
         return true;
       case 2:
         // Formule collective: vérifier que le nombre de créneaux requis est sélectionné
@@ -988,6 +1007,28 @@ export default function ReserverPage({
   // Handler pour le nombre d'animaux (formules collectives)
   const handleAnimalCountChange = (count: number) => {
     setBookingData((prev) => ({ ...prev, animalCount: count }));
+  };
+
+  // Handler pour la sélection d'adresse
+  const handleAddressSelect = (addressId: string | null, addressData?: {
+    address: string;
+    city?: string;
+    postalCode?: string;
+    coordinates?: { lat: number; lng: number };
+  }) => {
+    setBookingData((prev) => ({
+      ...prev,
+      selectedAddressId: addressId,
+      selectedAddressData: addressData || null,
+    }));
+  };
+
+  // Handler pour l'adresse guest (utilisateurs non connectés)
+  const handleGuestAddressChange = (address: GuestAddressData | null) => {
+    setBookingData((prev) => ({
+      ...prev,
+      guestAddress: address,
+    }));
   };
 
   const handleToggleOption = (optionId: string) => {
@@ -1269,6 +1310,14 @@ export default function ReserverPage({
                 userAnimals={userAnimals}
                 selectedAnimalIds={bookingData.selectedAnimalIds}
                 error={error}
+                // Gestion des adresses
+                sessionToken={authToken}
+                selectedAddressId={bookingData.selectedAddressId}
+                onAddressSelect={handleAddressSelect}
+                // Adresse guest
+                guestAddress={bookingData.guestAddress}
+                onGuestAddressChange={handleGuestAddressChange}
+                announcerCoordinates={announcerData?.coordinates ?? undefined}
               />
             )}
           </motion.div>

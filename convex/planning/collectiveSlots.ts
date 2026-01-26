@@ -188,15 +188,69 @@ export const getSlotsByUser = query({
       (s) => s.date >= args.startDate && s.date <= args.endDate
     );
 
-    // Enrichir avec les infos de la formule
+    // Récupérer toutes les missions collectives de l'annonceur
+    const allMissions = await ctx.db
+      .query("missions")
+      .withIndex("by_announcer", (q) => q.eq("announcerId", user._id))
+      .collect();
+
+    // Filtrer les missions collectives avec des créneaux
+    const collectiveMissions = allMissions.filter(
+      (m) => m.sessionType === "collective" && m.collectiveSlotIds && m.collectiveSlotIds.length > 0
+    );
+
+    // Enrichir avec les infos de la formule et les réservations
     const enrichedSlots = await Promise.all(
       filteredSlots.map(async (slot) => {
         const variant = await ctx.db.get(slot.variantId);
         const service = await ctx.db.get(slot.serviceId);
+
+        // Trouver les missions qui ont réservé ce créneau
+        const missionsForSlot = collectiveMissions.filter((m) => {
+          return m.collectiveSlotIds?.some((id) => String(id) === String(slot._id));
+        });
+
+        // Créer les bookings à partir des missions
+        const bookingsFromMissions = await Promise.all(
+          missionsForSlot.map(async (mission) => {
+            const client = await ctx.db.get(mission.clientId);
+            const animal = mission.animalId
+              ? await ctx.db.get(mission.animalId)
+              : null;
+
+            // Trouver le numéro de séance pour ce créneau
+            const sessionNumber = mission.collectiveSlotIds
+              ? mission.collectiveSlotIds.indexOf(slot._id) + 1
+              : 1;
+
+            return {
+              _id: mission._id,
+              missionId: mission._id,
+              clientId: mission.clientId,
+              clientName: client
+                ? `${client.firstName} ${client.lastName.charAt(0)}.`
+                : "Client inconnu",
+              animalName: animal?.name || mission.animal?.name || "Animal",
+              animalEmoji: mission.animal?.emoji || "🐾",
+              animalType: animal?.type || mission.animal?.type || "",
+              animalCount: mission.animalCount || 1,
+              sessionNumber,
+              status: "booked" as const,
+              missionStatus: mission.status,
+            };
+          })
+        );
+
+        // Ne garder que les missions actives (pas annulées/refusées)
+        const activeBookings = bookingsFromMissions.filter(
+          (b) => b.missionStatus !== "cancelled" && b.missionStatus !== "refused"
+        );
+
         return {
           ...slot,
           variantName: variant?.name || "Formule inconnue",
           serviceName: service?.name || service?.category || "Service inconnu",
+          bookings: activeBookings,
         };
       })
     );
@@ -213,6 +267,7 @@ export const getSlotsByUser = query({
 
 /**
  * Récupérer les créneaux disponibles pour une formule (côté client)
+ * Filtre les créneaux passés et ceux qui commencent dans moins de 2h
  */
 export const getAvailableSlots = query({
   args: {
@@ -222,8 +277,14 @@ export const getAvailableSlots = query({
     startDate: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const today = new Date().toISOString().split("T")[0];
+    const now = new Date();
+    const today = now.toISOString().split("T")[0];
     const startDate = args.startDate || today;
+
+    // Délai minimum de réservation (en heures)
+    const MIN_BOOKING_LEAD_TIME_HOURS = 2;
+    const currentMinutesOfDay = now.getHours() * 60 + now.getMinutes();
+    const minBookableMinutes = currentMinutesOfDay + (MIN_BOOKING_LEAD_TIME_HOURS * 60);
 
     const slots = await ctx.db
       .query("collectiveSlots")
@@ -237,8 +298,17 @@ export const getAvailableSlots = query({
       // Doit être actif et non annulé
       if (!slot.isActive || slot.isCancelled) return false;
 
-      // Doit être dans le futur
+      // Doit être dans le futur (pas de dates passées)
       if (slot.date < startDate) return false;
+
+      // Pour les créneaux d'aujourd'hui, vérifier le délai minimum de 2h
+      if (slot.date === today) {
+        const [slotHours, slotMinutes] = slot.startTime.split(":").map(Number);
+        const slotMinutesOfDay = slotHours * 60 + slotMinutes;
+
+        // Créneau trop proche (moins de 2h) = non disponible
+        if (slotMinutesOfDay < minBookableMinutes) return false;
+      }
 
       // Doit avoir assez de places
       if (slot.bookedAnimals + args.animalCount > slot.maxAnimals) return false;

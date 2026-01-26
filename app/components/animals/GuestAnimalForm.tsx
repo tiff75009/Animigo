@@ -74,14 +74,22 @@ interface GuestAnimalFormProps {
   data: GuestAnimalData;
   onChange: (data: GuestAnimalData) => void;
   errors?: Record<string, string>;
+  // Types d'animaux acceptés par la formule (filtre les options)
+  acceptedAnimalTypes?: string[];
 }
 
 export default function GuestAnimalForm({
   data,
   onChange,
   errors = {},
+  acceptedAnimalTypes,
 }: GuestAnimalFormProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Filtrer les types d'animaux si des types acceptés sont spécifiés
+  const availableTypes = acceptedAnimalTypes && acceptedAnimalTypes.length > 0
+    ? ANIMAL_TYPES.filter(t => acceptedAnimalTypes.includes(t.id))
+    : ANIMAL_TYPES;
 
   const selectedType = ANIMAL_TYPES.find((t) => t.id === data.type);
 
@@ -120,13 +128,19 @@ export default function GuestAnimalForm({
               }`}
             >
               <option value="">Sélectionner...</option>
-              {ANIMAL_TYPES.map((type) => (
+              {availableTypes.map((type) => (
                 <option key={type.id} value={type.id}>
                   {type.emoji} {type.name}
                 </option>
               ))}
             </select>
             {errors.type && <p className="text-xs text-red-500 mt-1">{errors.type}</p>}
+            {/* Message si types filtrés */}
+            {acceptedAnimalTypes && acceptedAnimalTypes.length > 0 && acceptedAnimalTypes.length < ANIMAL_TYPES.length && (
+              <p className="text-xs text-gray-500 mt-1">
+                Cette formule accepte : {availableTypes.map(t => t.name).join(", ")}
+              </p>
+            )}
           </div>
 
           {/* Genre */}

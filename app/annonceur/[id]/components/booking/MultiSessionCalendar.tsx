@@ -42,6 +42,9 @@ interface MultiSessionCalendarProps {
   className?: string;
 }
 
+// Délai minimum de réservation (en heures)
+const MIN_BOOKING_LEAD_TIME_HOURS = 2;
+
 // Helper functions
 function parseTimeToMinutes(time: string): number {
   const [hours, minutes] = time.split(":").map(Number);
@@ -52,6 +55,25 @@ function minutesToTime(minutes: number): string {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
   return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+}
+
+// Vérifier si un créneau est réservable (pas passé + délai minimum)
+function isSlotBookable(dateStr: string, startTime: string): boolean {
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+  // Date passée = non réservable
+  if (dateStr < todayStr) return false;
+
+  // Date future = réservable
+  if (dateStr > todayStr) return true;
+
+  // Date = aujourd'hui : vérifier l'heure avec délai minimum
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const slotMinutes = parseTimeToMinutes(startTime);
+  const minBookableMinutes = currentMinutes + (MIN_BOOKING_LEAD_TIME_HOURS * 60);
+
+  return slotMinutes >= minBookableMinutes;
 }
 
 function generateTimeSlots(startTime: string, endTime: string, intervalMinutes: number = 30): string[] {
@@ -220,12 +242,18 @@ export default function MultiSessionCalendar({
 
   // Vérifier si un créneau horaire est disponible
   const isTimeSlotAvailable = (dateStr: string, startTime: string): boolean => {
+    // Vérifier d'abord si le créneau est réservable (pas passé + délai minimum 2h)
+    if (!isSlotBookable(dateStr, startTime)) {
+      return false;
+    }
+
     const availability = availabilityCalendar?.find((a) => a.date === dateStr);
     if (!availability) return true;
     if (availability.status === "unavailable") return false;
 
     const startMinutes = parseTimeToMinutes(startTime);
     const endMinutes = startMinutes + variantDuration;
+    // Note: bookedSlots inclut déjà les créneaux collectifs ET les buffers sont déjà appliqués côté backend
     const bookedSlots = availability.bookedSlots || [];
     const availableTimeSlots = availability.timeSlots;
 
@@ -240,13 +268,17 @@ export default function MultiSessionCalendar({
     }
 
     // Vérifier les conflits avec les créneaux réservés
-    const hasConflict = bookedSlots.some((booked) => {
+    // Les bookedSlots du backend incluent DÉJÀ les buffers (temps de préparation)
+    // Donc on compare simplement notre créneau avec les créneaux déjà étendus
+    const hasConflictWithBooked = bookedSlots.some((booked) => {
       const bookedStart = parseTimeToMinutes(booked.startTime);
       const bookedEnd = parseTimeToMinutes(booked.endTime);
+
+      // Conflit si notre créneau chevauche un créneau réservé (qui inclut déjà les buffers)
       return startMinutes < bookedEnd && endMinutes > bookedStart;
     });
 
-    return !hasConflict;
+    return !hasConflictWithBooked;
   };
 
   // Vérifier si un jour a des disponibilités
@@ -277,21 +309,46 @@ export default function MultiSessionCalendar({
     const bookedSlots = availability.bookedSlots || [];
     if (bookedSlots.length === 0) return true;
 
-    // Vérifier si tous les créneaux de la journée sont bloqués
-    const startMinutes = parseTimeToMinutes(acceptReservationsFrom);
-    const endMinutes = parseTimeToMinutes(acceptReservationsTo);
-    const totalMinutes = endMinutes - startMinutes;
+    // Vérifier les créneaux disponibles (si partial)
+    const availableTimeSlots = availability.timeSlots;
 
-    // Calculer le temps total bloqué
-    let blockedMinutes = 0;
-    for (const slot of bookedSlots) {
-      const slotStart = parseTimeToMinutes(slot.startTime);
-      const slotEnd = parseTimeToMinutes(slot.endTime);
-      blockedMinutes += Math.min(slotEnd, endMinutes) - Math.max(slotStart, startMinutes);
+    // Tester chaque créneau horaire possible
+    const slotInterval = 30; // Intervalle de 30 minutes
+    const dayStart = parseTimeToMinutes(acceptReservationsFrom);
+    const dayEnd = parseTimeToMinutes(acceptReservationsTo);
+
+    for (let startMinutes = dayStart; startMinutes <= dayEnd - variantDuration; startMinutes += slotInterval) {
+      const endMinutes = startMinutes + variantDuration;
+
+      // Vérifier si dans les créneaux disponibles (si partial)
+      if (availableTimeSlots && availableTimeSlots.length > 0) {
+        const isInAvailableSlot = availableTimeSlots.some((slot) => {
+          const slotStart = parseTimeToMinutes(slot.startTime);
+          const slotEnd = parseTimeToMinutes(slot.endTime);
+          return startMinutes >= slotStart && endMinutes <= slotEnd;
+        });
+        if (!isInAvailableSlot) continue;
+      }
+
+      // Vérifier s'il y a conflit avec les créneaux réservés
+      // Les bookedSlots incluent DÉJÀ les buffers côté backend
+      const hasConflict = bookedSlots.some((booked) => {
+        const bookedStart = parseTimeToMinutes(booked.startTime);
+        const bookedEnd = parseTimeToMinutes(booked.endTime);
+        return startMinutes < bookedEnd && endMinutes > bookedStart;
+      });
+
+      // Si pas de conflit, le créneau est disponible
+      if (!hasConflict) {
+        // Vérifier aussi si c'est réservable (pas dans le passé)
+        const time = minutesToTime(startMinutes);
+        if (isSlotBookable(dateStr, time)) {
+          return true;
+        }
+      }
     }
 
-    // S'il reste au moins la durée d'une séance, il y a de la place
-    return (totalMinutes - blockedMinutes) >= variantDuration;
+    return false;
   };
 
   // Gérer la sélection d'un créneau horaire

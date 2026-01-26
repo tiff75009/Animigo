@@ -34,6 +34,13 @@ export interface Mission {
   clientNotes?: string;
   announcerNotes?: string;
   cancellationReason?: string;
+  // Type de formule et données multi-séances/collectives
+  sessionType?: "individual" | "collective";
+  numberOfSessions?: number;
+  sessions?: Array<{ date: string; startTime: string; endTime: string }>;
+  collectiveSlotIds?: string[];
+  collectiveSlotDates?: string[]; // Dates des créneaux pour les formules collectives
+  animalCount?: number;
 }
 
 export interface Availability {
@@ -116,6 +123,21 @@ export function formatPrice(cents: number): string {
 
 export const dayNames = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
+// Type pour les réservations dans un créneau collectif
+export interface SlotBooking {
+  _id: string;
+  missionId: string;
+  clientId: string;
+  clientName: string;
+  animalName: string;
+  animalEmoji: string;
+  animalType: string;
+  animalCount: number;
+  sessionNumber: number;
+  status: "booked" | "completed" | "cancelled" | "slot_cancelled";
+  missionStatus?: string;
+}
+
 // Type pour les créneaux collectifs
 export interface CollectiveSlot {
   _id: string;
@@ -130,6 +152,7 @@ export interface CollectiveSlot {
   availableSpots: number;
   isActive: boolean;
   isCancelled: boolean;
+  bookings?: SlotBooking[];
 }
 
 // Couleurs pour les créneaux collectifs

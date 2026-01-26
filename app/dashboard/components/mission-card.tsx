@@ -23,6 +23,8 @@ import {
   Users,
   Activity,
   Loader2,
+  Repeat,
+  CalendarDays,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import { useQuery } from "convex/react";
@@ -63,6 +65,19 @@ export interface ConvexMission {
   clientCoordinates?: { lat: number; lng: number };
   clientNotes?: string;
   announcerNotes?: string;
+  // Type de formule
+  sessionType?: "individual" | "collective";
+  numberOfSessions?: number;
+  // Créneaux collectifs
+  collectiveSlotIds?: string[];
+  collectiveSlotDates?: string[]; // Dates des créneaux pour l'affichage
+  animalCount?: number;
+  // Séances multi-sessions
+  sessions?: Array<{
+    date: string;
+    startTime: string;
+    endTime: string;
+  }>;
 }
 
 interface MissionCardProps {
@@ -268,7 +283,10 @@ export function MissionCard({
           <span className="flex items-center gap-1 text-foreground">
             <Calendar className="w-3.5 h-3.5 text-purple" />
             {formatDateRange(mission.startDate, mission.endDate)}
-            {days > 1 && <span className="text-text-light">({days}j)</span>}
+            {/* Afficher le nombre de jours uniquement pour les formules uni-séance standard */}
+            {days > 1 && !mission.sessions && mission.sessionType !== "collective" && (
+              <span className="text-text-light">({days}j)</span>
+            )}
           </span>
           {mission.startTime && (
             <span className="flex items-center gap-1 text-foreground">
@@ -298,11 +316,25 @@ export function MissionCard({
               {formatPrice(mission.announcerEarnings ?? mission.amount * 0.85)}
             </p>
           </div>
-          {mission.variantName && (
-            <span className="text-xs bg-white/80 px-2 py-1 rounded-md text-foreground">
-              {mission.variantName}
-            </span>
-          )}
+          <div className="flex items-center gap-1.5">
+            {/* Badge type de formule */}
+            {mission.sessionType === "collective" ? (
+              <span className="flex items-center gap-1 text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-md">
+                <Users className="w-3 h-3" />
+                Collectif
+              </span>
+            ) : mission.sessions && mission.sessions.length > 1 ? (
+              <span className="flex items-center gap-1 text-[10px] bg-secondary/20 text-secondary px-1.5 py-0.5 rounded-md">
+                <Repeat className="w-3 h-3" />
+                {mission.sessions.length}x
+              </span>
+            ) : null}
+            {mission.variantName && (
+              <span className="text-xs bg-white/80 px-2 py-1 rounded-md text-foreground">
+                {mission.variantName}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Bouton voir détails */}
@@ -499,24 +531,133 @@ function MissionDetailsModal({
             )}
           </div>
 
-          {/* Dates, Lieu et Distance */}
-          <div className="bg-slate-50 rounded-xl p-3 space-y-2">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-purple" />
-              <span className="text-sm text-foreground">
-                {formatDateRange(mission.startDate, mission.endDate)}
-                {days > 1 && <span className="text-text-light"> ({days} jours)</span>}
-              </span>
-            </div>
-            {(mission.startTime || mission.endTime) && (
+          {/* Type de formule et créneaux */}
+          {mission.sessionType === "collective" ? (
+            // Formule COLLECTIVE
+            <div className="bg-gradient-to-br from-blue-50 to-purple/5 rounded-xl p-3 space-y-3">
               <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-accent" />
-                <span className="text-sm text-foreground">
-                  {mission.startTime}
-                  {mission.endTime && ` - ${mission.endTime}`}
+                <Users className="w-4 h-4 text-blue-600" />
+                <span className="font-semibold text-foreground text-sm">Formule collective</span>
+                {mission.collectiveSlotDates && mission.collectiveSlotDates.length > 0 && (
+                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
+                    {mission.collectiveSlotDates.length} séance{mission.collectiveSlotDates.length > 1 ? "s" : ""}
+                  </span>
+                )}
+                {mission.animalCount && mission.animalCount > 1 && (
+                  <span className="px-2 py-0.5 bg-purple/20 text-purple text-xs rounded-full">
+                    {mission.animalCount} animaux
+                  </span>
+                )}
+              </div>
+              {/* Afficher les dates des créneaux réservés */}
+              {mission.collectiveSlotDates && mission.collectiveSlotDates.length > 0 ? (
+                <div className="space-y-2 pl-6 max-h-40 overflow-y-auto">
+                  {mission.collectiveSlotDates.map((date, idx) => (
+                    <div key={idx} className="flex items-center gap-3 text-sm">
+                      <span className="w-5 h-5 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-medium">
+                        {idx + 1}
+                      </span>
+                      <Calendar className="w-3.5 h-3.5 text-purple" />
+                      <span className="text-foreground">
+                        {new Date(date).toLocaleDateString("fr-FR", {
+                          weekday: "short",
+                          day: "numeric",
+                          month: "short",
+                        })}
+                      </span>
+                      {mission.startTime && (
+                        <>
+                          <Clock className="w-3.5 h-3.5 text-accent" />
+                          <span className="text-text-light">
+                            {mission.startTime}
+                            {mission.endTime && ` - ${mission.endTime}`}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-2 pl-6">
+                  <div className="flex items-center gap-2">
+                    <CalendarDays className="w-4 h-4 text-purple" />
+                    <span className="text-sm text-foreground">
+                      {formatDateRange(mission.startDate, mission.endDate)}
+                    </span>
+                  </div>
+                  {(mission.startTime || mission.endTime) && (
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-accent" />
+                      <span className="text-sm text-foreground">
+                        {mission.startTime}
+                        {mission.endTime && ` - ${mission.endTime}`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+              <p className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">
+                Séance collective avec d'autres animaux
+              </p>
+            </div>
+          ) : mission.sessions && mission.sessions.length > 1 ? (
+            // Formule MULTI-SÉANCES
+            <div className="bg-gradient-to-br from-accent/10 to-secondary/5 rounded-xl p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <Repeat className="w-4 h-4 text-secondary" />
+                <span className="font-semibold text-foreground text-sm">
+                  Formule multi-séances
+                </span>
+                <span className="px-2 py-0.5 bg-secondary/20 text-secondary text-xs rounded-full">
+                  {mission.sessions.length} séances
                 </span>
               </div>
-            )}
+              <div className="space-y-2 pl-6 max-h-40 overflow-y-auto">
+                {mission.sessions.map((session, idx) => (
+                  <div key={idx} className="flex items-center gap-3 text-sm">
+                    <span className="w-5 h-5 bg-secondary/20 text-secondary rounded-full flex items-center justify-center text-xs font-medium">
+                      {idx + 1}
+                    </span>
+                    <Calendar className="w-3.5 h-3.5 text-purple" />
+                    <span className="text-foreground">
+                      {new Date(session.date).toLocaleDateString("fr-FR", {
+                        weekday: "short",
+                        day: "numeric",
+                        month: "short",
+                      })}
+                    </span>
+                    <Clock className="w-3.5 h-3.5 text-accent" />
+                    <span className="text-text-light">
+                      {session.startTime} - {session.endTime}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            // Formule UNI-SÉANCE (standard)
+            <div className="bg-slate-50 rounded-xl p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-purple" />
+                <span className="text-sm text-foreground">
+                  {formatDateRange(mission.startDate, mission.endDate)}
+                  {days > 1 && <span className="text-text-light"> ({days} jours)</span>}
+                </span>
+              </div>
+              {(mission.startTime || mission.endTime) && (
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-accent" />
+                  <span className="text-sm text-foreground">
+                    {mission.startTime}
+                    {mission.endTime && ` - ${mission.endTime}`}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Lieu et Distance */}
+          <div className="bg-slate-50 rounded-xl p-3 space-y-2">
             {cityDisplay && (
               <div className="flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-secondary" />
