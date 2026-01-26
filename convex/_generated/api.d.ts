@@ -9,6 +9,7 @@
  */
 
 import type * as admin_announcers from "../admin/announcers.js";
+import type * as admin_categoryTypes from "../admin/categoryTypes.js";
 import type * as admin_commissions from "../admin/commissions.js";
 import type * as admin_config from "../admin/config.js";
 import type * as admin_credits from "../admin/credits.js";
@@ -88,6 +89,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "admin/announcers": typeof admin_announcers;
+  "admin/categoryTypes": typeof admin_categoryTypes;
   "admin/commissions": typeof admin_commissions;
   "admin/config": typeof admin_config;
   "admin/credits": typeof admin_credits;

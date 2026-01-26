@@ -48,14 +48,25 @@ export function MonthView({
   const [selectionStart, setSelectionStart] = useState<string | null>(null);
   const [selectionEnd, setSelectionEnd] = useState<string | null>(null);
 
+  // Check if a date string is in the past
+  const isDateStrPast = useCallback((dateStr: string): boolean => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const checkDate = new Date(dateStr);
+    return checkDate < today;
+  }, []);
+
   // Handle mouse down on a day
   const handleMouseDown = useCallback(
     (dateStr: string) => {
+      // Block selection on past dates
+      if (isDateStrPast(dateStr)) return;
+
       setIsSelecting(true);
       setSelectionStart(dateStr);
       setSelectionEnd(dateStr);
     },
-    []
+    [isDateStrPast]
   );
 
   // Handle mouse enter while selecting
@@ -157,6 +168,14 @@ export function MonthView({
     );
   };
 
+  // Check if date is in the past (before today)
+  const isPastDate = (day: number): boolean => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const checkDate = new Date(year, month, day);
+    return checkDate < today;
+  };
+
   return (
     <div
       onMouseUp={handleMouseUp}
@@ -193,6 +212,7 @@ export function MonthView({
           const dayAvailability = getAvailabilityForDate(item.day);
           const daySlots = getSlotsForDate(item.day);
           const today = isToday(item.day);
+          const past = isPastDate(item.day);
           const dateStr = formatDateStr(year, month, item.day);
           const inSelection = isInSelectionRange(dateStr);
 
@@ -205,24 +225,34 @@ export function MonthView({
               }}
               onMouseEnter={() => handleMouseEnter(dateStr)}
               className={cn(
-                "h-24 md:h-28 p-1 rounded-lg border transition-colors cursor-pointer",
-                today
-                  ? "border-primary bg-primary/5"
-                  : "border-gray-100 hover:border-gray-200 hover:bg-gray-50",
-                dayAvailability &&
+                "h-24 md:h-28 p-1 rounded-lg border transition-colors",
+                // Past dates styling
+                past
+                  ? "bg-gray-50 border-gray-100 cursor-not-allowed opacity-60"
+                  : "cursor-pointer",
+                // Today styling (only if not past)
+                !past && today && "border-primary bg-primary/5",
+                // Normal day styling (only if not past and not today)
+                !past && !today && "border-gray-100 hover:border-gray-200 hover:bg-gray-50",
+                // Availability colors (only if not past)
+                !past &&
+                  dayAvailability &&
                   !dayMissions.length &&
                   !inSelection &&
                   availabilityColors[dayAvailability.status],
-                inSelection && "bg-primary/20 border-primary"
+                // Selection styling (only if not past)
+                !past && inSelection && "bg-primary/20 border-primary"
               )}
-              animate={inSelection ? { scale: 1.02 } : { scale: 1 }}
+              animate={!past && inSelection ? { scale: 1.02 } : { scale: 1 }}
             >
               <div className="flex items-center justify-between mb-1">
                 <span
                   className={cn(
                     "text-sm font-medium",
-                    today ? "text-primary" : "text-foreground",
-                    inSelection && "text-primary font-bold"
+                    past && "text-gray-400",
+                    !past && today && "text-primary",
+                    !past && !today && "text-foreground",
+                    !past && inSelection && "text-primary font-bold"
                   )}
                 >
                   {item.day}

@@ -30,6 +30,8 @@ import {
   FileText,
   MapPin,
   Globe,
+  Layers,
+  ListChecks,
 } from "lucide-react";
 
 interface NavItem {
@@ -126,6 +128,16 @@ export function AdminSidebar() {
           label: "Catégories",
           href: "/admin/services/categories",
           icon: Tag,
+        },
+        {
+          label: "Prestations",
+          href: "/admin/services/prestations",
+          icon: ListChecks,
+        },
+        {
+          label: "Types",
+          href: "/admin/services/types",
+          icon: Layers,
         },
         {
           label: "Activités",

@@ -42,12 +42,23 @@ export function WeekView({
   const [selectionStart, setSelectionStart] = useState<string | null>(null);
   const [selectionEnd, setSelectionEnd] = useState<string | null>(null);
 
+  // Check if a date string is in the past
+  const isDateStrPast = useCallback((dateStr: string): boolean => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const checkDate = new Date(dateStr);
+    return checkDate < today;
+  }, []);
+
   // Handle mouse down on a day
   const handleMouseDown = useCallback((dateStr: string) => {
+    // Block selection on past dates
+    if (isDateStrPast(dateStr)) return;
+
     setIsSelecting(true);
     setSelectionStart(dateStr);
     setSelectionEnd(dateStr);
-  }, []);
+  }, [isDateStrPast]);
 
   // Handle mouse enter while selecting
   const handleMouseEnter = useCallback(
@@ -150,6 +161,15 @@ export function WeekView({
     );
   };
 
+  // Check if date is in the past (before today)
+  const isPastDate = (date: Date): boolean => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const checkDate = new Date(date);
+    checkDate.setHours(0, 0, 0, 0);
+    return checkDate < today;
+  };
+
   // Parse time to hours (e.g., "09:30" -> 9.5)
   const parseTimeToHours = (time: string): number => {
     const [h, m] = time.split(":").map(Number);
@@ -169,6 +189,7 @@ export function WeekView({
           <div className="w-16" />
           {weekDates.map((date, index) => {
             const today = isToday(date);
+            const past = isPastDate(date);
             const dayAvailability = getAvailabilityForDate(date);
             const dateStr = formatDateLocal(date);
             const inSelection = isInSelectionRange(dateStr);
@@ -182,22 +203,35 @@ export function WeekView({
                 }}
                 onMouseEnter={() => handleMouseEnter(dateStr)}
                 className={cn(
-                  "text-center py-3 rounded-lg cursor-pointer transition-colors",
-                  today && "bg-primary/10",
-                  !inSelection &&
+                  "text-center py-3 rounded-lg transition-colors",
+                  // Past dates styling
+                  past
+                    ? "bg-gray-50 cursor-not-allowed opacity-60"
+                    : "cursor-pointer",
+                  // Today styling (only if not past)
+                  !past && today && "bg-primary/10",
+                  // Availability colors (only if not past)
+                  !past &&
+                    !inSelection &&
                     dayAvailability &&
                     availabilityColors[dayAvailability.status],
-                  inSelection && "bg-primary/20 ring-2 ring-primary"
+                  // Selection styling (only if not past)
+                  !past && inSelection && "bg-primary/20 ring-2 ring-primary"
                 )}
               >
-                <p className="text-sm font-medium text-text-light">
+                <p className={cn(
+                  "text-sm font-medium",
+                  past ? "text-gray-400" : "text-text-light"
+                )}>
                   {dayNames[index]}
                 </p>
                 <p
                   className={cn(
                     "text-lg font-bold",
-                    today ? "text-primary" : "text-foreground",
-                    inSelection && "text-primary"
+                    past && "text-gray-400",
+                    !past && today && "text-primary",
+                    !past && !today && "text-foreground",
+                    !past && inSelection && "text-primary"
                   )}
                 >
                   {date.getDate()}
@@ -220,14 +254,19 @@ export function WeekView({
               {weekDates.map((date, dayIndex) => {
                 const dateStr = formatDateLocal(date);
                 const dayAvailability = getAvailabilityForDate(date);
+                const past = isPastDate(date);
 
                 return (
                   <div
                     key={dayIndex}
-                    onClick={() => onDayClick(dateStr)}
+                    onClick={() => !past && onDayClick(dateStr)}
                     className={cn(
-                      "border-r last:border-r-0 min-h-[48px] cursor-pointer hover:bg-gray-50 transition-colors relative",
-                      dayAvailability?.status === "unavailable" &&
+                      "border-r last:border-r-0 min-h-[48px] transition-colors relative",
+                      past
+                        ? "bg-gray-50/80 cursor-not-allowed"
+                        : "cursor-pointer hover:bg-gray-50",
+                      !past &&
+                        dayAvailability?.status === "unavailable" &&
                         "bg-red-50/50"
                     )}
                   />

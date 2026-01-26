@@ -38,6 +38,17 @@ export function DayView({
 }: DayViewProps) {
   const dateStr = formatDateLocal(currentDate);
 
+  // Check if the current date is in the past
+  const isPastDate = (): boolean => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const checkDate = new Date(currentDate);
+    checkDate.setHours(0, 0, 0, 0);
+    return checkDate < today;
+  };
+
+  const past = isPastDate();
+
   // Get day's missions (filtrer les missions collectives qui sont affichées dans les créneaux)
   const dayMissions = missions.filter((mission) => {
     // Ne pas afficher les missions collectives comme missions séparées
@@ -102,17 +113,22 @@ export function DayView({
 
         {/* Availability toggle */}
         <button
-          onClick={() => onToggleAvailability(dateStr)}
+          onClick={() => !past && onToggleAvailability(dateStr)}
+          disabled={past}
           className={cn(
             "px-4 py-2 rounded-lg text-sm font-medium border transition-colors",
-            dayAvailability
-              ? availabilityColors[dayAvailability.status]
-              : "bg-green-100 text-green-800 border-green-200"
+            past
+              ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+              : dayAvailability
+                ? availabilityColors[dayAvailability.status]
+                : "bg-green-100 text-green-800 border-green-200"
           )}
         >
-          {dayAvailability
-            ? availabilityLabels[dayAvailability.status]
-            : "Disponible"}
+          {past
+            ? "Date passée"
+            : dayAvailability
+              ? availabilityLabels[dayAvailability.status]
+              : "Disponible"}
         </button>
       </div>
 

@@ -39,7 +39,11 @@ export const listCategories = query({
       return a.order - b.order;
     });
 
-    // Récupérer les URLs des images et ajouter parentName
+    // Récupérer tous les types pour enrichir les données
+    const allTypes = await ctx.db.query("categoryTypes").collect();
+    const typeMap = new Map(allTypes.map(t => [t._id, t]));
+
+    // Récupérer les URLs des images et ajouter parentName + typeInfo
     const categoriesWithUrls = await Promise.all(
       sorted.map(async (cat) => {
         let imageUrl = null;
@@ -49,10 +53,16 @@ export const listCategories = query({
 
         // Récupérer le nom du parent si existe
         let parentName: string | undefined;
+        let typeId = cat.typeId;
         if (cat.parentCategoryId) {
           const parent = categoryMap.get(cat.parentCategoryId);
           parentName = parent?.name;
+          // Les prestations héritent du type de leur parent
+          typeId = parent?.typeId;
         }
+
+        // Récupérer les infos du type
+        const type = typeId ? typeMap.get(typeId) : null;
 
         return {
           id: cat._id,
@@ -67,6 +77,12 @@ export const listCategories = query({
           parentCategoryId: cat.parentCategoryId,
           parentName,
           isParent: !cat.parentCategoryId,
+          // Type information
+          typeId: typeId || null,
+          typeName: type?.name || null,
+          typeIcon: type?.icon || null,
+          typeColor: type?.color || null,
+          // Business fields
           billingType: cat.billingType,
           defaultHourlyPrice: cat.defaultHourlyPrice,
           allowRangeBooking: cat.allowRangeBooking,
@@ -102,13 +118,21 @@ export const listParentCategories = query({
       .filter(c => !c.parentCategoryId)
       .sort((a, b) => a.order - b.order);
 
-    // Récupérer les URLs des images
+    // Récupérer tous les types
+    const allTypes = await ctx.db.query("categoryTypes").collect();
+    const typeMap = new Map(allTypes.map(t => [t._id, t]));
+
+    // Récupérer les URLs des images et les infos de type
     const result = await Promise.all(
       parentCategories.map(async (cat) => {
         let imageUrl = null;
         if (cat.imageStorageId) {
           imageUrl = await ctx.storage.getUrl(cat.imageStorageId);
         }
+
+        // Récupérer les infos du type
+        const type = cat.typeId ? typeMap.get(cat.typeId) : null;
+
         return {
           id: cat._id,
           slug: cat.slug,
@@ -116,6 +140,11 @@ export const listParentCategories = query({
           icon: cat.icon,
           imageUrl,
           isCapacityBased: cat.isCapacityBased,
+          // Type information
+          typeId: cat.typeId || null,
+          typeName: type?.name || null,
+          typeIcon: type?.icon || null,
+          typeColor: type?.color || null,
         };
       })
     );
@@ -242,7 +271,7 @@ export const generateUploadUrl = mutation({
   },
 });
 
-// Créer une catégorie (parent ou sous-catégorie)
+// Créer une catégorie (parent) ou prestation (sous-catégorie)
 export const createCategory = mutation({
   args: {
     token: v.string(),
@@ -252,6 +281,8 @@ export const createCategory = mutation({
     icon: v.optional(v.string()),
     color: v.optional(v.string()), // Couleur HEX
     imageStorageId: v.optional(v.id("_storage")),
+    // Type de catégorie (uniquement pour les catégories parentes)
+    typeId: v.optional(v.id("categoryTypes")),
     // Référence vers la catégorie parente (undefined = catégorie parente)
     parentCategoryId: v.optional(v.id("serviceCategories")),
     // Champs métier (uniquement pour les sous-catégories)
@@ -325,6 +356,8 @@ export const createCategory = mutation({
       icon: args.icon,
       color: args.color,
       imageStorageId: args.imageStorageId,
+      // Type de catégorie (uniquement pour les catégories parentes)
+      typeId: !args.parentCategoryId ? args.typeId : undefined,
       parentCategoryId: args.parentCategoryId,
       // Champs métier (ignorés pour les catégories parentes)
       billingType: args.parentCategoryId ? args.billingType : undefined,
@@ -350,7 +383,7 @@ export const createCategory = mutation({
   },
 });
 
-// Mettre à jour une catégorie
+// Mettre à jour une catégorie ou prestation
 export const updateCategory = mutation({
   args: {
     token: v.string(),
@@ -361,7 +394,9 @@ export const updateCategory = mutation({
     color: v.optional(v.string()), // Couleur HEX
     imageStorageId: v.optional(v.id("_storage")),
     isActive: v.optional(v.boolean()),
-    // Changer le parent (null = devient catégorie parente, Id = devient sous-catégorie)
+    // Type de catégorie (uniquement pour les catégories parentes)
+    typeId: v.optional(v.union(v.id("categoryTypes"), v.null())),
+    // Changer le parent (null = devient catégorie parente, Id = devient prestation)
     parentCategoryId: v.optional(v.union(v.id("serviceCategories"), v.null())),
     billingType: v.optional(v.union(
       v.literal("hourly"),
@@ -468,6 +503,19 @@ export const updateCategory = mutation({
     if (args.isCapacityBased !== undefined) updates.isCapacityBased = args.isCapacityBased;
     if (args.enableDurationBasedBlocking !== undefined) updates.enableDurationBasedBlocking = args.enableDurationBasedBlocking;
 
+    // Gérer typeId (uniquement pour les catégories parentes)
+    // On détermine si la catégorie est/sera une catégorie parente
+    const willBeParent = args.parentCategoryId === null ||
+      (args.parentCategoryId === undefined && !category.parentCategoryId);
+
+    if (args.typeId !== undefined && willBeParent) {
+      if (args.typeId === null) {
+        updates.typeId = undefined; // Supprimer le type
+      } else {
+        updates.typeId = args.typeId;
+      }
+    }
+
     await ctx.db.patch(args.categoryId, updates);
 
     return { success: true };
@@ -527,6 +575,91 @@ export const reorderCategories = mutation({
     }
 
     return { success: true };
+  },
+});
+
+// Liste des prestations (sous-catégories) avec filtrage
+export const listPrestations = query({
+  args: {
+    token: v.string(),
+    typeId: v.optional(v.id("categoryTypes")),
+    parentId: v.optional(v.id("serviceCategories")),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx, args.token);
+
+    // Récupérer toutes les catégories
+    const allCategories = await ctx.db.query("serviceCategories").collect();
+
+    // Créer un map des catégories parentes
+    const parentCategories = allCategories.filter(c => !c.parentCategoryId);
+    const parentMap = new Map(parentCategories.map(c => [c._id, c]));
+
+    // Récupérer tous les types
+    const allTypes = await ctx.db.query("categoryTypes").collect();
+    const typeMap = new Map(allTypes.map(t => [t._id, t]));
+
+    // Filtrer pour ne garder que les prestations (sous-catégories)
+    let prestations = allCategories.filter(c => c.parentCategoryId);
+
+    // Filtre par parent
+    if (args.parentId) {
+      prestations = prestations.filter(c => c.parentCategoryId === args.parentId);
+    }
+
+    // Filtre par type (via le parent)
+    if (args.typeId) {
+      prestations = prestations.filter(c => {
+        const parent = parentMap.get(c.parentCategoryId!);
+        return parent?.typeId === args.typeId;
+      });
+    }
+
+    // Trier par ordre
+    prestations.sort((a, b) => a.order - b.order);
+
+    // Enrichir avec infos du parent et du type
+    const result = await Promise.all(
+      prestations.map(async (prestation) => {
+        const parent = parentMap.get(prestation.parentCategoryId!);
+        const type = parent?.typeId ? typeMap.get(parent.typeId) : null;
+
+        let imageUrl = null;
+        if (prestation.imageStorageId) {
+          imageUrl = await ctx.storage.getUrl(prestation.imageStorageId);
+        }
+
+        return {
+          id: prestation._id,
+          slug: prestation.slug,
+          name: prestation.name,
+          description: prestation.description,
+          icon: prestation.icon,
+          color: prestation.color,
+          imageUrl,
+          order: prestation.order,
+          isActive: prestation.isActive,
+          // Parent info
+          parentCategoryId: prestation.parentCategoryId,
+          parentName: parent?.name || null,
+          parentIcon: parent?.icon || null,
+          // Type info (hérité du parent)
+          typeId: parent?.typeId || null,
+          typeName: type?.name || null,
+          typeIcon: type?.icon || null,
+          typeColor: type?.color || null,
+          // Business fields
+          billingType: prestation.billingType,
+          allowRangeBooking: prestation.allowRangeBooking,
+          allowOvernightStay: prestation.allowOvernightStay,
+          enableDurationBasedBlocking: prestation.enableDurationBasedBlocking,
+          createdAt: prestation.createdAt,
+          updatedAt: prestation.updatedAt,
+        };
+      })
+    );
+
+    return result;
   },
 });
 

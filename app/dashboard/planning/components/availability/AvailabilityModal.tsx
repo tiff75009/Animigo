@@ -65,6 +65,16 @@ export function AvailabilityModal({
 
   const isRange = endDate && endDate !== startDate;
 
+  // Check if the start date is in the past
+  const isPastDate = (dateStr: string): boolean => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const checkDate = new Date(dateStr);
+    return checkDate < today;
+  };
+
+  const isPast = startDate ? isPastDate(startDate) : false;
+
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("fr-FR", {
       weekday: "long",
@@ -198,33 +208,47 @@ export function AvailabilityModal({
             </button>
           </div>
 
-          {/* Status selection */}
-          <div className="space-y-3 mb-6">
-            <label className="text-sm font-medium text-foreground">
-              Statut
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {(
-                ["available", "partial", "unavailable"] as AvailabilityStatus[]
-              ).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setStatus(s)}
-                  className={cn(
-                    "py-3 px-2 rounded-xl text-sm font-medium border-2 transition-all",
-                    status === s
-                      ? cn(availabilityColors[s], "border-current")
-                      : "border-gray-200 text-text-light hover:border-gray-300"
-                  )}
-                >
-                  {availabilityLabels[s]}
-                </button>
-              ))}
+          {/* Past date warning */}
+          {isPast && (
+            <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+              <p className="text-sm text-amber-800 font-medium">
+                Cette date est passée
+              </p>
+              <p className="text-xs text-amber-600 mt-1">
+                Vous ne pouvez pas modifier la disponibilité des jours passés.
+              </p>
             </div>
-          </div>
+          )}
+
+          {/* Status selection */}
+          {!isPast && (
+            <div className="space-y-3 mb-6">
+              <label className="text-sm font-medium text-foreground">
+                Statut
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {(
+                  ["available", "partial", "unavailable"] as AvailabilityStatus[]
+                ).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setStatus(s)}
+                    className={cn(
+                      "py-3 px-2 rounded-xl text-sm font-medium border-2 transition-all",
+                      status === s
+                        ? cn(availabilityColors[s], "border-current")
+                        : "border-gray-200 text-text-light hover:border-gray-300"
+                    )}
+                  >
+                    {availabilityLabels[s]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Time slots (for partial availability) */}
-          {status === "partial" && (
+          {!isPast && status === "partial" && (
             <div className="space-y-3 mb-6">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-foreground flex items-center gap-2">
@@ -283,7 +307,7 @@ export function AvailabilityModal({
           )}
 
           {/* Reason (for unavailable) */}
-          {status === "unavailable" && (
+          {!isPast && status === "unavailable" && (
             <div className="space-y-2 mb-6">
               <label className="text-sm font-medium text-foreground">
                 Raison (optionnel)
@@ -300,30 +324,43 @@ export function AvailabilityModal({
 
           {/* Actions */}
           <div className="flex gap-3">
-            {currentAvailability && !isRange && (
+            {isPast ? (
               <motion.button
-                onClick={handleClear}
-                disabled={isLoading}
-                className="flex-1 py-3 border border-gray-200 text-text-light rounded-xl font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+                onClick={onClose}
+                className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors"
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.99 }}
               >
-                Reinitialiser
+                Fermer
               </motion.button>
+            ) : (
+              <>
+                {currentAvailability && !isRange && (
+                  <motion.button
+                    onClick={handleClear}
+                    disabled={isLoading}
+                    className="flex-1 py-3 border border-gray-200 text-text-light rounded-xl font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.99 }}
+                  >
+                    Reinitialiser
+                  </motion.button>
+                )}
+                <motion.button
+                  onClick={handleSave}
+                  disabled={isLoading}
+                  className="flex-1 py-3 bg-primary text-white rounded-xl font-semibold disabled:opacity-50"
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.99 }}
+                >
+                  {isLoading
+                    ? "Enregistrement..."
+                    : isRange
+                      ? `Appliquer a ${getDaysCount()} jours`
+                      : "Enregistrer"}
+                </motion.button>
+              </>
             )}
-            <motion.button
-              onClick={handleSave}
-              disabled={isLoading}
-              className="flex-1 py-3 bg-primary text-white rounded-xl font-semibold disabled:opacity-50"
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-            >
-              {isLoading
-                ? "Enregistrement..."
-                : isRange
-                  ? `Appliquer a ${getDaysCount()} jours`
-                  : "Enregistrer"}
-            </motion.button>
           </div>
         </motion.div>
       </motion.div>

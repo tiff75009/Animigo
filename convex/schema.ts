@@ -342,6 +342,22 @@ export default defineSchema({
     .index("by_service", ["serviceId"])
     .index("by_service_active", ["serviceId", "isActive"]),
 
+  // Types de catégories (garde, service, santé, reproduction, etc.)
+  categoryTypes: defineTable({
+    slug: v.string(), // Identifiant unique (ex: "garde", "service", "sante")
+    name: v.string(), // Nom affiché (ex: "Garde", "Services", "Santé")
+    description: v.optional(v.string()),
+    icon: v.optional(v.string()), // Emoji (ex: "🏠", "✨", "💊")
+    color: v.optional(v.string()), // Couleur HEX (ex: "#FF6B6B")
+    order: v.number(), // Ordre d'affichage
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_order", ["order"])
+    .index("by_active", ["isActive"]),
+
   // Catégories de services (gérées par l'admin)
   serviceCategories: defineTable({
     slug: v.string(), // Identifiant unique (ex: "garde", "toilettage")
@@ -352,9 +368,12 @@ export default defineSchema({
     imageStorageId: v.optional(v.id("_storage")), // Image de la catégorie
     order: v.number(), // Ordre d'affichage
     isActive: v.boolean(),
+    // Type de catégorie (uniquement pour les catégories parentes)
+    // Les prestations (sous-catégories) héritent du type de leur parent
+    typeId: v.optional(v.id("categoryTypes")),
     // Référence vers la catégorie parente (hiérarchie à 2 niveaux max)
     // undefined = catégorie parente (niveau racine)
-    // Id = sous-catégorie
+    // Id = prestation (sous-catégorie)
     parentCategoryId: v.optional(v.id("serviceCategories")),
     // Type de facturation pour cette catégorie
     billingType: v.optional(v.union(

@@ -1,5 +1,6 @@
 "use client";
 
+import { Receipt } from "lucide-react";
 import type { BillingType } from "../../types";
 import { BILLING_TYPES } from "../../types";
 
@@ -13,12 +14,13 @@ export default function BillingTypeSelector({
   onChange,
 }: BillingTypeSelectorProps) {
   return (
-    <div className="mb-4">
-      <label className="block text-sm font-medium text-slate-300 mb-3">
-        Type de facturation
-      </label>
+    <div className="p-4 bg-slate-900/50 rounded-lg border border-slate-700">
+      <div className="flex items-center gap-2 mb-3">
+        <Receipt className="w-5 h-5 text-green-400" />
+        <span className="font-medium text-white">Type de facturation</span>
+      </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-2">
         {BILLING_TYPES.map((type) => (
           <label
             key={type.value}
@@ -45,9 +47,8 @@ export default function BillingTypeSelector({
         ))}
       </div>
 
-      <p className="text-xs text-slate-500 mt-2">
-        Pour les catégories &quot;Flexible&quot;, l&apos;annonceur définit
-        s&apos;il facture à l&apos;heure ou à la journée.
+      <p className="text-xs text-slate-500 mt-3">
+        &quot;Flexible&quot; : l&apos;annonceur choisit entre horaire ou journalier.
       </p>
     </div>
   );

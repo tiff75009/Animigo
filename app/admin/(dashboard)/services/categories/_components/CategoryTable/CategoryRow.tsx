@@ -122,6 +122,17 @@ export default function CategoryRow({
                 <span className="px-2 py-0.5 bg-blue-500/20 text-blue-300 text-xs rounded-full font-normal">
                   Parent
                 </span>
+                {category.typeName && (
+                  <span
+                    className="px-2 py-0.5 text-xs rounded-full font-normal"
+                    style={{
+                      backgroundColor: `${category.typeColor || "#6B7280"}20`,
+                      color: category.typeColor || "#6B7280",
+                    }}
+                  >
+                    {category.typeIcon} {category.typeName}
+                  </span>
+                )}
               </p>
               <p className="text-xs text-slate-400">{category.slug}</p>
             </div>
@@ -147,7 +158,7 @@ export default function CategoryRow({
               <span className="inline-flex items-center gap-1.5">
                 <span className="font-medium">{childrenCount}</span>
                 <span className="text-slate-400">
-                  sous-catégorie{childrenCount > 1 ? "s" : ""}
+                  prestation{childrenCount > 1 ? "s" : ""}
                 </span>
               </span>
             ) : (
@@ -258,7 +269,20 @@ export default function CategoryRow({
           )}
 
           <div>
-            <p className="font-medium text-white">{category.name}</p>
+            <p className="font-medium text-white flex items-center gap-2">
+              {category.name}
+              {category.typeName && (
+                <span
+                  className="px-1.5 py-0.5 text-xs rounded-full"
+                  style={{
+                    backgroundColor: `${category.typeColor || "#6B7280"}15`,
+                    color: category.typeColor || "#6B7280",
+                  }}
+                >
+                  {category.typeIcon}
+                </span>
+              )}
+            </p>
             <p className="text-sm text-slate-400">{category.slug}</p>
           </div>
         </div>
