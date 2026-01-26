@@ -643,6 +643,20 @@ export default defineSchema({
     startTime: v.optional(v.string()),
     endTime: v.optional(v.string()), // Heure de fin calculée (startTime + durée)
 
+    // Créneaux collectifs (pour formules collectives)
+    collectiveSlotIds: v.optional(v.array(v.id("collectiveSlots"))),
+    // Nombre d'animaux (pour formules collectives)
+    animalCount: v.optional(v.number()),
+    // Type d'animal sélectionné
+    selectedAnimalType: v.optional(v.string()),
+
+    // Séances multi-sessions (pour formules individuelles multi-séances)
+    sessions: v.optional(v.array(v.object({
+      date: v.string(),
+      startTime: v.string(),
+      endTime: v.string(),
+    }))),
+
     // Garde de nuit
     includeOvernightStay: v.optional(v.boolean()), // Le client souhaite la garde de nuit
     overnightNights: v.optional(v.number()),       // Nombre de nuits

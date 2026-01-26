@@ -82,6 +82,7 @@ export const getMyServices = query({
           .collect();
 
         // Pour les variantes collectives, vérifier si des créneaux existent
+        // Pour les variantes individuelles, s'assurer qu'elles sont actives par défaut
         const today = new Date().toISOString().split("T")[0];
         const variantsWithSlotCount = await Promise.all(
           variants.map(async (v) => {
@@ -103,7 +104,11 @@ export const getMyServices = query({
                 isActive: activeSlots.length > 0, // Une formule collective n'est active que si elle a des créneaux
               };
             }
-            return v;
+            // Pour les formules individuelles, utiliser isActive de la DB ou true par défaut
+            return {
+              ...v,
+              isActive: v.isActive !== false, // true si isActive est true ou undefined
+            };
           })
         );
 

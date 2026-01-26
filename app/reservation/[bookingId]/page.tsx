@@ -8,8 +8,10 @@ import {
   CheckCircle,
   MapPin,
   Calendar,
+  CalendarCheck,
   Clock,
   User,
+  Users,
   Mail,
   Phone,
   Lock,
@@ -25,6 +27,7 @@ import {
   Info,
   Moon,
   Sun,
+  Package,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -42,6 +45,22 @@ interface ServiceOption {
   description?: string;
   price: number;
   priceUnit?: string;
+}
+
+// Type pour les séances multi-sessions
+interface SessionData {
+  date: string;
+  startTime: string;
+  endTime: string;
+}
+
+// Type pour les créneaux collectifs
+interface CollectiveSlotData {
+  _id: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  availableSpots: number;
 }
 
 interface PendingBookingData {
@@ -83,6 +102,11 @@ interface PendingBookingData {
       monthly?: number;
       nightly?: number;
     };
+    // Support formules collectives/multi-séances
+    numberOfSessions?: number;
+    sessionInterval?: number;
+    sessionType?: "individual" | "collective";
+    animalTypes?: string[];
   } | null;
   options: Array<{ id: string; name: string; price: number }>;
   availableOptions: ServiceOption[];
@@ -100,6 +124,13 @@ interface PendingBookingData {
     overnightAmount?: number;
   };
   serviceLocation?: "announcer_home" | "client_home";
+  // Support formules collectives
+  collectiveSlotIds?: Id<"collectiveSlots">[];
+  collectiveSlots?: CollectiveSlotData[];
+  animalCount?: number;
+  selectedAnimalType?: string;
+  // Support formules multi-séances
+  sessions?: SessionData[];
   userId?: Id<"users">;
   expiresAt: number;
 }
@@ -529,9 +560,27 @@ export default function ReservationPage({
     }
   }, [sessionData?.user?.location, bookingData?.serviceLocation, addressPreFilled]);
 
-  // Calculer le nombre de jours entre deux dates
+  // Détecter le type de formule
+  const isCollectiveFormula = bookingData?.variant?.sessionType === "collective" ||
+    (bookingData?.collectiveSlots && bookingData.collectiveSlots.length > 0);
+  const isMultiSessionFormula = !isCollectiveFormula &&
+    ((bookingData?.variant?.numberOfSessions ?? 1) > 1 ||
+    (bookingData?.sessions && bookingData.sessions.length > 1));
+  const numberOfSessions = bookingData?.variant?.numberOfSessions || 1;
+  const effectiveAnimalCount = bookingData?.animalCount || 1;
+
+  // Calculer le nombre de jours/séances selon le type de formule
   const calculateDays = () => {
     if (!bookingData) return 1;
+    // Formule collective: nombre de créneaux
+    if (isCollectiveFormula && bookingData.collectiveSlots) {
+      return bookingData.collectiveSlots.length || numberOfSessions;
+    }
+    // Formule multi-séances: nombre de séances
+    if (isMultiSessionFormula && bookingData.sessions) {
+      return bookingData.sessions.length || numberOfSessions;
+    }
+    // Formule uni-séance: calcul classique
     const start = new Date(bookingData.dates.startDate);
     const end = new Date(bookingData.dates.endDate);
     return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
@@ -545,9 +594,11 @@ export default function ReservationPage({
     return sum + (option?.price || 0);
   }, 0);
 
-  // Smart price calculation
+  // Smart price calculation (seulement pour les formules uni-séance classiques)
   const priceCalculation: PriceCalculationResult | null = (() => {
     if (!bookingData?.variant) return null;
+    // Ne pas utiliser le calcul smart pour les formules collectives/multi-séances
+    if (isCollectiveFormula || isMultiSessionFormula) return null;
 
     const pricing = bookingData.variant.pricing;
 
@@ -586,7 +637,24 @@ export default function ReservationPage({
     ? priceCalculation.firstDayAmount + priceCalculation.fullDaysAmount + priceCalculation.lastDayAmount
     : 0;
   const overnightAmount = priceCalculation?.nightsAmount ?? 0;
-  const totalAmount = priceCalculation?.totalAmount ?? 0;
+
+  // Calculer le montant total selon le type de formule
+  const totalAmount = (() => {
+    if (!bookingData?.variant) return 0;
+    // Formule collective: prix × séances × animaux + options
+    if (isCollectiveFormula) {
+      const basePrice = bookingData.variant.price * numberOfSessions * effectiveAnimalCount;
+      return basePrice + optionsTotal;
+    }
+    // Formule multi-séances: prix × séances + options
+    if (isMultiSessionFormula) {
+      const basePrice = bookingData.variant.price * numberOfSessions;
+      return basePrice + optionsTotal;
+    }
+    // Formule uni-séance: utiliser le calcul smart
+    return priceCalculation?.totalAmount ?? 0;
+  })();
+
   const isMultiDay = bookingData?.dates.endDate !== bookingData?.dates.startDate;
 
   // Calculer la commission
@@ -1353,71 +1421,190 @@ export default function ReservationPage({
                       {bookingData.variant && (
                         <p className="text-sm text-text-light">{bookingData.variant.name}</p>
                       )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Dates et horaires - format combiné comme étape 4 */}
-                <div className="py-4 border-b border-gray-100">
-                  <p className="text-xs font-medium text-text-light uppercase mb-2">Date et horaire</p>
-                  <div className="flex items-start gap-3">
-                    <Calendar className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                    <div className="text-sm text-foreground">
-                      {isMultiDay && bookingData.dates.startTime && bookingData.dates.endTime ? (
-                        // Multi-jours avec heures
-                        <span>
-                          Du {formatShortDate(bookingData.dates.startDate)} à {formatTime(bookingData.dates.startTime)} jusqu&apos;au {formatShortDate(bookingData.dates.endDate)} à {formatTime(bookingData.dates.endTime)}
-                        </span>
-                      ) : bookingData.dates.startTime && bookingData.dates.endTime ? (
-                        // Même jour avec plage horaire
-                        <span>
-                          {formatShortDate(bookingData.dates.startDate)} de {formatTime(bookingData.dates.startTime)} à {formatTime(bookingData.dates.endTime)}
-                        </span>
-                      ) : bookingData.dates.startTime ? (
-                        // Même jour avec heure de début et durée
-                        <span>
-                          {formatShortDate(bookingData.dates.startDate)} à {formatTime(bookingData.dates.startTime)}
-                          {bookingData.variant?.duration && (
-                            <span className="text-text-light">
-                              {" → "}{formatTime(calculateEndTime(bookingData.dates.startTime, bookingData.variant.duration))}
-                              {" "}({formatDuration(bookingData.variant.duration)})
+                      {/* Badge type de formule */}
+                      {(isCollectiveFormula || isMultiSessionFormula) && (
+                        <div className="flex items-center gap-2 mt-1">
+                          {isCollectiveFormula ? (
+                            <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full flex items-center gap-1">
+                              <Users className="w-3 h-3" />
+                              Collective
+                            </span>
+                          ) : (
+                            <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
+                              {numberOfSessions} séances
                             </span>
                           )}
-                        </span>
-                      ) : isMultiDay ? (
-                        // Multi-jours sans heures
-                        <span>
-                          Du {formatShortDate(bookingData.dates.startDate)} au {formatShortDate(bookingData.dates.endDate)}
-                        </span>
-                      ) : (
-                        // Date simple
-                        <span>{formatShortDate(bookingData.dates.startDate)}</span>
-                      )}
-
-                      {/* Durée */}
-                      {priceCalculation && (daysCount > 1 || priceCalculation.firstDayHours > 0) && (
-                        <div className="flex items-center gap-1 mt-1.5 text-xs text-text-light">
-                          <Clock className="w-3 h-3" />
-                          {daysCount > 1 ? (
-                            <span>
-                              {daysCount} jour{daysCount > 1 ? "s" : ""}
-                              {priceCalculation.firstDayHours + priceCalculation.lastDayHours + (priceCalculation.fullDays * 8) > 0 && (
-                                <> · {formatHoursDisplay(priceCalculation.firstDayHours + priceCalculation.lastDayHours + (priceCalculation.fullDays * 8))} au total</>
-                              )}
-                            </span>
-                          ) : priceCalculation.firstDayHours > 0 ? (
-                            <span>Durée : {formatHoursDisplay(priceCalculation.firstDayHours)}</span>
-                          ) : null}
                         </div>
                       )}
                     </div>
                   </div>
                 </div>
 
-                {/* Prix - Détail du calcul intelligent - format étape 4 - Tous les prix incluent la commission */}
+                {/* Dates et horaires - adapté selon le type de formule */}
+                <div className="py-4 border-b border-gray-100">
+                  {isCollectiveFormula && bookingData.collectiveSlots && bookingData.collectiveSlots.length > 0 ? (
+                    // Formule collective: liste numérotée des créneaux
+                    <div className="p-3 bg-purple-50 rounded-xl">
+                      <div className="flex items-center gap-2 mb-2">
+                        <CalendarCheck className="w-4 h-4 text-purple-600" />
+                        <span className="text-sm font-medium text-purple-800">
+                          Créneaux sélectionnés ({bookingData.collectiveSlots.length}/{numberOfSessions})
+                        </span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {bookingData.collectiveSlots.map((slot: CollectiveSlotData, index: number) => (
+                          <div
+                            key={slot._id}
+                            className="flex items-center gap-2 text-sm"
+                          >
+                            <span className="w-5 h-5 rounded-full bg-purple-200 text-purple-700 text-xs flex items-center justify-center font-semibold">
+                              {index + 1}
+                            </span>
+                            <span className="text-gray-700 capitalize">
+                              {formatShortDate(slot.date)}
+                            </span>
+                            <span className="text-gray-500">•</span>
+                            <span className="text-purple-700 font-medium">
+                              {slot.startTime} - {slot.endTime}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      {effectiveAnimalCount > 1 && (
+                        <div className="mt-2 pt-2 border-t border-purple-200 flex items-center gap-2">
+                          <Users className="w-4 h-4 text-purple-600" />
+                          <span className="text-sm text-purple-700">
+                            {effectiveAnimalCount} animal{effectiveAnimalCount > 1 ? "aux" : ""}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ) : isMultiSessionFormula && bookingData.sessions && bookingData.sessions.length > 0 ? (
+                    // Formule multi-séances: liste numérotée des séances
+                    <div className="p-3 bg-primary/5 rounded-xl">
+                      <div className="flex items-center gap-2 mb-2">
+                        <CalendarCheck className="w-4 h-4 text-primary" />
+                        <span className="text-sm font-medium text-foreground">
+                          Séances planifiées ({bookingData.sessions.length}/{numberOfSessions})
+                        </span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {bookingData.sessions.map((session: SessionData, index: number) => (
+                          <div
+                            key={`${session.date}-${session.startTime}`}
+                            className="flex items-center gap-2 text-sm"
+                          >
+                            <span className="w-5 h-5 rounded-full bg-primary/20 text-primary text-xs flex items-center justify-center font-semibold">
+                              {index + 1}
+                            </span>
+                            <span className="text-gray-700 capitalize">
+                              {formatShortDate(session.date)}
+                            </span>
+                            <span className="text-gray-500">•</span>
+                            <span className="text-primary font-medium">
+                              {session.startTime} - {session.endTime}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    // Formule uni-séance: affichage classique
+                    <>
+                      <p className="text-xs font-medium text-text-light uppercase mb-2">Date et horaire</p>
+                      <div className="flex items-start gap-3">
+                        <Calendar className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                        <div className="text-sm text-foreground">
+                          {isMultiDay && bookingData.dates.startTime && bookingData.dates.endTime ? (
+                            // Multi-jours avec heures
+                            <span>
+                              Du {formatShortDate(bookingData.dates.startDate)} à {formatTime(bookingData.dates.startTime)} jusqu&apos;au {formatShortDate(bookingData.dates.endDate)} à {formatTime(bookingData.dates.endTime)}
+                            </span>
+                          ) : bookingData.dates.startTime && bookingData.dates.endTime ? (
+                            // Même jour avec plage horaire
+                            <span>
+                              {formatShortDate(bookingData.dates.startDate)} de {formatTime(bookingData.dates.startTime)} à {formatTime(bookingData.dates.endTime)}
+                            </span>
+                          ) : bookingData.dates.startTime ? (
+                            // Même jour avec heure de début et durée
+                            <span>
+                              {formatShortDate(bookingData.dates.startDate)} à {formatTime(bookingData.dates.startTime)}
+                              {bookingData.variant?.duration && (
+                                <span className="text-text-light">
+                                  {" → "}{formatTime(calculateEndTime(bookingData.dates.startTime, bookingData.variant.duration))}
+                                  {" "}({formatDuration(bookingData.variant.duration)})
+                                </span>
+                              )}
+                            </span>
+                          ) : isMultiDay ? (
+                            // Multi-jours sans heures
+                            <span>
+                              Du {formatShortDate(bookingData.dates.startDate)} au {formatShortDate(bookingData.dates.endDate)}
+                            </span>
+                          ) : (
+                            // Date simple
+                            <span>{formatShortDate(bookingData.dates.startDate)}</span>
+                          )}
+
+                          {/* Durée */}
+                          {priceCalculation && (daysCount > 1 || priceCalculation.firstDayHours > 0) && (
+                            <div className="flex items-center gap-1 mt-1.5 text-xs text-text-light">
+                              <Clock className="w-3 h-3" />
+                              {daysCount > 1 ? (
+                                <span>
+                                  {daysCount} jour{daysCount > 1 ? "s" : ""}
+                                  {priceCalculation.firstDayHours + priceCalculation.lastDayHours + (priceCalculation.fullDays * 8) > 0 && (
+                                    <> · {formatHoursDisplay(priceCalculation.firstDayHours + priceCalculation.lastDayHours + (priceCalculation.fullDays * 8))} au total</>
+                                  )}
+                                </span>
+                              ) : priceCalculation.firstDayHours > 0 ? (
+                                <span>Durée : {formatHoursDisplay(priceCalculation.firstDayHours)}</span>
+                              ) : null}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Prix - Détail adapté selon le type de formule */}
                 <div className="pt-4">
-                  {priceCalculation && (() => {
-                    // Helper pour appliquer la commission
+                  {/* Formule collective ou multi-séances */}
+                  {(isCollectiveFormula || isMultiSessionFormula) && bookingData.variant && (() => {
+                    const withCommission = (amount: number) => Math.round(amount * (1 + commissionRate / 100));
+                    const variantPriceWithComm = withCommission(bookingData.variant.price);
+                    const basePrice = isCollectiveFormula
+                      ? bookingData.variant.price * numberOfSessions * effectiveAnimalCount
+                      : bookingData.variant.price * numberOfSessions;
+                    const basePriceWithComm = withCommission(basePrice);
+
+                    return (
+                      <div className={`rounded-xl p-4 space-y-3 mb-3 ${isCollectiveFormula ? "bg-purple-50" : "bg-primary/5"}`}>
+                        {/* Ligne formule */}
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Package className={`w-4 h-4 ${isCollectiveFormula ? "text-purple-600" : "text-primary"}`} />
+                              <span className="font-medium text-foreground">
+                                Formule : {bookingData.variant.name}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-500 ml-6">
+                              └ {formatPrice(variantPriceWithComm)} × {numberOfSessions} séance{numberOfSessions > 1 ? "s" : ""}
+                              {isCollectiveFormula && effectiveAnimalCount > 1 && ` × ${effectiveAnimalCount} animaux`}
+                            </p>
+                          </div>
+                          <span className={`font-bold text-lg ${isCollectiveFormula ? "text-purple-700" : "text-primary"}`}>
+                            {formatPrice(basePriceWithComm)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Formule uni-séance (calcul smart) */}
+                  {priceCalculation && !isCollectiveFormula && !isMultiSessionFormula && (() => {
                     const withCommission = (amount: number) => Math.round(amount * (1 + commissionRate / 100));
                     const firstDayWithComm = withCommission(priceCalculation.firstDayAmount);
                     const fullDaysWithComm = withCommission(priceCalculation.fullDaysAmount);

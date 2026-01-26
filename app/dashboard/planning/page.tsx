@@ -13,9 +13,10 @@ import {
   Loader2,
   CalendarOff,
   Eye,
+  Users,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
-import { usePlanning, ViewMode, Mission, MissionStats, Availability } from "@/app/hooks/usePlanning";
+import { usePlanning, ViewMode, Mission, MissionStats, Availability, CollectiveSlot } from "@/app/hooks/usePlanning";
 import { useAuth } from "@/app/hooks/useAuth";
 
 // Components
@@ -25,6 +26,7 @@ import { DayView } from "./components/views/DayView";
 import { YearView } from "./components/views/YearView";
 import { AvailabilityModal } from "./components/availability/AvailabilityModal";
 import { MissionDetailModal } from "./components/MissionDetailModal";
+import { CollectiveSlotModal } from "./components/CollectiveSlotModal";
 import {
   statusColors,
   statusLabels,
@@ -169,6 +171,10 @@ const CalendarLegend = memo(function CalendarLegend() {
         <span className="text-text-light">Terminee</span>
       </div>
       <div className="flex items-center gap-2 text-xs">
+        <div className="w-3 h-3 rounded-full bg-purple-500" />
+        <span className="text-text-light">Collectif</span>
+      </div>
+      <div className="flex items-center gap-2 text-xs">
         <div className="w-3 h-3 rounded bg-green-100 border border-green-200" />
         <span className="text-text-light">Disponible</span>
       </div>
@@ -269,9 +275,11 @@ const CalendarContent = memo(function CalendarContent({
   currentDate,
   missions,
   availability,
+  collectiveSlots,
   onDayClick,
   onRangeSelect,
   onMissionClick,
+  onSlotClick,
   onMonthClick,
   onToggleAvailability,
 }: {
@@ -280,9 +288,11 @@ const CalendarContent = memo(function CalendarContent({
   currentDate: Date;
   missions: Mission[];
   availability: Availability[];
+  collectiveSlots: CollectiveSlot[];
   onDayClick: (date: string) => void;
   onRangeSelect: (startDate: string, endDate: string) => void;
   onMissionClick: (mission: Mission) => void;
+  onSlotClick: (slot: CollectiveSlot) => void;
   onMonthClick: (month: number) => void;
   onToggleAvailability: (date: string) => void;
 }) {
@@ -297,9 +307,11 @@ const CalendarContent = memo(function CalendarContent({
           currentDate={currentDate}
           missions={missions}
           availability={availability}
+          collectiveSlots={collectiveSlots}
           onDayClick={onDayClick}
           onRangeSelect={onRangeSelect}
           onMissionClick={onMissionClick}
+          onSlotClick={onSlotClick}
         />
       )}
       {viewMode === "week" && (
@@ -307,9 +319,11 @@ const CalendarContent = memo(function CalendarContent({
           currentDate={currentDate}
           missions={missions}
           availability={availability}
+          collectiveSlots={collectiveSlots}
           onDayClick={onDayClick}
           onRangeSelect={onRangeSelect}
           onMissionClick={onMissionClick}
+          onSlotClick={onSlotClick}
         />
       )}
       {viewMode === "day" && (
@@ -317,8 +331,10 @@ const CalendarContent = memo(function CalendarContent({
           currentDate={currentDate}
           missions={missions}
           availability={availability}
+          collectiveSlots={collectiveSlots}
           onMissionClick={onMissionClick}
           onToggleAvailability={onToggleAvailability}
+          onSlotClick={onSlotClick}
         />
       )}
       {viewMode === "year" && (
@@ -406,6 +422,7 @@ const ListView = memo(function ListView({
 export default function PlanningPage() {
   const { token, isLoading: authLoading } = useAuth();
   const [selectedMission, setSelectedMission] = useState<Mission | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<CollectiveSlot | null>(null);
   const [selectedStartDate, setSelectedStartDate] = useState<string | null>(null);
   const [selectedEndDate, setSelectedEndDate] = useState<string | null>(null);
   const [showListView, setShowListView] = useState(false);
@@ -416,6 +433,7 @@ export default function PlanningPage() {
     setViewMode,
     missions,
     availability,
+    collectiveSlots,
     stats,
     isLoading,
     goToToday,
@@ -455,6 +473,14 @@ export default function PlanningPage() {
 
   const handleMissionClick = useCallback((mission: Mission) => {
     setSelectedMission(mission);
+  }, []);
+
+  const handleSlotClick = useCallback((slot: CollectiveSlot) => {
+    setSelectedSlot(slot);
+  }, []);
+
+  const handleCloseSlotModal = useCallback(() => {
+    setSelectedSlot(null);
   }, []);
 
   const handleMonthClick = useCallback((month: number) => {
@@ -566,9 +592,11 @@ export default function PlanningPage() {
           currentDate={currentDate}
           missions={missions}
           availability={availability}
+          collectiveSlots={collectiveSlots}
           onDayClick={handleDayClick}
           onRangeSelect={handleRangeSelect}
           onMissionClick={handleMissionClick}
+          onSlotClick={handleSlotClick}
           onMonthClick={handleMonthClick}
           onToggleAvailability={handleDayClick}
         />
@@ -615,6 +643,13 @@ export default function PlanningPage() {
         onComplete={async (id, notes) => {
           await completeMission(id as any, notes);
         }}
+      />
+
+      {/* Collective Slot Modal */}
+      <CollectiveSlotModal
+        slot={selectedSlot}
+        token={token}
+        onClose={handleCloseSlotModal}
       />
     </div>
   );

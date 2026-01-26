@@ -8,5 +8,7 @@ export { default as GuestAddressSelector } from "./GuestAddressSelector";
 export { default as MobileTimePicker } from "./MobileTimePicker";
 export { default as BookingStepBar, useBookingSteps } from "./BookingStepBar";
 export { default as CollectiveSlotPicker } from "./CollectiveSlotPicker";
+export { default as MultiSessionCalendar } from "./MultiSessionCalendar";
+export type { SelectedSession } from "./MultiSessionCalendar";
 export * from "./types";
 export * from "./pricing";

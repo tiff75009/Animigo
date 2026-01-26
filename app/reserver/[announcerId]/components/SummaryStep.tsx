@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { AlertCircle, Clock, MapPin, Moon, Sun, Home, CalendarCheck, Users, CreditCard, Package, Plus } from "lucide-react";
+import { AlertCircle, Clock, MapPin, Moon, Sun, Home, CalendarCheck, Users, CreditCard, Package, Plus, PawPrint } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import type { ServiceDetail, ServiceVariant } from "./FormulaStep";
 import type { ServiceOption } from "./OptionsStep";
@@ -20,6 +20,16 @@ interface CollectiveSlotInfo {
   startTime: string;
   endTime: string;
   availableSpots: number;
+}
+
+// Type pour les animaux de l'utilisateur (correspondant au retour de getUserAnimals)
+interface UserAnimal {
+  id: string;
+  name: string;
+  type: string;
+  emoji?: string;
+  breed?: string;
+  primaryPhotoUrl?: string | null;
 }
 
 // Price calculation result interface (must match page.tsx)
@@ -69,6 +79,9 @@ interface SummaryStepProps {
   // Support pour les formules individuelles multi-séances
   isMultiSessionIndividual?: boolean;
   selectedSessions?: SelectedSession[];
+  // Animaux de l'utilisateur
+  userAnimals?: UserAnimal[] | null;
+  selectedAnimalIds?: string[];
   error: string | null;
 }
 
@@ -115,6 +128,9 @@ export default function SummaryStep({
   // Formules multi-séances
   isMultiSessionIndividual = false,
   selectedSessions = [],
+  // Animaux de l'utilisateur
+  userAnimals = null,
+  selectedAnimalIds = [],
   error,
 }: SummaryStepProps) {
   const isMultiDay = selectedEndDate && selectedEndDate !== selectedDate;
@@ -123,6 +139,10 @@ export default function SummaryStep({
   const isCollective = isCollectiveFormula || selectedVariant.sessionType === "collective";
   const isMultiSession = isMultiSessionIndividual || (!isCollective && (selectedVariant.numberOfSessions || 1) > 1);
   const numberOfSessions = selectedVariant.numberOfSessions || 1;
+
+  // Filtrer les animaux sélectionnés
+  const selectedAnimals = userAnimals?.filter(animal => selectedAnimalIds.includes(animal.id)) || [];
+  const effectiveAnimalCount = selectedAnimals.length > 0 ? selectedAnimals.length : animalCount;
 
   // Formater l'heure (9:00 -> 9h, 14:30 -> 14h30)
   const formatTime = (time: string) => {
@@ -249,75 +269,93 @@ export default function SummaryStep({
         )}
 
         {/* Affichage des dates selon le type de formule */}
-        {isCollective && collectiveSlots.length > 0 ? (
+        {isCollective ? (
           // Formule collective: liste numérotée des créneaux
           <div className="p-3 bg-purple-50 rounded-xl">
             <div className="flex items-center gap-2 mb-2">
               <CalendarCheck className="w-4 h-4 text-purple-600" />
               <span className="text-sm font-medium text-purple-800">
-                Créneaux sélectionnés ({collectiveSlots.length}/{numberOfSessions})
+                {collectiveSlots.length > 0
+                  ? `Créneaux sélectionnés (${collectiveSlots.length}/${numberOfSessions})`
+                  : `${numberOfSessions} séance${numberOfSessions > 1 ? "s" : ""} collective${numberOfSessions > 1 ? "s" : ""}`
+                }
               </span>
             </div>
-            <div className="space-y-1.5">
-              {collectiveSlots
-                .sort((a, b) => a.date.localeCompare(b.date))
-                .map((slot, index) => (
-                <div
-                  key={slot._id}
-                  className="flex items-center gap-2 text-sm"
-                >
-                  <span className="w-5 h-5 rounded-full bg-purple-200 text-purple-700 text-xs flex items-center justify-center font-semibold">
-                    {index + 1}
-                  </span>
-                  <span className="text-gray-700 capitalize">
-                    {formatDate(slot.date)}
-                  </span>
-                  <span className="text-gray-500">•</span>
-                  <span className="text-purple-700 font-medium">
-                    {slot.startTime} - {slot.endTime}
-                  </span>
-                </div>
-              ))}
-            </div>
-            {animalCount > 1 && (
+            {collectiveSlots.length > 0 ? (
+              <div className="space-y-1.5">
+                {collectiveSlots
+                  .sort((a, b) => a.date.localeCompare(b.date))
+                  .map((slot, index) => (
+                  <div
+                    key={slot._id}
+                    className="flex items-center gap-2 text-sm"
+                  >
+                    <span className="w-5 h-5 rounded-full bg-purple-200 text-purple-700 text-xs flex items-center justify-center font-semibold">
+                      {index + 1}
+                    </span>
+                    <span className="text-gray-700 capitalize">
+                      {formatDate(slot.date)}
+                    </span>
+                    <span className="text-gray-500">•</span>
+                    <span className="text-purple-700 font-medium">
+                      {slot.startTime} - {slot.endTime}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-purple-600/70 animate-pulse">
+                Chargement des créneaux...
+              </p>
+            )}
+            {effectiveAnimalCount > 1 && (
               <div className="mt-2 pt-2 border-t border-purple-200 flex items-center gap-2">
                 <Users className="w-4 h-4 text-purple-600" />
                 <span className="text-sm text-purple-700">
-                  {animalCount} animal{animalCount > 1 ? "aux" : ""}
+                  {effectiveAnimalCount} animal{effectiveAnimalCount > 1 ? "aux" : ""}
                 </span>
               </div>
             )}
           </div>
-        ) : isMultiSession && selectedSessions.length > 0 ? (
+        ) : isMultiSession ? (
           // Formule multi-séances: liste numérotée des séances
           <div className="p-3 bg-primary/5 rounded-xl">
             <div className="flex items-center gap-2 mb-2">
               <CalendarCheck className="w-4 h-4 text-primary" />
               <span className="text-sm font-medium text-foreground">
-                Séances planifiées ({selectedSessions.length}/{numberOfSessions})
+                {selectedSessions.length > 0
+                  ? `Séances planifiées (${selectedSessions.length}/${numberOfSessions})`
+                  : `${numberOfSessions} séance${numberOfSessions > 1 ? "s" : ""} à planifier`
+                }
               </span>
             </div>
-            <div className="space-y-1.5">
-              {selectedSessions
-                .sort((a, b) => a.date.localeCompare(b.date))
-                .map((session, index) => (
-                <div
-                  key={`${session.date}-${session.startTime}`}
-                  className="flex items-center gap-2 text-sm"
-                >
-                  <span className="w-5 h-5 rounded-full bg-primary/20 text-primary text-xs flex items-center justify-center font-semibold">
-                    {index + 1}
-                  </span>
-                  <span className="text-gray-700 capitalize">
-                    {formatDate(session.date)}
-                  </span>
-                  <span className="text-gray-500">•</span>
-                  <span className="text-primary font-medium">
-                    {session.startTime} - {session.endTime}
-                  </span>
-                </div>
-              ))}
-            </div>
+            {selectedSessions.length > 0 ? (
+              <div className="space-y-1.5">
+                {selectedSessions
+                  .sort((a, b) => a.date.localeCompare(b.date))
+                  .map((session, index) => (
+                  <div
+                    key={`${session.date}-${session.startTime}`}
+                    className="flex items-center gap-2 text-sm"
+                  >
+                    <span className="w-5 h-5 rounded-full bg-primary/20 text-primary text-xs flex items-center justify-center font-semibold">
+                      {index + 1}
+                    </span>
+                    <span className="text-gray-700 capitalize">
+                      {formatDate(session.date)}
+                    </span>
+                    <span className="text-gray-500">•</span>
+                    <span className="text-primary font-medium">
+                      {session.startTime} - {session.endTime}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-primary/70 animate-pulse">
+                Chargement des séances...
+              </p>
+            )}
           </div>
         ) : (
           // Formule uni-séance: affichage classique
@@ -367,6 +405,51 @@ export default function SummaryStep({
             )}
           </div>
         )}
+
+        {/* Section Animaux - visible si des animaux sont sélectionnés */}
+        {selectedAnimals.length > 0 && (
+          <div className="p-3 bg-amber-50 rounded-xl mt-3">
+            <div className="flex items-center gap-2 mb-2">
+              <PawPrint className="w-4 h-4 text-amber-600" />
+              <span className="text-sm font-medium text-amber-800">
+                {selectedAnimals.length > 1 ? "Animaux concernés" : "Animal concerné"}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {selectedAnimals.map((animal) => (
+                <div
+                  key={animal.id}
+                  className="flex items-center gap-3"
+                >
+                  {animal.primaryPhotoUrl ? (
+                    <Image
+                      src={animal.primaryPhotoUrl}
+                      alt={animal.name}
+                      width={32}
+                      height={32}
+                      className="rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-amber-200 flex items-center justify-center text-amber-700 text-sm">
+                      {animal.emoji || animal.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{animal.name}</p>
+                    <p className="text-xs text-text-light">
+                      {animal.type}{animal.breed ? ` - ${animal.breed}` : ""}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {selectedAnimals.length > 1 && (
+              <p className="text-xs text-amber-600 mt-2 pt-2 border-t border-amber-200">
+                Le prix est ajusté pour {selectedAnimals.length} animaux
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Price Breakdown - Mode Plan/Détaillé */}
@@ -400,7 +483,7 @@ export default function SummaryStep({
                 // Formule collective: prix × séances × animaux
                 <p className="text-xs text-gray-500 ml-6">
                   └ {formatPrice(Math.round(selectedVariant.price * (1 + commissionRate / 100)))} × {numberOfSessions} séance{numberOfSessions > 1 ? "s" : ""}
-                  {animalCount > 1 && ` × ${animalCount} animaux`}
+                  {effectiveAnimalCount > 1 && ` × ${effectiveAnimalCount} animaux`}
                 </p>
               ) : isMultiSession ? (
                 // Formule multi-séances: prix × séances
@@ -424,7 +507,7 @@ export default function SummaryStep({
               isCollective ? "text-purple-700" : isMultiSession ? "text-primary" : "text-foreground"
             )}>
               {isCollective ? (
-                formatPrice(Math.round(selectedVariant.price * numberOfSessions * animalCount * (1 + commissionRate / 100)))
+                formatPrice(Math.round(selectedVariant.price * numberOfSessions * effectiveAnimalCount * (1 + commissionRate / 100)))
               ) : isMultiSession ? (
                 formatPrice(Math.round(selectedVariant.price * numberOfSessions * (1 + commissionRate / 100)))
               ) : (
@@ -485,7 +568,7 @@ export default function SummaryStep({
             <span className="text-gray-600">Sous-total</span>
             <span className="font-medium text-foreground">
               {isCollective ? (
-                formatPrice(Math.round(selectedVariant.price * numberOfSessions * animalCount) + selectedOptionIds.reduce((sum, optId) => {
+                formatPrice(Math.round(selectedVariant.price * numberOfSessions * effectiveAnimalCount) + selectedOptionIds.reduce((sum, optId) => {
                   const opt = selectedService.options.find((o: ServiceOption) => o.id === optId);
                   return sum + (opt?.price || 0);
                 }, 0))
@@ -505,7 +588,7 @@ export default function SummaryStep({
             <span>Frais de service ({commissionRate}%)</span>
             <span>
               {isCollective ? (
-                formatPrice(Math.round((selectedVariant.price * numberOfSessions * animalCount + selectedOptionIds.reduce((sum, optId) => {
+                formatPrice(Math.round((selectedVariant.price * numberOfSessions * effectiveAnimalCount + selectedOptionIds.reduce((sum, optId) => {
                   const opt = selectedService.options.find((o: ServiceOption) => o.id === optId);
                   return sum + (opt?.price || 0);
                 }, 0)) * commissionRate / 100))
@@ -528,7 +611,7 @@ export default function SummaryStep({
             <span className="font-bold text-lg text-foreground">Total</span>
             <span className="font-bold text-xl text-primary">
               {isCollective ? (
-                formatPrice(Math.round((selectedVariant.price * numberOfSessions * animalCount + selectedOptionIds.reduce((sum, optId) => {
+                formatPrice(Math.round((selectedVariant.price * numberOfSessions * effectiveAnimalCount + selectedOptionIds.reduce((sum, optId) => {
                   const opt = selectedService.options.find((o: ServiceOption) => o.id === optId);
                   return sum + (opt?.price || 0);
                 }, 0)) * (1 + commissionRate / 100)))

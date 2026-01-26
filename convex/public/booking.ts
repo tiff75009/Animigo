@@ -56,6 +56,16 @@ export const createPendingBooking = mutation({
     startTime: v.optional(v.string()),
     endTime: v.optional(v.string()), // Heure de fin (pour réservation par plage)
     calculatedAmount: v.number(),
+    // Créneaux collectifs (pour formules collectives)
+    collectiveSlotIds: v.optional(v.array(v.id("collectiveSlots"))),
+    animalCount: v.optional(v.number()),
+    selectedAnimalType: v.optional(v.string()),
+    // Séances multi-sessions (pour formules individuelles multi-séances)
+    sessions: v.optional(v.array(v.object({
+      date: v.string(),
+      startTime: v.string(),
+      endTime: v.string(),
+    }))),
     // Garde de nuit
     includeOvernightStay: v.optional(v.boolean()),
     overnightNights: v.optional(v.number()),
@@ -79,6 +89,7 @@ export const createPendingBooking = mutation({
     token: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    try {
     let userId: Id<"users"> | undefined;
 
     // Si un token est fourni, récupérer l'utilisateur
@@ -121,49 +132,56 @@ export const createPendingBooking = mutation({
       endTime = addMinutesToTime(args.startTime, duration);
     }
 
-    // Vérifier la disponibilité de l'annonceur AVANT de créer la réservation
-    const unavailabilities = await ctx.db
-      .query("availability")
-      .withIndex("by_user", (q) => q.eq("userId", args.announcerId))
-      .filter((q) => q.eq(q.field("status"), "unavailable"))
-      .collect();
+    // Pour les formules collectives, les créneaux sont déjà validés côté serveur
+    // On ne vérifie pas les conflits car les créneaux collectifs gèrent leur propre capacité
+    const isCollectiveBooking = args.collectiveSlotIds && args.collectiveSlotIds.length > 0;
+    const isMultiSessionBooking = args.sessions && args.sessions.length > 0;
 
-    const unavailableDates = new Set(unavailabilities.map((a) => a.date));
-    const requestedDates = getDatesBetween(args.startDate, args.endDate);
+    if (!isCollectiveBooking && !isMultiSessionBooking) {
+      // Vérifier la disponibilité de l'annonceur AVANT de créer la réservation
+      const unavailabilities = await ctx.db
+        .query("availability")
+        .withIndex("by_user", (q) => q.eq("userId", args.announcerId))
+        .filter((q) => q.eq(q.field("status"), "unavailable"))
+        .collect();
 
-    for (const date of requestedDates) {
-      if (unavailableDates.has(date)) {
-        throw new ConvexError(`L'annonceur n'est pas disponible le ${date}`);
+      const unavailableDates = new Set(unavailabilities.map((a) => a.date));
+      const requestedDates = getDatesBetween(args.startDate, args.endDate);
+
+      for (const date of requestedDates) {
+        if (unavailableDates.has(date)) {
+          throw new ConvexError(`L'annonceur n'est pas disponible le ${date}`);
+        }
       }
-    }
 
-    // Vérifier les conflits avec les missions existantes
-    const announcerProfile = await ctx.db
-      .query("profiles")
-      .withIndex("by_user", (q) => q.eq("userId", args.announcerId))
-      .first();
+      // Vérifier les conflits avec les missions existantes
+      const announcerProfile = await ctx.db
+        .query("profiles")
+        .withIndex("by_user", (q) => q.eq("userId", args.announcerId))
+        .first();
 
-    const bufferBefore = announcerProfile?.bufferBefore ?? 0;
-    const bufferAfter = announcerProfile?.bufferAfter ?? 0;
+      const bufferBefore = announcerProfile?.bufferBefore ?? 0;
+      const bufferAfter = announcerProfile?.bufferAfter ?? 0;
 
-    const newMissionSlot = {
-      startDate: args.startDate,
-      endDate: args.endDate,
-      startTime: args.startTime,
-      endTime,
-    };
+      const newMissionSlot = {
+        startDate: args.startDate,
+        endDate: args.endDate,
+        startTime: args.startTime,
+        endTime,
+      };
 
-    const conflictCheck = await checkBookingConflict(
-      ctx.db,
-      args.announcerId,
-      service.category,
-      newMissionSlot,
-      bufferBefore,
-      bufferAfter
-    );
+      const conflictCheck = await checkBookingConflict(
+        ctx.db,
+        args.announcerId,
+        service.category,
+        newMissionSlot,
+        bufferBefore,
+        bufferAfter
+      );
 
-    if (conflictCheck.hasConflict) {
-      throw new ConvexError(conflictCheck.conflictMessage || "L'annonceur n'est pas disponible sur ce créneau");
+      if (conflictCheck.hasConflict) {
+        throw new ConvexError(conflictCheck.conflictMessage || "L'annonceur n'est pas disponible sur ce créneau");
+      }
     }
 
     const now = Date.now();
@@ -180,6 +198,12 @@ export const createPendingBooking = mutation({
       startTime: args.startTime,
       endTime,
       calculatedAmount: args.calculatedAmount,
+      // Créneaux collectifs
+      collectiveSlotIds: args.collectiveSlotIds,
+      animalCount: args.animalCount,
+      selectedAnimalType: args.selectedAnimalType,
+      // Séances multi-sessions
+      sessions: args.sessions,
       // Garde de nuit
       includeOvernightStay: args.includeOvernightStay,
       overnightNights: args.overnightNights,
@@ -202,6 +226,15 @@ export const createPendingBooking = mutation({
       success: true,
       bookingId: pendingBookingId,
     };
+    } catch (error) {
+      // Re-throw ConvexErrors as-is
+      if (error instanceof ConvexError) {
+        throw error;
+      }
+      // Log and wrap other errors
+      console.error("createPendingBooking error:", error);
+      throw new ConvexError(`Erreur lors de la création de la réservation: ${error instanceof Error ? error.message : String(error)}`);
+    }
   },
 });
 
@@ -295,6 +328,31 @@ export const getPendingBooking = query({
       priceType: opt.priceType,
     }));
 
+    // Récupérer les détails des créneaux collectifs si présents
+    let collectiveSlots: Array<{
+      _id: string;
+      date: string;
+      startTime: string;
+      endTime: string;
+      availableSpots: number;
+    }> = [];
+    if (pendingBooking.collectiveSlotIds && pendingBooking.collectiveSlotIds.length > 0) {
+      for (const slotId of pendingBooking.collectiveSlotIds) {
+        const slot = await ctx.db.get(slotId);
+        if (slot) {
+          collectiveSlots.push({
+            _id: slot._id,
+            date: slot.date,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            availableSpots: slot.maxAnimals - slot.bookedAnimals,
+          });
+        }
+      }
+      // Trier par date
+      collectiveSlots.sort((a, b) => a.date.localeCompare(b.date));
+    }
+
     // Déterminer le type de statut pour le badge
     let statusType: "particulier" | "micro_entrepreneur" | "professionnel" = "particulier";
     if (announcer.accountType === "annonceur_pro") {
@@ -339,6 +397,11 @@ export const getPendingBooking = query({
         duration: variant.duration,
         // Pricing nightly si défini
         pricing: variant.pricing,
+        // Support formules collectives/multi-séances
+        numberOfSessions: variant.numberOfSessions,
+        sessionInterval: variant.sessionInterval,
+        sessionType: variant.sessionType,
+        animalTypes: variant.animalTypes,
       } : null,
       options: selectedOptions,
       availableOptions,
@@ -357,6 +420,13 @@ export const getPendingBooking = query({
       },
       // Lieu de prestation
       serviceLocation: pendingBooking.serviceLocation,
+      // Support formules collectives
+      collectiveSlotIds: pendingBooking.collectiveSlotIds,
+      collectiveSlots, // Détails complets des créneaux
+      animalCount: pendingBooking.animalCount,
+      selectedAnimalType: pendingBooking.selectedAnimalType,
+      // Support formules multi-séances
+      sessions: pendingBooking.sessions,
       userId: pendingBooking.userId,
       expiresAt: pendingBooking.expiresAt,
     };

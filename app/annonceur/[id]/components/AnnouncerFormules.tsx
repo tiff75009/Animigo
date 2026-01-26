@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Package, Sparkles, Plus, MousePointerClick, Filter, PawPrint, Check } from "lucide-react";
+import { Package, Sparkles, Plus, MousePointerClick, Filter, PawPrint, Check, MapPin, Home, Users, Target, Clock, Info, CalendarDays } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/app/lib/utils";
 import { ServiceData, FormuleData } from "./types";
@@ -15,10 +15,12 @@ import {
   BookingStepBar,
   useBookingSteps,
   CollectiveSlotPicker,
+  MultiSessionCalendar,
   type BookingSelection,
   type CalendarEntry,
   type ClientAddress,
   type GuestAddress,
+  type SelectedSession,
   isGardeService,
 } from "./booking";
 
@@ -64,7 +66,10 @@ interface AnnouncerFormulesProps {
   selectedAnimalType?: string; // Type d'animal sélectionné par le client
   animalCount?: number; // Nombre d'animaux du client
   onAnimalCountChange?: (count: number) => void;
-  // Sélection de l'animal (utilisateur connecté)
+  // Séances individuelles multi-sessions
+  selectedSessions?: SelectedSession[];
+  onSessionsChange?: (sessions: SelectedSession[]) => void;
+  // Sélection de l'animal (utilisateur connecté - sélection multiple)
   userAnimals?: Array<{
     id: string;
     name: string;
@@ -72,8 +77,12 @@ interface AnnouncerFormulesProps {
     breed?: string;
     profilePhoto?: string;
   }>;
-  selectedAnimalId?: string | null;
-  onAnimalSelect?: (animalId: string, animalType: string) => void;
+  selectedAnimalIds?: string[];
+  onAnimalToggle?: (animalId: string, animalType: string) => void;
+  maxSelectableAnimals?: number;
+  // Infos annonceur pour la section lieu
+  announcerCity?: string;
+  announcerFirstName?: string;
   className?: string;
 }
 
@@ -116,9 +125,14 @@ export default function AnnouncerFormules({
   selectedAnimalType = "chien",
   animalCount = 1,
   onAnimalCountChange,
+  selectedSessions = [],
+  onSessionsChange,
   userAnimals = [],
-  selectedAnimalId,
-  onAnimalSelect,
+  selectedAnimalIds = [],
+  onAnimalToggle,
+  maxSelectableAnimals = 1,
+  announcerCity,
+  announcerFirstName,
   className,
 }: AnnouncerFormulesProps) {
   // Aucun service sélectionné
@@ -202,6 +216,12 @@ export default function AnnouncerFormules({
   const collectiveSessionInterval = selectedFormule?.sessionInterval || 7;
   const collectiveMaxAnimals = selectedFormule?.maxAnimalsPerSession || 5;
 
+  // Déterminer si c'est une formule individuelle multi-séances
+  const isMultiSessionIndividual = !isCollectiveFormule &&
+    (selectedFormule?.numberOfSessions || 1) > 1;
+  const individualNumberOfSessions = selectedFormule?.numberOfSessions || 1;
+  const individualSessionInterval = selectedFormule?.sessionInterval || 0;
+
   // Déterminer si on doit afficher le sélecteur de lieu
   // Pour les services garde (isRangeMode), on affiche toujours le sélecteur de lieu
   const showLocationSelector = hasVariantSelected && (
@@ -227,6 +247,26 @@ export default function AnnouncerFormules({
   const hasOptions = service.options.length > 0 || isRangeMode;
   const hasOptionsSelected = selectedOptionIds.length > 0;
 
+  // Pour les formules collectives
+  const hasSlotsSelected = selectedSlotIds.length > 0;
+  const selectedSlotsCount = selectedSlotIds.length;
+
+  // Pour les formules individuelles multi-séances
+  const hasSessionsSelected = selectedSessions.length > 0;
+  const selectedSessionsCount = selectedSessions.length;
+
+  // Calculer les animaux compatibles avec la formule sélectionnée
+  const compatibleUserAnimals = userAnimals.filter((animal) => {
+    const acceptedTypes = selectedFormule?.animalTypes || service?.animalTypes || [];
+    return acceptedTypes.length === 0 || acceptedTypes.includes(animal.type);
+  });
+
+  // L'utilisateur a-t-il sélectionné au moins un animal?
+  const hasAnimalsSelected = selectedAnimalIds.length > 0;
+
+  // Déterminer le serviceLocation de la formule ou du service
+  const formuleServiceLocation = selectedFormule?.serviceLocation || service?.serviceLocation;
+
   const steps = useBookingSteps({
     hasVariantSelected,
     hasDateSelected,
@@ -234,10 +274,27 @@ export default function AnnouncerFormules({
     hasTimeSelected,
     hasEndTimeSelected,
     isRangeMode,
-    showLocationSelector,
+    showLocationSelector: showLocationSelector && !isCollectiveFormule, // Pas de sélecteur de lieu pour les collectives
     hasLocationSelected,
     hasOptions,
     hasOptionsSelected,
+    // Paramètres pour les formules collectives
+    isCollectiveFormula: isCollectiveFormule,
+    hasSlotsSelected,
+    requiredSlots: collectiveNumberOfSessions,
+    selectedSlotsCount,
+    // Paramètres pour les formules individuelles multi-séances
+    isMultiSessionIndividual,
+    hasSessionsSelected: isMultiSessionIndividual ? hasSessionsSelected : hasDateSelected && hasTimeSelected,
+    requiredSessions: individualNumberOfSessions,
+    selectedSessionsCount,
+    // Nouveaux paramètres pour l'étape Animaux
+    isLoggedIn,
+    hasAnimalsSelected: hasAnimalsSelected || !isLoggedIn, // Pas d'animal requis pour les invités
+    selectedAnimalsCount: selectedAnimalIds.length,
+    maxAnimals: maxSelectableAnimals,
+    // Paramètre pour l'étape Lieu
+    serviceLocation: formuleServiceLocation,
   });
 
   return (
@@ -426,116 +483,149 @@ export default function AnnouncerFormules({
         </div>
       </motion.div>
 
-      {/* Créneaux collectifs - visible sur tous les écrans */}
+      {/* Section Animaux - visible pour utilisateurs connectés ayant des animaux compatibles */}
+      {hasVariantSelected && isLoggedIn && userAnimals.length > 0 && onAnimalToggle && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={cn(
+            "bg-white rounded-2xl p-5 sm:p-6 border-2 transition-colors duration-300",
+            hasAnimalsSelected
+              ? "border-gray-100"
+              : "border-primary/30"
+          )}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <span className={cn(
+                "p-2 rounded-lg transition-colors duration-300",
+                hasAnimalsSelected ? "bg-primary/10" : "bg-primary/15"
+              )}>
+                <PawPrint className={cn(
+                  "w-5 h-5 transition-colors duration-300",
+                  hasAnimalsSelected ? "text-primary" : "text-primary"
+                )} />
+              </span>
+              Vos animaux
+            </h3>
+            <span className="text-sm text-gray-500">
+              {selectedAnimalIds.length}/{maxSelectableAnimals} sélectionné{selectedAnimalIds.length > 1 ? "s" : ""}
+            </span>
+          </div>
+
+          {compatibleUserAnimals.length > 0 ? (
+            <div className="grid gap-2">
+              {compatibleUserAnimals.map((animal, idx) => {
+                const isSelected = selectedAnimalIds.includes(animal.id);
+                const canSelect = isSelected || selectedAnimalIds.length < maxSelectableAnimals;
+                return (
+                  <button
+                    key={animal.id || `animal-${idx}`}
+                    type="button"
+                    onClick={() => canSelect && onAnimalToggle(animal.id, animal.type)}
+                    disabled={!canSelect && !isSelected}
+                    className={cn(
+                      "w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left",
+                      isSelected
+                        ? "border-primary bg-primary/5"
+                        : canSelect
+                          ? "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                          : "border-gray-200 opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    {animal.profilePhoto ? (
+                      <img
+                        src={animal.profilePhoto}
+                        alt={animal.name}
+                        className="w-12 h-12 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+                        <PawPrint className="w-6 h-6 text-gray-400" />
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <p className={cn(
+                        "font-semibold",
+                        isSelected ? "text-primary" : "text-gray-900"
+                      )}>
+                        {animal.name}
+                      </p>
+                      <p className="text-sm text-gray-500 capitalize">
+                        {animal.type}
+                        {animal.breed && ` • ${animal.breed}`}
+                      </p>
+                    </div>
+                    <div className={cn(
+                      "w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all",
+                      isSelected
+                        ? "bg-primary border-primary"
+                        : "border-gray-300 bg-white"
+                    )}>
+                      {isSelected && <Check className="w-4 h-4 text-white" />}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="p-4 bg-amber-50 rounded-xl text-amber-700 text-sm">
+              Aucun de vos animaux n'est compatible avec cette formule.
+              Types acceptés : {(selectedFormule?.animalTypes || service?.animalTypes || []).join(", ")}.
+            </div>
+          )}
+        </motion.div>
+      )}
+
+      {/* Section Nombre d'animaux - pour les invités avec formule collective */}
+      {hasVariantSelected && !isLoggedIn && isCollectiveFormule && onAnimalCountChange && collectiveMaxAnimals > 1 && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100"
+        >
+          <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
+            <span className="p-2 bg-primary/10 rounded-lg">
+              <PawPrint className="w-5 h-5 text-primary" />
+            </span>
+            Nombre d'animaux
+          </h3>
+          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+            <p className="text-sm text-gray-500">
+              Maximum {collectiveMaxAnimals} par séance
+            </p>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => onAnimalCountChange(Math.max(1, animalCount - 1))}
+                disabled={animalCount <= 1}
+                className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                -
+              </button>
+              <span className="w-8 text-center font-semibold text-gray-900">
+                {animalCount}
+              </span>
+              <button
+                type="button"
+                onClick={() => onAnimalCountChange(Math.min(collectiveMaxAnimals, animalCount + 1))}
+                disabled={animalCount >= collectiveMaxAnimals}
+                className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                +
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Section Créneaux collectifs - visible pour formules collectives */}
       {hasVariantSelected && isCollectiveFormule && selectedFormule && onSlotsSelected && (
-        <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 space-y-4">
-          {/* Sélecteur d'animal (utilisateur connecté) */}
-          {isLoggedIn && userAnimals.length > 0 && onAnimalSelect && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <PawPrint className="w-5 h-5 text-primary" />
-                <span className="font-medium text-gray-900">
-                  Quel animal participera ?
-                </span>
-              </div>
-              <div className="grid gap-2">
-                {userAnimals
-                  .filter((animal) => {
-                    // Filtrer par les types acceptés par la formule
-                    const acceptedTypes = selectedFormule.animalTypes || service?.animalTypes || [];
-                    return acceptedTypes.length === 0 || acceptedTypes.includes(animal.type);
-                  })
-                  .map((animal, idx) => {
-                    const isSelected = selectedAnimalId === animal.id;
-                    return (
-                      <button
-                        key={animal.id || `animal-${idx}`}
-                        type="button"
-                        onClick={() => onAnimalSelect(animal.id, animal.type)}
-                        className={cn(
-                          "w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left",
-                          isSelected
-                            ? "border-primary bg-primary/5"
-                            : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                        )}
-                      >
-                        {animal.profilePhoto ? (
-                          <img
-                            src={animal.profilePhoto}
-                            alt={animal.name}
-                            className="w-12 h-12 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
-                            <PawPrint className="w-6 h-6 text-gray-400" />
-                          </div>
-                        )}
-                        <div className="flex-1">
-                          <p className={cn(
-                            "font-semibold",
-                            isSelected ? "text-primary" : "text-gray-900"
-                          )}>
-                            {animal.name}
-                          </p>
-                          <p className="text-sm text-gray-500 capitalize">
-                            {animal.type}
-                            {animal.breed && ` • ${animal.breed}`}
-                          </p>
-                        </div>
-                        {isSelected && (
-                          <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
-                            <Check className="w-4 h-4 text-white" />
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-              </div>
-              {userAnimals.filter((animal) => {
-                const acceptedTypes = selectedFormule.animalTypes || service?.animalTypes || [];
-                return acceptedTypes.length === 0 || acceptedTypes.includes(animal.type);
-              }).length === 0 && (
-                <div className="p-4 bg-amber-50 rounded-xl text-amber-700 text-sm">
-                  Aucun de vos animaux n'est compatible avec cette formule.
-                  Types acceptés : {(selectedFormule.animalTypes || service?.animalTypes || []).join(", ")}.
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Sélecteur du nombre d'animaux */}
-          {onAnimalCountChange && collectiveMaxAnimals > 1 && (
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-              <div>
-                <p className="font-medium text-gray-900">Nombre d'animaux</p>
-                <p className="text-sm text-gray-500">
-                  Maximum {collectiveMaxAnimals} par séance
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => onAnimalCountChange(Math.max(1, animalCount - 1))}
-                  disabled={animalCount <= 1}
-                  className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  -
-                </button>
-                <span className="w-8 text-center font-semibold text-gray-900">
-                  {animalCount}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => onAnimalCountChange(Math.min(collectiveMaxAnimals, animalCount + 1))}
-                  disabled={animalCount >= collectiveMaxAnimals}
-                  className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  +
-                </button>
-              </div>
-            </div>
-          )}
-
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100"
+        >
           <CollectiveSlotPicker
             variantId={selectedFormule.id as string}
             numberOfSessions={collectiveNumberOfSessions}
@@ -545,11 +635,34 @@ export default function AnnouncerFormules({
             onSlotsSelected={onSlotsSelected}
             selectedSlotIds={selectedSlotIds}
           />
-        </div>
+        </motion.div>
       )}
 
-      {/* Calendrier normal - visible quand une formule non-collective est sélectionnée (desktop seulement) */}
-      {hasVariantSelected && !isCollectiveFormule && (
+      {/* Calendrier multi-séances - visible quand une formule individuelle avec plusieurs séances est sélectionnée */}
+      {hasVariantSelected && isMultiSessionIndividual && onSessionsChange && calendarMonth && onMonthChange && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <MultiSessionCalendar
+            numberOfSessions={individualNumberOfSessions}
+            sessionInterval={individualSessionInterval}
+            selectedSessions={selectedSessions}
+            onSessionsChange={onSessionsChange}
+            calendarMonth={calendarMonth}
+            availabilityCalendar={availabilityCalendar}
+            variantDuration={variantDuration}
+            bufferBefore={bufferBefore}
+            bufferAfter={bufferAfter}
+            acceptReservationsFrom={acceptReservationsFrom}
+            acceptReservationsTo={acceptReservationsTo}
+            onMonthChange={onMonthChange}
+          />
+        </motion.div>
+      )}
+
+      {/* Calendrier normal - visible quand une formule non-collective à 1 séance est sélectionnée (desktop seulement) */}
+      {hasVariantSelected && !isCollectiveFormule && !isMultiSessionIndividual && (
         <div className="hidden md:block">
           {calendarMonth && onDateSelect && onEndDateSelect && onTimeSelect && onEndTimeSelect && onOvernightChange && onMonthChange && (
               <BookingCalendar
@@ -586,44 +699,129 @@ export default function AnnouncerFormules({
         </div>
       )}
 
-      {/* Section Lieu de prestation - visible pour services garde ou si choix nécessaire */}
-      {showLocationSelector && onLocationSelect && (
-        <ServiceLocationSelector
-          serviceLocation={service.serviceLocation || "both"}
-          selectedLocation={bookingSelection?.serviceLocation ?? null}
-          onSelect={onLocationSelect}
-          isRangeMode={isRangeMode}
-        />
-      )}
+      {/* Section Lieu de prestation */}
+      {hasVariantSelected && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100"
+        >
+          <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
+            <span className="p-2 bg-blue-100 rounded-lg">
+              <MapPin className="w-5 h-5 text-blue-600" />
+            </span>
+            {isCollectiveFormule ? "Lieu des séances" : "Lieu de prestation"}
+          </h3>
 
-      {/* Section Adresse client - visible si service à domicile */}
-      {hasVariantSelected &&
-        (bookingSelection?.serviceLocation === "client_home" ||
-          (service.serviceLocation === "client_home" && !showLocationSelector)) && (
-          <>
-            {isLoggedIn ? (
-              // Utilisateur connecté - Sélection d'adresse existante
-              onAddressSelect && onAddNewAddress && (
-                <AddressSelector
-                  addresses={clientAddresses}
-                  selectedAddressId={bookingSelection?.selectedAddressId ?? null}
-                  isLoading={isLoadingAddresses}
-                  onSelect={onAddressSelect}
-                  onAddNew={onAddNewAddress}
-                />
-              )
-            ) : (
-              // Invité - Saisie d'adresse avec autocomplétion
-              onGuestAddressChange && (
-                <GuestAddressSelector
-                  guestAddress={guestAddress ?? null}
-                  announcerCoordinates={announcerCoordinates}
-                  onAddressChange={onGuestAddressChange}
-                />
-              )
-            )}
-          </>
-        )}
+          {/* Cas 1: Service collectif - toujours chez le prestataire */}
+          {isCollectiveFormule && (
+            <div className="space-y-3">
+              <div className="p-4 bg-gray-50 rounded-xl flex items-center gap-3">
+                <div className="p-2 bg-white rounded-lg">
+                  <Home className="w-5 h-5 text-gray-500" />
+                </div>
+                <div>
+                  <p className="font-medium text-gray-900">
+                    Chez {announcerFirstName || "le prestataire"}
+                  </p>
+                  {announcerCity && (
+                    <p className="text-sm text-gray-500">
+                      {announcerCity}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 italic px-1">
+                L'adresse exacte vous sera communiquée une fois la réservation acceptée par {announcerFirstName || "le prestataire"}.
+              </p>
+            </div>
+          )}
+
+          {/* Cas 2: Service uniquement chez le prestataire */}
+          {!isCollectiveFormule && formuleServiceLocation === "announcer_home" && (
+            <div className="space-y-3">
+              <div className="p-4 bg-gray-50 rounded-xl flex items-center gap-3">
+                <div className="p-2 bg-white rounded-lg">
+                  <Home className="w-5 h-5 text-gray-500" />
+                </div>
+                <div>
+                  <p className="font-medium text-gray-900">
+                    Chez {announcerFirstName || "le prestataire"}
+                  </p>
+                  {announcerCity && (
+                    <p className="text-sm text-gray-500">
+                      {announcerCity}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 italic px-1">
+                L'adresse exacte vous sera communiquée une fois la réservation acceptée par {announcerFirstName || "le prestataire"}.
+              </p>
+            </div>
+          )}
+
+          {/* Cas 3: Service avec choix (both) ou garde */}
+          {!isCollectiveFormule && (formuleServiceLocation === "both" || isRangeMode) && onLocationSelect && (
+            <ServiceLocationSelector
+              serviceLocation={formuleServiceLocation || "both"}
+              selectedLocation={bookingSelection?.serviceLocation ?? null}
+              onSelect={onLocationSelect}
+              isRangeMode={isRangeMode}
+            />
+          )}
+
+          {/* Cas 4: Service uniquement à domicile */}
+          {!isCollectiveFormule && formuleServiceLocation === "client_home" && (
+            <>
+              {isLoggedIn ? (
+                onAddressSelect && onAddNewAddress && (
+                  <AddressSelector
+                    addresses={clientAddresses}
+                    selectedAddressId={bookingSelection?.selectedAddressId ?? null}
+                    isLoading={isLoadingAddresses}
+                    onSelect={onAddressSelect}
+                    onAddNew={onAddNewAddress}
+                  />
+                )
+              ) : (
+                onGuestAddressChange && (
+                  <GuestAddressSelector
+                    guestAddress={guestAddress ?? null}
+                    announcerCoordinates={announcerCoordinates}
+                    onAddressChange={onGuestAddressChange}
+                  />
+                )
+              )}
+            </>
+          )}
+
+          {/* Afficher le sélecteur d'adresse si "à domicile" est sélectionné */}
+          {!isCollectiveFormule && formuleServiceLocation === "both" && bookingSelection?.serviceLocation === "client_home" && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              {isLoggedIn ? (
+                onAddressSelect && onAddNewAddress && (
+                  <AddressSelector
+                    addresses={clientAddresses}
+                    selectedAddressId={bookingSelection?.selectedAddressId ?? null}
+                    isLoading={isLoadingAddresses}
+                    onSelect={onAddressSelect}
+                    onAddNew={onAddNewAddress}
+                  />
+                )
+              ) : (
+                onGuestAddressChange && (
+                  <GuestAddressSelector
+                    guestAddress={guestAddress ?? null}
+                    announcerCoordinates={announcerCoordinates}
+                    onAddressChange={onGuestAddressChange}
+                  />
+                )
+              )}
+            </div>
+          )}
+        </motion.div>
+      )}
 
       {/* Section Options additionnelles - visible quand une formule est sélectionnée */}
       {/* Pour les services garde (isRangeMode), toujours afficher cette section */}

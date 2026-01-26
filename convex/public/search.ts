@@ -659,6 +659,16 @@ export const getAnnouncerServiceDetails = query({
           isActive: v.isActive,
           // Pricing object for multi-pricing support
           pricing: v.pricing,
+          // Session fields for multi-session and collective formulas
+          numberOfSessions: v.numberOfSessions,
+          sessionInterval: v.sessionInterval,
+          sessionType: v.sessionType as "individual" | "collective" | undefined,
+          // Objectives for formula details
+          objectives: v.objectives,
+          // Animal types accepted by this variant
+          animalTypes: v.animalTypes,
+          // Max animals for collective sessions
+          maxAnimalsPerSession: v.maxAnimalsPerSession,
         })),
         options: options.map((o) => ({
           id: o._id,
@@ -826,7 +836,10 @@ export const getAnnouncerAvailabilityCalendar = query({
         .map((a) => a.date)
     );
 
-    // Récupérer les missions existantes pour cette catégorie (ou toutes les sous-catégories si capacity-based)
+    // Récupérer TOUTES les missions de l'annonceur (toutes catégories confondues)
+    // Car un annonceur ne peut être qu'à un seul endroit à la fois
+    // On inclut aussi les réservations en attente (pending_acceptance, pending_confirmation, etc.)
+    // Seules les missions cancelled et refused sont exclues
     const allMissions = await ctx.db
       .query("missions")
       .withIndex("by_announcer", (q) => q.eq("announcerId", args.announcerId))
@@ -838,8 +851,29 @@ export const getAnnouncerAvailabilityCalendar = query({
       )
       .collect();
 
-    // Filtrer les missions par catégorie (toutes les sous-catégories si capacity-based)
-    const missions = allMissions.filter((m) => categorySlugs.includes(m.serviceCategory));
+    // Pour les catégories capacity-based, on filtre par catégorie pour le comptage
+    const categoryMissions = allMissions.filter((m) => categorySlugs.includes(m.serviceCategory));
+
+    // Pour le blocage des créneaux, on utilise TOUTES les missions (toutes catégories)
+    // car l'annonceur ne peut pas être à deux endroits à la fois
+    const missions = allMissions;
+
+    // Récupérer les créneaux collectifs actifs de l'annonceur (ils bloquent aussi les disponibilités)
+    const collectiveSlots = await ctx.db
+      .query("collectiveSlots")
+      .withIndex("by_user", (q) => q.eq("userId", args.announcerId))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("isActive"), true),
+          q.eq(q.field("isCancelled"), false)
+        )
+      )
+      .collect();
+
+    // Filtrer les créneaux collectifs dans la plage de dates
+    const collectiveSlotsInRange = collectiveSlots.filter(
+      (slot) => slot.date >= args.startDate && slot.date <= args.endDate
+    );
 
     // Générer les dates de la plage
     const allDates = getDatesBetween(args.startDate, args.endDate);
@@ -873,14 +907,23 @@ export const getAnnouncerAvailabilityCalendar = query({
         continue;
       }
 
-      // Trouver les missions pour ce jour
+      // Trouver TOUTES les missions pour ce jour (toutes catégories)
       const dayMissions = missions.filter((m) =>
         datesOverlap(m.startDate, m.endDate, date, date)
       );
 
-      if (dayMissions.length > 0) {
-        // Compter les animaux pour les catégories capacity-based
-        const currentAnimalsCount = dayMissions.length;
+      // Pour les catégories capacity-based, compter seulement les missions de la même catégorie
+      const dayCategoryMissions = categoryMissions.filter((m) =>
+        datesOverlap(m.startDate, m.endDate, date, date)
+      );
+
+      // Trouver les créneaux collectifs pour ce jour
+      const dayCollectiveSlots = collectiveSlotsInRange.filter((slot) => slot.date === date);
+
+      // S'il y a des missions ou des créneaux collectifs ce jour
+      if (dayMissions.length > 0 || dayCollectiveSlots.length > 0) {
+        // Compter les animaux pour les catégories capacity-based (seulement même catégorie)
+        const currentAnimalsCount = dayCategoryMissions.length;
 
         if (isCapacityBasedCategory) {
           // Mode capacité: vérifier si la capacité maximale est atteinte
@@ -901,7 +944,7 @@ export const getAnnouncerAvailabilityCalendar = query({
           }
 
           // Extraire les créneaux occupés pour information
-          const bookedSlots = dayMissions
+          const missionBookedSlots = dayMissions
             .filter((m) => m.startTime && m.endTime && m.startDate === m.endDate)
             .map((m) => {
               const adjustedSlot = applyBuffersToTimeSlot(
@@ -917,6 +960,26 @@ export const getAnnouncerAvailabilityCalendar = query({
                 originalEndTime: adjustedSlot.originalEndTime,
               };
             });
+
+          // Ajouter les créneaux collectifs comme slots bloqués
+          const dayCollectiveSlotsCapacity = collectiveSlotsInRange
+            .filter((slot) => slot.date === date)
+            .map((slot) => {
+              const adjustedSlot = applyBuffersToTimeSlot(
+                slot.startTime,
+                slot.endTime,
+                bufferBefore,
+                bufferAfter
+              );
+              return {
+                startTime: adjustedSlot.startTime,
+                endTime: adjustedSlot.endTime,
+                originalStartTime: adjustedSlot.originalStartTime,
+                originalEndTime: adjustedSlot.originalEndTime,
+              };
+            });
+
+          const bookedSlots = [...missionBookedSlots, ...dayCollectiveSlotsCapacity];
 
           // Disponible avec capacité restante
           calendar.push({
@@ -946,7 +1009,7 @@ export const getAnnouncerAvailabilityCalendar = query({
 
         // Sinon, ce sont des missions avec créneaux horaires spécifiques
         // Extraire les créneaux occupés AVEC les buffers (temps de préparation)
-        const bookedSlots = dayMissions
+        const missionBookedSlots = dayMissions
           .filter((m) => m.startTime && m.endTime && m.startDate === m.endDate)
           .map((m) => {
             // Appliquer les buffers pour bloquer le temps de préparation avant/après
@@ -965,6 +1028,27 @@ export const getAnnouncerAvailabilityCalendar = query({
             };
           });
 
+        // Ajouter les créneaux collectifs comme slots bloqués (même sans réservation)
+        const dayCollectiveSlots = collectiveSlotsInRange
+          .filter((slot) => slot.date === date)
+          .map((slot) => {
+            const adjustedSlot = applyBuffersToTimeSlot(
+              slot.startTime,
+              slot.endTime,
+              bufferBefore,
+              bufferAfter
+            );
+            return {
+              startTime: adjustedSlot.startTime,
+              endTime: adjustedSlot.endTime,
+              originalStartTime: adjustedSlot.originalStartTime,
+              originalEndTime: adjustedSlot.originalEndTime,
+            };
+          });
+
+        // Combiner les missions et les créneaux collectifs
+        const bookedSlots = [...missionBookedSlots, ...dayCollectiveSlots];
+
         // Vérifier aussi les disponibilités partielles définies manuellement
         const partialAvail = unavailabilities.find(
           (a) => a.date === date && a.status === "partial"
@@ -979,15 +1063,34 @@ export const getAnnouncerAvailabilityCalendar = query({
         continue;
       }
 
+      // Mapper les créneaux collectifs avec buffers pour les bookedSlots
+      const collectiveSlotsWithBuffers = dayCollectiveSlots.map((slot) => {
+        const adjustedSlot = applyBuffersToTimeSlot(
+          slot.startTime,
+          slot.endTime,
+          bufferBefore,
+          bufferAfter
+        );
+        return {
+          startTime: adjustedSlot.startTime,
+          endTime: adjustedSlot.endTime,
+          originalStartTime: adjustedSlot.originalStartTime,
+          originalEndTime: adjustedSlot.originalEndTime,
+        };
+      });
+
       // Vérifier disponibilité partielle (définie manuellement)
       const partialAvail = unavailabilities.find(
         (a) => a.date === date && a.status === "partial"
       );
-      if (partialAvail?.timeSlots) {
+
+      // S'il y a des créneaux collectifs ou une disponibilité partielle
+      if (collectiveSlotsWithBuffers.length > 0 || partialAvail?.timeSlots) {
         calendar.push({
           date,
           status: "partial",
-          timeSlots: partialAvail.timeSlots,
+          timeSlots: partialAvail?.timeSlots,
+          bookedSlots: collectiveSlotsWithBuffers.length > 0 ? collectiveSlotsWithBuffers : undefined,
         });
         continue;
       }

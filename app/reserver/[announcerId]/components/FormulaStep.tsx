@@ -123,11 +123,6 @@ function SelectedFormuleDetails({
   const sessionInterval = variant.sessionInterval || 0;
   const acceptedAnimals = variant.animalTypes || service.animalTypes || [];
 
-  const pricing = variant.pricing;
-  const basePrice = pricing?.daily || pricing?.hourly || variant.price || 0;
-  const displayPrice = calculatePriceWithCommission(basePrice, commissionRate);
-  const priceUnit = pricing?.daily ? "/jour" : pricing?.hourly ? "/h" : "";
-
   // Déterminer le lieu de prestation
   const getLocationInfo = () => {
     const location = service.serviceLocation;
@@ -162,38 +157,33 @@ function SelectedFormuleDetails({
             : "bg-gray-50 border-gray-200"
       )}>
         {/* En-tête avec type de formule */}
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-bold text-foreground text-lg">{variant.name}</h3>
-              {isCollective ? (
-                <span className="px-2 py-0.5 bg-purple-200 text-purple-700 text-xs rounded-full font-medium flex items-center gap-1">
-                  <Users className="w-3 h-3" />
-                  Collectif
-                </span>
-              ) : isMultiSession ? (
-                <span className="px-2 py-0.5 bg-primary/20 text-primary text-xs rounded-full font-medium">
-                  {numberOfSessions} séances
-                </span>
-              ) : (
-                <span className="px-2 py-0.5 bg-gray-200 text-gray-600 text-xs rounded-full font-medium">
-                  Séance unique
-                </span>
-              )}
-            </div>
-            {variant.description && (
-              <p className="text-sm text-text-light">{variant.description}</p>
+        <div className="mb-4">
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="font-bold text-foreground text-lg">{variant.name}</h3>
+            {isCollective ? (
+              <span className="px-2 py-0.5 bg-purple-200 text-purple-700 text-xs rounded-full font-medium flex items-center gap-1">
+                <Users className="w-3 h-3" />
+                Collectif
+              </span>
+            ) : isMultiSession ? (
+              <span className="px-2 py-0.5 bg-primary/20 text-primary text-xs rounded-full font-medium">
+                {numberOfSessions} séances
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 bg-gray-200 text-gray-600 text-xs rounded-full font-medium">
+                Séance unique
+              </span>
             )}
-          </div>
-          <div className="text-right">
-            <p className="text-xl font-bold text-primary">
-              {formatPrice(displayPrice)}
-              <span className="text-xs font-normal text-text-light">{priceUnit}</span>
-            </p>
             {variant.duration && (
-              <p className="text-xs text-text-light">{formatDuration(variant.duration)}</p>
+              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-medium flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                {formatDuration(variant.duration)}
+              </span>
             )}
           </div>
+          {variant.description && (
+            <p className="text-sm text-text-light">{variant.description}</p>
+          )}
         </div>
 
         {/* Grille d'informations */}
@@ -439,15 +429,11 @@ export default function FormulaStep({
 
   // Vue récapitulatif quand tout est pré-sélectionné depuis la page annonceur
   if (showRecapView && selectedVariant) {
-    const pricing = selectedVariant.pricing;
-    const basePrice = pricing?.daily || pricing?.hourly || selectedVariant.price || 0;
-    const displayPrice = calculatePriceWithCommission(basePrice, commissionRate);
-    const priceUnit = pricing?.daily ? "/jour" : pricing?.hourly ? "/h" : "";
-
-    // Calculate options total
-    const optionsTotal = selectedOptions.reduce((sum, opt) => {
-      return sum + calculatePriceWithCommission(opt.price, commissionRate);
-    }, 0);
+    const isCollective = selectedVariant.sessionType === "collective";
+    const isMultiSession = (selectedVariant.numberOfSessions || 1) > 1;
+    const numberOfSessions = selectedVariant.numberOfSessions || 1;
+    const sessionInterval = selectedVariant.sessionInterval || 0;
+    const acceptedAnimals = selectedVariant.animalTypes || selectedService.animalTypes || [];
 
     return (
       <div className="bg-white rounded-2xl p-5 shadow-sm">
@@ -457,29 +443,141 @@ export default function FormulaStep({
 
         {/* Service et Formule */}
         <div className="space-y-4">
-          {/* Service */}
-          <div className="p-4 bg-gray-50 rounded-xl">
-            <div className="flex items-center gap-3">
-              {selectedService.categoryIcon && (
-                <span className="text-2xl">{selectedService.categoryIcon}</span>
-              )}
-              <div className="flex-1">
-                <p className="font-semibold text-foreground">{selectedService.categoryName}</p>
-                <p className="text-sm text-text-light">{selectedVariant.name}</p>
-                {selectedVariant.duration && (
-                  <div className="flex items-center gap-1 mt-1 text-xs text-text-light">
-                    <Clock className="w-3 h-3" />
-                    {formatDuration(selectedVariant.duration)}
-                  </div>
-                )}
-              </div>
-              <div className="text-right">
-                <p className="text-lg font-bold text-primary">
-                  {formatPrice(displayPrice)}
-                  <span className="text-xs font-normal text-text-light">{priceUnit}</span>
-                </p>
-              </div>
+          {/* En-tête Service */}
+          <div className="flex items-center gap-3 pb-3 border-b border-gray-100">
+            {selectedService.categoryIcon && (
+              <span className="text-2xl">{selectedService.categoryIcon}</span>
+            )}
+            <div>
+              <p className="font-semibold text-foreground">{selectedService.categoryName}</p>
             </div>
+          </div>
+
+          {/* Détails de la formule */}
+          <div className={cn(
+            "p-4 rounded-xl border-2",
+            isCollective
+              ? "bg-purple-50 border-purple-200"
+              : isMultiSession
+                ? "bg-primary/5 border-primary/20"
+                : "bg-gray-50 border-gray-200"
+          )}>
+            {/* Nom + Badges */}
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <h3 className="font-bold text-foreground">{selectedVariant.name}</h3>
+              {/* Badge Individuel/Collectif */}
+              {isCollective ? (
+                <span className="px-2 py-0.5 bg-purple-200 text-purple-700 text-xs rounded-full font-medium flex items-center gap-1">
+                  <Users className="w-3 h-3" />
+                  Collectif
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">
+                  Individuel
+                </span>
+              )}
+              {/* Badge nombre de séances */}
+              {isMultiSession && (
+                <span className="px-2 py-0.5 bg-primary/20 text-primary text-xs rounded-full font-medium flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />
+                  {numberOfSessions} séances
+                </span>
+              )}
+              {/* Badge durée */}
+              {selectedVariant.duration && (
+                <span className="px-2 py-0.5 bg-gray-200 text-gray-700 text-xs rounded-full font-medium flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  {formatDuration(selectedVariant.duration)}
+                </span>
+              )}
+            </div>
+
+            {/* Description */}
+            {selectedVariant.description && (
+              <p className="text-sm text-text-light mb-3">{selectedVariant.description}</p>
+            )}
+
+            {/* Objectifs */}
+            {selectedVariant.objectives && selectedVariant.objectives.length > 0 && (
+              <div className="mb-3 p-3 bg-white/80 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <Target className="w-4 h-4 text-secondary" />
+                  <span className="text-sm font-medium text-foreground">Objectifs de la prestation</span>
+                </div>
+                <div className="space-y-1.5">
+                  {selectedVariant.objectives.map((obj, idx) => (
+                    <div key={idx} className="flex items-center gap-2 text-sm text-text-light">
+                      <span className="text-base">{obj.icon}</span>
+                      <span>{obj.text}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Informations supplémentaires */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {/* Intervalle entre séances */}
+              {isMultiSession && sessionInterval > 0 && (
+                <div className="p-2 bg-white/80 rounded-lg">
+                  <p className="text-xs text-text-light">
+                    <span className="font-medium">Intervalle min :</span> {sessionInterval} jour{sessionInterval > 1 ? "s" : ""} entre séances
+                  </p>
+                </div>
+              )}
+
+              {/* Animaux acceptés */}
+              {acceptedAnimals.length > 0 && (
+                <div className="p-2 bg-white/80 rounded-lg sm:col-span-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <PawPrint className="w-3 h-3 text-amber-600" />
+                    <span className="text-xs font-medium text-foreground">Animaux acceptés</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {acceptedAnimals.map((animal) => {
+                      const info = animalLabels[animal] || { emoji: "🐾", label: animal };
+                      return (
+                        <span
+                          key={animal}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full"
+                        >
+                          {info.emoji} {info.label}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Max animaux par séance (collectif) */}
+              {isCollective && selectedVariant.maxAnimalsPerSession && (
+                <div className="p-2 bg-white/80 rounded-lg">
+                  <p className="text-xs text-text-light">
+                    <span className="font-medium">Max par séance :</span> {selectedVariant.maxAnimalsPerSession} animaux
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Features incluses */}
+            {selectedVariant.includedFeatures && selectedVariant.includedFeatures.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-200/50">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                  <span className="text-sm font-medium text-foreground">Inclus dans la formule</span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {selectedVariant.includedFeatures.map((feature, idx) => (
+                    <span
+                      key={idx}
+                      className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full"
+                    >
+                      {feature}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Options sélectionnées */}
@@ -489,9 +587,9 @@ export default function FormulaStep({
               <div className="space-y-2">
                 {selectedOptions.map((opt) => (
                   <div key={opt.id} className="flex items-center justify-between text-sm">
-                    <span className="text-text-light">{opt.name}</span>
-                    <span className="font-medium text-secondary">
-                      +{formatPrice(calculatePriceWithCommission(opt.price, commissionRate))}
+                    <span className="flex items-center gap-2">
+                      <Check className="w-4 h-4 text-secondary" />
+                      <span className="text-text-light">{opt.name}</span>
                     </span>
                   </div>
                 ))}
@@ -532,19 +630,6 @@ export default function FormulaStep({
               )}
             </div>
           )}
-
-          {/* Total estimé */}
-          <div className="p-4 bg-primary/5 rounded-xl border border-primary/20">
-            <div className="flex items-center justify-between">
-              <p className="font-medium text-foreground">Total estime</p>
-              <p className="text-xl font-bold text-primary">
-                {formatPrice(displayPrice + optionsTotal)}
-              </p>
-            </div>
-            <p className="text-xs text-text-light mt-1">
-              Le prix final sera calcule a l&apos;etape suivante selon les dates choisies
-            </p>
-          </div>
         </div>
 
         {/* Choix du lieu si nécessaire */}

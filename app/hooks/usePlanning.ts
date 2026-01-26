@@ -1,6 +1,22 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
+
+// Type pour les créneaux collectifs transformés
+export interface CollectiveSlot {
+  _id: string;
+  variantId: string;
+  variantName: string;
+  serviceName: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  maxAnimals: number;
+  bookedAnimals: number;
+  availableSpots: number;
+  isActive: boolean;
+  isCancelled: boolean;
+}
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -134,6 +150,23 @@ export function usePlanning({
     api.planning.availability.getAvailabilityByDateRange,
     token ? { token, startDate, endDate } : "skip"
   );
+
+  // Query pour les créneaux collectifs
+  const collectiveSlotsRaw = useQuery(
+    api.planning.collectiveSlots.getSlotsByUser,
+    token ? { token, startDate, endDate } : "skip"
+  );
+
+  // Transformer les créneaux pour ajouter availableSpots et filtrer les annulés
+  const collectiveSlots = useMemo(() => {
+    if (!collectiveSlotsRaw) return [];
+    return collectiveSlotsRaw
+      .filter((slot) => !slot.isCancelled && slot.isActive)
+      .map((slot) => ({
+        ...slot,
+        availableSpots: slot.maxAnimals - slot.bookedAnimals,
+      }));
+  }, [collectiveSlotsRaw]);
 
   const stats = useQuery(
     api.planning.missions.getMissionStats,
@@ -340,6 +373,15 @@ export function usePlanning({
     [availability]
   );
 
+  // Helper pour obtenir les créneaux collectifs d'un jour
+  const getCollectiveSlotsForDay = useCallback(
+    (date: string): CollectiveSlot[] => {
+      if (!collectiveSlots) return [];
+      return collectiveSlots.filter((slot) => slot.date === date);
+    },
+    [collectiveSlots]
+  );
+
   // Helper pour formater le titre selon la vue
   const getViewTitle = useCallback((): string => {
     const options: Intl.DateTimeFormatOptions = {};
@@ -379,6 +421,7 @@ export function usePlanning({
     // Data
     missions: missions || [],
     availability: availability || [],
+    collectiveSlots: collectiveSlots || [],
     stats: stats || {
       total: 0,
       pending: 0,
@@ -401,6 +444,7 @@ export function usePlanning({
     // Helpers
     getMissionsForDay,
     getAvailabilityForDay,
+    getCollectiveSlotsForDay,
 
     // Mission actions
     acceptMission,

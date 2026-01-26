@@ -26,6 +26,7 @@ import {
   type BookingSelection,
   type PriceBreakdown,
   type ClientAddress,
+  type SelectedSession,
   DEFAULT_BOOKING_SELECTION,
   calculatePriceBreakdown,
   isGardeService,
@@ -167,8 +168,8 @@ export default function AnnouncerProfilePage() {
     profilePhoto: animal.profilePhoto,
   }));
 
-  // State for selected animal in collective sessions
-  const [selectedAnimalId, setSelectedAnimalId] = useState<string | null>(null);
+  // State for selected animals in collective sessions (supports multiple selection)
+  const [selectedAnimalIds, setSelectedAnimalIds] = useState<string[]>([]);
 
   // Calculer la distance entre le client et l'annonceur
   // (doit être avant les early returns pour respecter les règles des hooks)
@@ -262,6 +263,39 @@ export default function AnnouncerProfilePage() {
   }, [bookingSelection.startDate, bookingSelection.endDate]);
 
   const nights = bookingSelection.includeOvernightStay ? Math.max(0, days - 1) : 0;
+
+  // Calculate maximum selectable animals for collective formulas
+  const maxSelectableAnimals = useMemo(() => {
+    // If no variant or not collective, default to 1
+    if (!bookingVariant || bookingVariant.sessionType !== "collective") return 1;
+
+    // Get the max animals per session from the variant
+    const maxAnimalsPerSlot = bookingVariant.maxAnimalsPerSession || 5;
+
+    // If we have selected slots, use the minimum available spots among all slots
+    if (collectiveSlots.length > 0) {
+      const minAvailableSpots = Math.min(...collectiveSlots.map((s: any) => s.availableSpots));
+      // The max is the minimum between variant's max and available spots
+      const maxFromSlots = Math.min(maxAnimalsPerSlot, minAvailableSpots);
+
+      // Filter user animals by accepted types
+      const acceptedTypes = bookingVariant.animalTypes || [];
+      const compatibleAnimals = userAnimals.filter((a: any) =>
+        acceptedTypes.length === 0 || acceptedTypes.includes(a.type)
+      );
+
+      // Final max is the minimum between slots availability and compatible animals
+      return Math.min(maxFromSlots, Math.max(1, compatibleAnimals.length));
+    }
+
+    // No slots selected yet, use the variant's max or compatible animals count
+    const acceptedTypes = bookingVariant.animalTypes || [];
+    const compatibleAnimals = userAnimals.filter((a: any) =>
+      acceptedTypes.length === 0 || acceptedTypes.includes(a.type)
+    );
+
+    return Math.min(maxAnimalsPerSlot, Math.max(1, compatibleAnimals.length));
+  }, [bookingVariant, collectiveSlots, userAnimals]);
 
   // Calculate price breakdown
   const priceBreakdown = useMemo((): PriceBreakdown | null => {
@@ -376,10 +410,36 @@ export default function AnnouncerProfilePage() {
     setBookingSelection((prev) => ({ ...prev, animalCount: count }));
   }, []);
 
-  // Handler pour la sélection d'animal (utilisateur connecté)
-  const handleAnimalSelect = useCallback((animalId: string, animalType: string) => {
-    setSelectedAnimalId(animalId);
-    setBookingSelection((prev) => ({ ...prev, selectedAnimalType: animalType }));
+  // Handler pour les séances individuelles multi-sessions
+  const handleSessionsChange = useCallback((sessions: SelectedSession[]) => {
+    setBookingSelection((prev) => ({ ...prev, selectedSessions: sessions }));
+  }, []);
+
+  // Handler pour la sélection/déselection d'animal (utilisateur connecté - sélection multiple)
+  const handleAnimalToggle = useCallback((animalId: string, animalType: string) => {
+    setSelectedAnimalIds((prev) => {
+      const isSelected = prev.includes(animalId);
+      let newIds: string[];
+
+      if (isSelected) {
+        // Remove the animal
+        newIds = prev.filter((id) => id !== animalId);
+      } else {
+        // Add the animal (respect max limit)
+        newIds = [...prev, animalId];
+      }
+
+      // Sync animalCount with selected animals count
+      const newCount = Math.max(1, newIds.length);
+      setBookingSelection((prevBooking) => ({
+        ...prevBooking,
+        selectedAnimalType: animalType,
+        animalCount: newCount,
+        selectedAnimalIds: newIds,
+      }));
+
+      return newIds;
+    });
   }, []);
 
   const handleBook = useCallback(() => {
@@ -441,6 +501,10 @@ export default function AnnouncerProfilePage() {
     }
     if (bookingSelection.selectedAnimalType && bookingSelection.selectedAnimalType !== "chien") {
       params.set("animalType", bookingSelection.selectedAnimalType);
+    }
+    // Séances individuelles multi-sessions
+    if (bookingSelection.selectedSessions.length > 0) {
+      params.set("sessions", JSON.stringify(bookingSelection.selectedSessions));
     }
 
     const queryString = params.toString();
@@ -507,6 +571,10 @@ export default function AnnouncerProfilePage() {
     }
     if (bookingSelection.selectedAnimalType && bookingSelection.selectedAnimalType !== "chien") {
       params.set("animalType", bookingSelection.selectedAnimalType);
+    }
+    // Séances individuelles multi-sessions
+    if (bookingSelection.selectedSessions.length > 0) {
+      params.set("sessions", JSON.stringify(bookingSelection.selectedSessions));
     }
 
     // Paramètre pour aller directement à la finalisation
@@ -622,10 +690,17 @@ export default function AnnouncerProfilePage() {
                 selectedAnimalType={bookingSelection.selectedAnimalType}
                 animalCount={bookingSelection.animalCount}
                 onAnimalCountChange={handleAnimalCountChange}
-                // Props sélection d'animal
+                // Props séances individuelles multi-sessions
+                selectedSessions={bookingSelection.selectedSessions}
+                onSessionsChange={handleSessionsChange}
+                // Props sélection d'animal (multiple)
                 userAnimals={userAnimals}
-                selectedAnimalId={selectedAnimalId}
-                onAnimalSelect={handleAnimalSelect}
+                selectedAnimalIds={selectedAnimalIds}
+                onAnimalToggle={handleAnimalToggle}
+                maxSelectableAnimals={maxSelectableAnimals}
+                // Infos annonceur pour la section lieu
+                announcerCity={announcer.location ?? undefined}
+                announcerFirstName={announcer.firstName}
               />
             )}
 
@@ -662,6 +737,7 @@ export default function AnnouncerProfilePage() {
               clientAddress={selectedClientAddress}
               collectiveSlots={collectiveSlots}
               animalCount={bookingSelection.animalCount}
+              selectedSessions={bookingSelection.selectedSessions}
               onServiceChange={(serviceId) => {
                 // Trouver le categorySlug du service sélectionné et mettre à jour l'URL
                 const service = announcer.services.find((s) => s.id === serviceId);
@@ -709,6 +785,9 @@ export default function AnnouncerProfilePage() {
         animalCount={bookingSelection.animalCount}
         onAnimalCountChange={handleAnimalCountChange}
         selectedAnimalType={bookingSelection.selectedAnimalType}
+        // Props séances individuelles multi-sessions
+        selectedSessions={bookingSelection.selectedSessions}
+        onSessionsChange={handleSessionsChange}
       />
     </div>
   );

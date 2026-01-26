@@ -116,6 +116,29 @@ export function formatPrice(cents: number): string {
 
 export const dayNames = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
+// Type pour les créneaux collectifs
+export interface CollectiveSlot {
+  _id: string;
+  variantId: string;
+  variantName: string;
+  serviceName: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  maxAnimals: number;
+  bookedAnimals: number;
+  availableSpots: number;
+  isActive: boolean;
+  isCancelled: boolean;
+}
+
+// Couleurs pour les créneaux collectifs
+export const collectiveSlotColors = {
+  available: "bg-purple-100 text-purple-800 border-purple-200",
+  partial: "bg-purple-200 text-purple-900 border-purple-300",
+  full: "bg-purple-400 text-white border-purple-500",
+};
+
 export const monthNames = [
   "Janvier",
   "Fevrier",

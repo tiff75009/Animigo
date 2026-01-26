@@ -29,6 +29,13 @@ interface CollectiveSlotInfo {
   availableSpots: number;
 }
 
+// Type pour les séances multi-sessions individuelles
+interface SelectedSession {
+  date: string;
+  startTime: string;
+  endTime: string;
+}
+
 interface BookingSummaryProps {
   service: ServiceData | null;
   variant: FormuleData | null;
@@ -44,6 +51,8 @@ interface BookingSummaryProps {
   // Props pour formules collectives
   collectiveSlots?: CollectiveSlotInfo[]; // Créneaux sélectionnés avec leurs détails
   animalCount?: number; // Nombre d'animaux pour séance collective
+  // Props pour formules individuelles multi-séances
+  selectedSessions?: SelectedSession[];
   onBook?: () => void;
   onFinalize?: () => void; // Aller directement à la page de finalisation
   className?: string;
@@ -63,6 +72,7 @@ export default function BookingSummary({
   clientAddress,
   collectiveSlots = [],
   animalCount = 1,
+  selectedSessions = [],
   onBook,
   onFinalize,
   className,
@@ -70,8 +80,16 @@ export default function BookingSummary({
   // Déterminer si c'est une formule collective
   const isCollectiveFormule = variant?.sessionType === "collective";
   const numberOfSessions = variant?.numberOfSessions || 1;
+
+  // Déterminer si c'est une formule individuelle multi-séances
+  const isMultiSessionIndividual = !isCollectiveFormule && numberOfSessions > 1;
+
   const hasAllSlotsSelected = isCollectiveFormule
     ? collectiveSlots.length >= numberOfSessions
+    : true;
+
+  const hasAllSessionsSelected = isMultiSessionIndividual
+    ? selectedSessions.length >= numberOfSessions
     : true;
   // Get selected options
   const selectedOptions = service?.options.filter((opt) =>
@@ -80,19 +98,22 @@ export default function BookingSummary({
 
   // Calculate if booking is ready - requires complete date/time selection
   // Pour les formules collectives : tous les créneaux doivent être sélectionnés
+  // Pour les formules individuelles multi-séances : toutes les séances doivent être sélectionnées
   // Pour le mode plage : date début, date fin, heure début, heure fin
   // Pour le mode normal : date début, heure début
   const isDateTimeComplete = isCollectiveFormule
     ? hasAllSlotsSelected
-    : isRangeMode
-      ? Boolean(selection.startDate && selection.endDate && selection.startTime && selection.endTime)
-      : Boolean(selection.startDate && selection.startTime);
+    : isMultiSessionIndividual
+      ? hasAllSessionsSelected
+      : isRangeMode
+        ? Boolean(selection.startDate && selection.endDate && selection.startTime && selection.endTime)
+        : Boolean(selection.startDate && selection.startTime);
 
   const isReadyToBook = Boolean(
     selection.selectedServiceId &&
     selection.selectedVariantId &&
     isDateTimeComplete &&
-    (isCollectiveFormule || priceBreakdown)
+    (isCollectiveFormule || isMultiSessionIndividual || priceBreakdown)
   );
 
   // Check what is missing for validation message
@@ -102,6 +123,11 @@ export default function BookingSummary({
       const slotsNeeded = numberOfSessions - collectiveSlots.length;
       if (slotsNeeded > 0) {
         missing.push(`${slotsNeeded} créneau${slotsNeeded > 1 ? "x" : ""}`);
+      }
+    } else if (isMultiSessionIndividual) {
+      const sessionsNeeded = numberOfSessions - selectedSessions.length;
+      if (sessionsNeeded > 0) {
+        missing.push(`${sessionsNeeded} séance${sessionsNeeded > 1 ? "s" : ""}`);
       }
     } else {
       if (!selection.startDate) missing.push("date de début");
@@ -134,10 +160,13 @@ export default function BookingSummary({
 
   // Partial state (formule selected but no date/slots)
   // Pour les formules collectives : afficher si pas tous les créneaux sélectionnés
+  // Pour les formules individuelles multi-séances : afficher si pas toutes les séances sélectionnées
   // Pour les formules normales : afficher si pas de date ou pas de prix
   const showPartialState = isCollectiveFormule
     ? !hasAllSlotsSelected
-    : (!selection.startDate || !priceBreakdown);
+    : isMultiSessionIndividual
+      ? !hasAllSessionsSelected
+      : (!selection.startDate || !priceBreakdown);
 
   if (showPartialState) {
     return (
@@ -156,6 +185,13 @@ export default function BookingSummary({
               </span>
               <span className="text-xs text-gray-500">
                 {numberOfSessions} séance{numberOfSessions > 1 ? "s" : ""}
+              </span>
+            </div>
+          )}
+          {isMultiSessionIndividual && (
+            <div className="mt-2 flex items-center gap-2">
+              <span className="px-2 py-1 bg-primary/10 text-primary text-xs rounded-full">
+                Pack {numberOfSessions} séances
               </span>
             </div>
           )}
@@ -194,6 +230,62 @@ export default function BookingSummary({
           </div>
         )}
 
+        {/* Séances sélectionnées pour formules individuelles multi-séances */}
+        {isMultiSessionIndividual && selectedSessions.length > 0 && (
+          <div className="pb-4 border-b border-gray-100 mb-4">
+            <p className="text-sm text-gray-500 mb-2">
+              Séances sélectionnées ({selectedSessions.length}/{numberOfSessions})
+            </p>
+            <div className="space-y-2">
+              {selectedSessions
+                .sort((a, b) => a.date.localeCompare(b.date))
+                .map((session, index) => (
+                <div
+                  key={`${session.date}-${session.startTime}`}
+                  className="flex items-center gap-2 p-2 bg-primary/5 rounded-lg"
+                >
+                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-semibold">
+                    {index + 1}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900 capitalize">
+                      {new Date(session.date).toLocaleDateString("fr-FR", {
+                        weekday: "short",
+                        day: "numeric",
+                        month: "short",
+                      })}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {session.startTime} - {session.endTime}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Prix total estimé pour formules multi-séances */}
+        {isMultiSessionIndividual && variant && (
+          <div className="pb-4 border-b border-gray-100 mb-4">
+            <div className="p-3 bg-gradient-to-r from-primary/5 to-secondary/5 rounded-xl">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Total estimé</span>
+                <span className="text-lg font-bold text-primary">
+                  {formatPrice(
+                    Math.round(
+                      variant.price * numberOfSessions * (1 + commissionRate / 100)
+                    )
+                  )}€
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">
+                {formatPrice(variant.price * (1 + commissionRate / 100))}€ × {numberOfSessions} séances
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Nombre d'animaux pour formules collectives */}
         {isCollectiveFormule && animalCount > 1 && (
           <div className="pb-4 border-b border-gray-100 mb-4">
@@ -223,7 +315,7 @@ export default function BookingSummary({
 
         <div className="text-center py-4">
           <div className="p-2 bg-primary/10 rounded-full w-fit mx-auto mb-2">
-            {isCollectiveFormule ? (
+            {isCollectiveFormule || isMultiSessionIndividual ? (
               <CalendarCheck className="w-5 h-5 text-primary" />
             ) : (
               <Calendar className="w-5 h-5 text-primary" />
@@ -232,7 +324,9 @@ export default function BookingSummary({
           <p className="text-gray-500 text-sm">
             {isCollectiveFormule
               ? `Sélectionnez ${numberOfSessions - collectiveSlots.length} créneau${(numberOfSessions - collectiveSlots.length) > 1 ? "x" : ""}`
-              : "Sélectionnez une date pour voir le prix total"}
+              : isMultiSessionIndividual
+                ? `Sélectionnez ${numberOfSessions - selectedSessions.length} séance${(numberOfSessions - selectedSessions.length) > 1 ? "s" : ""}`
+                : "Sélectionnez une date pour voir le prix total"}
           </p>
         </div>
       </div>
@@ -250,11 +344,15 @@ export default function BookingSummary({
             <p className="text-2xl font-bold text-gray-900">
               {isCollectiveFormule && variant ? (
                 // Pour les formules collectives : prix horaire × nombre de séances × durée × nombre d'animaux + commission
-                // variant.price est le prix à l'heure, variant.duration est en minutes, numberOfSessions est le nombre de séances
                 formatPrice(
                   Math.round(
                     (variant.price * (variant.duration || 60) / 60) * numberOfSessions * animalCount * (1 + commissionRate / 100)
                   )
+                )
+              ) : isMultiSessionIndividual && variant ? (
+                // Pour les formules individuelles multi-séances : prix × nombre de séances + commission
+                formatPrice(
+                  Math.round(variant.price * numberOfSessions * (1 + commissionRate / 100))
                 )
               ) : priceBreakdown ? (
                 formatPrice(priceBreakdown.total)
@@ -305,6 +403,11 @@ export default function BookingSummary({
               Séance collective
             </span>
           )}
+          {isMultiSessionIndividual && (
+            <span className="inline-block mt-1 px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full">
+              Pack {numberOfSessions} séances
+            </span>
+          )}
         </div>
 
         {/* Créneaux collectifs */}
@@ -342,6 +445,43 @@ export default function BookingSummary({
           </div>
         )}
 
+        {/* Séances individuelles multi-sessions */}
+        {isMultiSessionIndividual && selectedSessions.length > 0 && (
+          <div className="p-3 bg-primary/5 rounded-xl">
+            <div className="flex items-center gap-2 mb-2">
+              <CalendarCheck className="w-4 h-4 text-primary" />
+              <span className="text-sm font-medium text-gray-900">
+                Séances sélectionnées ({selectedSessions.length}/{numberOfSessions})
+              </span>
+            </div>
+            <div className="space-y-1.5">
+              {selectedSessions
+                .sort((a, b) => a.date.localeCompare(b.date))
+                .map((session, index) => (
+                <div
+                  key={`${session.date}-${session.startTime}`}
+                  className="flex items-center gap-2 text-sm"
+                >
+                  <span className="w-5 h-5 rounded-full bg-primary/20 text-primary text-xs flex items-center justify-center font-semibold">
+                    {index + 1}
+                  </span>
+                  <span className="text-gray-700 capitalize">
+                    {new Date(session.date).toLocaleDateString("fr-FR", {
+                      weekday: "short",
+                      day: "numeric",
+                      month: "short",
+                    })}
+                  </span>
+                  <span className="text-gray-500">•</span>
+                  <span className="text-primary font-medium">
+                    {session.startTime} - {session.endTime}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Nombre d'animaux pour formules collectives */}
         {isCollectiveFormule && animalCount > 0 && (
           <div className="p-3 bg-blue-50 rounded-xl">
@@ -354,8 +494,8 @@ export default function BookingSummary({
           </div>
         )}
 
-        {/* Dates & times (pour formules non-collectives) */}
-        {!isCollectiveFormule && (
+        {/* Dates & times (pour formules non-collectives et non-multi-sessions) */}
+        {!isCollectiveFormule && !isMultiSessionIndividual && (
         <div className="p-3 bg-gray-50 rounded-xl">
           <div className="flex items-center gap-2 mb-2">
             <Calendar className="w-4 h-4 text-gray-600" />
@@ -513,31 +653,128 @@ export default function BookingSummary({
           </div>
         )}
 
-        {/* Options */}
-        {selectedOptions.length > 0 && (
-          <div className="p-3 bg-secondary/5 rounded-xl">
-            <div className="flex items-center gap-2 mb-2">
-              <Plus className="w-4 h-4 text-secondary" />
-              <span className="text-sm font-medium text-gray-900">Options</span>
+        {/* Détail du prix - mode plan */}
+        <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+          <div className="flex items-center gap-2 mb-3">
+            <CreditCard className="w-4 h-4 text-gray-600" />
+            <span className="text-sm font-semibold text-gray-900">Détail du prix</span>
+          </div>
+
+          <div className="space-y-2 text-sm">
+            {/* Formule de base */}
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <span className="text-gray-700">Formule : {variant.name}</span>
+                {(isCollectiveFormule || isMultiSessionIndividual) && (
+                  <p className="text-xs text-gray-500 mt-0.5 pl-4">
+                    └ {formatPrice(variant.price)}€ × {numberOfSessions} séance{numberOfSessions > 1 ? "s" : ""}
+                    {isCollectiveFormule && animalCount > 1 && ` × ${animalCount} animaux`}
+                  </p>
+                )}
+                {!isCollectiveFormule && !isMultiSessionIndividual && priceBreakdown && (
+                  <p className="text-xs text-gray-500 mt-0.5 pl-4">
+                    └ {priceBreakdown.daysCount > 1
+                      ? `${priceBreakdown.daysCount} jours × ${formatPrice(priceBreakdown.dailyRate)}€/jour`
+                      : `${priceBreakdown.hoursCount.toFixed(1).replace(".0", "")}h × ${formatPrice(priceBreakdown.hourlyRate)}€/h`
+                    }
+                  </p>
+                )}
+              </div>
+              <span className="font-medium text-gray-900">
+                {isCollectiveFormule && variant ? (
+                  formatPrice(
+                    Math.round((variant.price * (variant.duration || 60) / 60) * numberOfSessions * animalCount)
+                  )
+                ) : isMultiSessionIndividual && variant ? (
+                  formatPrice(variant.price * numberOfSessions)
+                ) : priceBreakdown ? (
+                  formatPrice(priceBreakdown.baseAmount)
+                ) : "---"}€
+              </span>
             </div>
-            <div className="space-y-1">
-              {selectedOptions.map((opt) => (
-                <div
-                  key={opt.id.toString()}
-                  className="flex items-center justify-between text-sm"
-                >
-                  <span className="text-gray-700">{opt.name}</span>
-                  <span className="text-secondary font-medium">
-                    +{formatPrice(opt.price * (1 + commissionRate / 100))}€
-                  </span>
+
+            {/* Nuits si applicable */}
+            {!isCollectiveFormule && priceBreakdown && selection.includeOvernightStay && priceBreakdown.nights > 0 && (
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <span className="text-gray-700">Nuits</span>
+                  <p className="text-xs text-gray-500 mt-0.5 pl-4">
+                    └ {priceBreakdown.nights} nuit{priceBreakdown.nights > 1 ? "s" : ""} × {formatPrice(priceBreakdown.nightlyRate)}€/nuit
+                  </p>
                 </div>
-              ))}
+                <span className="font-medium text-gray-900">
+                  +{formatPrice(priceBreakdown.nightsAmount)}€
+                </span>
+              </div>
+            )}
+
+            {/* Options */}
+            {selectedOptions.length > 0 && (
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <span className="text-gray-700">Options</span>
+                  {selectedOptions.map((opt) => (
+                    <p key={opt.id.toString()} className="text-xs text-gray-500 mt-0.5 pl-4">
+                      └ {opt.name} : +{formatPrice(opt.price)}€
+                    </p>
+                  ))}
+                </div>
+                <span className="font-medium text-gray-900">
+                  +{formatPrice(selectedOptions.reduce((sum, opt) => sum + opt.price, 0))}€
+                </span>
+              </div>
+            )}
+
+            {/* Sous-total */}
+            <div className="pt-2 mt-2 border-t border-gray-200">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Sous-total</span>
+                <span className="font-medium text-gray-900">
+                  {isCollectiveFormule && variant ? (
+                    formatPrice(
+                      Math.round((variant.price * (variant.duration || 60) / 60) * numberOfSessions * animalCount) +
+                      selectedOptions.reduce((sum, opt) => sum + opt.price, 0)
+                    )
+                  ) : isMultiSessionIndividual && variant ? (
+                    formatPrice(
+                      variant.price * numberOfSessions +
+                      selectedOptions.reduce((sum, opt) => sum + opt.price, 0)
+                    )
+                  ) : priceBreakdown ? (
+                    formatPrice(priceBreakdown.subtotal)
+                  ) : "---"}€
+                </span>
+              </div>
+            </div>
+
+            {/* Frais de service */}
+            <div className="flex justify-between text-gray-500">
+              <span>Frais de service ({commissionRate}%)</span>
+              <span>
+                {isCollectiveFormule && variant ? (
+                  formatPrice(
+                    Math.round(
+                      ((variant.price * (variant.duration || 60) / 60) * numberOfSessions * animalCount +
+                      selectedOptions.reduce((sum, opt) => sum + opt.price, 0)) * commissionRate / 100
+                    )
+                  )
+                ) : isMultiSessionIndividual && variant ? (
+                  formatPrice(
+                    Math.round(
+                      (variant.price * numberOfSessions +
+                      selectedOptions.reduce((sum, opt) => sum + opt.price, 0)) * commissionRate / 100
+                    )
+                  )
+                ) : priceBreakdown ? (
+                  formatPrice(priceBreakdown.commission)
+                ) : "---"}€
+              </span>
             </div>
           </div>
-        )}
+        </div>
 
         {/* Total - frais de service inclus */}
-        <div className="pt-3 border-t border-gray-100">
+        <div className="pt-3 border-t-2 border-primary/20">
           <div className="flex justify-between font-bold text-lg">
             <span className="text-gray-900">Total</span>
             <span className="text-primary">
@@ -548,6 +785,11 @@ export default function BookingSummary({
                     (variant.price * (variant.duration || 60) / 60) * numberOfSessions * animalCount * (1 + commissionRate / 100)
                   )
                 )
+              ) : isMultiSessionIndividual && variant ? (
+                // Pour les formules individuelles multi-séances : prix × nombre de séances + commission
+                formatPrice(
+                  Math.round(variant.price * numberOfSessions * (1 + commissionRate / 100))
+                )
               ) : priceBreakdown ? (
                 formatPrice(priceBreakdown.total)
               ) : (
@@ -555,9 +797,6 @@ export default function BookingSummary({
               )}€
             </span>
           </div>
-          <p className="text-xs text-gray-400 mt-1 text-right">
-            Frais de service inclus
-          </p>
         </div>
 
         {/* Validation message for missing fields */}

@@ -14,9 +14,9 @@ import {
   ChevronRight,
   AlertCircle,
   Info,
-  CalendarDays,
-  CalendarRange,
-  LayoutGrid,
+  ArrowLeft,
+  Repeat,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 
@@ -40,15 +40,21 @@ interface CollectiveSlotPickerProps {
   className?: string;
 }
 
-type ViewMode = "month" | "week" | "day";
-
-// Formater la date
-const formatDate = (dateStr: string): string => {
+// Formater la date complète
+const formatDateFull = (dateStr: string): string => {
   const date = new Date(dateStr);
   return date.toLocaleDateString("fr-FR", {
     weekday: "long",
     day: "numeric",
     month: "long",
+  });
+};
+
+// Formater le jour de la semaine court
+const formatWeekday = (dateStr: string): string => {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString("fr-FR", {
+    weekday: "short",
   });
 };
 
@@ -59,14 +65,6 @@ const formatDateShort = (dateStr: string): string => {
     weekday: "short",
     day: "numeric",
     month: "short",
-  });
-};
-
-// Formater le jour de la semaine
-const formatWeekday = (dateStr: string): string => {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("fr-FR", {
-    weekday: "short",
   });
 };
 
@@ -122,6 +120,30 @@ const getWeekDays = (monday: Date): { date: Date; dateStr: string }[] => {
   return days;
 };
 
+// Générer plusieurs semaines à partir d'une date
+const getWeeksFromDate = (startDate: Date, weeksCount: number = 4): { date: Date; dateStr: string }[][] => {
+  const weeks = [];
+  const monday = getMonday(startDate);
+
+  for (let w = 0; w < weeksCount; w++) {
+    const weekMonday = new Date(monday);
+    weekMonday.setDate(monday.getDate() + (w * 7));
+    weeks.push(getWeekDays(weekMonday));
+  }
+
+  return weeks;
+};
+
+// Obtenir le jour de la semaine (0 = dimanche, 1 = lundi, etc.)
+const getDayOfWeek = (dateStr: string): number => {
+  return new Date(dateStr).getDay();
+};
+
+// Obtenir le nom du jour de la semaine
+const getDayName = (dateStr: string): string => {
+  return new Date(dateStr).toLocaleDateString("fr-FR", { weekday: "long" });
+};
+
 export default function CollectiveSlotPicker({
   variantId,
   numberOfSessions,
@@ -132,9 +154,11 @@ export default function CollectiveSlotPicker({
   selectedSlotIds = [],
   className,
 }: CollectiveSlotPickerProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [localSelectedIds, setLocalSelectedIds] = useState<string[]>(selectedSlotIds);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null); // Pour la vue horaire
+  const [showAutoFillSuggestion, setShowAutoFillSuggestion] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false); // État replié quand tous les créneaux sont sélectionnés
 
   // Query pour récupérer les créneaux disponibles
   const availableSlotsQuery = useQuery(
@@ -157,7 +181,7 @@ export default function CollectiveSlotPicker({
       map.set(slot.date, existing);
     }
     // Trier les créneaux par heure pour chaque date
-    map.forEach((slots, date) => {
+    map.forEach((slots) => {
       slots.sort((a, b) => a.startTime.localeCompare(b.startTime));
     });
     return map;
@@ -173,87 +197,24 @@ export default function CollectiveSlotPicker({
       .filter((d): d is string => !!d);
   }, [localSelectedIds, availableSlots]);
 
-  // Jours de la semaine courante
-  const weekDays = useMemo(() => {
-    const monday = getMonday(currentDate);
-    return getWeekDays(monday);
-  }, [currentDate]);
-
-  // Générer les jours du mois courant
-  const calendarDays = useMemo(() => {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const days: { date: Date; dateStr: string; isCurrentMonth: boolean }[] = [];
-
-    // Jours du mois précédent
-    const startDayOfWeek = firstDay.getDay() || 7;
-    for (let i = startDayOfWeek - 1; i > 0; i--) {
-      const date = new Date(year, month, 1 - i);
-      days.push({
-        date,
-        dateStr: date.toISOString().split("T")[0],
-        isCurrentMonth: false,
-      });
-    }
-
-    // Jours du mois courant
-    for (let day = 1; day <= lastDay.getDate(); day++) {
-      const date = new Date(year, month, day);
-      days.push({
-        date,
-        dateStr: date.toISOString().split("T")[0],
-        isCurrentMonth: true,
-      });
-    }
-
-    // Compléter la dernière semaine
-    const remainingDays = 7 - (days.length % 7);
-    if (remainingDays < 7) {
-      for (let i = 1; i <= remainingDays; i++) {
-        const date = new Date(year, month + 1, i);
-        days.push({
-          date,
-          dateStr: date.toISOString().split("T")[0],
-          isCurrentMonth: false,
-        });
-      }
-    }
-
-    return days;
+  // Générer 4 semaines à partir de la date courante
+  const weeks = useMemo(() => {
+    return getWeeksFromDate(currentDate, 4);
   }, [currentDate]);
 
   const today = new Date().toISOString().split("T")[0];
-  const currentDateStr = currentDate.toISOString().split("T")[0];
 
   // Navigation
   const navigatePrev = () => {
-    if (viewMode === "month") {
-      setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
-    } else if (viewMode === "week") {
-      const newDate = new Date(currentDate);
-      newDate.setDate(currentDate.getDate() - 7);
-      setCurrentDate(newDate);
-    } else {
-      const newDate = new Date(currentDate);
-      newDate.setDate(currentDate.getDate() - 1);
-      setCurrentDate(newDate);
-    }
+    const newDate = new Date(currentDate);
+    newDate.setDate(currentDate.getDate() - 28); // 4 semaines
+    setCurrentDate(newDate);
   };
 
   const navigateNext = () => {
-    if (viewMode === "month") {
-      setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
-    } else if (viewMode === "week") {
-      const newDate = new Date(currentDate);
-      newDate.setDate(currentDate.getDate() + 7);
-      setCurrentDate(newDate);
-    } else {
-      const newDate = new Date(currentDate);
-      newDate.setDate(currentDate.getDate() + 1);
-      setCurrentDate(newDate);
-    }
+    const newDate = new Date(currentDate);
+    newDate.setDate(currentDate.getDate() + 28); // 4 semaines
+    setCurrentDate(newDate);
   };
 
   const goToToday = () => {
@@ -300,353 +261,299 @@ export default function CollectiveSlotPicker({
 
   const isComplete = localSelectedIds.length === numberOfSessions;
 
-  // Rendu d'un créneau
-  const renderSlot = (slot: CollectiveSlot, compact: boolean = false) => {
-    const isSelected = localSelectedIds.includes(slot._id);
-    const canSelect =
-      isSelected ||
-      (localSelectedIds.length < numberOfSessions &&
-        (checkInterval(selectedDates, slot.date, sessionInterval) ||
-          localSelectedIds.length === 0));
+  // Auto-collapse when all slots are selected
+  useEffect(() => {
+    if (isComplete && localSelectedIds.length > 0) {
+      // Petit délai pour laisser voir la sélection avant de replier
+      const timer = setTimeout(() => {
+        setIsCollapsed(true);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isComplete, localSelectedIds.length]);
 
-    return (
-      <button
-        key={slot._id}
-        onClick={() => canSelect && handleSlotSelect(slot._id)}
-        disabled={!canSelect}
-        className={cn(
-          "rounded-lg transition-all text-left",
-          compact ? "px-2 py-1.5 text-xs" : "px-3 py-2 text-sm",
-          isSelected
-            ? "bg-primary text-white shadow-md"
-            : canSelect
-            ? "bg-primary/10 text-primary hover:bg-primary/20 hover:shadow-sm"
-            : "bg-gray-100 text-gray-400 cursor-not-allowed"
-        )}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5">
-            <Clock className={cn("flex-shrink-0", compact ? "w-3 h-3" : "w-4 h-4")} />
-            <span className="font-medium">{slot.startTime}</span>
-            <span className="opacity-70">-</span>
-            <span>{slot.endTime}</span>
-          </div>
-          {isSelected && <Check className={compact ? "w-3 h-3" : "w-4 h-4"} />}
-        </div>
-        {!compact && (
-          <div className="flex items-center gap-1 mt-1 text-xs opacity-80">
-            <Users className="w-3 h-3" />
-            <span>{slot.availableSpots} place{slot.availableSpots > 1 ? "s" : ""}</span>
-          </div>
-        )}
-      </button>
-    );
+  // Récupérer les détails des créneaux sélectionnés pour le résumé
+  const selectedSlotsDetails = useMemo(() => {
+    return localSelectedIds
+      .map((id) => availableSlots.find((s: CollectiveSlot) => s._id === id))
+      .filter((s): s is CollectiveSlot => s !== undefined)
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [localSelectedIds, availableSlots]);
+
+  // Trouver les créneaux correspondants pour l'auto-fill (même jour de semaine, même heure)
+  const findMatchingSlots = useMemo(() => {
+    if (localSelectedIds.length !== 1) return [];
+
+    const firstSlot = availableSlots.find((s: CollectiveSlot) => s._id === localSelectedIds[0]);
+    if (!firstSlot) return [];
+
+    const targetDayOfWeek = getDayOfWeek(firstSlot.date);
+    const targetTime = firstSlot.startTime;
+
+    // Trouver tous les créneaux au même jour de semaine et même heure
+    const matchingSlots = availableSlots
+      .filter((slot: CollectiveSlot) => {
+        if (slot._id === firstSlot._id) return false; // Exclure le premier
+        if (slot.date < today) return false; // Exclure les dates passées
+        if (getDayOfWeek(slot.date) !== targetDayOfWeek) return false;
+        if (slot.startTime !== targetTime) return false;
+        return true;
+      })
+      .sort((a: CollectiveSlot, b: CollectiveSlot) => a.date.localeCompare(b.date));
+
+    // Sélectionner les créneaux en respectant l'intervalle
+    const result: CollectiveSlot[] = [];
+    let lastDate = firstSlot.date;
+
+    for (const slot of matchingSlots) {
+      if (result.length >= numberOfSessions - 1) break; // On a assez de créneaux
+
+      const daysDiff = Math.abs(
+        (new Date(slot.date).getTime() - new Date(lastDate).getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      if (daysDiff >= sessionInterval) {
+        result.push(slot);
+        lastDate = slot.date;
+      }
+    }
+
+    return result;
+  }, [localSelectedIds, availableSlots, numberOfSessions, sessionInterval, today]);
+
+  // Peut-on proposer l'auto-fill ?
+  const canAutoFill = localSelectedIds.length === 1 &&
+    findMatchingSlots.length >= numberOfSessions - 1 &&
+    numberOfSessions > 1;
+
+  // Appliquer l'auto-fill
+  const applyAutoFill = () => {
+    if (!canAutoFill) return;
+
+    const slotsToSelect = findMatchingSlots.slice(0, numberOfSessions - 1);
+    const newIds = [...localSelectedIds, ...slotsToSelect.map((s) => s._id)];
+    setLocalSelectedIds(newIds);
+    onSlotsSelected(newIds);
+    setShowAutoFillSuggestion(false);
+    setSelectedDay(null); // Revenir au calendrier
   };
 
-  // Rendu de la vue jour
-  const renderDayView = () => {
-    const daySlots = slotsByDate.get(currentDateStr) || [];
-    const isPast = currentDateStr < today;
+  // Afficher la suggestion après la première sélection
+  useEffect(() => {
+    if (canAutoFill && localSelectedIds.length === 1) {
+      setShowAutoFillSuggestion(true);
+    } else {
+      setShowAutoFillSuggestion(false);
+    }
+  }, [canAutoFill, localSelectedIds.length]);
+
+  // Infos sur le premier créneau sélectionné pour l'auto-fill
+  const firstSelectedSlot = localSelectedIds.length > 0
+    ? availableSlots.find((s: CollectiveSlot) => s._id === localSelectedIds[0])
+    : null;
+
+  // Obtenir le titre de la période affichée
+  const getPeriodTitle = () => {
+    if (weeks.length === 0) return "";
+    const firstDay = weeks[0][0];
+    const lastDay = weeks[weeks.length - 1][6];
+
+    const firstMonth = new Date(firstDay.dateStr).toLocaleDateString("fr-FR", { month: "short" });
+    const lastMonth = new Date(lastDay.dateStr).toLocaleDateString("fr-FR", { month: "short", year: "numeric" });
+
+    if (firstMonth === lastMonth.split(" ")[0]) {
+      return `${formatDayNumber(firstDay.dateStr)} - ${formatDayNumber(lastDay.dateStr)} ${lastMonth}`;
+    }
+    return `${formatDayNumber(firstDay.dateStr)} ${firstMonth} - ${formatDayNumber(lastDay.dateStr)} ${lastMonth}`;
+  };
+
+  // Vérifier si on a sélectionné un créneau pour ce jour
+  const hasSelectedSlotForDay = (day: string) => {
+    const daySlots = slotsByDate.get(day) || [];
+    return daySlots.some((s) => localSelectedIds.includes(s._id));
+  };
+
+  // Rendu de la vue horaire pour un jour spécifique
+  const renderTimeView = () => {
+    if (!selectedDay) return null;
+
+    const daySlots = slotsByDate.get(selectedDay) || [];
+    const isPast = selectedDay < today;
+    const hasSelectedThisDay = hasSelectedSlotForDay(selectedDay);
+    const needsMoreSlots = localSelectedIds.length < numberOfSessions;
 
     return (
-      <div className="space-y-4">
-        <div className="text-center">
-          <h4 className="text-lg font-semibold text-gray-900 capitalize">
-            {formatDate(currentDateStr)}
-          </h4>
-          {isPast && (
-            <p className="text-sm text-gray-500 mt-1">Cette date est passée</p>
-          )}
+      <motion.div
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        className="space-y-4"
+      >
+        {/* Header avec flèche retour */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setSelectedDay(null)}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5 text-gray-600" />
+          </button>
+          <div className="flex-1">
+            <h4 className="text-lg font-semibold text-gray-900 capitalize">
+              {formatDateFull(selectedDay)}
+            </h4>
+            <p className="text-sm text-gray-500">
+              {daySlots.length} créneau{daySlots.length > 1 ? "x" : ""} disponible{daySlots.length > 1 ? "s" : ""}
+            </p>
+          </div>
         </div>
 
-        {daySlots.length === 0 ? (
+        {isPast ? (
+          <div className="text-center py-8 text-gray-500">
+            <Clock className="w-12 h-12 mx-auto mb-3 opacity-30" />
+            <p>Cette date est passée</p>
+          </div>
+        ) : daySlots.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <Clock className="w-12 h-12 mx-auto mb-3 opacity-30" />
             <p>Aucun créneau disponible ce jour</p>
           </div>
         ) : (
-          <div className="grid gap-2 max-h-[400px] overflow-y-auto">
-            {daySlots.map((slot) => renderSlot(slot, false))}
-          </div>
-        )}
-      </div>
-    );
-  };
+          <div className="grid gap-2 max-h-[280px] overflow-y-auto">
+            {daySlots.map((slot) => {
+              const isSelected = localSelectedIds.includes(slot._id);
+              const canSelect =
+                isSelected ||
+                (localSelectedIds.length < numberOfSessions &&
+                  (checkInterval(selectedDates, slot.date, sessionInterval) ||
+                    localSelectedIds.length === 0));
 
-  // Rendu de la vue semaine
-  const renderWeekView = () => {
-    return (
-      <div className="space-y-3">
-        {/* En-tête des jours */}
-        <div className="grid grid-cols-7 gap-1">
-          {weekDays.map(({ date, dateStr }) => {
-            const isPast = dateStr < today;
-            const isToday = dateStr === today;
-            const hasSlots = slotsByDate.has(dateStr);
-            const daySlots = slotsByDate.get(dateStr) || [];
-            const hasSelectedSlot = daySlots.some((s) => localSelectedIds.includes(s._id));
-
-            return (
-              <div
-                key={dateStr}
-                className={cn(
-                  "text-center p-2 rounded-lg",
-                  isToday && "bg-primary/10 ring-2 ring-primary/30",
-                  hasSelectedSlot && "bg-primary/5"
-                )}
-              >
-                <div className={cn(
-                  "text-xs font-medium uppercase",
-                  isPast ? "text-gray-400" : "text-gray-600"
-                )}>
-                  {formatWeekday(dateStr)}
-                </div>
-                <div className={cn(
-                  "text-lg font-bold",
-                  isPast ? "text-gray-400" : isToday ? "text-primary" : "text-gray-900"
-                )}>
-                  {formatDayNumber(dateStr)}
-                </div>
-                {hasSlots && !isPast && (
-                  <div className={cn(
-                    "w-2 h-2 rounded-full mx-auto mt-1",
-                    hasSelectedSlot ? "bg-primary" : "bg-green-500"
-                  )} />
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Créneaux par jour */}
-        <div className="grid grid-cols-7 gap-1 min-h-[200px]">
-          {weekDays.map(({ dateStr }) => {
-            const daySlots = slotsByDate.get(dateStr) || [];
-            const isPast = dateStr < today;
-
-            return (
-              <div
-                key={dateStr}
-                className={cn(
-                  "p-1 rounded-lg space-y-1 max-h-[250px] overflow-y-auto",
-                  isPast ? "bg-gray-50 opacity-50" : "bg-gray-50"
-                )}
-              >
-                {!isPast && daySlots.map((slot) => renderSlot(slot, true))}
-                {!isPast && daySlots.length === 0 && (
-                  <div className="text-xs text-gray-400 text-center py-4">
-                    -
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
-  // Rendu de la vue mois
-  const renderMonthView = () => {
-    return (
-      <>
-        {/* Jours de la semaine */}
-        <div className="grid grid-cols-7 gap-1 mb-2">
-          {["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"].map((day) => (
-            <div
-              key={day}
-              className="text-center text-xs font-medium text-gray-500 py-2"
-            >
-              {day}
-            </div>
-          ))}
-        </div>
-
-        {/* Grille du calendrier */}
-        <div className="grid grid-cols-7 gap-1">
-          {calendarDays.map(({ date, dateStr, isCurrentMonth }) => {
-            const daySlots = slotsByDate.get(dateStr) || [];
-            const isPast = dateStr < today;
-            const isToday = dateStr === today;
-
-            // Vérifier si un des créneaux du jour est sélectionné
-            const hasSelectedSlot = daySlots.some((s) =>
-              localSelectedIds.includes(s._id)
-            );
-
-            // Vérifier si le jour respecte l'intervalle
-            const respectsInterval = checkInterval(
-              selectedDates,
-              dateStr,
-              sessionInterval
-            );
-
-            return (
-              <div
-                key={dateStr}
-                className={cn(
-                  "min-h-[60px] p-1 rounded-lg transition-colors",
-                  isCurrentMonth ? "bg-white" : "bg-gray-100/50",
-                  isPast && "opacity-50",
-                  isToday && "ring-2 ring-primary/50"
-                )}
-              >
-                <div
+              return (
+                <button
+                  key={slot._id}
+                  onClick={() => canSelect && handleSlotSelect(slot._id)}
+                  disabled={!canSelect}
                   className={cn(
-                    "text-xs font-medium mb-1",
-                    isCurrentMonth ? "text-gray-700" : "text-gray-400"
+                    "w-full p-4 rounded-xl border-2 transition-all text-left",
+                    isSelected
+                      ? "bg-primary/10 border-primary"
+                      : canSelect
+                      ? "bg-white border-gray-200 hover:border-primary/50 hover:bg-gray-50"
+                      : "bg-gray-50 border-gray-100 cursor-not-allowed opacity-60"
                   )}
                 >
-                  {date.getDate()}
-                </div>
-
-                {/* Créneaux du jour */}
-                {!isPast && isCurrentMonth && (
-                  <div className="space-y-1">
-                    {daySlots.slice(0, 2).map((slot) => {
-                      const isSelected = localSelectedIds.includes(slot._id);
-                      const canSelect =
-                        isSelected ||
-                        (localSelectedIds.length < numberOfSessions &&
-                          (checkInterval(selectedDates, dateStr, sessionInterval) ||
-                            localSelectedIds.length === 0));
-
-                      return (
-                        <button
-                          key={slot._id}
-                          onClick={() => canSelect && handleSlotSelect(slot._id)}
-                          disabled={!canSelect}
-                          className={cn(
-                            "w-full text-xs px-1 py-1 rounded transition-all",
-                            isSelected
-                              ? "bg-primary text-white shadow-sm"
-                              : canSelect
-                              ? "bg-primary/10 text-primary hover:bg-primary/20"
-                              : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                          )}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span>{slot.startTime}</span>
-                            {isSelected && <Check className="w-3 h-3" />}
-                          </div>
-                        </button>
-                      );
-                    })}
-                    {daySlots.length > 2 && (
-                      <div className="text-xs text-gray-500 text-center">
-                        +{daySlots.length - 2}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "p-2 rounded-lg",
+                        isSelected ? "bg-primary/20" : "bg-gray-100"
+                      )}>
+                        <Clock className={cn(
+                          "w-5 h-5",
+                          isSelected ? "text-primary" : "text-gray-500"
+                        )} />
+                      </div>
+                      <div>
+                        <p className={cn(
+                          "font-semibold text-lg",
+                          isSelected ? "text-primary" : "text-gray-900"
+                        )}>
+                          {slot.startTime} - {slot.endTime}
+                        </p>
+                        <div className="flex items-center gap-1 text-sm text-gray-500">
+                          <Users className="w-4 h-4" />
+                          <span>{slot.availableSpots} place{slot.availableSpots > 1 ? "s" : ""} disponible{slot.availableSpots > 1 ? "s" : ""}</span>
+                        </div>
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+                        <Check className="w-5 h-5 text-white" />
                       </div>
                     )}
                   </div>
-                )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Suggestion d'auto-remplissage */}
+        {showAutoFillSuggestion && canAutoFill && firstSelectedSlot && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-4 bg-gradient-to-r from-secondary/10 to-primary/10 border-2 border-secondary/30 rounded-xl"
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-secondary/20 rounded-lg flex-shrink-0">
+                <Sparkles className="w-5 h-5 text-secondary" />
               </div>
-            );
-          })}
-        </div>
-      </>
+              <div className="flex-1">
+                <p className="font-semibold text-gray-900 mb-1">
+                  Réserver les mêmes créneaux ?
+                </p>
+                <p className="text-sm text-gray-600 mb-3">
+                  Voulez-vous réserver les {numberOfSessions} séances tous les{" "}
+                  <strong className="capitalize">{getDayName(firstSelectedSlot.date)}s</strong> à{" "}
+                  <strong>{firstSelectedSlot.startTime}</strong> ?
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={applyAutoFill}
+                    className="flex-1 sm:flex-none px-4 py-2 bg-secondary text-white font-medium rounded-lg hover:bg-secondary/90 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Repeat className="w-4 h-4" />
+                    Oui, réserver automatiquement
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowAutoFillSuggestion(false);
+                      setSelectedDay(null);
+                    }}
+                    className="flex-1 sm:flex-none px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Non, choisir manuellement
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Bouton pour sélectionner le créneau suivant (quand auto-fill n'est pas disponible ou refusé) */}
+        {hasSelectedThisDay && needsMoreSlots && !showAutoFillSuggestion && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="pt-2"
+          >
+            <button
+              onClick={() => setSelectedDay(null)}
+              className="w-full py-3 px-4 bg-primary text-white font-semibold rounded-xl hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+            >
+              <Calendar className="w-5 h-5" />
+              Sélectionner la séance {localSelectedIds.length + 1}/{numberOfSessions}
+            </button>
+            <p className="text-xs text-center text-gray-500 mt-2">
+              Choisissez un autre jour pour votre prochaine séance
+            </p>
+          </motion.div>
+        )}
+      </motion.div>
     );
   };
 
-  // Titre de la navigation
-  const getNavigationTitle = () => {
-    if (viewMode === "month") {
-      return currentDate.toLocaleDateString("fr-FR", {
-        month: "long",
-        year: "numeric",
-      });
-    } else if (viewMode === "week") {
-      const monday = weekDays[0];
-      const sunday = weekDays[6];
-      return `${formatDayNumber(monday.dateStr)} - ${formatDayNumber(sunday.dateStr)} ${currentDate.toLocaleDateString("fr-FR", { month: "short", year: "numeric" })}`;
-    } else {
-      return formatDate(currentDateStr);
-    }
-  };
-
-  return (
-    <div className={cn("space-y-4", className)}>
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-primary" />
-            Choisissez vos créneaux
-          </h3>
-          <p className="text-sm text-gray-500 mt-1">
-            Sélectionnez {numberOfSessions} créneau
-            {numberOfSessions > 1 ? "x" : ""} avec au moins {sessionInterval} jour
-            {sessionInterval > 1 ? "s" : ""} d'intervalle
-          </p>
-        </div>
-        <div
-          className={cn(
-            "px-3 py-1.5 rounded-full text-sm font-medium",
-            isComplete
-              ? "bg-green-100 text-green-700"
-              : "bg-amber-100 text-amber-700"
-          )}
-        >
-          {localSelectedIds.length}/{numberOfSessions} sélectionné
-          {localSelectedIds.length > 1 ? "s" : ""}
-        </div>
-      </div>
-
-      {/* Message si intervalle requis */}
-      {sessionInterval > 1 && (
-        <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-xl text-sm text-blue-700">
-          <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
-          <p>
-            Les séances doivent être espacées d'au moins{" "}
-            <strong>{sessionInterval} jours</strong>. Les créneaux trop proches
-            de vos sélections seront grisés.
-          </p>
-        </div>
-      )}
-
-      {/* Sélecteur de vue */}
-      <div className="flex items-center justify-center gap-1 p-1 bg-gray-100 rounded-xl">
-        <button
-          onClick={() => setViewMode("day")}
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all",
-            viewMode === "day"
-              ? "bg-white text-primary shadow-sm"
-              : "text-gray-600 hover:text-gray-900"
-          )}
-        >
-          <CalendarDays className="w-4 h-4" />
-          Jour
-        </button>
-        <button
-          onClick={() => setViewMode("week")}
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all",
-            viewMode === "week"
-              ? "bg-white text-primary shadow-sm"
-              : "text-gray-600 hover:text-gray-900"
-          )}
-        >
-          <CalendarRange className="w-4 h-4" />
-          Semaine
-        </button>
-        <button
-          onClick={() => setViewMode("month")}
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all",
-            viewMode === "month"
-              ? "bg-white text-primary shadow-sm"
-              : "text-gray-600 hover:text-gray-900"
-          )}
-        >
-          <LayoutGrid className="w-4 h-4" />
-          Mois
-        </button>
-      </div>
-
-      {/* Calendrier */}
-      <div className="bg-gray-50 rounded-2xl p-4">
+  // Rendu de la vue calendrier
+  const renderCalendarView = () => {
+    return (
+      <motion.div
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: 20 }}
+        className="space-y-3"
+      >
         {/* Navigation */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-2">
           <button
             onClick={navigatePrev}
             className="p-2 hover:bg-white rounded-lg transition-colors"
@@ -654,8 +561,8 @@ export default function CollectiveSlotPicker({
             <ChevronLeft className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2">
-            <h4 className="text-lg font-semibold text-gray-900 capitalize">
-              {getNavigationTitle()}
+            <h4 className="text-base font-semibold text-gray-900">
+              {getPeriodTitle()}
             </h4>
             <button
               onClick={goToToday}
@@ -672,85 +579,220 @@ export default function CollectiveSlotPicker({
           </button>
         </div>
 
-        {/* Contenu selon la vue */}
-        {viewMode === "day" && renderDayView()}
-        {viewMode === "week" && renderWeekView()}
-        {viewMode === "month" && renderMonthView()}
-      </div>
+        {/* En-têtes des jours de la semaine */}
+        <div className="grid grid-cols-7 gap-1">
+          {["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"].map((day) => (
+            <div
+              key={day}
+              className="text-center text-xs font-medium text-gray-500 py-2"
+            >
+              {day}
+            </div>
+          ))}
+        </div>
 
-      {/* Liste des créneaux sélectionnés */}
-      {localSelectedIds.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="font-medium text-gray-900 text-sm">
-            Séances sélectionnées
-          </h4>
-          <div className="grid gap-2">
-            {localSelectedIds.map((slotId, index) => {
-              const slot = availableSlots.find((s: CollectiveSlot) => s._id === slotId);
-              if (!slot) return null;
+        {/* Grille des semaines */}
+        <div className="space-y-1">
+          {weeks.map((week, weekIndex) => (
+            <div key={weekIndex} className="grid grid-cols-7 gap-1">
+              {week.map(({ dateStr }) => {
+                const isPast = dateStr < today;
+                const isToday = dateStr === today;
+                const hasSlots = slotsByDate.has(dateStr) && !isPast;
+                const daySlots = slotsByDate.get(dateStr) || [];
+                const slotsCount = daySlots.length;
+                const hasSelectedSlot = daySlots.some((s) => localSelectedIds.includes(s._id));
+                const canSelectDay = hasSlots && (
+                  hasSelectedSlot ||
+                  localSelectedIds.length < numberOfSessions &&
+                  (checkInterval(selectedDates, dateStr, sessionInterval) || localSelectedIds.length === 0)
+                );
 
-              return (
-                <motion.div
-                  key={slotId}
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center justify-between p-3 bg-primary/5 border border-primary/20 rounded-xl"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-semibold">
-                      {index + 1}
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {formatDateShort(slot.date)}
-                      </p>
-                      <p className="text-sm text-gray-500 flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {slot.startTime} - {slot.endTime}
-                      </p>
-                    </div>
-                  </div>
+                return (
                   <button
-                    onClick={() => handleSlotSelect(slotId)}
-                    className="text-sm text-red-500 hover:text-red-700 hover:underline"
+                    key={dateStr}
+                    onClick={() => hasSlots && setSelectedDay(dateStr)}
+                    disabled={!hasSlots}
+                    className={cn(
+                      "relative aspect-square flex flex-col items-center justify-center rounded-xl transition-all",
+                      isPast && "opacity-40 cursor-not-allowed",
+                      isToday && "ring-2 ring-primary/50",
+                      hasSlots && !isPast && "hover:bg-primary/10 cursor-pointer",
+                      hasSelectedSlot && "bg-primary/15",
+                      !hasSlots && !isPast && "text-gray-400"
+                    )}
                   >
-                    Retirer
+                    <span className={cn(
+                      "text-sm font-medium",
+                      isToday && "text-primary font-bold",
+                      hasSelectedSlot && "text-primary"
+                    )}>
+                      {formatDayNumber(dateStr)}
+                    </span>
+
+                    {/* Indicateur de créneaux disponibles */}
+                    {hasSlots && !isPast && (
+                      <div className="flex items-center gap-0.5 mt-0.5">
+                        {hasSelectedSlot ? (
+                          <div className="w-2 h-2 rounded-full bg-primary" />
+                        ) : canSelectDay ? (
+                          <div className="w-2 h-2 rounded-full bg-green-500" />
+                        ) : (
+                          <div className="w-2 h-2 rounded-full bg-gray-300" />
+                        )}
+                        {slotsCount > 1 && (
+                          <span className="text-[10px] text-gray-500">+{slotsCount - 1}</span>
+                        )}
+                      </div>
+                    )}
                   </button>
-                </motion.div>
-              );
-            })}
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        {/* Légende */}
+        <div className="flex flex-wrap items-center justify-center gap-4 pt-2 text-xs text-gray-500">
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
+            <span>Disponible</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-primary" />
+            <span>Sélectionné</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-gray-300" />
+            <span>Intervalle non respecté</span>
           </div>
         </div>
-      )}
+      </motion.div>
+    );
+  };
 
-      {/* Message si pas assez de créneaux */}
-      {availableSlots.length < numberOfSessions && (
-        <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-xl text-sm text-amber-700">
-          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-          <p>
-            Il n'y a que {availableSlots.length} créneau
-            {availableSlots.length > 1 ? "x" : ""} disponible
-            {availableSlots.length > 1 ? "s" : ""}, mais la formule en requiert{" "}
-            {numberOfSessions}. Contactez l'annonceur pour plus de créneaux.
-          </p>
+  // Vue repliée avec résumé des séances sélectionnées
+  const renderCollapsedView = () => (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="space-y-3"
+    >
+      {/* Header avec bouton modifier */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="p-2 bg-green-100 rounded-lg">
+            <Check className="w-5 h-5 text-green-600" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900">
+              {numberOfSessions} séance{numberOfSessions > 1 ? "s" : ""} sélectionnée{numberOfSessions > 1 ? "s" : ""}
+            </h3>
+            <p className="text-sm text-gray-500">
+              Créneaux confirmés
+            </p>
+          </div>
         </div>
-      )}
-
-      {/* Légende */}
-      <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded bg-primary/20" />
-          <span>Disponible</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded bg-primary" />
-          <span>Sélectionné</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded bg-gray-200" />
-          <span>Intervalle non respecté</span>
-        </div>
+        <button
+          onClick={() => setIsCollapsed(false)}
+          className="px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
+        >
+          Modifier
+        </button>
       </div>
+
+      {/* Liste des séances */}
+      <div className="flex flex-wrap gap-2">
+        {selectedSlotsDetails.map((slot) => {
+          const date = new Date(slot.date);
+          const dayName = date.toLocaleDateString("fr-FR", { weekday: "short" });
+          const dayNum = date.getDate();
+          const month = date.toLocaleDateString("fr-FR", { month: "short" });
+          return (
+            <div
+              key={slot._id}
+              className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-xl text-sm"
+            >
+              <Calendar className="w-4 h-4 text-green-600" />
+              <span className="font-medium text-gray-900 capitalize">
+                {dayName} {dayNum} {month}
+              </span>
+              <span className="text-gray-500">
+                {slot.startTime} - {slot.endTime}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </motion.div>
+  );
+
+  return (
+    <div className={cn("space-y-4", className)}>
+      {/* Vue repliée si tous les créneaux sont sélectionnés */}
+      {isCollapsed && isComplete ? (
+        renderCollapsedView()
+      ) : (
+        <>
+          {/* Header */}
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-primary" />
+                Choisissez vos créneaux
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">
+                Sélectionnez {numberOfSessions} créneau
+                {numberOfSessions > 1 ? "x" : ""} avec au moins {sessionInterval} jour
+                {sessionInterval > 1 ? "s" : ""} d'intervalle
+              </p>
+            </div>
+            <div
+              className={cn(
+                "px-3 py-1.5 rounded-full text-sm font-medium",
+                isComplete
+                  ? "bg-green-100 text-green-700"
+                  : "bg-amber-100 text-amber-700"
+              )}
+            >
+              {localSelectedIds.length}/{numberOfSessions} sélectionné
+              {localSelectedIds.length > 1 ? "s" : ""}
+            </div>
+          </div>
+
+          {/* Message si intervalle requis */}
+          {sessionInterval > 1 && (
+            <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-xl text-sm text-blue-700">
+              <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <p>
+                Les séances doivent être espacées d'au moins{" "}
+                <strong>{sessionInterval} jours</strong>. Les créneaux trop proches
+                de vos sélections seront grisés.
+              </p>
+            </div>
+          )}
+
+          {/* Calendrier ou vue horaire */}
+          <div className="bg-gray-50 rounded-2xl p-4">
+            <AnimatePresence mode="wait">
+              {selectedDay ? renderTimeView() : renderCalendarView()}
+            </AnimatePresence>
+          </div>
+
+          {/* Message si pas assez de créneaux */}
+          {availableSlots.length < numberOfSessions && (
+            <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-xl text-sm text-amber-700">
+              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <p>
+                Il n'y a que {availableSlots.length} créneau
+                {availableSlots.length > 1 ? "x" : ""} disponible
+                {availableSlots.length > 1 ? "s" : ""}, mais la formule en requiert{" "}
+                {numberOfSessions}. Contactez l'annonceur pour plus de créneaux.
+              </p>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

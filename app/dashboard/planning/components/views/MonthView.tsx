@@ -3,9 +3,11 @@
 import { useMemo, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/app/lib/utils";
+import { Users } from "lucide-react";
 import {
   Mission,
   Availability,
+  CollectiveSlot,
   statusColors,
   availabilityColors,
   getDaysInMonth,
@@ -18,18 +20,22 @@ interface MonthViewProps {
   currentDate: Date;
   missions: Mission[];
   availability: Availability[];
+  collectiveSlots?: CollectiveSlot[];
   onDayClick: (date: string) => void;
   onRangeSelect?: (startDate: string, endDate: string) => void;
   onMissionClick: (mission: Mission) => void;
+  onSlotClick?: (slot: CollectiveSlot) => void;
 }
 
 export function MonthView({
   currentDate,
   missions,
   availability,
+  collectiveSlots = [],
   onDayClick,
   onRangeSelect,
   onMissionClick,
+  onSlotClick,
 }: MonthViewProps) {
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -124,6 +130,12 @@ export function MonthView({
     return availability.find((a) => a.date === dateStr) || null;
   };
 
+  // Get collective slots for a specific date
+  const getSlotsForDate = (day: number): CollectiveSlot[] => {
+    const dateStr = formatDateStr(year, month, day);
+    return collectiveSlots.filter((slot) => slot.date === dateStr);
+  };
+
   // Check if date is today
   const isToday = (day: number): boolean => {
     const today = new Date();
@@ -168,6 +180,7 @@ export function MonthView({
 
           const dayMissions = getMissionsForDate(item.day);
           const dayAvailability = getAvailabilityForDate(item.day);
+          const daySlots = getSlotsForDate(item.day);
           const today = isToday(item.day);
           const dateStr = formatDateStr(year, month, item.day);
           const inSelection = isInSelectionRange(dateStr);
@@ -212,9 +225,25 @@ export function MonthView({
                 )}
               </div>
 
-              {/* Missions */}
+              {/* Missions et créneaux collectifs */}
               <div className="space-y-0.5 overflow-hidden">
-                {dayMissions.slice(0, 2).map((mission) => (
+                {/* Créneaux collectifs */}
+                {daySlots.slice(0, 1).map((slot) => (
+                  <motion.div
+                    key={slot._id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSlotClick?.(slot);
+                    }}
+                    className="text-[10px] md:text-xs bg-purple-500 text-white px-1.5 py-0.5 rounded truncate flex items-center gap-0.5"
+                    whileHover={{ scale: 1.05 }}
+                  >
+                    <Users className="w-2.5 h-2.5" />
+                    <span className="truncate">{slot.bookedAnimals}/{slot.maxAnimals}</span>
+                  </motion.div>
+                ))}
+                {/* Missions */}
+                {dayMissions.slice(0, daySlots.length > 0 ? 1 : 2).map((mission) => (
                   <motion.div
                     key={mission.id}
                     onClick={(e) => {
@@ -230,9 +259,9 @@ export function MonthView({
                     {mission.animal.emoji} {mission.animal.name}
                   </motion.div>
                 ))}
-                {dayMissions.length > 2 && (
+                {(dayMissions.length + daySlots.length > 2) && (
                   <p className="text-[10px] text-text-light">
-                    +{dayMissions.length - 2} autres
+                    +{dayMissions.length + daySlots.length - 2} autres
                   </p>
                 )}
               </div>

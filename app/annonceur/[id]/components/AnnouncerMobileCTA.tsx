@@ -10,12 +10,15 @@ import {
   BookingSummary,
   BookingCalendar,
   CollectiveSlotPicker,
+  MultiSessionCalendar,
   type BookingSelection,
   type PriceBreakdown,
   type CalendarEntry,
+  type SelectedSession,
   formatPrice,
   formatDateDisplay,
   calculatePriceWithCommission,
+  calculateCollectivePrice,
   isGardeService,
   getFormuleBestPrice,
 } from "./booking";
@@ -54,6 +57,9 @@ interface AnnouncerMobileCTAProps {
   animalCount?: number;
   onAnimalCountChange?: (count: number) => void;
   selectedAnimalType?: string;
+  // Séances individuelles multi-sessions
+  selectedSessions?: SelectedSession[];
+  onSessionsChange?: (sessions: SelectedSession[]) => void;
 }
 
 // Get minimum price for a service
@@ -126,6 +132,9 @@ export default function AnnouncerMobileCTA({
   animalCount = 1,
   onAnimalCountChange,
   selectedAnimalType = "chien",
+  // Séances individuelles multi-sessions
+  selectedSessions = [],
+  onSessionsChange,
 }: AnnouncerMobileCTAProps) {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isCalendarSheetOpen, setIsCalendarSheetOpen] = useState(false);
@@ -141,9 +150,20 @@ export default function AnnouncerMobileCTA({
   const collectiveSessionInterval = bookingVariant?.sessionInterval || 7;
   const collectiveMaxAnimals = bookingVariant?.maxAnimalsPerSession || 5;
 
+  // Déterminer si c'est une formule individuelle multi-séances
+  const isMultiSessionIndividual = !isCollectiveFormule &&
+    (bookingVariant?.numberOfSessions || 1) > 1;
+  const individualNumberOfSessions = bookingVariant?.numberOfSessions || 1;
+  const individualSessionInterval = bookingVariant?.sessionInterval || 0;
+
   // Check if we need time selection for the service (non-range mode services)
-  // Pour les formules collectives, pas besoin de sélection de temps
-  const needsTimeSelection = bookingService && !isRangeMode && !isCollectiveFormule;
+  // Pour les formules collectives et multi-séances individuelles, pas besoin de sélection de temps standard
+  const needsTimeSelection = bookingService && !isRangeMode && !isCollectiveFormule && !isMultiSessionIndividual;
+
+  // Pour les formules individuelles multi-séances
+  const hasAllSessionsSelected = isMultiSessionIndividual
+    ? selectedSessions.length >= individualNumberOfSessions
+    : true;
 
   // Determine if booking can proceed: if needs time, must have time selected
   // Pour les formules collectives, vérifier si tous les créneaux sont sélectionnés
@@ -172,9 +192,12 @@ export default function AnnouncerMobileCTA({
   const hasVariantSelected = Boolean(bookingService && bookingVariant);
   const hasDateSelected = Boolean(bookingSelection?.startDate);
   // Pour les formules collectives, la réservation est complète quand tous les créneaux sont sélectionnés
+  // Pour les formules multi-séances individuelles, quand toutes les séances sont sélectionnées
   const hasFullBooking = isCollectiveFormule
     ? hasVariantSelected && hasAllSlotsSelected
-    : hasVariantSelected && hasDateSelected && priceBreakdown;
+    : isMultiSessionIndividual
+      ? hasVariantSelected && hasAllSessionsSelected
+      : hasVariantSelected && hasDateSelected && priceBreakdown;
 
   // Get price to display
   const { price: minPrice, unit: minUnit } = selectedService
@@ -191,6 +214,18 @@ export default function AnnouncerMobileCTA({
         setIsSheetOpen(true);
       } else {
         // Pas assez de créneaux - ouvrir le sheet de sélection
+        setIsCalendarSheetOpen(true);
+      }
+      return;
+    }
+
+    // Cas spécial pour les formules individuelles multi-séances
+    if (isMultiSessionIndividual && hasVariantSelected) {
+      if (hasAllSessionsSelected) {
+        // Toutes les séances sont sélectionnées - afficher le récap
+        setIsSheetOpen(true);
+      } else {
+        // Pas assez de séances - ouvrir le calendrier multi-séances
         setIsCalendarSheetOpen(true);
       }
       return;
@@ -224,6 +259,14 @@ export default function AnnouncerMobileCTA({
       return;
     }
 
+    // Pour les formules individuelles multi-séances
+    if (isMultiSessionIndividual) {
+      if (hasAllSessionsSelected) {
+        setIsCalendarSheetOpen(false);
+      }
+      return;
+    }
+
     if (hasRequiredTimeSelection && bookingSelection?.startDate) {
       setIsCalendarSheetOpen(false);
     }
@@ -243,6 +286,44 @@ export default function AnnouncerMobileCTA({
 
   // Determine what to show in the CTA bar
   const renderPriceSection = () => {
+    // Collective formula with all slots selected: show total price
+    if (isCollectiveFormule && hasAllSlotsSelected && bookingVariant) {
+      const collectiveTotal = calculateCollectivePrice(
+        bookingVariant.price,
+        animalCount,
+        commissionRate,
+        collectiveNumberOfSessions,
+        bookingVariant.unit || "hour",
+        bookingVariant.duration || 60
+      );
+
+      return (
+        <button
+          onClick={() => setIsCalendarSheetOpen(true)}
+          className="flex-1 min-w-0 text-left"
+        >
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <span className="font-medium text-gray-700 truncate max-w-[100px]">
+              {bookingVariant.name}
+            </span>
+            <span className="text-primary underline underline-offset-2">
+              {collectiveNumberOfSessions} séance{collectiveNumberOfSessions > 1 ? "s" : ""}
+            </span>
+            {animalCount > 1 && (
+              <>
+                <span className="text-gray-300">•</span>
+                <span>{animalCount} animaux</span>
+              </>
+            )}
+          </div>
+          <p className="text-xl font-bold text-gray-900">
+            {formatPrice(collectiveTotal.total)}€
+            <span className="text-sm font-normal text-gray-500 ml-1">total</span>
+          </p>
+        </button>
+      );
+    }
+
     // Full booking: show total with details - tappable to modify
     if (hasFullBooking && priceBreakdown) {
       return (
@@ -278,6 +359,92 @@ export default function AnnouncerMobileCTA({
           </div>
           <p className="text-xl font-bold text-gray-900">
             {formatPrice(priceBreakdown.total)}€
+            <span className="text-sm font-normal text-gray-500 ml-1">total</span>
+          </p>
+        </button>
+      );
+    }
+
+    // Collective formula selected but not all slots: show pack price (not hourly)
+    if (isCollectiveFormule && hasVariantSelected && bookingVariant && !hasAllSlotsSelected) {
+      const collectiveTotal = calculateCollectivePrice(
+        bookingVariant.price,
+        animalCount,
+        commissionRate,
+        collectiveNumberOfSessions,
+        bookingVariant.unit || "hour",
+        bookingVariant.duration || 60
+      );
+
+      return (
+        <button
+          onClick={() => setIsCalendarSheetOpen(true)}
+          className="flex-1 min-w-0 text-left"
+        >
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <span className="truncate max-w-[100px]">
+              {bookingService?.categoryIcon} {bookingVariant.name}
+            </span>
+            <span className="text-primary underline underline-offset-2">
+              {selectedSlotIds.length}/{collectiveNumberOfSessions} séances
+            </span>
+          </div>
+          <p className="text-xl font-bold text-gray-900">
+            {formatPrice(collectiveTotal.total)}€
+            <span className="text-sm font-normal text-gray-500 ml-1">total</span>
+          </p>
+        </button>
+      );
+    }
+
+    // Multi-session individual formula with all sessions selected: show total price
+    if (isMultiSessionIndividual && hasAllSessionsSelected && bookingVariant) {
+      const isGarde = bookingService ? isGardeService(bookingService) : false;
+      const { price: variantPrice, unit: variantUnit } = getFormuleBestPrice(bookingVariant, isGarde);
+      const totalPrice = calculatePriceWithCommission(variantPrice * individualNumberOfSessions, commissionRate);
+
+      return (
+        <button
+          onClick={() => setIsCalendarSheetOpen(true)}
+          className="flex-1 min-w-0 text-left"
+        >
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <span className="font-medium text-gray-700 truncate max-w-[100px]">
+              {bookingVariant.name}
+            </span>
+            <span className="text-primary underline underline-offset-2">
+              {individualNumberOfSessions} séance{individualNumberOfSessions > 1 ? "s" : ""}
+            </span>
+          </div>
+          <p className="text-xl font-bold text-gray-900">
+            {formatPrice(totalPrice)}€
+            <span className="text-sm font-normal text-gray-500 ml-1">total</span>
+          </p>
+        </button>
+      );
+    }
+
+    // Multi-session individual formula selected but not all sessions: show progress
+    if (isMultiSessionIndividual && hasVariantSelected && bookingVariant && !hasAllSessionsSelected) {
+      const isGarde = bookingService ? isGardeService(bookingService) : false;
+      const { price: variantPrice } = getFormuleBestPrice(bookingVariant, isGarde);
+      const totalPrice = calculatePriceWithCommission(variantPrice * individualNumberOfSessions, commissionRate);
+
+      return (
+        <button
+          onClick={() => setIsCalendarSheetOpen(true)}
+          className="flex-1 min-w-0 text-left"
+        >
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <span className="truncate max-w-[100px]">
+              {bookingService?.categoryIcon} {bookingVariant.name}
+            </span>
+            <span className="text-primary underline underline-offset-2">
+              {selectedSessions.length}/{individualNumberOfSessions} séances
+            </span>
+          </div>
+          <p className="text-xl font-bold text-gray-900">
+            {formatPrice(totalPrice)}€
             <span className="text-sm font-normal text-gray-500 ml-1">total</span>
           </p>
         </button>
@@ -378,6 +545,24 @@ export default function AnnouncerMobileCTA({
       );
     }
 
+    // Cas spécial pour les formules individuelles multi-séances
+    if (isMultiSessionIndividual && hasVariantSelected) {
+      if (hasAllSessionsSelected) {
+        return (
+          <>
+            <ShoppingCart className="w-4 h-4" />
+            Voir le récap
+          </>
+        );
+      }
+      return (
+        <>
+          <Calendar className="w-4 h-4" />
+          Choisir les séances
+        </>
+      );
+    }
+
     if (hasFullBooking && hasRequiredTimeSelection) {
       return (
         <>
@@ -411,7 +596,7 @@ export default function AnnouncerMobileCTA({
   return (
     <>
       {/* Fixed Bottom Bar */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 md:hidden z-40">
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 md:hidden z-40 p-4">
         <div className="flex items-center gap-3">
           {renderPriceSection()}
           <motion.button
@@ -598,8 +783,9 @@ export default function AnnouncerMobileCTA({
         createPortal(
           <AnimatePresence>
             {isCalendarSheetOpen && (
-              // Pour les formules collectives, on n'a pas besoin de tous les callbacks calendar
+              // Pour les formules collectives, multi-séances individuelles ou calendrier normal
               (isCollectiveFormule && bookingVariant && onSlotsSelected) ||
+              (isMultiSessionIndividual && bookingVariant && onSessionsChange && calendarMonth && onMonthChange) ||
               (calendarMonth && onDateSelect && onEndDateSelect && onTimeSelect && onEndTimeSelect && onOvernightChange && onMonthChange)
             ) && (
               <>
@@ -626,6 +812,8 @@ export default function AnnouncerMobileCTA({
                       <h3 className="text-lg font-semibold text-gray-900">
                         {isCollectiveFormule
                           ? "Choisissez vos créneaux"
+                          : isMultiSessionIndividual
+                          ? "Choisissez vos séances"
                           : isRangeMode
                           ? "Choisissez vos dates"
                           : "Choisissez votre créneau"}
@@ -637,6 +825,11 @@ export default function AnnouncerMobileCTA({
                           {isCollectiveFormule && (
                             <span className="ml-2 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full">
                               {selectedSlotIds.length}/{collectiveNumberOfSessions} séances
+                            </span>
+                          )}
+                          {isMultiSessionIndividual && (
+                            <span className="ml-2 px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full">
+                              {selectedSessions.length}/{individualNumberOfSessions} séances
                             </span>
                           )}
                         </p>
@@ -698,6 +891,22 @@ export default function AnnouncerMobileCTA({
                           selectedSlotIds={selectedSlotIds}
                         />
                       </div>
+                    ) : isMultiSessionIndividual && bookingVariant && onSessionsChange && calendarMonth && onMonthChange ? (
+                      // Afficher le MultiSessionCalendar pour les formules individuelles multi-séances
+                      <MultiSessionCalendar
+                        numberOfSessions={individualNumberOfSessions}
+                        sessionInterval={individualSessionInterval}
+                        selectedSessions={selectedSessions}
+                        onSessionsChange={onSessionsChange}
+                        calendarMonth={calendarMonth}
+                        availabilityCalendar={availabilityCalendar}
+                        variantDuration={variantDuration}
+                        bufferBefore={bufferBefore}
+                        bufferAfter={bufferAfter}
+                        acceptReservationsFrom={acceptReservationsFrom}
+                        acceptReservationsTo={acceptReservationsTo}
+                        onMonthChange={onMonthChange}
+                      />
                     ) : (
                       // Afficher le calendrier normal
                       calendarMonth && onDateSelect && onEndDateSelect && onTimeSelect && onEndTimeSelect && onOvernightChange && onMonthChange && (
@@ -743,11 +952,13 @@ export default function AnnouncerMobileCTA({
                       disabled={
                         isCollectiveFormule
                           ? !hasAllSlotsSelected
-                          : !bookingSelection?.startDate || !hasRequiredTimeSelection
+                          : isMultiSessionIndividual
+                            ? !hasAllSessionsSelected
+                            : !bookingSelection?.startDate || !hasRequiredTimeSelection
                       }
                       className={cn(
                         "w-full py-3.5 font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors",
-                        (isCollectiveFormule ? hasAllSlotsSelected : (bookingSelection?.startDate && hasRequiredTimeSelection))
+                        (isCollectiveFormule ? hasAllSlotsSelected : isMultiSessionIndividual ? hasAllSessionsSelected : (bookingSelection?.startDate && hasRequiredTimeSelection))
                           ? "bg-gradient-to-r from-primary to-primary/90 text-white shadow-lg shadow-primary/25"
                           : "bg-gray-100 text-gray-400 cursor-not-allowed"
                       )}
@@ -755,6 +966,15 @@ export default function AnnouncerMobileCTA({
                       {isCollectiveFormule ? (
                         !hasAllSlotsSelected ? (
                           `Sélectionnez ${collectiveNumberOfSessions - selectedSlotIds.length} créneau(x)`
+                        ) : (
+                          <>
+                            Confirmer
+                            <Check className="w-4 h-4" />
+                          </>
+                        )
+                      ) : isMultiSessionIndividual ? (
+                        !hasAllSessionsSelected ? (
+                          `Sélectionnez ${individualNumberOfSessions - selectedSessions.length} séance(s)`
                         ) : (
                           <>
                             Confirmer

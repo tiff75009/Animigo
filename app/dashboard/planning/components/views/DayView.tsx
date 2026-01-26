@@ -1,11 +1,12 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Clock, MapPin, Euro, User } from "lucide-react";
+import { Clock, MapPin, Euro, User, Users } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import {
   Mission,
   Availability,
+  CollectiveSlot,
   statusColors,
   statusLabels,
   availabilityColors,
@@ -18,8 +19,10 @@ interface DayViewProps {
   currentDate: Date;
   missions: Mission[];
   availability: Availability[];
+  collectiveSlots?: CollectiveSlot[];
   onMissionClick: (mission: Mission) => void;
   onToggleAvailability: (date: string) => void;
+  onSlotClick?: (slot: CollectiveSlot) => void;
 }
 
 const hours = Array.from({ length: 24 }, (_, i) => i);
@@ -28,8 +31,10 @@ export function DayView({
   currentDate,
   missions,
   availability,
+  collectiveSlots = [],
   onMissionClick,
   onToggleAvailability,
+  onSlotClick,
 }: DayViewProps) {
   const dateStr = formatDateLocal(currentDate);
 
@@ -37,6 +42,9 @@ export function DayView({
   const dayMissions = missions.filter((mission) => {
     return mission.startDate <= dateStr && mission.endDate >= dateStr;
   });
+
+  // Get day's collective slots
+  const daySlots = collectiveSlots.filter((slot) => slot.date === dateStr);
 
   // Get day's availability
   const dayAvailability = availability.find((a) => a.date === dateStr);
@@ -67,6 +75,11 @@ export function DayView({
           </h3>
           <p className="text-sm text-text-light">
             {dayMissions.length} mission{dayMissions.length > 1 ? "s" : ""}
+            {daySlots.length > 0 && (
+              <span className="ml-2 text-purple-600">
+                • {daySlots.length} créneau{daySlots.length > 1 ? "x" : ""} collectif{daySlots.length > 1 ? "s" : ""}
+              </span>
+            )}
           </p>
         </div>
 
@@ -113,6 +126,72 @@ export function DayView({
             />
           ))}
 
+          {/* Collective slot blocks */}
+          {daySlots.map((slot, index) => {
+            const startHour = parseTimeToHours(slot.startTime);
+            const endHour = parseTimeToHours(slot.endTime);
+
+            const top = startHour * 48;
+            const height = Math.max((endHour - startHour) * 48, 60);
+
+            const isFull = slot.bookedAnimals >= slot.maxAnimals;
+
+            return (
+              <motion.div
+                key={slot._id}
+                onClick={() => onSlotClick?.(slot)}
+                className={cn(
+                  "absolute left-2 right-2 rounded-xl p-3 text-white cursor-pointer overflow-hidden shadow-lg border-l-4",
+                  isFull
+                    ? "bg-purple-600 border-purple-800"
+                    : "bg-purple-500 border-purple-700"
+                )}
+                style={{
+                  top: `${top}px`,
+                  height: `${height}px`,
+                  zIndex: 20 + index,
+                }}
+                whileHover={{ scale: 1.01, zIndex: 50 }}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.1 }}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Users className="w-5 h-5" />
+                      <span className="font-bold truncate">
+                        {slot.variantName}
+                      </span>
+                    </div>
+                    <p className="text-sm opacity-90 truncate">
+                      {slot.serviceName}
+                    </p>
+                  </div>
+                  <span className={cn(
+                    "text-xs px-2 py-1 rounded-full flex-shrink-0",
+                    isFull ? "bg-white/30" : "bg-white/20"
+                  )}>
+                    {isFull ? "Complet" : `${slot.availableSpots} place${slot.availableSpots > 1 ? "s" : ""}`}
+                  </span>
+                </div>
+
+                {height > 80 && (
+                  <div className="mt-2 space-y-1 text-xs opacity-80">
+                    <div className="flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      <span>{slot.startTime} - {slot.endTime}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Users className="w-3 h-3" />
+                      <span>{slot.bookedAnimals}/{slot.maxAnimals} réservés</span>
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            );
+          })}
+
           {/* Mission blocks */}
           {dayMissions.map((mission, index) => {
             const startHour = mission.startTime
@@ -136,13 +215,13 @@ export function DayView({
                 style={{
                   top: `${top}px`,
                   height: `${height}px`,
-                  marginLeft: index * 8, // Offset overlapping
+                  marginLeft: (daySlots.length + index) * 8, // Offset overlapping
                   zIndex: 10 + index,
                 }}
                 whileHover={{ scale: 1.01, zIndex: 50 }}
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1 }}
+                transition={{ delay: (daySlots.length + index) * 0.1 }}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
@@ -195,11 +274,11 @@ export function DayView({
       </div>
 
       {/* Empty state */}
-      {dayMissions.length === 0 && (
+      {dayMissions.length === 0 && daySlots.length === 0 && (
         <div className="text-center py-12 bg-gray-50 rounded-xl">
-          <p className="text-text-light">Aucune mission ce jour</p>
+          <p className="text-text-light">Aucune mission ou créneau ce jour</p>
           <p className="text-sm text-text-light mt-1">
-            Cliquez sur le bouton de disponibilite pour gerer vos creneaux
+            Cliquez sur le bouton de disponibilité pour gérer vos créneaux
           </p>
         </div>
       )}

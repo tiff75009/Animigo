@@ -33,20 +33,43 @@ export const getAnnouncerProfile = query({
       .collect();
 
     // Récupérer les formules (prestations) pour chaque service
+    const today = new Date().toISOString().split("T")[0];
     const servicesWithFormules = await Promise.all(
       services.map(async (service) => {
-        const formules = await ctx.db
+        // Récupérer toutes les formules puis filtrer en JS
+        const allFormules = await ctx.db
           .query("serviceVariants")
           .withIndex("by_service", (q) => q.eq("serviceId", service._id))
-          .filter((q) => q.eq(q.field("isActive"), true))
           .collect();
 
-        // Récupérer les options
-        const options = await ctx.db
+        // Filtrer les formules actives
+        const formulesFiltered = await Promise.all(
+          allFormules.map(async (f) => {
+            if (f.sessionType === "collective") {
+              // Pour les collectives, vérifier si des créneaux actifs existent
+              const slots = await ctx.db
+                .query("collectiveSlots")
+                .withIndex("by_variant", (q: any) => q.eq("variantId", f._id))
+                .collect();
+              const activeSlots = slots.filter(
+                (slot: any) => slot.date >= today && slot.isActive && !slot.isCancelled
+              );
+              return activeSlots.length > 0 ? f : null;
+            }
+            // Pour les individuelles, actives sauf si explicitement désactivées
+            return f.isActive !== false ? f : null;
+          })
+        );
+
+        // Filtrer les nulls
+        const formules = formulesFiltered.filter((f): f is NonNullable<typeof f> => f !== null);
+
+        // Récupérer les options actives
+        const allOptions = await ctx.db
           .query("serviceOptions")
           .withIndex("by_service", (q) => q.eq("serviceId", service._id))
-          .filter((q) => q.eq(q.field("isActive"), true))
           .collect();
+        const options = allOptions.filter((o) => o.isActive !== false);
 
         // Récupérer la catégorie depuis le slug
         const category = service.category
@@ -274,20 +297,43 @@ export const getAnnouncerBySlug = query({
       .collect();
 
     // Récupérer les formules (prestations) pour chaque service
+    const todaySlug = new Date().toISOString().split("T")[0];
     const servicesWithFormules = await Promise.all(
       services.map(async (service) => {
-        const formules = await ctx.db
+        // Récupérer toutes les formules puis filtrer en JS
+        const allFormules = await ctx.db
           .query("serviceVariants")
           .withIndex("by_service", (q) => q.eq("serviceId", service._id))
-          .filter((q) => q.eq(q.field("isActive"), true))
           .collect();
 
-        // Récupérer les options
-        const options = await ctx.db
+        // Filtrer les formules actives
+        const formulesFiltered = await Promise.all(
+          allFormules.map(async (f) => {
+            if (f.sessionType === "collective") {
+              // Pour les collectives, vérifier si des créneaux actifs existent
+              const slots = await ctx.db
+                .query("collectiveSlots")
+                .withIndex("by_variant", (q: any) => q.eq("variantId", f._id))
+                .collect();
+              const activeSlots = slots.filter(
+                (slot: any) => slot.date >= todaySlug && slot.isActive && !slot.isCancelled
+              );
+              return activeSlots.length > 0 ? f : null;
+            }
+            // Pour les individuelles, actives sauf si explicitement désactivées
+            return f.isActive !== false ? f : null;
+          })
+        );
+
+        // Filtrer les nulls
+        const formules = formulesFiltered.filter((f): f is NonNullable<typeof f> => f !== null);
+
+        // Récupérer les options actives
+        const allOptions = await ctx.db
           .query("serviceOptions")
           .withIndex("by_service", (q) => q.eq("serviceId", service._id))
-          .filter((q) => q.eq(q.field("isActive"), true))
           .collect();
+        const options = allOptions.filter((o) => o.isActive !== false);
 
         // Récupérer la catégorie depuis le slug
         const category = service.category

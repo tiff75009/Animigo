@@ -3,9 +3,11 @@
 import { useMemo, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/app/lib/utils";
+import { Users } from "lucide-react";
 import {
   Mission,
   Availability,
+  CollectiveSlot,
   statusColors,
   availabilityColors,
   dayNames,
@@ -16,9 +18,11 @@ interface WeekViewProps {
   currentDate: Date;
   missions: Mission[];
   availability: Availability[];
+  collectiveSlots?: CollectiveSlot[];
   onDayClick: (date: string) => void;
   onRangeSelect?: (startDate: string, endDate: string) => void;
   onMissionClick: (mission: Mission) => void;
+  onSlotClick?: (slot: CollectiveSlot) => void;
 }
 
 const hours = Array.from({ length: 13 }, (_, i) => i + 8); // 8h - 20h
@@ -27,9 +31,11 @@ export function WeekView({
   currentDate,
   missions,
   availability,
+  collectiveSlots = [],
   onDayClick,
   onRangeSelect,
   onMissionClick,
+  onSlotClick,
 }: WeekViewProps) {
   // Range selection state
   const [isSelecting, setIsSelecting] = useState(false);
@@ -109,6 +115,12 @@ export function WeekView({
   const getAvailabilityForDate = (date: Date): Availability | null => {
     const dateStr = formatDateLocal(date);
     return availability.find((a) => a.date === dateStr) || null;
+  };
+
+  // Get collective slots for a specific date
+  const getSlotsForDate = (date: Date): CollectiveSlot[] => {
+    const dateStr = formatDateLocal(date);
+    return collectiveSlots.filter((slot) => slot.date === dateStr);
   };
 
   // Check if date is today
@@ -207,9 +219,48 @@ export function WeekView({
             </div>
           ))}
 
+          {/* Collective slot overlays */}
+          {weekDates.map((date, dayIndex) => {
+            const daySlots = getSlotsForDate(date);
+
+            return daySlots.map((slot, slotIndex) => {
+              const startHour = parseTimeToHours(slot.startTime);
+              const endHour = parseTimeToHours(slot.endTime);
+
+              const top = (startHour - 8) * 48;
+              const height = Math.max((endHour - startHour) * 48, 32);
+
+              return (
+                <motion.div
+                  key={`slot-${slot._id}-${dayIndex}`}
+                  onClick={() => onSlotClick?.(slot)}
+                  className="absolute rounded-lg p-2 bg-purple-500 text-white text-xs cursor-pointer overflow-hidden border-l-4 border-purple-700"
+                  style={{
+                    top: `${top}px`,
+                    left: `calc(64px + ${dayIndex * ((100 - 8) / 7)}% + 2px)`,
+                    width: `calc(${(100 - 8) / 7}% - 4px)`,
+                    height: `${height}px`,
+                    zIndex: 15 + slotIndex,
+                  }}
+                  whileHover={{ scale: 1.02, zIndex: 50 }}
+                >
+                  <div className="flex items-center gap-1 font-medium truncate">
+                    <Users className="w-3 h-3 flex-shrink-0" />
+                    <span className="truncate">{slot.variantName}</span>
+                  </div>
+                  <div className="truncate opacity-80">
+                    {slot.bookedAnimals}/{slot.maxAnimals} reservés
+                  </div>
+                </motion.div>
+              );
+            });
+          })}
+
           {/* Mission overlays */}
           {weekDates.map((date, dayIndex) => {
             const dayMissions = getMissionsForDate(date);
+            const daySlots = getSlotsForDate(date);
+            const slotOffset = daySlots.length * 4;
 
             return dayMissions.map((mission, missionIndex) => {
               const startHour = mission.startTime
@@ -221,10 +272,6 @@ export function WeekView({
 
               const top = (startHour - 8) * 48; // 48px per hour
               const height = (endHour - startHour) * 48;
-
-              // Calculate left position (skip time column)
-              const left = `calc(${12.5 * (dayIndex + 1)}% + 64px - ${12.5 * (dayIndex + 1)}%)`;
-              const width = "calc(12.5% - 4px)";
 
               return (
                 <motion.div
@@ -239,7 +286,7 @@ export function WeekView({
                     left: `calc(64px + ${dayIndex * ((100 - 8) / 7)}% + 2px)`,
                     width: `calc(${(100 - 8) / 7}% - 4px)`,
                     height: `${Math.max(height, 32)}px`,
-                    marginLeft: missionIndex * 4, // Offset overlapping missions
+                    marginLeft: slotOffset + missionIndex * 4, // Offset overlapping missions
                     zIndex: 10 + missionIndex,
                   }}
                   whileHover={{ scale: 1.02, zIndex: 50 }}

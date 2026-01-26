@@ -24,6 +24,13 @@ interface CollectiveSlotInfo {
   availableSpots: number;
 }
 
+// Type pour les séances multi-sessions individuelles
+interface SelectedSession {
+  date: string;
+  startTime: string;
+  endTime: string;
+}
+
 interface AnnouncerBookingCardProps {
   services: ServiceData[];
   responseRate: number;
@@ -39,6 +46,8 @@ interface AnnouncerBookingCardProps {
   // Props pour formules collectives
   collectiveSlots?: CollectiveSlotInfo[];
   animalCount?: number;
+  // Props pour formules individuelles multi-séances
+  selectedSessions?: SelectedSession[];
   onServiceChange?: (serviceId: string | null) => void;
   onBook?: () => void;
   onFinalize?: () => void;
@@ -78,6 +87,7 @@ export default function AnnouncerBookingCard({
   clientAddress,
   collectiveSlots = [],
   animalCount = 1,
+  selectedSessions = [],
   onServiceChange,
   onBook,
   onFinalize,
@@ -113,6 +123,7 @@ export default function AnnouncerBookingCard({
           clientAddress={clientAddress}
           collectiveSlots={collectiveSlots}
           animalCount={animalCount}
+          selectedSessions={selectedSessions}
           onBook={onBook}
           onFinalize={onFinalize}
         />

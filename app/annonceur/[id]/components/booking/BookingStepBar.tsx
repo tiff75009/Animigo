@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Package, Calendar, MapPin, Plus, ChevronLeft, ChevronRight } from "lucide-react";
+import { Check, Package, Calendar, MapPin, Plus, ChevronLeft, ChevronRight, Users, PawPrint } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/app/lib/utils";
 
@@ -247,6 +247,23 @@ export function useBookingSteps({
   hasLocationSelected,
   hasOptions,
   hasOptionsSelected,
+  // Paramètres pour les formules collectives
+  isCollectiveFormula,
+  hasSlotsSelected,
+  requiredSlots,
+  selectedSlotsCount,
+  // Paramètres pour les formules individuelles multi-séances
+  isMultiSessionIndividual,
+  hasSessionsSelected,
+  requiredSessions,
+  selectedSessionsCount,
+  // Nouveaux paramètres pour l'étape Animaux
+  isLoggedIn,
+  hasAnimalsSelected,
+  selectedAnimalsCount,
+  maxAnimals,
+  // Nouveaux paramètres pour l'étape Lieu
+  serviceLocation,
 }: {
   hasVariantSelected: boolean;
   hasDateSelected: boolean;
@@ -258,14 +275,66 @@ export function useBookingSteps({
   hasLocationSelected: boolean;
   hasOptions: boolean;
   hasOptionsSelected?: boolean;
+  // Paramètres pour les formules collectives
+  isCollectiveFormula?: boolean;
+  hasSlotsSelected?: boolean;
+  requiredSlots?: number;
+  selectedSlotsCount?: number;
+  // Paramètres pour les formules individuelles multi-séances
+  isMultiSessionIndividual?: boolean;
+  hasSessionsSelected?: boolean;
+  requiredSessions?: number;
+  selectedSessionsCount?: number;
+  // Nouveaux paramètres pour l'étape Animaux
+  isLoggedIn?: boolean;
+  hasAnimalsSelected?: boolean;
+  selectedAnimalsCount?: number;
+  maxAnimals?: number;
+  // Nouveaux paramètres pour l'étape Lieu
+  serviceLocation?: "announcer_home" | "client_home" | "both" | null;
 }): StepConfig[] {
-  // Pour le mode plage, on vérifie aussi la date/heure de fin
+  // Pour les formules collectives, vérifier si tous les créneaux sont sélectionnés
+  const isCollectiveSlotsComplete = isCollectiveFormula
+    ? Boolean(hasSlotsSelected && selectedSlotsCount === requiredSlots)
+    : false;
+
+  // Pour les formules individuelles multi-séances
+  const isMultiSessionComplete = isMultiSessionIndividual
+    ? Boolean(hasSessionsSelected && selectedSessionsCount === requiredSessions)
+    : false;
+
+  // Pour le mode plage (garde), on vérifie aussi la date/heure de fin
   const isDateTimeComplete = isRangeMode
     ? Boolean(hasDateSelected && hasEndDateSelected && hasTimeSelected && hasEndTimeSelected)
     : Boolean(hasDateSelected && hasTimeSelected);
 
-  // L'étape lieu est complétée si pas nécessaire ou si sélectionné
-  const isLocationComplete = !showLocationSelector || hasLocationSelected;
+  // L'étape calendrier/créneaux est complétée selon le type de formule
+  const isStep2Complete: boolean = isCollectiveFormula
+    ? isCollectiveSlotsComplete
+    : isMultiSessionIndividual
+      ? isMultiSessionComplete
+      : isDateTimeComplete;
+
+  // L'étape animaux est complétée si sélectionné ou si pas connecté
+  const isAnimalsStepComplete: boolean = !isLoggedIn || Boolean(hasAnimalsSelected);
+
+  // L'étape lieu est complétée si :
+  // - Service collectif (toujours chez le pro)
+  // - Service uniquement chez le pro
+  // - Lieu sélectionné
+  const isLocationComplete: boolean =
+    Boolean(isCollectiveFormula) ||
+    serviceLocation === "announcer_home" ||
+    hasLocationSelected;
+
+  // L'étape lieu est visible si :
+  // - Une formule est sélectionnée
+  // - L'étape animaux est complète (pour les utilisateurs connectés)
+  // - L'étape calendrier/créneaux est complète
+  const showLocationStep: boolean = hasVariantSelected && isAnimalsStepComplete && isStep2Complete;
+
+  // Label de l'étape lieu selon le type de service
+  const locationLabel = isCollectiveFormula ? "Lieu des séances" : "Lieu de prestation";
 
   return [
     {
@@ -276,28 +345,46 @@ export function useBookingSteps({
       isActive: !hasVariantSelected,
       isVisible: true,
     },
+    // Étape Animaux (utilisateurs connectés uniquement)
     {
-      id: "calendar",
-      label: isRangeMode ? "Dates & horaires" : "Date & heure",
-      icon: <Calendar className="w-4 h-4" />,
-      isCompleted: isDateTimeComplete,
-      isActive: hasVariantSelected && !isDateTimeComplete,
-      isVisible: hasVariantSelected,
+      id: "animals",
+      label: selectedAnimalsCount && maxAnimals
+        ? `Animaux (${selectedAnimalsCount}/${maxAnimals})`
+        : "Vos animaux",
+      icon: <PawPrint className="w-4 h-4" />,
+      isCompleted: Boolean(hasAnimalsSelected),
+      isActive: hasVariantSelected && !hasAnimalsSelected,
+      isVisible: Boolean(isLoggedIn) && hasVariantSelected,
     },
     {
+      id: isCollectiveFormula ? "slots" : isMultiSessionIndividual ? "sessions" : "calendar",
+      label: isCollectiveFormula
+        ? `Créneaux${requiredSlots && requiredSlots > 1 ? ` (${selectedSlotsCount || 0}/${requiredSlots})` : ""}`
+        : isMultiSessionIndividual
+          ? `Séances${requiredSessions && requiredSessions > 1 ? ` (${selectedSessionsCount || 0}/${requiredSessions})` : ""}`
+          : isRangeMode
+            ? "Dates & horaires"
+            : "Date & heure",
+      icon: isCollectiveFormula ? <Users className="w-4 h-4" /> : <Calendar className="w-4 h-4" />,
+      isCompleted: isStep2Complete,
+      isActive: hasVariantSelected && isAnimalsStepComplete && !isStep2Complete,
+      isVisible: hasVariantSelected,
+    },
+    // Étape Lieu (toujours visible après formule sélectionnée, mode lecture seule pour collectif)
+    {
       id: "location",
-      label: "Lieu de prestation",
+      label: locationLabel,
       icon: <MapPin className="w-4 h-4" />,
-      isCompleted: hasLocationSelected,
-      isActive: hasVariantSelected && isDateTimeComplete && !hasLocationSelected,
-      isVisible: showLocationSelector,
+      isCompleted: isLocationComplete,
+      isActive: showLocationStep && !isLocationComplete,
+      isVisible: showLocationStep,
     },
     {
       id: "options",
       label: "Options",
       icon: <Plus className="w-4 h-4" />,
       isCompleted: hasOptionsSelected || false,
-      isActive: hasVariantSelected && isDateTimeComplete && isLocationComplete,
+      isActive: showLocationStep && isLocationComplete,
       isVisible: hasOptions,
     },
   ];

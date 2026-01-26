@@ -69,6 +69,9 @@ interface BookingData {
   selectedSlotIds: string[];
   selectedCollectiveSlots: CollectiveSlotInfo[];
   animalCount: number;
+  selectedAnimalType: string;
+  // Animaux sélectionnés par l'utilisateur
+  selectedAnimalIds: string[];
 }
 
 // Step labels
@@ -333,6 +336,24 @@ export default function ReserverPage({
   // Direct finalization param (skip to step 4)
   const shouldFinalize = searchParams.get("finalize") === "true";
 
+  // Créneaux collectifs et multi-sessions params
+  const preSelectedSlotIds = searchParams.get("slotIds")?.split(",").filter(Boolean) || [];
+  const preSelectedAnimalCount = parseInt(searchParams.get("animalCount") || "1", 10);
+  const preSelectedAnimalType = searchParams.get("animalType") || "chien";
+  const preSelectedSessions: SelectedSession[] = (() => {
+    const sessionsParam = searchParams.get("sessions");
+    if (sessionsParam) {
+      try {
+        return JSON.parse(sessionsParam) as SelectedSession[];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  })();
+  // Animaux sélectionnés (IDs)
+  const preSelectedAnimalIds = searchParams.get("animalIds")?.split(",").filter(Boolean) || [];
+
   // Build guest address object if present
   const preSelectedGuestAddress = guestAddressParam ? {
     address: guestAddressParam,
@@ -350,8 +371,19 @@ export default function ReserverPage({
   // Determine initial step
   // If finalize=true and all required data is present, go directly to step 4 (summary)
   const getInitialStep = () => {
-    if (shouldFinalize && preSelectedServiceId && preSelectedVariantId && preSelectedDate && preSelectedStartTime) {
-      return 4; // Go directly to summary/finalization step
+    if (shouldFinalize && preSelectedServiceId && preSelectedVariantId) {
+      // Pour les formules collectives, les slotIds suffisent
+      if (preSelectedSlotIds.length > 0) {
+        return 4;
+      }
+      // Pour les formules multi-séances, les sessions suffisent
+      if (preSelectedSessions.length > 0) {
+        return 4;
+      }
+      // Pour les formules uni-séance, date et heure sont requises
+      if (preSelectedDate && preSelectedStartTime) {
+        return 4;
+      }
     }
     return 1;
   };
@@ -370,11 +402,14 @@ export default function ReserverPage({
     serviceLocation: preSelectedLocation,
     guestAddress: preSelectedGuestAddress,
     // Formules multi-séances
-    selectedSessions: [],
+    selectedSessions: preSelectedSessions,
     // Formules collectives
-    selectedSlotIds: [],
+    selectedSlotIds: preSelectedSlotIds,
     selectedCollectiveSlots: [],
-    animalCount: 1,
+    animalCount: preSelectedAnimalCount,
+    selectedAnimalType: preSelectedAnimalType,
+    // Animaux sélectionnés
+    selectedAnimalIds: preSelectedAnimalIds,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -384,10 +419,13 @@ export default function ReserverPage({
 
   // Effect pour aller directement à l'étape 4 si finalize=true
   useEffect(() => {
-    if (shouldFinalize && preSelectedServiceId && preSelectedVariantId && preSelectedDate && preSelectedStartTime) {
-      setStep(4);
+    if (shouldFinalize && preSelectedServiceId && preSelectedVariantId) {
+      // Pour les formules collectives, les slotIds suffisent
+      if (preSelectedSlotIds.length > 0 || preSelectedSessions.length > 0 || (preSelectedDate && preSelectedStartTime)) {
+        setStep(4);
+      }
     }
-  }, [shouldFinalize, preSelectedServiceId, preSelectedVariantId, preSelectedDate, preSelectedStartTime]);
+  }, [shouldFinalize, preSelectedServiceId, preSelectedVariantId, preSelectedDate, preSelectedStartTime, preSelectedSlotIds, preSelectedSessions]);
 
   // Queries
   const announcerData = useQuery(api.public.search.getAnnouncerById, {
@@ -415,6 +453,50 @@ export default function ReserverPage({
       : "skip"
   );
   const commissionRate = commissionData?.rate ?? 15; // Default 15% for particuliers
+
+  // Auth token pour les queries utilisateur
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setAuthToken(localStorage.getItem("auth_token"));
+    }
+  }, []);
+
+  // Récupérer les animaux de l'utilisateur connecté
+  const userAnimals = useQuery(
+    api.animals.getUserAnimals,
+    authToken ? { token: authToken } : "skip"
+  );
+
+  // Récupérer les détails des créneaux collectifs sélectionnés
+  const collectiveSlotsDetails = useQuery(
+    api.planning.collectiveSlots.getSlotsByIds,
+    bookingData.selectedSlotIds.length > 0
+      ? { slotIds: bookingData.selectedSlotIds as Id<"collectiveSlots">[] }
+      : "skip"
+  );
+
+  // Mettre à jour les détails des créneaux collectifs quand ils sont chargés
+  useEffect(() => {
+    if (collectiveSlotsDetails && collectiveSlotsDetails.length > 0) {
+      setBookingData(prev => ({
+        ...prev,
+        selectedCollectiveSlots: collectiveSlotsDetails.map((slot: {
+          _id: string;
+          date: string;
+          startTime: string;
+          endTime: string;
+          availableSpots: number;
+        }) => ({
+          _id: slot._id,
+          date: slot.date,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          availableSpots: slot.availableSpots,
+        })),
+      }));
+    }
+  }, [collectiveSlotsDetails]);
 
   // Selected service and variant (needed before calendar query)
   // Match by id OR by category (slug) since URL may contain either
@@ -454,7 +536,8 @@ export default function ReserverPage({
   const createPendingBooking = useMutation(api.public.booking.createPendingBooking);
 
   // Déterminer le type de formule (collective, multi-session, uni-séance)
-  const isCollectiveFormula = selectedVariant?.sessionType === "collective";
+  // Une formule est collective si sessionType === "collective" OU si des slotIds sont présents dans l'URL
+  const isCollectiveFormula = selectedVariant?.sessionType === "collective" || preSelectedSlotIds.length > 0;
   const isMultiSessionIndividual = !isCollectiveFormula && (selectedVariant?.numberOfSessions || 1) > 1;
   const numberOfSessions = selectedVariant?.numberOfSessions || 1;
   const sessionInterval = selectedVariant?.sessionInterval || 0;
@@ -499,7 +582,17 @@ export default function ReserverPage({
   })();
 
   // Calculate days (for display purposes)
+  // Pour les formules collectives ou multi-séances, retourner le nombre de séances
   const calculateDays = () => {
+    // Formule collective: nombre de créneaux sélectionnés
+    if (isCollectiveFormula) {
+      return bookingData.selectedSlotIds.length || numberOfSessions;
+    }
+    // Formule multi-séances: nombre de séances
+    if (isMultiSessionIndividual) {
+      return bookingData.selectedSessions.length || numberOfSessions;
+    }
+    // Formule uni-séance: calcul classique basé sur la plage de dates
     if (!bookingData.selectedDate) return 1;
     if (!bookingData.selectedEndDate || bookingData.selectedDate === bookingData.selectedEndDate) return 1;
     const start = new Date(bookingData.selectedDate);
@@ -520,7 +613,16 @@ export default function ReserverPage({
 
   // Smart price calculation
   const priceCalculation = useMemo((): PriceCalculationResult | null => {
-    if (!selectedVariant || !selectedService || !bookingData.selectedDate) {
+    if (!selectedVariant || !selectedService) {
+      return null;
+    }
+
+    // Pour les formules collectives ou multi-séances, on peut calculer sans date spécifique
+    const hasCollectiveSlots = isCollectiveFormula && bookingData.selectedSlotIds.length > 0;
+    const hasMultiSessions = isMultiSessionIndividual && bookingData.selectedSessions.length > 0;
+
+    // Si pas de date et pas de slots/sessions, retourner null
+    if (!bookingData.selectedDate && !hasCollectiveSlots && !hasMultiSessions) {
       return null;
     }
 
@@ -535,8 +637,14 @@ export default function ReserverPage({
     // For duration-based blocking, use the variant's fixed price
     const useDurationBasedPricing = selectedService.enableDurationBasedBlocking && selectedVariant.duration;
 
+    // Pour les formules collectives/multi-séances, utiliser la première date disponible
+    const effectiveStartDate = bookingData.selectedDate ||
+      (hasMultiSessions && bookingData.selectedSessions[0]?.date) ||
+      (hasCollectiveSlots && bookingData.selectedCollectiveSlots[0]?.date) ||
+      new Date().toISOString().split('T')[0];
+
     return calculateSmartPrice({
-      startDate: bookingData.selectedDate,
+      startDate: effectiveStartDate,
       endDate: bookingData.selectedEndDate,
       startTime: bookingData.selectedTime,
       endTime: bookingData.selectedEndTime,
@@ -554,7 +662,7 @@ export default function ReserverPage({
       fixedServicePrice: useDurationBasedPricing ? selectedVariant.price : undefined,
       serviceDurationMinutes: useDurationBasedPricing ? selectedVariant.duration : undefined,
     });
-  }, [selectedVariant, selectedService, bookingData, workdayHours, announcerPreferences, optionsTotal]);
+  }, [selectedVariant, selectedService, bookingData, workdayHours, announcerPreferences, optionsTotal, isCollectiveFormula, isMultiSessionIndividual]);
 
   // Extract values from price calculation for easy access
   const baseAmount = priceCalculation
@@ -562,12 +670,69 @@ export default function ReserverPage({
     : 0;
   const overnightAmount = priceCalculation?.nightsAmount ?? 0;
   const nights = priceCalculation?.nights ?? 0;
-  const totalAmount = priceCalculation?.totalAmount ?? 0;
+
+  // Calculer le montant total selon le type de formule
+  const totalAmount = useMemo(() => {
+    if (!selectedVariant) return 0;
+
+    // Prix avec commission
+    const commissionMultiplier = 1 + commissionRate / 100;
+
+    if (isCollectiveFormula) {
+      // Formule collective: prix × séances × animaux
+      const nSessions = selectedVariant.numberOfSessions || 1;
+      const effectiveAnimalCount = bookingData.animalCount;
+      const basePrice = selectedVariant.price * nSessions * effectiveAnimalCount;
+      return Math.round((basePrice + optionsTotal) * commissionMultiplier);
+    }
+
+    if (isMultiSessionIndividual) {
+      // Formule multi-séances individuelle: prix × séances
+      const nSessions = selectedVariant.numberOfSessions || 1;
+      const basePrice = selectedVariant.price * nSessions;
+      return Math.round((basePrice + optionsTotal) * commissionMultiplier);
+    }
+
+    // Formule uni-séance: utiliser le calcul standard
+    return priceCalculation?.totalAmount ?? 0;
+  }, [selectedVariant, isCollectiveFormula, isMultiSessionIndividual, bookingData.animalCount, optionsTotal, commissionRate, priceCalculation?.totalAmount]);
 
   // Handle form submission
   const handleSubmit = async () => {
-    if (!selectedService || !selectedVariant || !bookingData.selectedDate) {
-      setError("Veuillez compléter toutes les informations");
+    // Vérifier les informations de base
+    if (!selectedService || !selectedVariant) {
+      setError("Veuillez sélectionner un service et une formule");
+      return;
+    }
+
+    // Validation selon le type de formule
+    const hasValidDate = bookingData.selectedDate !== null;
+    const hasValidSlots = isCollectiveFormula && bookingData.selectedSlotIds.length > 0;
+    const hasValidSessions = isMultiSessionIndividual && bookingData.selectedSessions.length > 0;
+
+    if (!hasValidDate && !hasValidSlots && !hasValidSessions) {
+      setError("Veuillez sélectionner une date ou des créneaux");
+      return;
+    }
+
+    // Pour les formules collectives, attendre que les détails des créneaux soient chargés
+    if (isCollectiveFormula && bookingData.selectedSlotIds.length > 0 && bookingData.selectedCollectiveSlots.length === 0) {
+      setError("Chargement des créneaux en cours, veuillez patienter...");
+      return;
+    }
+
+    // Vérifier que le montant est valide
+    if (isNaN(totalAmount) || totalAmount <= 0) {
+      console.error("Invalid totalAmount:", totalAmount, { selectedVariant, isCollectiveFormula, isMultiSessionIndividual });
+      setError("Erreur de calcul du prix. Veuillez réessayer.");
+      return;
+    }
+
+    // Vérifier que l'heure est fournie si le service est basé sur la durée (pas range mode)
+    const needsTimeSlot = !isRangeMode && !isCollectiveFormula && !isMultiSessionIndividual;
+    if (needsTimeSlot && !bookingData.selectedTime) {
+      setError("Veuillez sélectionner un horaire pour cette prestation.");
+      setStep(2); // Rediriger vers l'étape de sélection de date/heure
       return;
     }
 
@@ -584,16 +749,83 @@ export default function ReserverPage({
         return;
       }
 
+      // Déterminer la date de début et de fin effectives
+      // Pour les formules collectives, utiliser le premier et dernier créneau
+      // Pour les formules multi-séances, utiliser la première et dernière séance
+      let effectiveStartDate = bookingData.selectedDate || new Date().toISOString().split('T')[0];
+      let effectiveEndDate = bookingData.selectedEndDate || effectiveStartDate;
+      let effectiveStartTime = bookingData.selectedTime;
+      let effectiveEndTime = bookingData.selectedEndTime;
+
+      if (isCollectiveFormula && bookingData.selectedCollectiveSlots.length > 0) {
+        // Trier les créneaux par date
+        const sortedSlots = [...bookingData.selectedCollectiveSlots].sort((a, b) => a.date.localeCompare(b.date));
+        effectiveStartDate = sortedSlots[0].date;
+        effectiveEndDate = sortedSlots[sortedSlots.length - 1].date;
+        effectiveStartTime = sortedSlots[0].startTime;
+        effectiveEndTime = sortedSlots[0].endTime;
+      } else if (isMultiSessionIndividual && bookingData.selectedSessions.length > 0) {
+        // Trier les séances par date
+        const sortedSessions = [...bookingData.selectedSessions].sort((a, b) => a.date.localeCompare(b.date));
+        effectiveStartDate = sortedSessions[0].date;
+        effectiveEndDate = sortedSessions[sortedSessions.length - 1].date;
+        effectiveStartTime = sortedSessions[0].startTime;
+        effectiveEndTime = sortedSessions[0].endTime;
+      }
+
+      // Log des données pour debug
+      const bookingParams = {
+        announcerId: announcerId as Id<"users">,
+        serviceId: selectedService.id as Id<"services">,
+        variantId: selectedVariant.id,
+        optionIds: bookingData.selectedOptionIds as Id<"serviceOptions">[],
+        startDate: effectiveStartDate,
+        endDate: effectiveEndDate,
+        startTime: effectiveStartTime || undefined,
+        endTime: effectiveEndTime || undefined,
+        calculatedAmount: totalAmount,
+        // Créneaux collectifs
+        collectiveSlotIds: isCollectiveFormula && bookingData.selectedSlotIds.length > 0
+          ? bookingData.selectedSlotIds
+          : undefined,
+        animalCount: isCollectiveFormula ? bookingData.animalCount : undefined,
+        selectedAnimalType: isCollectiveFormula ? bookingData.selectedAnimalType : undefined,
+        // Séances multi-sessions
+        sessions: isMultiSessionIndividual && bookingData.selectedSessions.length > 0
+          ? bookingData.selectedSessions
+          : undefined,
+        includeOvernightStay: bookingData.includeOvernightStay && nights > 0 ? true : undefined,
+        overnightNights: nights > 0 ? nights : undefined,
+        overnightAmount: overnightAmount > 0 ? overnightAmount : undefined,
+        serviceLocation: bookingData.serviceLocation || undefined,
+        // Debug info
+        isCollectiveFormula,
+        isMultiSessionIndividual,
+        selectedSlotIds: bookingData.selectedSlotIds,
+      };
+      console.log("Creating booking with params:", bookingParams);
+
       const result = await createPendingBooking({
         announcerId: announcerId as Id<"users">,
         serviceId: selectedService.id as Id<"services">,
         variantId: selectedVariant.id,
         optionIds: bookingData.selectedOptionIds as Id<"serviceOptions">[],
-        startDate: bookingData.selectedDate,
-        endDate: bookingData.selectedEndDate || bookingData.selectedDate,
-        startTime: bookingData.selectedTime || undefined,
-        endTime: bookingData.selectedEndTime || undefined,
+        startDate: effectiveStartDate,
+        endDate: effectiveEndDate,
+        startTime: effectiveStartTime || undefined,
+        endTime: effectiveEndTime || undefined,
         calculatedAmount: totalAmount,
+        // Créneaux collectifs
+        collectiveSlotIds: isCollectiveFormula && bookingData.selectedSlotIds.length > 0
+          ? bookingData.selectedSlotIds as Id<"collectiveSlots">[]
+          : undefined,
+        animalCount: isCollectiveFormula ? bookingData.animalCount : undefined,
+        selectedAnimalType: isCollectiveFormula ? bookingData.selectedAnimalType : undefined,
+        // Séances multi-sessions
+        sessions: isMultiSessionIndividual && bookingData.selectedSessions.length > 0
+          ? bookingData.selectedSessions
+          : undefined,
+        // Garde de nuit
         includeOvernightStay: bookingData.includeOvernightStay && nights > 0 ? true : undefined,
         overnightNights: nights > 0 ? nights : undefined,
         overnightAmount: overnightAmount > 0 ? overnightAmount : undefined,
@@ -612,9 +844,22 @@ export default function ReserverPage({
       } else {
         setError("Une erreur est survenue lors de la création de la réservation");
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Booking error:", err);
-      setError(err instanceof Error ? err.message : "Erreur lors de la réservation");
+      // Essayer d'extraire un message d'erreur plus détaillé
+      let errorMessage = "Erreur lors de la réservation";
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      } else if (typeof err === "object" && err !== null && "data" in err) {
+        // Erreur Convex avec data
+        const convexErr = err as { data?: string | { message?: string } };
+        if (typeof convexErr.data === "string") {
+          errorMessage = convexErr.data;
+        } else if (convexErr.data?.message) {
+          errorMessage = convexErr.data.message;
+        }
+      }
+      setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -971,6 +1216,9 @@ export default function ReserverPage({
                 isMultiSessionIndividual={isMultiSessionIndividual}
                 selectedSessions={bookingData.selectedSessions}
                 onSessionsChange={handleSessionsChange}
+                // Props pour CollectiveSlotPicker
+                animalCount={bookingData.animalCount}
+                animalType={bookingData.selectedAnimalType}
                 onDateSelect={handleDateSelect}
                 onEndDateSelect={handleEndDateSelect}
                 onTimeSelect={handleTimeSelect}
@@ -1017,6 +1265,9 @@ export default function ReserverPage({
                 // Support formules multi-séances
                 isMultiSessionIndividual={isMultiSessionIndividual}
                 selectedSessions={bookingData.selectedSessions}
+                // Animaux de l'utilisateur
+                userAnimals={userAnimals}
+                selectedAnimalIds={bookingData.selectedAnimalIds}
                 error={error}
               />
             )}

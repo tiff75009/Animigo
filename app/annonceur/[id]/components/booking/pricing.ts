@@ -40,6 +40,59 @@ export function calculatePriceWithCommission(basePriceCents: number, commissionR
   return basePriceCents + commission;
 }
 
+// Calculate total price for collective formulas
+// For collective formulas:
+// - If priceUnit is "flat": price is the pack price (all sessions included)
+// - If priceUnit is "hour": price is hourly, need to multiply by duration and sessions
+// Total = (pack price) × (number of animals) × (1 + commission%)
+export interface CollectivePriceBreakdown {
+  basePrice: number; // pack price × animalCount (in cents)
+  commission: number; // commission amount (in cents)
+  total: number; // basePrice + commission (in cents)
+  pricePerAnimal: number; // pack price per animal (in cents)
+  animalCount: number;
+  numberOfSessions: number;
+}
+
+export function calculateCollectivePrice(
+  variantPrice: number, // in cents - the base price
+  animalCount: number,
+  commissionRate: number,
+  numberOfSessions: number = 1,
+  priceUnit: string = "flat", // "hour", "day", "flat", etc.
+  durationMinutes: number = 60 // duration per session in minutes
+): CollectivePriceBreakdown {
+  // Calculate the pack price based on price unit
+  let packPrice: number;
+
+  if (priceUnit === "flat") {
+    // Price is already the total pack price
+    packPrice = variantPrice;
+  } else if (priceUnit === "hour") {
+    // Price is hourly - calculate total for all sessions
+    // packPrice = hourlyPrice × (duration in hours) × numberOfSessions
+    const hoursPerSession = durationMinutes / 60;
+    packPrice = Math.round(variantPrice * hoursPerSession * numberOfSessions);
+  } else {
+    // For other units (day, week, month), use price directly multiplied by sessions
+    packPrice = variantPrice * numberOfSessions;
+  }
+
+  // Multiply by number of animals
+  const basePrice = packPrice * animalCount;
+  const commission = Math.round((basePrice * commissionRate) / 100);
+  const total = basePrice + commission;
+
+  return {
+    basePrice,
+    commission,
+    total,
+    pricePerAnimal: packPrice,
+    animalCount,
+    numberOfSessions,
+  };
+}
+
 // Format duration
 export function formatDuration(days: number, hours: number, nights: number): string {
   const parts: string[] = [];

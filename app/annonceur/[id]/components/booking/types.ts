@@ -7,6 +7,13 @@ export interface GuestAddress {
   coordinates: { lat: number; lng: number } | null;
 }
 
+// Type pour les séances individuelles multi-sessions
+export interface SelectedSession {
+  date: string;
+  startTime: string;
+  endTime: string;
+}
+
 export interface BookingSelection {
   selectedServiceId: string | null;
   selectedVariantId: string | null;
@@ -23,6 +30,9 @@ export interface BookingSelection {
   selectedSlotIds: string[]; // IDs des créneaux sélectionnés pour les formules collectives
   animalCount: number; // Nombre d'animaux pour les séances collectives
   selectedAnimalType: string; // Type d'animal sélectionné
+  selectedAnimalIds: string[]; // IDs des animaux sélectionnés (pour sélection multiple)
+  // Séances individuelles multi-sessions
+  selectedSessions: SelectedSession[]; // Dates/heures pour formules individuelles avec plusieurs séances
 }
 
 export interface ClientAddress {
@@ -89,4 +99,7 @@ export const DEFAULT_BOOKING_SELECTION: BookingSelection = {
   selectedSlotIds: [],
   animalCount: 1,
   selectedAnimalType: "chien",
+  selectedAnimalIds: [],
+  // Séances individuelles multi-sessions
+  selectedSessions: [],
 };
