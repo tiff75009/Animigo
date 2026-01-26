@@ -59,10 +59,10 @@ interface CategoriesData {
   parentCategories: ParentCategoryData[];
   rootCategories: SubcategoryData[];
 }
+import { Navbar } from "@/app/components/navbar";
 import { LocationSearchBar } from "@/app/components/search";
 import FilterSidebar from "@/app/components/search/FilterSidebar";
 import {
-  SearchHeader,
   ServiceCardGrid,
   ServiceCardList,
   ANIMAL_TYPES,
@@ -168,7 +168,6 @@ export default function RecherchePage() {
 
   const router = useRouter();
   const [showFilters, setShowFilters] = useState(false);
-  const [showLocationModal, setShowLocationModal] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const filtersRef = useRef<HTMLDivElement>(null);
@@ -257,16 +256,17 @@ export default function RecherchePage() {
   ].filter(Boolean).length;
 
 
+  // Déterminer si on doit afficher l'icône de localisation
+  // Seulement si : pas connecté OU pas d'adresse enregistrée
+  const showLocationIcon = !token || !clientLocation?.city;
+
   return (
     <div className="min-h-screen bg-gray-50/50">
-      {/* Header */}
-      <SearchHeader
-        onLocationClick={() => setShowLocationModal(true)}
-        locationText={filters.location.text || clientLocation?.city || undefined}
-      />
+      {/* Navbar identique à l'accueil */}
+      <Navbar />
 
       {/* Hero Section with Mode Toggle */}
-      <section className="pt-20 sm:pt-24 pb-6 bg-gradient-to-b from-primary/5 via-background to-background relative overflow-hidden">
+      <section className="pt-4 pb-6 bg-gradient-to-b from-primary/5 via-background to-background relative overflow-hidden">
         {/* Decorative elements */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           {/* Gradient orbs */}
@@ -380,31 +380,20 @@ export default function RecherchePage() {
               </motion.div>
             </div>
 
-            {/* Dynamic Title */}
-            <motion.h1
-              className="hidden sm:block text-xl md:text-2xl font-bold text-gray-900"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.2 }}
+            {/* Barre de recherche de localisation */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+              className="mt-4 sm:mt-6 max-w-xl mx-auto px-4 sm:px-0"
             >
-              {filters.searchMode === "garde" ? (
-                <>
-                  Trouvez le{" "}
-                  <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                    garde parfait
-                  </span>
-                  {" "}pour votre compagnon
-                </>
-              ) : (
-                <>
-                  Des{" "}
-                  <span className="bg-gradient-to-r from-secondary to-purple bg-clip-text text-transparent">
-                    services de qualité
-                  </span>
-                  {" "}pour votre animal
-                </>
-              )}
-            </motion.h1>
+              <LocationSearchBar
+                value={filters.location}
+                onChange={setLocation}
+                placeholder={clientLocation?.city || "Rechercher une ville..."}
+                showGeolocationButton={showLocationIcon}
+              />
+            </motion.div>
           </motion.div>
         </div>
       </section>
@@ -723,40 +712,6 @@ export default function RecherchePage() {
           )}
         </div>
       </section>
-
-      {/* Location Modal */}
-      <AnimatePresence>
-        {showLocationModal && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowLocationModal(false)}
-              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50"
-            />
-            <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="fixed top-4 left-4 right-4 md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-lg z-50"
-            >
-              <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-                <div className="p-4">
-                  <LocationSearchBar
-                    value={filters.location}
-                    onChange={(loc) => {
-                      setLocation(loc);
-                      setShowLocationModal(false);
-                    }}
-                    placeholder="Rechercher une ville..."
-                  />
-                </div>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
 
       {/* Filter Drawer */}
       <AnimatePresence>

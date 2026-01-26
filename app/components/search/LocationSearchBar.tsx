@@ -24,6 +24,7 @@ interface LocationSearchBarProps {
   onGeolocationRequest?: () => void; // Callback pour passer en mode plan
   placeholder?: string;
   className?: string;
+  showGeolocationButton?: boolean; // Afficher le bouton de géolocalisation
 }
 
 export default function LocationSearchBar({
@@ -32,6 +33,7 @@ export default function LocationSearchBar({
   onGeolocationRequest,
   placeholder = "Ville, code postal...",
   className,
+  showGeolocationButton = true,
 }: LocationSearchBarProps) {
   const [inputValue, setInputValue] = useState(value.text);
   const [isOpen, setIsOpen] = useState(false);
@@ -216,27 +218,29 @@ export default function LocationSearchBar({
         </div>
 
         {/* Geolocation button */}
-        <motion.button
-          type="button"
-          onClick={handleGeolocate}
-          disabled={isGeoLoading}
-          className={cn(
-            "flex items-center justify-center w-12 h-12 rounded-xl border-2 transition-all",
-            value.coordinates
-              ? "border-primary bg-primary text-white"
-              : "border-foreground/10 bg-white text-foreground hover:border-primary hover:text-primary",
-            isGeoLoading && "opacity-50 cursor-not-allowed"
-          )}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          title="Me localiser"
-        >
-          {isGeoLoading ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
-          ) : (
-            <LocateFixed className="w-5 h-5" />
-          )}
-        </motion.button>
+        {showGeolocationButton && (
+          <motion.button
+            type="button"
+            onClick={handleGeolocate}
+            disabled={isGeoLoading}
+            className={cn(
+              "flex items-center justify-center w-12 h-12 rounded-xl border-2 transition-all",
+              value.coordinates
+                ? "border-primary bg-primary text-white"
+                : "border-foreground/10 bg-white text-foreground hover:border-primary hover:text-primary",
+              isGeoLoading && "opacity-50 cursor-not-allowed"
+            )}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            title="Me localiser"
+          >
+            {isGeoLoading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <LocateFixed className="w-5 h-5" />
+            )}
+          </motion.button>
+        )}
       </div>
 
       {/* Error message */}
