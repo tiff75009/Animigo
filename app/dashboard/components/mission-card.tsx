@@ -278,8 +278,19 @@ export function MissionCard({
 }: MissionCardProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [showAnimalModal, setShowAnimalModal] = useState(false);
+  const [, setTick] = useState(0); // Force re-render pour mettre à jour le temps écoulé
   const status = statusConfig[mission.status] || statusConfig.pending_acceptance;
   const isAccepted = mission.status !== "pending_acceptance" && mission.status !== "pending_confirmation";
+
+  // Mise à jour automatique du temps écoulé toutes les secondes
+  useEffect(() => {
+    if (mission.bookedAt && mission.status === "pending_acceptance") {
+      const interval = setInterval(() => {
+        setTick((t) => t + 1);
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [mission.bookedAt, mission.status]);
 
   const days = getDaysDifference(mission.startDate, mission.endDate);
   const firstName = getFirstName(mission.clientName);
