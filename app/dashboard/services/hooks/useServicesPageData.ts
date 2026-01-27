@@ -254,6 +254,13 @@ export function useServicesPageData(token: string | undefined) {
     initialVariants: Array<{
       name: string;
       description?: string;
+      objectives?: { icon: string; text: string }[]; // Activités proposées pendant la garde
+      numberOfSessions?: number;
+      sessionInterval?: number;
+      sessionType?: "individual" | "collective";
+      maxAnimalsPerSession?: number;
+      serviceLocation?: "announcer_home" | "client_home" | "both";
+      animalTypes?: string[];
       price: number;
       priceUnit: "hour" | "half_day" | "day" | "week" | "month" | "flat";
       // Multi-tarification

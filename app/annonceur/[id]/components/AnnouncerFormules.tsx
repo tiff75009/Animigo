@@ -527,6 +527,8 @@ export default function AnnouncerFormules({
                   animationDelay={index * 0.1}
                   allowOvernightStay={service.allowOvernightStay}
                   overnightPrice={service.overnightPrice}
+                  announcerFirstName={announcerFirstName}
+                  dogCategoryAcceptance={service.dogCategoryAcceptance}
                 />
               ))}
             </div>
@@ -944,6 +946,7 @@ export default function AnnouncerFormules({
               selectedLocation={bookingSelection?.serviceLocation ?? null}
               onSelect={onLocationSelect}
               isRangeMode={isRangeMode}
+              announcerFirstName={announcerFirstName}
             />
           )}
 

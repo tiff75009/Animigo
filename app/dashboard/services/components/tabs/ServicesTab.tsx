@@ -96,6 +96,13 @@ interface ServicesTabProps {
     initialVariants: Array<{
       name: string;
       description?: string;
+      objectives?: { icon: string; text: string }[];
+      numberOfSessions?: number;
+      sessionInterval?: number;
+      sessionType?: "individual" | "collective";
+      maxAnimalsPerSession?: number;
+      serviceLocation?: ServiceLocation;
+      animalTypes?: string[];
       price: number;
       priceUnit: "hour" | "half_day" | "day" | "week" | "month" | "flat";
       // Multi-tarification

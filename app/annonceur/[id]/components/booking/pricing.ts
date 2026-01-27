@@ -559,9 +559,11 @@ export function calculatePriceBreakdown(
   }, 0);
 
   // Get pricing values
-  const hourlyPrice = pricing.hourly || variant.price || 0;
-  const halfDailyPrice = (pricing as { halfDaily?: number }).halfDaily || 0;
+  // Pour les services de garde, le variant.price est le prix JOURNALIER, pas horaire
+  // Ne pas utiliser variant.price comme fallback pour hourlyPrice si c'est un service de garde
   const dailyPrice = pricing.daily || (isGarde ? variant.price : 0) || 0;
+  const hourlyPrice = pricing.hourly || (isGarde && dailyPrice ? Math.round(dailyPrice / workdayHours) : variant.price) || 0;
+  const halfDailyPrice = (pricing as { halfDaily?: number }).halfDaily || (dailyPrice ? Math.round(dailyPrice / 2) : 0);
   const nightlyPrice = (pricing as { nightly?: number }).nightly || overnightPrice || 0;
 
   // Duration-based services: use fixed price for the variant's duration

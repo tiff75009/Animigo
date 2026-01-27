@@ -16,6 +16,8 @@ interface SelectableFormuleCardProps {
   animationDelay?: number;
   allowOvernightStay?: boolean;
   overnightPrice?: number;
+  announcerFirstName?: string; // Prénom de l'annonceur pour le badge "Chez [prénom]"
+  dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both"; // Chiens catégorisés acceptés
 }
 
 // Calculer le prix total avec durée et nombre de séances
@@ -39,6 +41,8 @@ export default function SelectableFormuleCard({
   animationDelay = 0,
   allowOvernightStay,
   overnightPrice,
+  announcerFirstName,
+  dogCategoryAcceptance,
 }: SelectableFormuleCardProps) {
   const { price: formulePrice, unit: formuleUnit } = getFormuleBestPrice(formule, isGarde);
 
@@ -174,7 +178,7 @@ export default function SelectableFormuleCard({
             formule.serviceLocation === "client_home" && "bg-secondary/10 text-secondary",
             formule.serviceLocation === "both" && "bg-purple-100 text-purple-600"
           )}>
-            {formule.serviceLocation === "announcer_home" && <><Home className="w-3 h-3" /> Chez le pro</>}
+            {formule.serviceLocation === "announcer_home" && <><Home className="w-3 h-3" /> Chez {announcerFirstName || "le pro"}</>}
             {formule.serviceLocation === "client_home" && <><MapPin className="w-3 h-3" /> À domicile</>}
             {formule.serviceLocation === "both" && <><Home className="w-2.5 h-2.5" /><MapPin className="w-2.5 h-2.5" /> Flexible</>}
           </span>
@@ -228,6 +232,20 @@ export default function SelectableFormuleCard({
                animal}
             </span>
           ))}
+          {/* Chiens catégorisés */}
+          {isGarde && formule.animalTypes?.includes("chien") && dogCategoryAcceptance && (
+            <span className={cn(
+              "px-2 py-0.5 text-xs rounded-full",
+              dogCategoryAcceptance === "none"
+                ? "bg-gray-100 text-gray-500"
+                : "bg-amber-100 text-amber-700"
+            )}>
+              {dogCategoryAcceptance === "none" && "Non catégorisés uniquement"}
+              {dogCategoryAcceptance === "cat1" && "🔶 Cat. 1 acceptée"}
+              {dogCategoryAcceptance === "cat2" && "🔶 Cat. 2 acceptée"}
+              {dogCategoryAcceptance === "both" && "🔶 Cat. 1 & 2 acceptées"}
+            </span>
+          )}
         </div>
       )}
 

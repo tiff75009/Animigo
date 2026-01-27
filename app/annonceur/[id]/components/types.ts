@@ -51,6 +51,8 @@ export interface ServiceData {
   animalTypes: string[];
   formules: FormuleData[];
   options: OptionData[];
+  // Acceptation des chiens catégorisés (législation française)
+  dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
   // Booking settings
   serviceLocation?: "announcer_home" | "client_home" | "both";
   allowOvernightStay?: boolean;

@@ -10,6 +10,7 @@ interface ServiceLocationSelectorProps {
   selectedLocation: "announcer_home" | "client_home" | null;
   onSelect: (location: "announcer_home" | "client_home") => void;
   isRangeMode?: boolean; // Mode garde - toujours afficher les deux options
+  announcerFirstName?: string; // Prénom de l'annonceur pour "Chez [prénom]"
 }
 
 export default function ServiceLocationSelector({
@@ -17,6 +18,7 @@ export default function ServiceLocationSelector({
   selectedLocation,
   onSelect,
   isRangeMode = false,
+  announcerFirstName,
 }: ServiceLocationSelectorProps) {
   // Si le service n'accepte qu'un seul lieu, auto-sélectionner et ne pas afficher le choix
   // Cela s'applique aussi en mode garde (isRangeMode)
@@ -160,7 +162,7 @@ export default function ServiceLocationSelector({
                       : "text-gray-900"
                   )}
                 >
-                  Chez le pet-sitter
+                  Chez {announcerFirstName || "le pet-sitter"}
                 </p>
                 <p className="text-xs text-gray-500 mt-0.5">
                   Vous déposez votre animal

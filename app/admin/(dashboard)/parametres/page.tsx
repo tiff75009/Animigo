@@ -28,6 +28,8 @@ import {
   Trash2,
   Upload,
   ImageIcon,
+  CreditCard,
+  Percent,
 } from "lucide-react";
 import { Id, Doc } from "@/convex/_generated/dataModel";
 import { uploadToCloudinary } from "@/app/lib/cloudinary";
@@ -90,6 +92,12 @@ export default function ParametresPage() {
   const [manualIpAddress, setManualIpAddress] = useState("");
   const [isAddingIp, setIsAddingIp] = useState(false);
 
+  // États pour TVA et frais Stripe
+  const [vatRate, setVatRate] = useState(20);
+  const [stripeFeeRate, setStripeFeeRate] = useState(3);
+  const [isSavingVat, setIsSavingVat] = useState(false);
+  const [isSavingStripeFee, setIsSavingStripeFee] = useState(false);
+
   // Query pour récupérer toutes les configs
   const allConfigs = useQuery(
     api.admin.config.getAllConfigs,
@@ -110,6 +118,16 @@ export default function ParametresPage() {
     token ? { token } : "skip"
   );
 
+  // Queries pour TVA et frais Stripe
+  const vatRateData = useQuery(
+    api.admin.commissions.getVatRateAdmin,
+    token ? { token } : "skip"
+  );
+  const stripeFeeRateData = useQuery(
+    api.admin.commissions.getStripeFeeRateAdmin,
+    token ? { token } : "skip"
+  );
+
   // Mutations
   const toggleModeration = useMutation(api.admin.config.toggleServiceModeration);
   const updateConfig = useMutation(api.admin.config.updateConfig);
@@ -119,6 +137,8 @@ export default function ParametresPage() {
   const rejectRequest = useMutation(api.maintenance.visitRequests.rejectRequest);
   const revokeAccess = useMutation(api.maintenance.visitRequests.revokeAccess);
   const addManualIp = useMutation(api.maintenance.visitRequests.addManualIp);
+  const updateVatRateMutation = useMutation(api.admin.commissions.updateVatRate);
+  const updateStripeFeeRateMutation = useMutation(api.admin.commissions.updateStripeFeeRate);
 
   // Charger les configs existantes
   useEffect(() => {
@@ -168,6 +188,19 @@ export default function ParametresPage() {
       }
     }
   }, [allConfigs]);
+
+  // Charger les taux de TVA et frais Stripe
+  useEffect(() => {
+    if (vatRateData?.rate !== undefined) {
+      setVatRate(vatRateData.rate);
+    }
+  }, [vatRateData]);
+
+  useEffect(() => {
+    if (stripeFeeRateData?.rate !== undefined) {
+      setStripeFeeRate(stripeFeeRateData.rate);
+    }
+  }, [stripeFeeRateData]);
 
   const handleToggleModeration = async () => {
     if (!token) return;
@@ -309,6 +342,31 @@ export default function ParametresPage() {
       console.error("Erreur lors de l'ajout:", error);
     } finally {
       setIsAddingIp(false);
+    }
+  };
+
+  // Handlers pour TVA et frais Stripe
+  const handleSaveVatRate = async () => {
+    if (!token) return;
+    setIsSavingVat(true);
+    try {
+      await updateVatRateMutation({ token, rate: vatRate });
+    } catch (error) {
+      console.error("Erreur lors de la sauvegarde du taux de TVA:", error);
+    } finally {
+      setIsSavingVat(false);
+    }
+  };
+
+  const handleSaveStripeFeeRate = async () => {
+    if (!token) return;
+    setIsSavingStripeFee(true);
+    try {
+      await updateStripeFeeRateMutation({ token, rate: stripeFeeRate });
+    } catch (error) {
+      console.error("Erreur lors de la sauvegarde des frais Stripe:", error);
+    } finally {
+      setIsSavingStripeFee(false);
     }
   };
 
@@ -755,6 +813,140 @@ export default function ParametresPage() {
                 Ces valeurs sont utilisées pour le calcul des tarifs de tous les annonceurs.
                 Les gardes de nuit sont facturées entre {dayEndTime} et {dayStartTime}.
               </p>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* TVA sur les commissions */}
+        <motion.div
+          className="bg-slate-900 rounded-xl p-6 border border-slate-800"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.06 }}
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-emerald-500/20 rounded-lg">
+              <Percent className="w-5 h-5 text-emerald-400" />
+            </div>
+            <h2 className="text-lg font-semibold text-white">TVA sur les commissions</h2>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Taux de TVA applicable
+              </label>
+              <div className="flex items-center gap-4">
+                <input
+                  type="range"
+                  min={0}
+                  max={30}
+                  step={0.5}
+                  value={vatRate}
+                  onChange={(e) => setVatRate(Number(e.target.value))}
+                  className="flex-1 accent-emerald-500"
+                />
+                <div className="w-20 px-3 py-2 bg-slate-800 rounded-lg text-center font-semibold text-emerald-400">
+                  {vatRate}%
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                La TVA est appliquée sur le montant des commissions facturées aux clients.
+              </p>
+            </div>
+
+            <button
+              onClick={handleSaveVatRate}
+              disabled={isSavingVat}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+            >
+              {isSavingVat ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Enregistrement...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  Enregistrer le taux de TVA
+                </>
+              )}
+            </button>
+
+            <div className="flex items-start gap-2 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+              <Percent className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-emerald-300">
+                <p className="font-medium mb-1">Exemple de calcul :</p>
+                <p>Prix annonceur : 40€ | Commission 15% : 6€ | <strong>TVA {vatRate}% : {(6 * vatRate / 100).toFixed(2)}€</strong></p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Frais Stripe */}
+        <motion.div
+          className="bg-slate-900 rounded-xl p-6 border border-slate-800"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.07 }}
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-indigo-500/20 rounded-lg">
+              <CreditCard className="w-5 h-5 text-indigo-400" />
+            </div>
+            <h2 className="text-lg font-semibold text-white">Intégration Stripe</h2>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Taux de prélèvement Stripe
+              </label>
+              <div className="flex items-center gap-4">
+                <input
+                  type="range"
+                  min={0}
+                  max={10}
+                  step={0.1}
+                  value={stripeFeeRate}
+                  onChange={(e) => setStripeFeeRate(Number(e.target.value))}
+                  className="flex-1 accent-indigo-500"
+                />
+                <div className="w-20 px-3 py-2 bg-slate-800 rounded-lg text-center font-semibold text-indigo-400">
+                  {stripeFeeRate}%
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                Les frais Stripe sont calculés sur le montant HT de la réservation (hors commission, hors TVA).
+              </p>
+            </div>
+
+            <button
+              onClick={handleSaveStripeFeeRate}
+              disabled={isSavingStripeFee}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+            >
+              {isSavingStripeFee ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Enregistrement...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  Enregistrer les frais Stripe
+                </>
+              )}
+            </button>
+
+            <div className="flex items-start gap-2 p-3 bg-indigo-500/10 border border-indigo-500/30 rounded-lg">
+              <CreditCard className="w-5 h-5 text-indigo-400 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-indigo-300">
+                <p className="font-medium mb-1">Exemple de calcul complet :</p>
+                <p>Prix annonceur : 40€</p>
+                <p>+ Commission 15% : 6€</p>
+                <p>+ TVA {vatRate}% sur commission : {(6 * vatRate / 100).toFixed(2)}€</p>
+                <p>+ Frais Stripe {stripeFeeRate}% : {(40 * stripeFeeRate / 100).toFixed(2)}€</p>
+                <p className="font-bold mt-1">= Total client : {(40 + 6 + (6 * vatRate / 100) + (40 * stripeFeeRate / 100)).toFixed(2)}€</p>
+              </div>
             </div>
           </div>
         </motion.div>

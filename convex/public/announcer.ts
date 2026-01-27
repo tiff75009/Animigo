@@ -87,6 +87,8 @@ export const getAnnouncerProfile = query({
           categoryIcon: category?.icon || "🐾",
           description: service.description || category?.description || "",
           animalTypes: service.animalTypes || [],
+          // Acceptation des chiens catégorisés (législation française)
+          dogCategoryAcceptance: service.dogCategoryAcceptance || "none",
           // Booking settings from category and service
           serviceLocation: service.serviceLocation as "announcer_home" | "client_home" | "both" | undefined,
           allowOvernightStay: category?.allowOvernightStay,
@@ -95,6 +97,10 @@ export const getAnnouncerProfile = query({
           dayEndTime: service.dayEndTime,
           enableDurationBasedBlocking: category?.enableDurationBasedBlocking,
           allowedPriceUnits: category?.allowedPriceUnits as ("hour" | "half_day" | "day" | "week" | "month")[] | undefined,
+          // Pricing configuration from category
+          displayPriceUnit: category?.displayPriceUnit as ("hour" | "half_day" | "day" | "week" | "month") | undefined,
+          clientBillingMode: category?.clientBillingMode as ("exact_hourly" | "round_half_day" | "round_full_day") | undefined,
+          hourlyBillingSurchargePercent: category?.hourlyBillingSurchargePercent,
           formules: formules.map((f) => ({
             id: f._id,
             name: f.name,
@@ -375,6 +381,8 @@ export const getAnnouncerBySlug = query({
           categoryIcon: category?.icon || "🐾",
           description: service.description || category?.description || "",
           animalTypes: service.animalTypes || [],
+          // Acceptation des chiens catégorisés (législation française)
+          dogCategoryAcceptance: service.dogCategoryAcceptance || "none",
           // Booking settings from category and service
           serviceLocation: service.serviceLocation as "announcer_home" | "client_home" | "both" | undefined,
           allowOvernightStay: category?.allowOvernightStay,
@@ -383,6 +391,10 @@ export const getAnnouncerBySlug = query({
           dayEndTime: service.dayEndTime,
           enableDurationBasedBlocking: category?.enableDurationBasedBlocking,
           allowedPriceUnits: category?.allowedPriceUnits as ("hour" | "half_day" | "day" | "week" | "month")[] | undefined,
+          // Pricing configuration from category
+          displayPriceUnit: category?.displayPriceUnit as ("hour" | "half_day" | "day" | "week" | "month") | undefined,
+          clientBillingMode: category?.clientBillingMode as ("exact_hourly" | "round_half_day" | "round_full_day") | undefined,
+          hourlyBillingSurchargePercent: category?.hourlyBillingSurchargePercent,
           formules: formules.map((f) => ({
             id: f._id,
             name: f.name,

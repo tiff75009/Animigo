@@ -38,6 +38,8 @@ interface AnnouncerBookingCardProps {
   nextAvailable: string;
   selectedServiceId?: string | null;
   commissionRate?: number;
+  vatRate?: number;
+  stripeFeeRate?: number;
   bookingService?: ServiceData | null;
   bookingVariant?: FormuleData | null;
   bookingSelection?: BookingSelection;
@@ -48,6 +50,7 @@ interface AnnouncerBookingCardProps {
   animalCount?: number;
   // Props pour formules individuelles multi-séances
   selectedSessions?: SelectedSession[];
+  announcerFirstName?: string; // Prénom de l'annonceur pour "Chez [prénom]"
   onServiceChange?: (serviceId: string | null) => void;
   onBook?: () => void;
   onFinalize?: () => void;
@@ -80,6 +83,8 @@ export default function AnnouncerBookingCard({
   nextAvailable,
   selectedServiceId,
   commissionRate = 15,
+  vatRate = 20,
+  stripeFeeRate = 3,
   bookingService,
   bookingVariant,
   bookingSelection,
@@ -88,6 +93,7 @@ export default function AnnouncerBookingCard({
   collectiveSlots = [],
   animalCount = 1,
   selectedSessions = [],
+  announcerFirstName,
   onServiceChange,
   onBook,
   onFinalize,
@@ -116,6 +122,8 @@ export default function AnnouncerBookingCard({
           selection={bookingSelection}
           priceBreakdown={priceBreakdown ?? null}
           commissionRate={commissionRate}
+          vatRate={vatRate}
+          stripeFeeRate={stripeFeeRate}
           responseRate={responseRate}
           responseTime={responseTime}
           nextAvailable={nextAvailable}
@@ -124,6 +132,7 @@ export default function AnnouncerBookingCard({
           collectiveSlots={collectiveSlots}
           animalCount={animalCount}
           selectedSessions={selectedSessions}
+          announcerFirstName={announcerFirstName}
           onBook={onBook}
           onFinalize={onFinalize}
         />

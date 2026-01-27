@@ -27,6 +27,7 @@ import {
   type PriceBreakdown,
   type ClientAddress,
   type SelectedSession,
+  type ClientBillingConfig,
   DEFAULT_BOOKING_SELECTION,
   calculatePriceBreakdown,
   isGardeService,
@@ -109,6 +110,12 @@ export default function AnnouncerProfilePage() {
       : "skip"
   );
   const commissionRate = commissionData?.rate ?? 15; // Default 15% for particuliers
+
+  // Récupérer les taux de TVA et frais Stripe
+  const vatRateData = useQuery(api.admin.commissions.getVatRate);
+  const stripeFeeRateData = useQuery(api.admin.commissions.getStripeFeeRate);
+  const vatRate = vatRateData?.rate ?? 20; // Default 20%
+  const stripeFeeRate = stripeFeeRateData?.rate ?? 3; // Default 3%
 
   // Workday config from admin settings
   const workdayConfig = useQuery(api.admin.config.getWorkdayConfig);
@@ -358,6 +365,17 @@ export default function AnnouncerProfilePage() {
     const overnightPrice = bookingService.overnightPrice;
     const enableDurationBasedBlocking = Boolean(bookingService.enableDurationBasedBlocking);
 
+    // Construire la config de facturation client depuis les paramètres du service
+    let clientBillingConfig: ClientBillingConfig | undefined;
+    if (bookingService.clientBillingMode) {
+      clientBillingConfig = {
+        mode: bookingService.clientBillingMode,
+        surchargePercent: bookingService.hourlyBillingSurchargePercent || 0,
+        workdayHours: workdayHours,
+        halfDayHours: workdayHours / 2,
+      };
+    }
+
     return calculatePriceBreakdown(
       bookingService,
       bookingVariant,
@@ -368,7 +386,8 @@ export default function AnnouncerProfilePage() {
       dayEndTime,
       overnightPrice,
       enableDurationBasedBlocking,
-      bookingService.allowedPriceUnits
+      bookingService.allowedPriceUnits,
+      clientBillingConfig
     );
   }, [bookingService, bookingVariant, bookingSelection, commissionRate, workdayHours, announcerPreferences]);
 
@@ -802,6 +821,8 @@ export default function AnnouncerProfilePage() {
               nextAvailable={announcer.availability.nextAvailable}
               selectedServiceId={selectedService?.id ?? null}
               commissionRate={commissionRate}
+              vatRate={vatRate}
+              stripeFeeRate={stripeFeeRate}
               bookingService={bookingService}
               bookingVariant={bookingVariant}
               bookingSelection={bookingSelection}
@@ -810,6 +831,7 @@ export default function AnnouncerProfilePage() {
               collectiveSlots={collectiveSlots}
               animalCount={bookingSelection.animalCount}
               selectedSessions={bookingSelection.selectedSessions}
+              announcerFirstName={announcer.firstName}
               onServiceChange={(serviceId) => {
                 // Trouver le categorySlug du service sélectionné et mettre à jour l'URL
                 const service = announcer.services.find((s) => s.id === serviceId);
@@ -827,6 +849,8 @@ export default function AnnouncerProfilePage() {
         services={announcer.services}
         selectedServiceId={selectedService?.id ?? null}
         commissionRate={commissionRate}
+        vatRate={vatRate}
+        stripeFeeRate={stripeFeeRate}
         bookingService={bookingService}
         bookingVariant={bookingVariant}
         bookingSelection={bookingSelection}
@@ -860,6 +884,19 @@ export default function AnnouncerProfilePage() {
         // Props séances individuelles multi-sessions
         selectedSessions={bookingSelection.selectedSessions}
         onSessionsChange={handleSessionsChange}
+        // Props pour sélection d'animaux (garde)
+        isLoggedIn={!!token}
+        userAnimals={userAnimals}
+        selectedAnimalIds={selectedAnimalIds}
+        onAnimalToggle={handleAnimalToggle}
+        maxSelectableAnimals={maxSelectableAnimals}
+        // Props pour le lieu
+        onLocationSelect={handleLocationSelect}
+        announcerFirstName={announcer.firstName}
+        announcerCity={extractCityDisplay(announcer.location)}
+        // Props pour les options
+        onOptionToggle={handleOptionToggle}
+        selectedOptionIds={bookingSelection.selectedOptionIds}
       />
     </div>
   );
