@@ -657,7 +657,7 @@ export default function AnnouncerProfilePage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header fixe avec recherche */}
-      <Navbar />
+      <Navbar hideSpacers />
 
       {/* Hero Section avec Cover et Action Bar */}
       <AnnouncerHero

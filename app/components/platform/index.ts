@@ -1,6 +1,5 @@
 // Platform components
 export { PlatformTopbar } from "./PlatformTopbar";
-export { SearchHeader } from "./SearchHeader";
 export { DashboardHeader } from "./DashboardHeader";
 export { AnnouncerCardGrid, AnnouncerCardList } from "./AnnouncerCard";
 export { ServiceCardGrid, ServiceCardList, type ServiceSearchResult } from "./ServiceCard";

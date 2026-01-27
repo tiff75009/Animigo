@@ -16,7 +16,7 @@ export default function ClientLayout({ children }: { children: ReactNode }) {
         <FloatingSidebar />
 
         {/* Main content avec marge pour la sidebar */}
-        <main className="pt-20 pb-8 md:pl-24 lg:pl-72 transition-all duration-300">
+        <main className="pt-8 pb-8 md:pl-24 lg:pl-72 transition-all duration-300">
           <div className="px-4 lg:px-8 max-w-5xl mx-auto">
             {children}
           </div>

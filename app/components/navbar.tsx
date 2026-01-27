@@ -2,8 +2,28 @@
 
 import { cn } from "@/app/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, User, Briefcase, LogOut, LayoutDashboard, Bell, MessageCircle, ChevronDown, MoreHorizontal } from "lucide-react";
+import {
+  Menu,
+  X,
+  User,
+  Briefcase,
+  LogOut,
+  LayoutDashboard,
+  Bell,
+  MessageCircle,
+  ChevronDown,
+  MoreHorizontal,
+  Calendar,
+  CreditCard,
+  Settings,
+  Star,
+  ClipboardList,
+  Home,
+  Search,
+  PawPrint,
+} from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import { useAuthState } from "@/app/hooks/useAuthState";
 import { useNotifications } from "@/app/hooks/useNotifications";
 import { NotificationDropdown } from "@/app/components/notifications";
@@ -25,12 +45,78 @@ const serviceCategories = [
 // Desktop: 5 premiers services affichés, le reste dans "Plus"
 const DESKTOP_VISIBLE_COUNT = 5;
 
-export function Navbar() {
+// Menu items pour le dashboard annonceur (par sections)
+const announcerDashboardSections = [
+  {
+    title: "Principal",
+    collapsible: false,
+    items: [
+      { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
+      { href: "/dashboard/planning", label: "Planning", icon: Calendar },
+      { href: "/dashboard/messagerie", label: "Messages", icon: MessageCircle },
+    ],
+  },
+  {
+    title: "Missions",
+    collapsible: true,
+    icon: ClipboardList,
+    items: [
+      { href: "/dashboard/missions/accepter", label: "À accepter", icon: ClipboardList },
+      { href: "/dashboard/missions/confirmation", label: "En attente", icon: Calendar },
+      { href: "/dashboard/missions/en-cours", label: "En cours", icon: Calendar },
+      { href: "/dashboard/missions/a-venir", label: "À venir", icon: Calendar },
+      { href: "/dashboard/missions/terminees", label: "Terminées", icon: Calendar },
+    ],
+  },
+  {
+    title: "Compte",
+    collapsible: false,
+    items: [
+      { href: "/dashboard/profil", label: "Ma fiche", icon: User },
+      { href: "/dashboard/services", label: "Mes services", icon: Briefcase },
+      { href: "/dashboard/avis", label: "Mes avis", icon: Star },
+      { href: "/dashboard/paiements", label: "Paiements", icon: CreditCard },
+      { href: "/dashboard/parametres", label: "Paramètres", icon: Settings },
+    ],
+  },
+];
+
+// Menu items pour le dashboard client (par sections)
+const clientDashboardSections = [
+  {
+    title: "Navigation",
+    collapsible: false,
+    items: [
+      { href: "/client", label: "Accueil", icon: Home },
+      { href: "/recherche", label: "Rechercher", icon: Search },
+      { href: "/client/messagerie", label: "Messages", icon: MessageCircle },
+      { href: "/client/notifications", label: "Notifications", icon: Bell },
+    ],
+  },
+  {
+    title: "Mon compte",
+    collapsible: false,
+    items: [
+      { href: "/client/profil", label: "Mon profil", icon: User },
+      { href: "/client/mes-animaux", label: "Mes animaux", icon: PawPrint },
+      { href: "/client/reservations", label: "Réservations", icon: Calendar },
+      { href: "/client/parametres", label: "Paramètres", icon: Settings },
+    ],
+  },
+];
+
+interface NavbarProps {
+  hideSpacers?: boolean;
+}
+
+export function Navbar({ hideSpacers = false }: NavbarProps) {
+  const pathname = usePathname();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [hoveredLink, setHoveredLink] = useState<string | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<string[]>([]);
 
   // Services visibles et cachés sur desktop
   const visibleServices = serviceCategories.slice(0, DESKTOP_VISIBLE_COUNT);
@@ -38,6 +124,12 @@ export function Navbar() {
 
   const { isLoading, isAuthenticated, isAdmin, user, logout } = useAuthState();
   const { unreadCount } = useNotifications(50);
+
+  // Detect if we're on a dashboard page
+  const isOnAnnouncerDashboard = pathname.startsWith("/dashboard");
+  const isOnClientDashboard = pathname.startsWith("/client");
+  const isOnDashboard = isOnAnnouncerDashboard || isOnClientDashboard;
+  const dashboardSections = isOnAnnouncerDashboard ? announcerDashboardSections : clientDashboardSections;
 
   const handleScroll = useCallback(() => {
     setIsScrolled(window.scrollY > 20);
@@ -361,56 +453,168 @@ export function Navbar() {
 
               {/* Scrollable Content */}
               <div className="flex-1 overflow-y-auto">
-                {/* Services Section */}
-                <div className="p-4">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Nos services</p>
-                  <div className="space-y-1">
-                    {serviceCategories.map((service) => (
-                      <Link
-                        key={service.slug}
-                        href={service.href}
-                        onClick={() => setIsMobileMenuOpen(false)}
-                        className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-                      >
-                        <span className="text-xl">{service.emoji}</span>
-                        <span className="font-medium text-gray-900">{service.label}</span>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
+                {isOnDashboard ? (
+                  /* Dashboard Navigation - Compact with sections */
+                  <div className="py-2">
+                    {dashboardSections.map((section, idx) => {
+                      const isExpanded = expandedSections.includes(section.title);
+                      const hasActiveItem = section.items.some(item => pathname === item.href || pathname.startsWith(item.href + "/"));
+                      const SectionIcon = section.collapsible ? ClipboardList : null;
 
-                <div className="mx-4 h-px bg-gray-100" />
-
-                {/* Other Links */}
-                <div className="p-4">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Liens utiles</p>
-                  <div className="space-y-1">
-                    <Link
-                      href="/inscription"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-                    >
-                      <Briefcase className="w-5 h-5 text-secondary" />
-                      <span className="font-medium text-gray-900">Devenir annonceur</span>
-                    </Link>
-                    <Link
-                      href="/#how-it-works"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-                    >
-                      <span className="text-xl">✨</span>
-                      <span className="font-medium text-gray-900">Comment ça marche</span>
-                    </Link>
-                    <Link
-                      href="/#faq"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-                    >
-                      <span className="text-xl">❓</span>
-                      <span className="font-medium text-gray-900">FAQ</span>
-                    </Link>
+                      return (
+                        <div key={section.title}>
+                          {idx > 0 && <div className="mx-4 h-px bg-gray-100 my-2" />}
+                          <div className="px-4 py-1">
+                            {section.collapsible ? (
+                              /* Collapsible section (Missions) */
+                              <>
+                                <button
+                                  onClick={() => setExpandedSections(prev =>
+                                    prev.includes(section.title)
+                                      ? prev.filter(s => s !== section.title)
+                                      : [...prev, section.title]
+                                  )}
+                                  className={cn(
+                                    "flex items-center gap-2.5 w-full px-3 py-2 rounded-lg transition-colors",
+                                    hasActiveItem ? "bg-primary/10 text-primary" : "hover:bg-gray-50 text-gray-700"
+                                  )}
+                                >
+                                  {SectionIcon && <SectionIcon className="w-4 h-4" />}
+                                  <span className="text-sm font-medium flex-1 text-left">{section.title}</span>
+                                  <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">
+                                    {section.items.length}
+                                  </span>
+                                  <motion.div
+                                    animate={{ rotate: isExpanded ? 180 : 0 }}
+                                    transition={{ duration: 0.2 }}
+                                  >
+                                    <ChevronDown className="w-4 h-4 text-gray-400" />
+                                  </motion.div>
+                                </button>
+                                <AnimatePresence>
+                                  {isExpanded && (
+                                    <motion.div
+                                      initial={{ height: 0, opacity: 0 }}
+                                      animate={{ height: "auto", opacity: 1 }}
+                                      exit={{ height: 0, opacity: 0 }}
+                                      transition={{ duration: 0.2 }}
+                                      className="overflow-hidden"
+                                    >
+                                      <div className="pl-4 mt-1 space-y-0.5">
+                                        {section.items.map((item) => {
+                                          const Icon = item.icon;
+                                          const isActive = pathname === item.href;
+                                          return (
+                                            <Link
+                                              key={item.href}
+                                              href={item.href}
+                                              onClick={() => setIsMobileMenuOpen(false)}
+                                              className={cn(
+                                                "flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors",
+                                                isActive
+                                                  ? "bg-primary text-white"
+                                                  : "hover:bg-gray-50 text-gray-700"
+                                              )}
+                                            >
+                                              <Icon className="w-4 h-4" />
+                                              <span className="text-sm font-medium">{item.label}</span>
+                                            </Link>
+                                          );
+                                        })}
+                                      </div>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </>
+                            ) : (
+                              /* Normal section */
+                              <>
+                                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1 px-3">
+                                  {section.title}
+                                </p>
+                                <div className="space-y-0.5">
+                                  {section.items.map((item) => {
+                                    const Icon = item.icon;
+                                    const isActive = pathname === item.href;
+                                    return (
+                                      <Link
+                                        key={item.href}
+                                        href={item.href}
+                                        onClick={() => setIsMobileMenuOpen(false)}
+                                        className={cn(
+                                          "flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors",
+                                          isActive
+                                            ? "bg-primary text-white"
+                                            : "hover:bg-gray-50 text-gray-700"
+                                        )}
+                                      >
+                                        <Icon className="w-4 h-4" />
+                                        <span className="text-sm font-medium">{item.label}</span>
+                                      </Link>
+                                    );
+                                  })}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                </div>
+                ) : (
+                  <>
+                    {/* Services Section */}
+                    <div className="p-4">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Nos services</p>
+                      <div className="space-y-1">
+                        {serviceCategories.map((service) => (
+                          <Link
+                            key={service.slug}
+                            href={service.href}
+                            onClick={() => setIsMobileMenuOpen(false)}
+                            className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
+                          >
+                            <span className="text-xl">{service.emoji}</span>
+                            <span className="font-medium text-gray-900">{service.label}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mx-4 h-px bg-gray-100" />
+
+                    {/* Other Links */}
+                    <div className="p-4">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Liens utiles</p>
+                      <div className="space-y-1">
+                        <Link
+                          href="/inscription"
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
+                        >
+                          <Briefcase className="w-5 h-5 text-secondary" />
+                          <span className="font-medium text-gray-900">Devenir annonceur</span>
+                        </Link>
+                        <Link
+                          href="/#how-it-works"
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
+                        >
+                          <span className="text-xl">✨</span>
+                          <span className="font-medium text-gray-900">Comment ça marche</span>
+                        </Link>
+                        <Link
+                          href="/#faq"
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
+                        >
+                          <span className="text-xl">❓</span>
+                          <span className="font-medium text-gray-900">FAQ</span>
+                        </Link>
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 {/* User Section (if authenticated) */}
                 {!isLoading && isAuthenticated && user && (
@@ -504,8 +708,12 @@ export function Navbar() {
       </AnimatePresence>
 
       {/* Spacer for fixed navbar */}
-      <div className="h-16 lg:h-16" />
-      <div className="h-12 lg:hidden" /> {/* Extra space for mobile services bar */}
+      {!hideSpacers && (
+        <>
+          <div className="h-16 lg:h-16" />
+          <div className="h-12 lg:hidden" /> {/* Extra space for mobile services bar */}
+        </>
+      )}
     </>
   );
 }

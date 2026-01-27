@@ -2,22 +2,35 @@
 
 import { useState, memo, useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Home,
-  MessageCircle,
-  PawPrint,
-  Settings,
-  LogOut,
-  Search,
-  Calendar,
+  LayoutDashboard,
   User,
-  ChevronLeft,
+  CreditCard,
+  Settings,
+  MessageSquare,
+  LogOut,
+  Calendar,
+  CheckCircle,
+  Clock,
+  CalendarClock,
+  XCircle,
+  Ban,
+  HelpCircle,
+  Star,
+  Briefcase,
   ChevronDown,
-  Bell,
+  ChevronLeft,
+  ClipboardList,
+  ShieldCheck,
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { getUnreadMessagesCount } from "@/app/lib/dashboard-data";
 import { useAuth } from "@/app/hooks/useAuth";
 
 interface NavItem {
@@ -119,6 +132,99 @@ const NavSection = memo(function NavSection({
   );
 });
 
+// Collapsible section for missions
+interface CollapsibleNavSectionProps {
+  title: string;
+  icon: React.ReactNode;
+  items: NavItem[];
+  currentPath: string;
+  isCollapsed: boolean;
+  onItemClick?: () => void;
+}
+
+const CollapsibleNavSection = memo(function CollapsibleNavSection({
+  title,
+  icon,
+  items,
+  currentPath,
+  isCollapsed,
+  onItemClick,
+}: CollapsibleNavSectionProps) {
+  const hasActiveItem = items.some(item => currentPath === item.href || currentPath.startsWith(item.href + "/"));
+  const [isOpen, setIsOpen] = useState(hasActiveItem);
+
+  // Si collapsed, on ne montre que l'icône du premier item actif ou l'icône par défaut
+  if (isCollapsed) {
+    return (
+      <div className="space-y-1">
+        {items.map((item) => (
+          <NavLink
+            key={item.href}
+            item={item}
+            isActive={currentPath === item.href}
+            isCollapsed={isCollapsed}
+            onClick={onItemClick}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      <motion.button
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          "flex items-center gap-3 w-full px-4 py-3 rounded-2xl font-medium transition-colors",
+          hasActiveItem
+            ? "bg-primary/10 text-primary"
+            : "text-slate-600 hover:bg-slate-100/80"
+        )}
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+      >
+        {icon}
+        <span className="flex-1 text-left">{title}</span>
+        {hasActiveItem && (
+          <span className="px-2 py-0.5 text-xs font-bold bg-primary text-white rounded-full">
+            {items.length}
+          </span>
+        )}
+        <motion.div
+          animate={{ rotate: isOpen ? 180 : 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          <ChevronDown className="w-4 h-4" />
+        </motion.div>
+      </motion.button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="pl-3 space-y-1">
+              {items.map((item) => (
+                <NavLink
+                  key={item.href}
+                  item={item}
+                  isActive={currentPath === item.href}
+                  isCollapsed={false}
+                  onClick={onItemClick}
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+});
+
 // Hook pour détecter la taille d'écran
 function useMediaQuery(query: string, defaultValue = false) {
   const [matches, setMatches] = useState(defaultValue);
@@ -139,7 +245,8 @@ function useMediaQuery(query: string, defaultValue = false) {
 
 export default function FloatingSidebar() {
   const pathname = usePathname();
-  const { logout } = useAuth();
+  const { user, token, logout, isLoading } = useAuth();
+  const unreadCount = getUnreadMessagesCount();
 
   const [isManuallyCollapsed, setIsManuallyCollapsed] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -151,12 +258,27 @@ export default function FloatingSidebar() {
 
   const isLgScreen = useMediaQuery("(min-width: 1024px)", true);
 
+  // Récupérer le profil pour l'avatar
+  const profileData = useQuery(
+    api.services.profile.getProfile,
+    token ? { token } : "skip"
+  );
+
+  // Récupérer le statut de vérification
+  const verificationStatus = useQuery(
+    api.verification.verification.getVerificationStatus,
+    token ? { sessionToken: token } : "skip"
+  );
+
+  const isIdentityVerified = verificationStatus?.isIdentityVerified || false;
+  const hasPendingRequest = verificationStatus?.latestRequest?.status === "submitted";
+
   useEffect(() => {
     setMounted(true);
   }, []);
 
   useEffect(() => {
-    const saved = localStorage.getItem("client-sidebar-collapsed");
+    const saved = localStorage.getItem("dashboard-sidebar-collapsed");
     if (saved !== null) {
       setIsManuallyCollapsed(saved === "true");
     }
@@ -179,6 +301,7 @@ export default function FloatingSidebar() {
     checkScrollState();
     nav.addEventListener("scroll", checkScrollState, { passive: true });
 
+    // Re-check on resize
     const resizeObserver = new ResizeObserver(checkScrollState);
     resizeObserver.observe(nav);
 
@@ -193,34 +316,44 @@ export default function FloatingSidebar() {
   const toggleCollapse = useCallback(() => {
     setIsManuallyCollapsed(prev => {
       const newValue = !prev;
-      localStorage.setItem("client-sidebar-collapsed", String(newValue));
+      localStorage.setItem("dashboard-sidebar-collapsed", String(newValue));
       return newValue;
     });
   }, []);
 
   const mainNavItems: NavItem[] = [
-    { href: "/client", icon: <Home className="w-5 h-5" />, label: "Accueil" },
-    { href: "/recherche", icon: <Search className="w-5 h-5" />, label: "Rechercher" },
-    { href: "/client/messagerie", icon: <MessageCircle className="w-5 h-5" />, label: "Messages" },
-    { href: "/client/notifications", icon: <Bell className="w-5 h-5" />, label: "Notifications" },
+    { href: "/dashboard", icon: <LayoutDashboard className="w-5 h-5" />, label: "Tableau de bord" },
+    { href: "/dashboard/planning", icon: <Calendar className="w-5 h-5" />, label: "Planning" },
+    { href: "/dashboard/messagerie", icon: <MessageSquare className="w-5 h-5" />, label: "Messages", badge: unreadCount },
+  ];
+
+  const missionNavItems: NavItem[] = [
+    { href: "/dashboard/missions/accepter", icon: <HelpCircle className="w-5 h-5" />, label: "À accepter" },
+    { href: "/dashboard/missions/confirmation", icon: <Clock className="w-5 h-5" />, label: "En attente" },
+    { href: "/dashboard/missions/en-cours", icon: <CalendarClock className="w-5 h-5" />, label: "En cours" },
+    { href: "/dashboard/missions/a-venir", icon: <Calendar className="w-5 h-5" />, label: "À venir" },
+    { href: "/dashboard/missions/terminees", icon: <CheckCircle className="w-5 h-5" />, label: "Terminées" },
+    { href: "/dashboard/missions/refusees", icon: <XCircle className="w-5 h-5" />, label: "Refusées" },
+    { href: "/dashboard/missions/annulees", icon: <Ban className="w-5 h-5" />, label: "Annulées" },
   ];
 
   const accountNavItems: NavItem[] = [
-    { href: "/client/profil", icon: <User className="w-5 h-5" />, label: "Mon profil" },
-    { href: "/client/mes-animaux", icon: <PawPrint className="w-5 h-5" />, label: "Mes animaux" },
-    { href: "/client/reservations", icon: <Calendar className="w-5 h-5" />, label: "Réservations" },
-    { href: "/client/parametres", icon: <Settings className="w-5 h-5" />, label: "Paramètres" },
+    { href: "/dashboard/profil", icon: <User className="w-5 h-5" />, label: "Ma fiche" },
+    { href: "/dashboard/services", icon: <Briefcase className="w-5 h-5" />, label: "Mes services" },
+    { href: "/dashboard/avis", icon: <Star className="w-5 h-5" />, label: "Mes avis" },
+    { href: "/dashboard/paiements", icon: <CreditCard className="w-5 h-5" />, label: "Paiements" },
+    { href: "/dashboard/parametres", icon: <Settings className="w-5 h-5" />, label: "Paramètres" },
   ];
 
   const handleLogout = async () => {
     await logout();
   };
 
-  const sidebarWidth = isCollapsed ? 72 : 260;
+  const sidebarWidth = isCollapsed ? 72 : 280;
 
   return (
     <div className="hidden md:block fixed left-4 top-24 bottom-6 z-40">
-      {/* Toggle Button - EN DEHORS de la sidebar pour éviter overflow hidden */}
+      {/* Toggle Button */}
       {isLgScreen && (
         <motion.button
           onClick={toggleCollapse}
@@ -247,7 +380,6 @@ export default function FloatingSidebar() {
         className="h-full flex flex-col bg-white/80 backdrop-blur-xl border border-slate-200/60 rounded-3xl shadow-xl shadow-slate-200/50 overflow-hidden"
         style={{ width: mounted ? undefined : sidebarWidth }}
       >
-
         {/* User Avatar Section */}
         <div className={cn(
           "p-4 border-b border-slate-100",
@@ -257,8 +389,19 @@ export default function FloatingSidebar() {
             "flex items-center gap-3",
             isCollapsed && "justify-center"
           )}>
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg shadow-primary/25 shrink-0">
-              <User className="w-5 h-5 text-white" />
+            <div className="relative w-10 h-10 rounded-2xl overflow-hidden ring-2 ring-white shadow-lg shadow-primary/25 shrink-0 bg-gradient-to-br from-primary to-secondary">
+              {profileData?.profile?.profileImageUrl ? (
+                <Image
+                  src={profileData.profile.profileImageUrl}
+                  alt="Avatar"
+                  fill
+                  className="object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <User className="w-5 h-5 text-white" />
+                </div>
+              )}
             </div>
             <AnimatePresence mode="wait">
               {!isCollapsed && (
@@ -267,19 +410,67 @@ export default function FloatingSidebar() {
                   animate={{ opacity: 1, width: "auto" }}
                   exit={{ opacity: 0, width: 0 }}
                   transition={{ duration: 0.2 }}
-                  className="overflow-hidden"
+                  className="overflow-hidden flex-1 min-w-0"
                 >
-                  <p className="font-semibold text-slate-800 text-sm whitespace-nowrap">Mon espace</p>
-                  <p className="text-xs text-slate-400 whitespace-nowrap">Client</p>
+                  <p className="font-semibold text-slate-800 text-sm whitespace-nowrap truncate">
+                    {user?.firstName} {user?.lastName}
+                  </p>
+                  <p className="text-xs whitespace-nowrap flex items-center gap-1">
+                    {isIdentityVerified ? (
+                      <>
+                        <ShieldCheck className="w-3 h-3 text-secondary" />
+                        <span className="text-secondary">Vérifié</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="w-3 h-3 text-amber-500" />
+                        <span className="text-amber-600">Non vérifié</span>
+                      </>
+                    )}
+                  </p>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
         </div>
 
+        {/* Verification Button */}
+        {!isIdentityVerified && !isLoading && !isCollapsed && (
+          <div className="px-3 py-2">
+            <Link href="/dashboard/verification">
+              <motion.div
+                className={cn(
+                  "flex items-center gap-3 p-3 rounded-xl transition-colors",
+                  hasPendingRequest
+                    ? "bg-blue-50 border border-blue-200"
+                    : "bg-amber-50 border border-amber-200 hover:bg-amber-100"
+                )}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+              >
+                {hasPendingRequest ? (
+                  <>
+                    <Clock className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-blue-700">En cours de vérification</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-5 h-5 text-amber-500 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-amber-700">Vérifier mon profil</p>
+                    </div>
+                  </>
+                )}
+              </motion.div>
+            </Link>
+          </div>
+        )}
+
         {/* Navigation with scroll indicators */}
         <div className="flex-1 relative overflow-hidden">
-          {/* Top scroll indicator */}
+          {/* Top scroll indicator - subtle chevron */}
           <AnimatePresence>
             {canScrollUp && (
               <motion.div
@@ -307,21 +498,29 @@ export default function FloatingSidebar() {
             )}
           >
             <NavSection
-              title="Navigation"
+              title="Principal"
               items={mainNavItems}
               currentPath={pathname}
               isCollapsed={isCollapsed}
             />
 
+            <CollapsibleNavSection
+              title="Missions"
+              icon={<ClipboardList className="w-5 h-5" />}
+              items={missionNavItems}
+              currentPath={pathname}
+              isCollapsed={isCollapsed}
+            />
+
             <NavSection
-              title="Mon compte"
+              title="Compte"
               items={accountNavItems}
               currentPath={pathname}
               isCollapsed={isCollapsed}
             />
           </nav>
 
-          {/* Bottom scroll indicator */}
+          {/* Bottom scroll indicator - subtle chevron */}
           <AnimatePresence>
             {canScrollDown && (
               <motion.div
