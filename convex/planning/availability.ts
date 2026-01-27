@@ -734,6 +734,25 @@ export const adminClearAvailability = mutation({
 });
 
 /**
+ * Helper: Calculer le jour de la semaine à partir d'une date string "YYYY-MM-DD"
+ * Évite les problèmes de timezone en parsant manuellement
+ */
+function getDayOfWeekFromDateString(dateStr: string): number {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  // Créer la date en local (pas UTC) pour éviter le décalage de timezone
+  const date = new Date(year, month - 1, day);
+  return date.getDay(); // 0=Dimanche, 1=Lundi, etc.
+}
+
+/**
+ * Helper: Créer une date locale à partir d'une string "YYYY-MM-DD"
+ */
+function parseDateStringToLocal(dateStr: string): Date {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+/**
  * Dupliquer une semaine type sur une plage de dates
  * Copie les disponibilités d'une semaine source vers toutes les semaines de la plage cible
  */
@@ -759,7 +778,7 @@ export const duplicateWeekAvailability = mutation({
     const overwrite = args.overwriteExisting ?? true;
 
     // 1. Récupérer les disponibilités de la semaine source (7 jours)
-    const sourceStart = new Date(args.sourceWeekStart);
+    const sourceStart = parseDateStringToLocal(args.sourceWeekStart);
     const sourceEnd = new Date(sourceStart);
     sourceEnd.setDate(sourceEnd.getDate() + 6);
 
@@ -783,7 +802,8 @@ export const duplicateWeekAvailability = mutation({
 
     for (const avail of sourceAvailabilities) {
       if (sourceDates.includes(avail.date)) {
-        const dayOfWeek = new Date(avail.date).getDay(); // 0=Dimanche, 1=Lundi, etc.
+        // Utiliser le helper pour éviter les problèmes de timezone
+        const dayOfWeek = getDayOfWeekFromDateString(avail.date);
         if (!sourceByDayOfWeek.has(dayOfWeek)) {
           sourceByDayOfWeek.set(dayOfWeek, []);
         }
@@ -792,8 +812,8 @@ export const duplicateWeekAvailability = mutation({
     }
 
     // 2. Générer toutes les dates cibles
-    const targetStart = new Date(args.targetStartDate);
-    const targetEnd = new Date(args.targetEndDate);
+    const targetStart = parseDateStringToLocal(args.targetStartDate);
+    const targetEnd = parseDateStringToLocal(args.targetEndDate);
 
     // Vérifier que la période n'est pas trop longue (max 1 an)
     const diffDays = Math.ceil(
@@ -816,7 +836,8 @@ export const duplicateWeekAvailability = mutation({
         const month = String(currentTarget.getMonth() + 1).padStart(2, "0");
         const day = String(currentTarget.getDate()).padStart(2, "0");
         const dateStr = `${year}-${month}-${day}`;
-        const dayOfWeek = currentTarget.getDay();
+        // Utiliser le helper pour éviter les problèmes de timezone
+        const dayOfWeek = getDayOfWeekFromDateString(dateStr);
 
         // Ne pas inclure les dates de la semaine source
         if (!sourceDates.includes(dateStr)) {
@@ -927,8 +948,9 @@ export const getWeekAvailability = query({
       return [];
     }
 
-    // Générer les 7 jours de la semaine
-    const weekStart = new Date(args.weekStartDate);
+    // Générer les 7 jours de la semaine (utiliser parsing local pour éviter les problèmes de timezone)
+    const [startYear, startMonth, startDay] = args.weekStartDate.split("-").map(Number);
+    const weekStart = new Date(startYear, startMonth - 1, startDay);
     const weekDates: string[] = [];
 
     for (let i = 0; i < 7; i++) {
@@ -953,7 +975,7 @@ export const getWeekAvailability = query({
     return weekAvailabilities.map((a) => ({
       id: a._id,
       date: a.date,
-      dayOfWeek: new Date(a.date).getDay(),
+      dayOfWeek: getDayOfWeekFromDateString(a.date),
       categoryTypeId: a.categoryTypeId,
       status: a.status,
       timeSlots: a.timeSlots,

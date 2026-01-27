@@ -824,12 +824,132 @@ export const getAnnouncerAvailabilityCalendar = query({
       ? await getAllSubcategorySlugs(ctx.db, args.serviceCategory)
       : [args.serviceCategory];
 
-    // Récupérer toutes les indisponibilités
-    const unavailabilities = await ctx.db
+    // NOUVEAU: Récupérer le categoryTypeId de cette catégorie
+    const category = await ctx.db
+      .query("serviceCategories")
+      .withIndex("by_slug", (q) => q.eq("slug", args.serviceCategory))
+      .first();
+
+    let categoryTypeId: Id<"categoryTypes"> | null = null;
+
+    if (category) {
+      // Si catégorie a un typeId, utiliser directement
+      if (category.typeId) {
+        categoryTypeId = category.typeId;
+      }
+      // Si sous-catégorie, récupérer le typeId du parent
+      else if (category.parentCategoryId) {
+        const parent = await ctx.db.get(category.parentCategoryId);
+        categoryTypeId = parent?.typeId ?? null;
+      }
+
+      // Fallback: Si pas de typeId trouvé, chercher par correspondance de slug
+      // Les categoryTypes ont généralement des slugs comme "garde", "service", "sante", "reproduction"
+      if (!categoryTypeId) {
+        // Récupérer tous les categoryTypes
+        const allCategoryTypes = await ctx.db
+          .query("categoryTypes")
+          .withIndex("by_active", (q) => q.eq("isActive", true))
+          .collect();
+
+        // Slugs à vérifier: la catégorie actuelle et son parent si c'est une sous-catégorie
+        const slugsToCheck: string[] = [args.serviceCategory.toLowerCase()];
+
+        // Si sous-catégorie, ajouter aussi le slug du parent
+        if (category.parentCategoryId) {
+          const parent = await ctx.db.get(category.parentCategoryId);
+          if (parent?.slug) {
+            slugsToCheck.push(parent.slug.toLowerCase());
+          }
+        }
+
+        // Vérifier si un des slugs correspond à un type
+        for (const slugToCheck of slugsToCheck) {
+          const matchingType = allCategoryTypes.find((type) => {
+            const typeSlugLower = type.slug.toLowerCase();
+            // Match exact ou le slug commence par le slug du type
+            return slugToCheck === typeSlugLower ||
+                   slugToCheck.startsWith(typeSlugLower + "-") ||
+                   slugToCheck.startsWith(typeSlugLower + "_");
+          });
+
+          if (matchingType) {
+            categoryTypeId = matchingType._id;
+            break;
+          }
+        }
+
+        // Fallback ultime: utiliser isCapacityBased pour identifier le type "garde"
+        if (!categoryTypeId && isCapacityBasedCategory) {
+          // Si c'est une catégorie capacity-based, c'est probablement de type "garde"
+          const gardeType = allCategoryTypes.find((type) =>
+            type.slug.toLowerCase().includes("garde")
+          );
+          if (gardeType) {
+            categoryTypeId = gardeType._id;
+          }
+        }
+
+        // Fallback pour les services non capacity-based: essayer de trouver le type "service"
+        if (!categoryTypeId && !isCapacityBasedCategory) {
+          // Chercher un type "service" ou similaire
+          const serviceType = allCategoryTypes.find((type) =>
+            type.slug.toLowerCase().includes("service") ||
+            type.slug.toLowerCase().includes("prestation")
+          );
+          if (serviceType) {
+            categoryTypeId = serviceType._id;
+          }
+        }
+      }
+    }
+
+    // Récupérer toutes les entrées de disponibilité de l'annonceur
+    const allAvailabilities = await ctx.db
       .query("availability")
       .withIndex("by_user", (q) => q.eq("userId", args.announcerId))
       .collect();
 
+    // Filtrer par categoryTypeId si défini
+    // On garde les entrées qui:
+    // 1. N'ont pas de categoryTypeId (rétrocompatibilité - s'applique à tous les types)
+    // 2. Ont le même categoryTypeId que la catégorie demandée
+    const unavailabilities = categoryTypeId
+      ? allAvailabilities.filter(
+          (a) => !a.categoryTypeId || String(a.categoryTypeId) === String(categoryTypeId)
+        )
+      : allAvailabilities;
+
+    // Créer une map des disponibilités par date pour ce type de catégorie
+    // Clé: date, Valeur: entrée de disponibilité
+    const availabilityByDate = new Map<string, typeof unavailabilities[0]>();
+    for (const avail of unavailabilities) {
+      const existing = availabilityByDate.get(avail.date);
+
+      if (categoryTypeId) {
+        // Cas 1: On a un categoryTypeId à chercher
+        // Priorité: entrée avec categoryTypeId correspondant > entrée sans categoryTypeId
+        if (avail.categoryTypeId && String(avail.categoryTypeId) === String(categoryTypeId)) {
+          // Entrée spécifique pour ce type - prioritaire (écrase toute entrée existante)
+          availabilityByDate.set(avail.date, avail);
+        } else if (!existing && !avail.categoryTypeId) {
+          // Entrée générique (sans type) - fallback si pas d'entrée spécifique
+          availabilityByDate.set(avail.date, avail);
+        }
+      } else {
+        // Cas 2: Pas de categoryTypeId (catégorie sans typeId configuré)
+        // Mode rétrocompatibilité: utiliser toutes les entrées disponibles
+        // Priorité: entrées sans categoryTypeId > entrées avec categoryTypeId
+        if (!existing) {
+          availabilityByDate.set(avail.date, avail);
+        } else if (!avail.categoryTypeId && existing.categoryTypeId) {
+          // Entrée générique remplace une entrée spécifique
+          availabilityByDate.set(avail.date, avail);
+        }
+      }
+    }
+
+    // Set des dates explicitement marquées comme indisponibles (pour rétrocompatibilité)
     const unavailableDatesSet = new Set(
       unavailabilities
         .filter((a) => a.status === "unavailable")
@@ -914,10 +1034,22 @@ export const getAnnouncerAvailabilityCalendar = query({
       // Trouver les créneaux collectifs pour ce jour
       const dayCollectiveSlots = collectiveSlotsInRange.filter((slot) => slot.date === date);
 
-      // Vérifier indisponibilité manuelle SAUF si il y a des créneaux collectifs ou des missions
-      // (les créneaux collectifs/missions doivent être visibles même sur les jours "indisponibles")
-      const isInUnavailableSet = unavailableDatesSet.has(date);
-      if (isInUnavailableSet && dayMissions.length === 0 && dayCollectiveSlots.length === 0) {
+      // NOUVEAU: Vérifier la disponibilité explicite pour ce type de catégorie
+      // Par défaut, un annonceur est INDISPONIBLE sauf s'il a défini une disponibilité
+      const dayAvailability = availabilityByDate.get(date);
+      const hasExplicitAvailability = dayAvailability &&
+        (dayAvailability.status === "available" || dayAvailability.status === "partial");
+
+      // Si pas de disponibilité explicite ET pas de missions/créneaux collectifs ce jour
+      // => INDISPONIBLE (comportement par défaut)
+      if (!hasExplicitAvailability && dayMissions.length === 0 && dayCollectiveSlots.length === 0) {
+        calendar.push({ date, status: "unavailable" });
+        continue;
+      }
+
+      // Vérifier indisponibilité explicite (status = "unavailable")
+      const isExplicitlyUnavailable = dayAvailability?.status === "unavailable";
+      if (isExplicitlyUnavailable && dayMissions.length === 0 && dayCollectiveSlots.length === 0) {
         calendar.push({ date, status: "unavailable" });
         continue;
       }
@@ -928,6 +1060,21 @@ export const getAnnouncerAvailabilityCalendar = query({
         const currentAnimalsCount = dayCategoryMissions.length;
 
         if (isCapacityBasedCategory) {
+          // NOUVEAU: Pour les catégories capacity-based, vérifier d'abord la disponibilité explicite
+          // Si pas de disponibilité définie pour ce type, le jour reste indisponible
+          if (!hasExplicitAvailability) {
+            calendar.push({
+              date,
+              status: "unavailable",
+              capacity: {
+                current: currentAnimalsCount,
+                max: maxAnimalsPerSlot,
+                remaining: 0, // Pas de capacité si pas de disponibilité
+              },
+            });
+            continue;
+          }
+
           // Mode capacité: vérifier si la capacité maximale est atteinte
           const remainingCapacity = Math.max(0, maxAnimalsPerSlot - currentAnimalsCount);
 
@@ -988,6 +1135,13 @@ export const getAnnouncerAvailabilityCalendar = query({
           // Ce jour n'a pas de missions actives ni de créneaux collectifs
           // Continuer vers le code qui gère les jours sans activité (en bas de la boucle)
         } else {
+          // NOUVEAU: Vérifier la disponibilité explicite même avec des missions existantes
+          // Si pas de disponibilité pour ce type, le jour est indisponible pour de NOUVELLES réservations
+          if (!hasExplicitAvailability) {
+            calendar.push({ date, status: "unavailable" });
+            continue;
+          }
+
           // Vérifier si une mission bloque toute la journée
           const hasFullDayBlock = missionsActiveOnThisDate.some((m) => {
             const isMultiDay = m.startDate !== m.endDate;
@@ -1100,10 +1254,9 @@ export const getAnnouncerAvailabilityCalendar = query({
         };
       });
 
-      // Vérifier disponibilité partielle (définie manuellement)
-      const partialAvail = unavailabilities.find(
-        (a) => a.date === date && a.status === "partial"
-      );
+      // Utiliser la disponibilité déjà récupérée pour ce jour
+      // (dayAvailability est défini plus haut dans la boucle)
+      const partialAvail = dayAvailability?.status === "partial" ? dayAvailability : undefined;
 
       // S'il y a des créneaux collectifs ou une disponibilité partielle
       if (collectiveSlotsWithBuffers.length > 0 || partialAvail?.timeSlots) {
@@ -1116,7 +1269,14 @@ export const getAnnouncerAvailabilityCalendar = query({
         continue;
       }
 
-      // Jour entièrement disponible
+      // NOUVEAU: Vérifier si l'annonceur a une disponibilité explicite pour ce jour
+      // Si pas de disponibilité explicite (available ou partial), le jour est INDISPONIBLE
+      if (!hasExplicitAvailability) {
+        calendar.push({ date, status: "unavailable" });
+        continue;
+      }
+
+      // Jour entièrement disponible (a une entrée "available" explicite)
       const calendarEntry: {
         date: string;
         status: "available" | "partial" | "unavailable" | "past";

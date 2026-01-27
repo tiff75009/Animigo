@@ -439,6 +439,30 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.21.1 - Corrections Systeme de Disponibilites
+
+- **Correction filtrage disponibilites par type de categorie**
+  - Le calendrier de reservation filtre maintenant correctement par `categoryTypeId`
+  - Resolution robuste du `categoryTypeId` avec plusieurs fallbacks :
+    1. `typeId` direct sur la serviceCategory
+    2. `typeId` du parent si sous-categorie
+    3. Correspondance par slug avec les categoryTypes
+    4. Fallback "garde" pour les categories capacity-based
+    5. Fallback "service" pour les autres categories
+  - Par defaut INDISPONIBLE : un annonceur sans disponibilite definie est indisponible
+  - Verification de disponibilite explicite a tous les points de decision
+
+- **Correction duplication de semaine (timezone)**
+  - Bug corrige : `new Date("2026-01-27")` interpretait la date en UTC
+  - Ajout des helpers `getDayOfWeekFromDateString()` et `parseDateStringToLocal()`
+  - Parsing manuel des dates pour eviter le decalage de timezone
+  - Correction appliquee a `duplicateWeekAvailability` et `getWeekAvailability`
+  - Les jours de la semaine correspondent maintenant correctement (Lundi source → Lundi cible)
+
+- **Backend Convex**
+  - `convex/public/search.ts` : `getAnnouncerAvailabilityCalendar` avec filtrage par type
+  - `convex/planning/availability.ts` : helpers de parsing de date sans timezone
+
 ### v0.21.0 - Systeme de Disponibilites Avance
 
 - **Disponibilite par type de categorie**
