@@ -311,65 +311,43 @@ export default function AnnouncerProfilePage() {
 
   const nights = bookingSelection.includeOvernightStay ? Math.max(0, days - 1) : 0;
 
-  // Calculate maximum selectable animals for collective formulas
+  // Maximum selectable animals = tous les animaux compatibles (pas de limite)
+  // Les créneaux seront filtrés en fonction du nombre d'animaux sélectionnés
   const maxSelectableAnimals = useMemo(() => {
-    // If no variant or not collective, default to 1
-    if (!bookingVariant || bookingVariant.sessionType !== "collective") return 1;
+    if (!bookingVariant) return 1;
 
-    // Get the max animals per session from the variant
-    const maxAnimalsPerSlot = bookingVariant.maxAnimalsPerSession || 5;
-
-    // If we have selected slots, use the minimum available spots among all slots
-    if (collectiveSlots.length > 0) {
-      const minAvailableSpots = Math.min(...collectiveSlots.map((s: any) => s.availableSpots));
-      // The max is the minimum between variant's max and available spots
-      const maxFromSlots = Math.min(maxAnimalsPerSlot, minAvailableSpots);
-
-      // Filter user animals by accepted types
-      const acceptedTypes = bookingVariant.animalTypes || [];
-      const compatibleAnimals = userAnimals.filter((a: any) =>
-        acceptedTypes.length === 0 || acceptedTypes.includes(a.type)
-      );
-
-      // Final max is the minimum between slots availability and compatible animals
-      return Math.min(maxFromSlots, Math.max(1, compatibleAnimals.length));
-    }
-
-    // No slots selected yet, use the variant's max or compatible animals count
+    // Get accepted animal types
     const acceptedTypes = bookingVariant.animalTypes || [];
     const compatibleAnimals = userAnimals.filter((a: any) =>
       acceptedTypes.length === 0 || acceptedTypes.includes(a.type)
     );
 
-    return Math.min(maxAnimalsPerSlot, Math.max(1, compatibleAnimals.length));
-  }, [bookingVariant, collectiveSlots, userAnimals]);
+    // Permettre de sélectionner tous les animaux compatibles
+    return Math.max(1, compatibleAnimals.length);
+  }, [bookingVariant, userAnimals]);
 
-  // Nettoyer les animaux sélectionnés si les conditions changent
+  // Nettoyer les animaux sélectionnés si leur type n'est plus compatible
   useEffect(() => {
     if (selectedAnimalIds.length === 0) return;
 
-    // Filtrer les animaux compatibles
+    // Filtrer les animaux compatibles (par type uniquement)
     const acceptedTypes = bookingVariant?.animalTypes || [];
     const compatibleIds = selectedAnimalIds.filter((id) => {
-      const animal = userAnimals.find((a) => a.id === id);
+      const animal = userAnimals.find((a: { id: string; type: string }) => a.id === id);
       if (!animal) return false;
       return acceptedTypes.length === 0 || acceptedTypes.includes(animal.type);
     });
 
-    // Limiter au max autorisé
-    const limitedIds = compatibleIds.slice(0, maxSelectableAnimals);
-
     // Si les IDs ont changé, mettre à jour
-    if (limitedIds.length !== selectedAnimalIds.length ||
-        !limitedIds.every((id, i) => selectedAnimalIds[i] === id)) {
-      setSelectedAnimalIds(limitedIds);
+    if (compatibleIds.length !== selectedAnimalIds.length) {
+      setSelectedAnimalIds(compatibleIds);
       setBookingSelection((prev) => ({
         ...prev,
-        selectedAnimalIds: limitedIds,
-        animalCount: Math.max(1, limitedIds.length),
+        selectedAnimalIds: compatibleIds,
+        animalCount: Math.max(1, compatibleIds.length),
       }));
     }
-  }, [bookingVariant, maxSelectableAnimals, userAnimals, selectedAnimalIds]);
+  }, [bookingVariant, userAnimals, selectedAnimalIds]);
 
   // Calculate price breakdown
   const priceBreakdown = useMemo((): PriceBreakdown | null => {
@@ -494,6 +472,8 @@ export default function AnnouncerProfilePage() {
   }, []);
 
   // Handler pour la sélection/déselection d'animal (utilisateur connecté - sélection multiple)
+  // Pas de limite : l'utilisateur peut sélectionner tous ses animaux compatibles
+  // Les créneaux seront filtrés en fonction du nombre d'animaux sélectionnés
   const handleAnimalToggle = useCallback((animalId: string, animalType: string) => {
     // Vérifier que le type d'animal est accepté par la formule
     const acceptedTypes = bookingVariant?.animalTypes || [];
@@ -510,11 +490,7 @@ export default function AnnouncerProfilePage() {
         // Remove the animal
         newIds = prev.filter((id) => id !== animalId);
       } else {
-        // Add the animal (respect max limit)
-        if (prev.length >= maxSelectableAnimals) {
-          console.warn(`Max ${maxSelectableAnimals} animals allowed`);
-          return prev; // Don't add if at max
-        }
+        // Add the animal (pas de limite)
         newIds = [...prev, animalId];
       }
 
@@ -529,7 +505,7 @@ export default function AnnouncerProfilePage() {
 
       return newIds;
     });
-  }, [bookingVariant, maxSelectableAnimals]);
+  }, [bookingVariant]);
 
   const handleBook = useCallback(() => {
     if (!announcerData || !announcer) return;

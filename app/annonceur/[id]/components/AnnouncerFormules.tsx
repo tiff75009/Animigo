@@ -534,7 +534,7 @@ export default function AnnouncerFormules({
         </div>
       </motion.div>
 
-      {/* Section Animaux - visible pour utilisateurs connectés ayant des animaux compatibles */}
+      {/* Section Animaux - Étape 1: sélectionner les animaux AVANT le planning */}
       {hasVariantSelected && isLoggedIn && userAnimals.length > 0 && onAnimalToggle && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -560,28 +560,28 @@ export default function AnnouncerFormules({
               Vos animaux
             </h3>
             <span className="text-sm text-gray-500">
-              {selectedAnimalIds.length}/{maxSelectableAnimals} sélectionné{selectedAnimalIds.length > 1 ? "s" : ""}
+              {selectedAnimalIds.length} sélectionné{selectedAnimalIds.length > 1 ? "s" : ""}
             </span>
           </div>
+
+          <p className="text-sm text-gray-500 mb-4">
+            Sélectionnez le ou les animaux pour cette prestation. Les créneaux disponibles seront filtrés en fonction du nombre d'animaux.
+          </p>
 
           {compatibleUserAnimals.length > 0 ? (
             <div className="grid gap-2">
               {compatibleUserAnimals.map((animal, idx) => {
                 const isSelected = selectedAnimalIds.includes(animal.id);
-                const canSelect = isSelected || selectedAnimalIds.length < maxSelectableAnimals;
                 return (
                   <button
                     key={animal.id || `animal-${idx}`}
                     type="button"
-                    onClick={() => canSelect && onAnimalToggle(animal.id, animal.type)}
-                    disabled={!canSelect && !isSelected}
+                    onClick={() => onAnimalToggle(animal.id, animal.type)}
                     className={cn(
                       "w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left",
                       isSelected
                         ? "border-primary bg-primary/5"
-                        : canSelect
-                          ? "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                          : "border-gray-200 opacity-50 cursor-not-allowed"
+                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                     )}
                   >
                     {animal.profilePhoto ? (
