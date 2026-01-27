@@ -21,7 +21,7 @@ import {
   type TabType,
   type AnnouncerData,
 } from "./components";
-import { SearchHeader } from "@/app/components/platform";
+import { Navbar } from "@/app/components/navbar";
 import {
   type BookingSelection,
   type PriceBreakdown,
@@ -657,10 +657,7 @@ export default function AnnouncerProfilePage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header fixe avec recherche */}
-      <SearchHeader
-        onLocationClick={() => router.push("/recherche")}
-        locationText={clientLocation?.city || clientLocation?.location || undefined}
-      />
+      <Navbar />
 
       {/* Hero Section avec Cover et Action Bar */}
       <AnnouncerHero
