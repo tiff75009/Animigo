@@ -181,8 +181,9 @@ export default defineSchema({
   // Profil client (propriétaires d'animaux)
   clientProfiles: defineTable({
     userId: v.id("users"),
-    // Photo
+    // Photos
     profileImageUrl: v.optional(v.string()),
+    coverImageUrl: v.optional(v.string()),
     // Bio
     description: v.optional(v.string()),
     // Localisation

@@ -1,3 +1,5 @@
+**TOUJOURS PARLER EN FRANÇAIS.**
+
 # Animigo - Configuration Claude Code
 
 **Langue : Toujours répondre en français.**

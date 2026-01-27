@@ -4,7 +4,6 @@ import { useAuth } from "@/app/hooks/useAuth";
 import { useClientProfile } from "./hooks/useClientProfile";
 import {
   ClientProfileHeader,
-  ClientBioSection,
   ClientLocationSection,
 } from "./components";
 import { motion } from "framer-motion";
@@ -47,60 +46,62 @@ export default function ClientProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-3xl mx-auto px-4 py-8">
-        {/* Page header */}
+    <div className="py-8">
+      {/* Page header */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-8"
+      >
+        <h1 className="text-2xl font-bold text-foreground">Mon profil</h1>
+        <p className="text-text-light mt-1">
+          Gérez vos informations personnelles
+        </p>
+      </motion.div>
+
+      {/* Error message */}
+      {error && (
         <motion.div
-          initial={{ opacity: 0, y: -20 }}
+          initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
+          className="mb-6 p-4 bg-red-50 rounded-xl flex items-start gap-3"
         >
-          <h1 className="text-2xl font-bold text-foreground">Mon profil</h1>
-          <p className="text-text-light mt-1">
-            Gérez vos informations personnelles
-          </p>
+          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-red-700">{error}</p>
+            <button
+              onClick={clearError}
+              className="text-sm text-red-600 hover:underline mt-1"
+            >
+              Fermer
+            </button>
+          </div>
         </motion.div>
+      )}
 
-        {/* Error message */}
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-6 p-4 bg-red-50 rounded-xl flex items-start gap-3"
-          >
-            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-red-700">{error}</p>
-              <button
-                onClick={clearError}
-                className="text-sm text-red-600 hover:underline mt-1"
-              >
-                Fermer
-              </button>
-            </div>
-          </motion.div>
-        )}
+      {/* Profile sections */}
+      <div className="space-y-6">
+        <ClientProfileHeader
+          profile={{
+            firstName: profile.firstName,
+            lastName: profile.lastName,
+            profileImageUrl: profile.profileImageUrl,
+            coverImageUrl: profile.coverImageUrl,
+            location: profile.location,
+            city: profile.city,
+            postalCode: profile.postalCode,
+            description: profile.description,
+            createdAt: profile.createdAt,
+          }}
+          onUploadAvatar={async (url) => { await updateProfile({ profileImageUrl: url }); }}
+          onRemoveAvatar={async () => { await updateProfile({ profileImageUrl: null }); }}
+          onUploadCover={async (url) => { await updateProfile({ coverImageUrl: url }); }}
+          onRemoveCover={async () => { await updateProfile({ coverImageUrl: null }); }}
+          onUpdateDescription={async (desc) => { await updateProfile({ description: desc || null }); }}
+          onUpdateLocation={async (data) => { await updateLocation(data); }}
+        />
 
-        {/* Profile sections */}
-        <div className="space-y-6">
-          <ClientProfileHeader
-            profile={{
-              firstName: profile.firstName,
-              lastName: profile.lastName,
-              profileImageUrl: profile.profileImageUrl,
-              city: profile.city,
-              createdAt: profile.createdAt,
-            }}
-          />
-
-          <ClientBioSection
-            description={profile.description}
-            onSave={(description) => updateProfile({ description })}
-            isSaving={isSaving}
-          />
-
-          <ClientLocationSection sessionToken={token!} />
-        </div>
+        <ClientLocationSection sessionToken={token!} />
       </div>
     </div>
   );

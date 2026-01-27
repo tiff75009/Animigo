@@ -11,6 +11,7 @@ interface Coordinates {
 
 interface ProfileUpdateData {
   profileImageUrl?: string | null;
+  coverImageUrl?: string | null;
   description?: string | null;
   location?: string | null;
   city?: string | null;

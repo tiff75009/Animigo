@@ -127,6 +127,27 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
   const { isLoading, isAuthenticated, isAdmin, user, logout } = useAuthState();
   const { unreadCount } = useNotifications(50);
 
+  // Token pour les queries
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  useEffect(() => {
+    const t = localStorage.getItem("auth_token");
+    setAuthToken(t);
+  }, []);
+
+  // Récupérer l'avatar du profil (annonceur ou client)
+  const announcerProfile = useQuery(
+    api.services.profile.getProfile,
+    authToken ? { token: authToken } : "skip"
+  );
+  const clientProfile = useQuery(
+    api.client.profile.getClientProfile,
+    authToken ? { token: authToken } : "skip"
+  );
+  const avatarUrl =
+    announcerProfile?.profile?.profileImageUrl ||
+    clientProfile?.profileImageUrl ||
+    null;
+
   // Nom et logo dynamiques du site
   const siteName = useQuery(api.admin.config.getSiteName) ?? "Animigo";
   const siteLogo = useQuery(api.admin.config.getSiteLogo);
@@ -194,7 +215,7 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                   <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-accent rounded-full" />
                 </div>
               )}
-              <span className="text-2xl font-love-taking text-gray-900 translate-y-1.5">
+              <span className="hidden lg:inline text-2xl font-love-taking text-gray-900 translate-y-1.5">
                 <span className="text-primary">{siteName.slice(0, 2)}</span>{siteName.slice(2)}
               </span>
             </Link>
@@ -287,8 +308,12 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                         isProfileOpen ? "bg-gray-100" : "hover:bg-gray-100"
                       )}
                     >
-                      <div className="w-8 h-8 bg-gradient-to-br from-primary to-secondary rounded-full flex items-center justify-center text-white text-xs font-bold">
-                        {initials}
+                      <div className="relative w-8 h-8 rounded-xl overflow-hidden bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white text-xs font-bold">
+                        {avatarUrl ? (
+                          <Image src={avatarUrl} alt="Avatar" fill className="object-cover" />
+                        ) : (
+                          initials
+                        )}
                       </div>
                     </button>
 
@@ -369,7 +394,7 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                   {/* Devenir annonceur (mobile) - only when not logged in */}
                   <Link
                     href="/inscription"
-                    className="text-sm font-medium text-gray-600 hover:text-gray-900 underline underline-offset-2 mr-1"
+                    className="text-xs font-bold text-secondary hover:text-secondary/80 whitespace-nowrap mr-1"
                   >
                     Devenir annonceur
                   </Link>
@@ -635,8 +660,12 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
 
                       {/* User Info Card */}
                       <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-primary/5 to-secondary/5 rounded-xl mb-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-full flex items-center justify-center text-white font-bold text-sm">
-                          {initials}
+                        <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-bold text-sm">
+                          {avatarUrl ? (
+                            <Image src={avatarUrl} alt="Avatar" fill className="object-cover" />
+                          ) : (
+                            initials
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-gray-900 truncate">

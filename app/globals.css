@@ -30,8 +30,8 @@
   --color-purple: var(--purple);
   --color-card: var(--card);
   --color-text-light: var(--text-light);
-  --font-sans: var(--font-nunito);
-  --font-body: var(--font-inter);
+  --font-sans: var(--font-montserrat);
+  --font-body: var(--font-montserrat);
   --radius-card: 1.5rem;
   --radius-button: 9999px;
 }
@@ -40,10 +40,17 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-body), system-ui, sans-serif;
+  font-weight: 400;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1, h2 {
   font-family: var(--font-sans), system-ui, sans-serif;
+  font-weight: 700;
+}
+
+h3, h4, h5, h6 {
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-weight: 600;
 }
 
 /* Special title class with Love Taking font */

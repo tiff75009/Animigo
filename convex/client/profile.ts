@@ -43,6 +43,7 @@ export const getClientProfile = query({
       createdAt: user.createdAt,
       // Données du profil client
       profileImageUrl: clientProfile?.profileImageUrl ?? null,
+      coverImageUrl: clientProfile?.coverImageUrl ?? null,
       description: clientProfile?.description ?? null,
       location: clientProfile?.location ?? null,
       city: clientProfile?.city ?? null,
@@ -54,7 +55,7 @@ export const getClientProfile = query({
   },
 });
 
-// Query: Récupérer uniquement les coordonnées du client (pour la recherche)
+// Query: Récupérer les coordonnées de l'utilisateur (client ou annonceur) pour la recherche
 export const getClientCoordinates = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
@@ -68,21 +69,39 @@ export const getClientCoordinates = query({
       return null;
     }
 
-    // 2. Récupérer le profil client
-    const clientProfile = await ctx.db
-      .query("clientProfiles")
-      .withIndex("by_user", (q) => q.eq("userId", session.userId))
-      .first();
+    // 2. Récupérer l'utilisateur pour connaître son type
+    const user = await ctx.db.get(session.userId);
+    if (!user) return null;
 
-    if (!clientProfile?.coordinates) {
-      return null;
+    // 3. Chercher dans la bonne table selon le type de compte
+    if (user.accountType === "utilisateur") {
+      const clientProfile = await ctx.db
+        .query("clientProfiles")
+        .withIndex("by_user", (q) => q.eq("userId", session.userId))
+        .first();
+
+      if (!clientProfile?.coordinates) return null;
+
+      return {
+        coordinates: clientProfile.coordinates,
+        city: clientProfile.city,
+        location: clientProfile.location,
+      };
+    } else {
+      // Annonceur (pro ou particulier)
+      const profile = await ctx.db
+        .query("profiles")
+        .withIndex("by_user", (q) => q.eq("userId", session.userId))
+        .first();
+
+      if (!profile?.coordinates) return null;
+
+      return {
+        coordinates: profile.coordinates,
+        city: profile.city,
+        location: profile.location,
+      };
     }
-
-    return {
-      coordinates: clientProfile.coordinates,
-      city: clientProfile.city,
-      location: clientProfile.location,
-    };
   },
 });
 
@@ -91,6 +110,7 @@ export const upsertClientProfile = mutation({
   args: {
     token: v.string(),
     profileImageUrl: v.optional(v.union(v.string(), v.null())),
+    coverImageUrl: v.optional(v.union(v.string(), v.null())),
     description: v.optional(v.union(v.string(), v.null())),
     location: v.optional(v.union(v.string(), v.null())),
     city: v.optional(v.union(v.string(), v.null())),
@@ -210,13 +230,47 @@ export const updateLocation = mutation({
 
     if (existingProfile) {
       await ctx.db.patch(existingProfile._id, locationData);
-      return { success: true, profileId: existingProfile._id };
     } else {
-      const profileId = await ctx.db.insert("clientProfiles", {
+      await ctx.db.insert("clientProfiles", {
         userId: session.userId,
         ...locationData,
       });
-      return { success: true, profileId };
     }
+
+    // 3. Synchroniser avec l'adresse par défaut dans clientAddresses
+    const defaultAddress = await ctx.db
+      .query("clientAddresses")
+      .withIndex("by_user_default", (q) =>
+        q.eq("userId", session.userId).eq("isDefault", true)
+      )
+      .first();
+
+    if (defaultAddress) {
+      // Mettre à jour l'adresse par défaut existante
+      await ctx.db.patch(defaultAddress._id, {
+        address: args.location,
+        city: args.city,
+        postalCode: args.postalCode,
+        coordinates: args.coordinates,
+        googlePlaceId: args.googlePlaceId,
+        updatedAt: now,
+      });
+    } else {
+      // Créer l'adresse par défaut si aucune n'existe
+      await ctx.db.insert("clientAddresses", {
+        userId: session.userId,
+        label: "Mon adresse",
+        address: args.location,
+        city: args.city,
+        postalCode: args.postalCode,
+        coordinates: args.coordinates,
+        googlePlaceId: args.googlePlaceId,
+        isDefault: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    return { success: true };
   },
 });
