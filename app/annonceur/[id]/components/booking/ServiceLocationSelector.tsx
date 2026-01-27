@@ -1,5 +1,6 @@
 "use client";
 
+import React, { useEffect } from "react";
 import { Home, MapPin, MousePointerClick } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/app/lib/utils";
@@ -17,9 +18,18 @@ export default function ServiceLocationSelector({
   onSelect,
   isRangeMode = false,
 }: ServiceLocationSelectorProps) {
-  // Pour les services garde (isRangeMode), toujours afficher les deux options
-  // Sinon, si le service est uniquement chez l'annonceur ou le client, pas besoin de sélection
-  if (serviceLocation !== "both" && !isRangeMode) {
+  // Si le service n'accepte qu'un seul lieu, auto-sélectionner et ne pas afficher le choix
+  // Cela s'applique aussi en mode garde (isRangeMode)
+  useEffect(() => {
+    if (serviceLocation === "announcer_home" && selectedLocation !== "announcer_home") {
+      onSelect("announcer_home");
+    } else if (serviceLocation === "client_home" && selectedLocation !== "client_home") {
+      onSelect("client_home");
+    }
+  }, [serviceLocation, selectedLocation, onSelect]);
+
+  // Ne pas afficher le sélecteur si un seul lieu est possible
+  if (serviceLocation !== "both") {
     return null;
   }
 

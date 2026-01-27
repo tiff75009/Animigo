@@ -188,7 +188,7 @@ export default function AnnouncerProfilePage() {
     token ? { token } : "skip"
   );
   const userAnimals = (userAnimalsData || []).map((animal: any) => ({
-    id: animal._id,
+    id: String(animal._id), // Convertir en string pour assurer la comparaison
     name: animal.name,
     type: animal.type,
     breed: animal.breed,

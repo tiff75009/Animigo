@@ -158,7 +158,7 @@ export const getAnnouncerProfile = query({
       content: string;
     }> = [];
 
-    // Construire l'adresse d'affichage
+    // Construire l'adresse d'affichage (ville + code postal uniquement)
     const buildDisplayLocation = () => {
       if (profile?.city && profile?.postalCode) {
         return `${profile.postalCode} ${profile.city}`;
@@ -166,8 +166,23 @@ export const getAnnouncerProfile = query({
       if (profile?.city) {
         return profile.city;
       }
+      // Extraire ville + code postal depuis l'adresse complète
       if (profile?.location) {
-        return profile.location;
+        // Format typique: "123 Rue Example, 75001 Paris" ou "123 Rue Example, 75001 Paris, France"
+        const postalCityMatch = profile.location.match(/(\d{5})\s+([^,]+)/);
+        if (postalCityMatch) {
+          return `${postalCityMatch[1]} ${postalCityMatch[2].trim()}`;
+        }
+        // Fallback: prendre le dernier segment avant "France" s'il existe
+        const parts = profile.location.split(",").map((p: string) => p.trim());
+        const lastPart = parts[parts.length - 1];
+        if (lastPart.toLowerCase() === "france" && parts.length > 1) {
+          return parts[parts.length - 2];
+        }
+        // Sinon retourner le dernier segment (souvent la ville)
+        if (parts.length > 1) {
+          return parts[parts.length - 1];
+        }
       }
       return null;
     };
@@ -430,7 +445,7 @@ export const getAnnouncerBySlug = query({
       content: string;
     }> = [];
 
-    // Construire l'adresse d'affichage
+    // Construire l'adresse d'affichage (ville + code postal uniquement)
     const buildDisplayLocation = () => {
       if (profile?.city && profile?.postalCode) {
         return `${profile.postalCode} ${profile.city}`;
@@ -438,8 +453,23 @@ export const getAnnouncerBySlug = query({
       if (profile?.city) {
         return profile.city;
       }
+      // Extraire ville + code postal depuis l'adresse complète
       if (profile?.location) {
-        return profile.location;
+        // Format typique: "123 Rue Example, 75001 Paris" ou "123 Rue Example, 75001 Paris, France"
+        const postalCityMatch = profile.location.match(/(\d{5})\s+([^,]+)/);
+        if (postalCityMatch) {
+          return `${postalCityMatch[1]} ${postalCityMatch[2].trim()}`;
+        }
+        // Fallback: prendre le dernier segment avant "France" s'il existe
+        const parts = profile.location.split(",").map((p: string) => p.trim());
+        const lastPart = parts[parts.length - 1];
+        if (lastPart.toLowerCase() === "france" && parts.length > 1) {
+          return parts[parts.length - 2];
+        }
+        // Sinon retourner le dernier segment (souvent la ville)
+        if (parts.length > 1) {
+          return parts[parts.length - 1];
+        }
       }
       return null;
     };
