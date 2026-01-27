@@ -61,6 +61,7 @@ import type * as planning_collectiveSlots from "../planning/collectiveSlots.js";
 import type * as planning_missions from "../planning/missions.js";
 import type * as public_announcer from "../public/announcer.js";
 import type * as public_booking from "../public/booking.js";
+import type * as public_categoryTypes from "../public/categoryTypes.js";
 import type * as public_emailVerify from "../public/emailVerify.js";
 import type * as public_legal from "../public/legal.js";
 import type * as public_search from "../public/search.js";
@@ -141,6 +142,7 @@ declare const fullApi: ApiFromModules<{
   "planning/missions": typeof planning_missions;
   "public/announcer": typeof public_announcer;
   "public/booking": typeof public_booking;
+  "public/categoryTypes": typeof public_categoryTypes;
   "public/emailVerify": typeof public_emailVerify;
   "public/legal": typeof public_legal;
   "public/search": typeof public_search;

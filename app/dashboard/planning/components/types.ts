@@ -46,6 +46,7 @@ export interface Mission {
 export interface Availability {
   id: Id<"availability">;
   date: string;
+  categoryTypeId?: string;
   status: AvailabilityStatus;
   timeSlots?: Array<{
     startTime: string;

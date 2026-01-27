@@ -13,12 +13,15 @@ import {
   dayNames,
   formatDateLocal,
 } from "../types";
+import { CategoryType } from "@/app/hooks/usePlanning";
 
 interface WeekViewProps {
   currentDate: Date;
   missions: Mission[];
   availability: Availability[];
   collectiveSlots?: CollectiveSlot[];
+  categoryTypes?: CategoryType[];
+  selectedTypeId?: string | null;
   onDayClick: (date: string) => void;
   onRangeSelect?: (startDate: string, endDate: string) => void;
   onMissionClick: (mission: Mission) => void;
@@ -32,6 +35,8 @@ export function WeekView({
   missions,
   availability,
   collectiveSlots = [],
+  categoryTypes = [],
+  selectedTypeId,
   onDayClick,
   onRangeSelect,
   onMissionClick,
@@ -133,10 +138,34 @@ export function WeekView({
     });
   };
 
-  // Get availability for a specific date
-  const getAvailabilityForDate = (date: Date): Availability | null => {
+  // Get all availabilities for a specific date
+  const getAvailabilitiesForDate = (date: Date): Availability[] => {
     const dateStr = formatDateLocal(date);
-    return availability.find((a) => a.date === dateStr) || null;
+    return availability.filter((a) => a.date === dateStr);
+  };
+
+  // Get background color class based on availabilities
+  const getDayBackgroundClass = (dayAvailabilities: Availability[], inSelection: boolean): string => {
+    if (inSelection) return "";
+
+    // Si filtre par type actif
+    if (selectedTypeId) {
+      const typeAvail = dayAvailabilities.find((a) => a.categoryTypeId === selectedTypeId);
+      if (!typeAvail) return ""; // Pas d'entrée = indisponible par défaut
+      if (typeAvail.status === "available") return "bg-green-50";
+      if (typeAvail.status === "partial") return "bg-orange-50";
+      return "";
+    }
+
+    // Mode "tous" - afficher le statut global
+    if (dayAvailabilities.length === 0) return "";
+
+    const hasAvailable = dayAvailabilities.some((a) => a.status === "available");
+    const hasPartial = dayAvailabilities.some((a) => a.status === "partial");
+
+    if (hasAvailable) return "bg-green-50";
+    if (hasPartial) return "bg-orange-50";
+    return "";
   };
 
   // Get collective slots for a specific date (prioriser ceux avec réservations)
@@ -190,9 +219,10 @@ export function WeekView({
           {weekDates.map((date, index) => {
             const today = isToday(date);
             const past = isPastDate(date);
-            const dayAvailability = getAvailabilityForDate(date);
+            const dayAvailabilities = getAvailabilitiesForDate(date);
             const dateStr = formatDateLocal(date);
             const inSelection = isInSelectionRange(dateStr);
+            const bgClass = getDayBackgroundClass(dayAvailabilities, inSelection);
 
             return (
               <div
@@ -203,28 +233,48 @@ export function WeekView({
                 }}
                 onMouseEnter={() => handleMouseEnter(dateStr)}
                 className={cn(
-                  "text-center py-3 rounded-lg transition-colors",
+                  "text-center py-3 rounded-lg transition-colors border",
                   // Past dates styling
                   past
-                    ? "bg-gray-50 cursor-not-allowed opacity-60"
-                    : "cursor-pointer",
+                    ? "bg-gray-50 border-gray-100 cursor-not-allowed opacity-60"
+                    : "cursor-pointer border-gray-200 hover:border-gray-300",
                   // Today styling (only if not past)
-                  !past && today && "bg-primary/10",
-                  // Availability colors (only if not past)
-                  !past &&
-                    !inSelection &&
-                    dayAvailability &&
-                    availabilityColors[dayAvailability.status],
+                  !past && today && "bg-primary/10 border-primary",
+                  // Availability colors (only if not past and not today)
+                  !past && !today && !inSelection && bgClass,
                   // Selection styling (only if not past)
-                  !past && inSelection && "bg-primary/20 ring-2 ring-primary"
+                  !past && inSelection && "bg-primary/20 border-primary ring-2 ring-primary"
                 )}
               >
-                <p className={cn(
-                  "text-sm font-medium",
-                  past ? "text-gray-400" : "text-text-light"
-                )}>
-                  {dayNames[index]}
-                </p>
+                <div className="flex items-center justify-between px-2">
+                  <p className={cn(
+                    "text-sm font-medium",
+                    past ? "text-gray-400" : "text-text-light"
+                  )}>
+                    {dayNames[index]}
+                  </p>
+                  {/* Indicateurs de type de disponibilité */}
+                  {!past && !inSelection && dayAvailabilities.length > 0 && categoryTypes.length > 0 && (
+                    <div className="flex gap-0.5">
+                      {categoryTypes.map((type) => {
+                        const typeAvail = dayAvailabilities.find(
+                          (a) => a.categoryTypeId === type._id
+                        );
+                        if (!typeAvail || typeAvail.status === "unavailable") {
+                          return null;
+                        }
+                        return (
+                          <span
+                            key={type._id}
+                            className="w-2 h-2 rounded-full"
+                            style={{ backgroundColor: type.color }}
+                            title={`${type.name}: ${typeAvail.status === "available" ? "Disponible" : "Partiel"}`}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
                 <p
                   className={cn(
                     "text-lg font-bold",
@@ -253,8 +303,9 @@ export function WeekView({
               {/* Day cells */}
               {weekDates.map((date, dayIndex) => {
                 const dateStr = formatDateLocal(date);
-                const dayAvailability = getAvailabilityForDate(date);
+                const dayAvailabilities = getAvailabilitiesForDate(date);
                 const past = isPastDate(date);
+                const bgClass = getDayBackgroundClass(dayAvailabilities, false);
 
                 return (
                   <div
@@ -264,10 +315,8 @@ export function WeekView({
                       "border-r last:border-r-0 min-h-[48px] transition-colors relative",
                       past
                         ? "bg-gray-50/80 cursor-not-allowed"
-                        : "cursor-pointer hover:bg-gray-50",
-                      !past &&
-                        dayAvailability?.status === "unavailable" &&
-                        "bg-red-50/50"
+                        : "cursor-pointer hover:bg-gray-100/50",
+                      !past && bgClass
                     )}
                   />
                 );

@@ -174,11 +174,22 @@ bun run build
 
 - **Page Planning** (`/dashboard/planning`)
   - **4 vues calendrier** : Jour, Semaine, Mois, Annee
-  - **Gestion des disponibilites**
-    - Clic simple : definir la dispo d'un jour
+  - **Gestion des disponibilites par type de service**
+    - Disponibilite par type de categorie (Garde, Services, Sante, Reproduction)
+    - Par defaut indisponible : nouvel annonceur = indisponible pour tout
+    - Indicateurs visuels colores par type dans les vues Mois et Semaine
+    - Clic simple : definir la dispo d'un jour pour un ou plusieurs types
     - Glisser-deposer : selectionner une plage de dates
     - Statuts : Disponible, Partiel, Indisponible
     - Action rapide "Weekends indispo"
+  - **Semaine type et duplication**
+    - Creer une semaine type avec vos disponibilites
+    - Dupliquer sur une periode personnalisee ou jusqu'a fin d'annee
+    - Option d'ecrasement des disponibilites existantes
+    - Bouton "Dupliquer cette semaine" visible en vue Semaine
+  - **Exclusivite individuel/collectif**
+    - Impossible d'etre disponible pour services individuels si creneau collectif existe
+    - Validation bidirectionnelle entre les deux systemes
   - **Gestion des missions**
     - Affichage des missions sur le calendrier
     - Detail des missions avec actions (accepter, refuser, annuler, terminer)
@@ -427,6 +438,50 @@ Utilisation de Framer Motion avec des variants predefinies :
 ---
 
 ## Changelog recent
+
+### v0.21.0 - Systeme de Disponibilites Avance
+
+- **Disponibilite par type de categorie**
+  - Chaque type de service (Garde, Services, Sante, Reproduction) a sa propre disponibilite
+  - Un annonceur peut etre disponible pour "Garde" mais pas pour "Services" le meme jour
+  - Nouveau champ `categoryTypeId` dans la table `availability`
+  - Nouvel index `by_user_date_type` pour les requetes optimisees
+
+- **Par defaut indisponible**
+  - Nouvel annonceur = indisponible pour tous les types
+  - Pas d'entree en base = indisponible (logique inversee)
+  - Validation lors des reservations par type de categorie
+
+- **Indicateurs visuels par type**
+  - Points colores dans les vues Mois et Semaine
+  - Chaque point correspond a un type de service disponible
+  - Couleurs definies par les types de categories admin
+  - Filtre par type pour voir uniquement certaines disponibilites
+
+- **Duplication de semaine type**
+  - Modal de duplication accessible depuis la vue Semaine
+  - Selection de la semaine source avec apercu des disponibilites
+  - Mode periode personnalisee ou "reste de l'annee"
+  - Option d'ecrasement des disponibilites existantes
+  - Protection : max 1 an, exclusion dates passees, exclusion semaine source
+
+- **Exclusivite individuel/collectif**
+  - Validation bidirectionnelle entre services individuels et creneaux collectifs
+  - Impossible de se rendre disponible si un creneau collectif existe sur le meme horaire
+  - Impossible de creer un creneau collectif si une disponibilite individuelle existe
+
+- **Backend Convex**
+  - `setAvailability` et `setAvailabilityRange` avec `categoryTypeId`
+  - `duplicateWeekAvailability` : mutation de duplication de semaine
+  - `getWeekAvailability` : query pour apercu de semaine
+  - `checkCollectiveSlotsConflict` : helper de validation d'exclusivite
+  - Mise a jour de `createPendingBooking` pour valider par type
+
+- **Frontend**
+  - `AvailabilityModal` : selection multi-types avec checkboxes
+  - `DuplicateWeekModal` : interface de duplication en 3 etapes
+  - `WeekView` et `MonthView` : indicateurs de type colores
+  - `QuickInfo` : astuce pour la semaine type en vue Mois
 
 ### v0.20.0 - Refonte Page Reservation Step-by-Step (4 etapes)
 

@@ -14,9 +14,10 @@ import {
   CalendarOff,
   Eye,
   Users,
+  Copy,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
-import { usePlanning, ViewMode, Mission, MissionStats, Availability, CollectiveSlot } from "@/app/hooks/usePlanning";
+import { usePlanning, ViewMode, Mission, MissionStats, Availability, CollectiveSlot, CategoryType } from "@/app/hooks/usePlanning";
 import { useAuth } from "@/app/hooks/useAuth";
 
 // Components
@@ -25,6 +26,7 @@ import { WeekView } from "./components/views/WeekView";
 import { DayView } from "./components/views/DayView";
 import { YearView } from "./components/views/YearView";
 import { AvailabilityModal } from "./components/availability/AvailabilityModal";
+import { DuplicateWeekModal } from "./components/availability/DuplicateWeekModal";
 import { MissionDetailModal } from "./components/MissionDetailModal";
 import { CollectiveSlotModal } from "./components/CollectiveSlotModal";
 import {
@@ -150,59 +152,126 @@ const PlanningStats = memo(function PlanningStats({ stats }: { stats: MissionSta
   );
 });
 
-// Légende mémorisée - statique, ne re-render jamais
-const CalendarLegend = memo(function CalendarLegend() {
+// Légende mémorisée avec sélecteur de type
+const CalendarLegend = memo(function CalendarLegend({
+  categoryTypes,
+  selectedTypeId,
+  onTypeChange,
+}: {
+  categoryTypes: CategoryType[];
+  selectedTypeId: string | null;
+  onTypeChange: (typeId: string | null) => void;
+}) {
   return (
-    <div className="flex flex-wrap gap-4 mb-4 pb-4 border-b border-gray-100">
-      <div className="flex items-center gap-2 text-xs">
-        <div className="w-3 h-3 rounded-full bg-blue-500" />
-        <span className="text-text-light">En cours</span>
-      </div>
-      <div className="flex items-center gap-2 text-xs">
-        <div className="w-3 h-3 rounded-full bg-purple" />
-        <span className="text-text-light">A venir</span>
-      </div>
-      <div className="flex items-center gap-2 text-xs">
-        <div className="w-3 h-3 rounded-full bg-amber-500" />
-        <span className="text-text-light">A accepter</span>
-      </div>
-      <div className="flex items-center gap-2 text-xs">
-        <div className="w-3 h-3 rounded-full bg-green-500" />
-        <span className="text-text-light">Terminee</span>
-      </div>
-      <div className="flex items-center gap-2 text-xs">
-        <div className="w-3 h-3 rounded-full bg-purple-500" />
-        <span className="text-text-light">Collectif</span>
-      </div>
-      <div className="flex items-center gap-2 text-xs">
-        <div className="w-3 h-3 rounded bg-green-100 border border-green-200" />
-        <span className="text-text-light">Disponible</span>
-      </div>
-      <div className="flex items-center gap-2 text-xs">
-        <div className="w-3 h-3 rounded bg-orange-100 border border-orange-200" />
-        <span className="text-text-light">Partiel</span>
-      </div>
-      <div className="flex items-center gap-2 text-xs">
-        <div className="w-3 h-3 rounded bg-red-100 border border-red-200" />
-        <span className="text-text-light">Indisponible</span>
+    <div className="space-y-4 mb-4 pb-4 border-b border-gray-100">
+      {/* Filtre par type de service */}
+      {categoryTypes.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium text-text-light mr-2">
+            Filtrer par type:
+          </span>
+          <button
+            onClick={() => onTypeChange(null)}
+            className={cn(
+              "px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
+              !selectedTypeId
+                ? "bg-primary text-white"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            )}
+          >
+            Tous
+          </button>
+          {categoryTypes.map((type) => (
+            <button
+              key={type._id}
+              onClick={() => onTypeChange(type._id)}
+              className={cn(
+                "px-3 py-1.5 rounded-full text-xs font-medium transition-colors flex items-center gap-1",
+                selectedTypeId === type._id
+                  ? "text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              )}
+              style={{
+                backgroundColor:
+                  selectedTypeId === type._id ? type.color : undefined,
+              }}
+            >
+              <span>{type.icon}</span>
+              {type.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Légende des statuts */}
+      <div className="flex flex-wrap gap-4">
+        <div className="flex items-center gap-2 text-xs">
+          <div className="w-3 h-3 rounded-full bg-blue-500" />
+          <span className="text-text-light">En cours</span>
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          <div className="w-3 h-3 rounded-full bg-purple" />
+          <span className="text-text-light">A venir</span>
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          <div className="w-3 h-3 rounded-full bg-amber-500" />
+          <span className="text-text-light">A accepter</span>
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          <div className="w-3 h-3 rounded-full bg-green-500" />
+          <span className="text-text-light">Terminee</span>
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          <div className="w-3 h-3 rounded-full bg-purple-500" />
+          <span className="text-text-light">Collectif</span>
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          <div className="w-3 h-3 rounded bg-green-100 border border-green-200" />
+          <span className="text-text-light">Disponible</span>
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          <div className="w-3 h-3 rounded bg-orange-100 border border-orange-200" />
+          <span className="text-text-light">Partiel</span>
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          <div className="w-3 h-3 rounded bg-gray-200 border border-gray-300" />
+          <span className="text-text-light">Indisponible (defaut)</span>
+        </div>
       </div>
     </div>
   );
 });
 
-// Info box mémorisée - statique
-const QuickInfo = memo(function QuickInfo() {
+// Info box mémorisée
+const QuickInfo = memo(function QuickInfo({ viewMode }: { viewMode: ViewMode }) {
   return (
-    <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-start gap-3">
-      <Calendar className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-      <div>
-        <p className="font-semibold text-blue-800">Gerer vos disponibilites</p>
-        <p className="text-sm text-blue-700">
-          Cliquez sur un jour du calendrier pour definir votre disponibilite.
-          Les clients ne pourront pas reserver pendant vos periodes
-          d&apos;indisponibilite.
-        </p>
+    <div className="space-y-3">
+      <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-start gap-3">
+        <Calendar className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="font-semibold text-blue-800">Gestion des disponibilites</p>
+          <ul className="text-sm text-blue-700 space-y-1 mt-1">
+            <li>• Par defaut, vous etes <strong>indisponible</strong> pour tous les types</li>
+            <li>• Selectionnez un type puis cliquez sur un jour pour vous rendre disponible</li>
+            <li>• Vous pouvez etre disponible pour &quot;Garde&quot; mais pas pour &quot;Services&quot; le meme jour</li>
+            <li>• Les seances collectives se gerent dans &quot;Mes services&quot;</li>
+          </ul>
+        </div>
       </div>
+
+      {/* Astuce pour la semaine type - visible uniquement en vue mois ou année */}
+      {(viewMode === "month" || viewMode === "year") && (
+        <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 flex items-start gap-3">
+          <Copy className="w-5 h-5 text-purple flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold text-purple-800">Astuce : Creez une semaine type</p>
+            <p className="text-sm text-purple-700 mt-1">
+              Passez en <strong>vue Semaine</strong> pour configurer vos disponibilites puis dupliquez-les
+              sur plusieurs semaines ou sur toute l&apos;annee en un clic.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 });
@@ -210,16 +279,20 @@ const QuickInfo = memo(function QuickInfo() {
 // Navigation du calendrier
 const CalendarNavigation = memo(function CalendarNavigation({
   title,
+  viewMode,
   onPrevious,
   onNext,
   onToday,
   onMarkWeekendsUnavailable,
+  onDuplicateWeek,
 }: {
   title: string;
+  viewMode: ViewMode;
   onPrevious: () => void;
   onNext: () => void;
   onToday: () => void;
   onMarkWeekendsUnavailable: () => void;
+  onDuplicateWeek: () => void;
 }) {
   return (
     <div className="flex items-center justify-between mb-4">
@@ -254,6 +327,18 @@ const CalendarNavigation = memo(function CalendarNavigation({
         >
           Aujourd&apos;hui
         </motion.button>
+        {/* Bouton Semaine type - uniquement en vue semaine */}
+        {viewMode === "week" && (
+          <motion.button
+            onClick={onDuplicateWeek}
+            className="hidden md:flex items-center gap-1 px-4 py-2 bg-purple/10 text-purple rounded-lg text-sm font-medium hover:bg-purple/20"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <Copy className="w-4 h-4" />
+            Dupliquer cette semaine
+          </motion.button>
+        )}
         <motion.button
           onClick={onMarkWeekendsUnavailable}
           className="hidden md:flex items-center gap-1 px-4 py-2 border border-gray-200 text-text-light rounded-lg text-sm font-medium hover:border-gray-300"
@@ -276,6 +361,8 @@ const CalendarContent = memo(function CalendarContent({
   missions,
   availability,
   collectiveSlots,
+  categoryTypes,
+  selectedTypeId,
   onDayClick,
   onRangeSelect,
   onMissionClick,
@@ -289,6 +376,8 @@ const CalendarContent = memo(function CalendarContent({
   missions: Mission[];
   availability: Availability[];
   collectiveSlots: CollectiveSlot[];
+  categoryTypes: CategoryType[];
+  selectedTypeId: string | null;
   onDayClick: (date: string) => void;
   onRangeSelect: (startDate: string, endDate: string) => void;
   onMissionClick: (mission: Mission) => void;
@@ -308,6 +397,8 @@ const CalendarContent = memo(function CalendarContent({
           missions={missions}
           availability={availability}
           collectiveSlots={collectiveSlots}
+          categoryTypes={categoryTypes}
+          selectedTypeId={selectedTypeId}
           onDayClick={onDayClick}
           onRangeSelect={onRangeSelect}
           onMissionClick={onMissionClick}
@@ -320,6 +411,8 @@ const CalendarContent = memo(function CalendarContent({
           missions={missions}
           availability={availability}
           collectiveSlots={collectiveSlots}
+          categoryTypes={categoryTypes}
+          selectedTypeId={selectedTypeId}
           onDayClick={onDayClick}
           onRangeSelect={onRangeSelect}
           onMissionClick={onMissionClick}
@@ -426,6 +519,8 @@ export default function PlanningPage() {
   const [selectedStartDate, setSelectedStartDate] = useState<string | null>(null);
   const [selectedEndDate, setSelectedEndDate] = useState<string | null>(null);
   const [showListView, setShowListView] = useState(false);
+  const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null);
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
 
   const {
     currentDate,
@@ -434,6 +529,7 @@ export default function PlanningPage() {
     missions,
     availability,
     collectiveSlots,
+    categoryTypes,
     stats,
     isLoading,
     goToToday,
@@ -442,6 +538,8 @@ export default function PlanningPage() {
     goToDate,
     getViewTitle,
     getAvailabilityForDay,
+    getAvailabilityForDayByType,
+    getAllAvailabilitiesForDay,
     acceptMission,
     refuseMission,
     cancelMission,
@@ -491,6 +589,7 @@ export default function PlanningPage() {
   }, [currentDate, goToDate, setViewMode]);
 
   const handleAvailabilitySave = useCallback(async (
+    categoryTypeId: string,
     status: "available" | "partial" | "unavailable",
     options?: {
       timeSlots?: Array<{ startTime: string; endTime: string }>;
@@ -498,28 +597,41 @@ export default function PlanningPage() {
     }
   ) => {
     if (!selectedStartDate) return;
-    await setDayAvailability(selectedStartDate, status, options);
+    await setDayAvailability(selectedStartDate, categoryTypeId, status, options);
   }, [selectedStartDate, setDayAvailability]);
 
   const handleAvailabilitySaveRange = useCallback(async (
     startDate: string,
     endDate: string,
+    categoryTypeId: string,
     status: "available" | "partial" | "unavailable",
     options?: {
       timeSlots?: Array<{ startTime: string; endTime: string }>;
       reason?: string;
     }
   ) => {
-    await setRangeAvailability(startDate, endDate, status, options);
+    await setRangeAvailability(startDate, endDate, categoryTypeId, status, options);
   }, [setRangeAvailability]);
 
-  const handleAvailabilityClear = useCallback(async () => {
+  const handleAvailabilityClear = useCallback(async (categoryTypeId?: string) => {
     if (!selectedStartDate) return;
-    await clearDayAvailability(selectedStartDate);
+    await clearDayAvailability(selectedStartDate, categoryTypeId);
   }, [selectedStartDate, clearDayAvailability]);
+
+  const handleTypeChange = useCallback((typeId: string | null) => {
+    setSelectedTypeId(typeId);
+  }, []);
 
   const handleCloseMissionModal = useCallback(() => {
     setSelectedMission(null);
+  }, []);
+
+  const handleOpenDuplicateModal = useCallback(() => {
+    setShowDuplicateModal(true);
+  }, []);
+
+  const handleCloseDuplicateModal = useCallback(() => {
+    setShowDuplicateModal(false);
   }, []);
 
   // Track si le premier chargement est terminé
@@ -576,14 +688,20 @@ export default function PlanningPage() {
         {/* Navigation - re-render quand le titre change */}
         <CalendarNavigation
           title={viewTitle}
+          viewMode={viewMode}
           onPrevious={goToPrevious}
           onNext={goToNext}
           onToday={goToToday}
           onMarkWeekendsUnavailable={markWeekendsUnavailable}
+          onDuplicateWeek={handleOpenDuplicateModal}
         />
 
-        {/* Legend - jamais re-render */}
-        <CalendarLegend />
+        {/* Legend avec sélecteur de type */}
+        <CalendarLegend
+          categoryTypes={categoryTypes}
+          selectedTypeId={selectedTypeId}
+          onTypeChange={handleTypeChange}
+        />
 
         {/* Calendar Content */}
         <CalendarContent
@@ -593,6 +711,8 @@ export default function PlanningPage() {
           missions={missions}
           availability={availability}
           collectiveSlots={collectiveSlots}
+          categoryTypes={categoryTypes}
+          selectedTypeId={selectedTypeId}
           onDayClick={handleDayClick}
           onRangeSelect={handleRangeSelect}
           onMissionClick={handleMissionClick}
@@ -608,7 +728,7 @@ export default function PlanningPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
       >
-        <QuickInfo />
+        <QuickInfo viewMode={viewMode} />
       </motion.div>
 
       {/* Availability Modal */}
@@ -617,10 +737,12 @@ export default function PlanningPage() {
         onClose={handleCloseModal}
         startDate={selectedStartDate || ""}
         endDate={selectedEndDate || undefined}
-        currentAvailability={
+        categoryTypes={categoryTypes}
+        selectedTypeId={selectedTypeId}
+        currentAvailabilities={
           selectedStartDate && !selectedEndDate
-            ? getAvailabilityForDay(selectedStartDate)
-            : null
+            ? getAllAvailabilitiesForDay(selectedStartDate)
+            : []
         }
         onSave={handleAvailabilitySave}
         onSaveRange={handleAvailabilitySaveRange}
@@ -650,6 +772,14 @@ export default function PlanningPage() {
         slot={selectedSlot}
         token={token}
         onClose={handleCloseSlotModal}
+      />
+
+      {/* Duplicate Week Modal */}
+      <DuplicateWeekModal
+        isOpen={showDuplicateModal}
+        onClose={handleCloseDuplicateModal}
+        token={token}
+        categoryTypes={categoryTypes}
       />
     </div>
   );

@@ -141,18 +141,51 @@ export const createPendingBooking = mutation({
 
     if (!isCollectiveBooking && !isMultiSessionBooking) {
       // Vérifier la disponibilité de l'annonceur AVANT de créer la réservation
-      const unavailabilities = await ctx.db
+      // NOUVEAU: Logique "par défaut indisponible" + vérification par type de catégorie
+
+      // 1. Récupérer le typeId de la catégorie du service
+      let typeId = category?.typeId;
+      if (!typeId && category?.parentCategoryId) {
+        const parentCategory = await ctx.db.get(category.parentCategoryId);
+        typeId = parentCategory?.typeId;
+      }
+
+      // 2. Récupérer les disponibilités pour ce type
+      const availabilities = await ctx.db
         .query("availability")
         .withIndex("by_user", (q) => q.eq("userId", args.announcerId))
-        .filter((q) => q.eq(q.field("status"), "unavailable"))
         .collect();
 
-      const unavailableDates = new Set(unavailabilities.map((a) => a.date));
+      // Filtrer par type si disponible
+      const relevantAvailabilities = typeId
+        ? availabilities.filter((a) => String(a.categoryTypeId) === String(typeId))
+        : availabilities;
+
+      // Créer un map date -> availability
+      const availabilityMap = new Map(
+        relevantAvailabilities.map((a) => [a.date, a])
+      );
+
       const requestedDates = getDatesBetween(args.startDate, args.endDate);
 
       for (const date of requestedDates) {
-        if (unavailableDates.has(date)) {
-          throw new ConvexError(`L'annonceur n'est pas disponible le ${date}`);
+        const avail = availabilityMap.get(date);
+
+        // Pas d'entrée OU status "unavailable" = indisponible (nouveau comportement par défaut)
+        if (!avail || avail.status === "unavailable") {
+          throw new ConvexError(`L'annonceur n'est pas disponible le ${date} pour ce type de service`);
+        }
+
+        // Si "partial", vérifier les timeSlots
+        if (avail.status === "partial" && args.startTime && endTime) {
+          const isInSlot = avail.timeSlots?.some(
+            (ts) => args.startTime! >= ts.startTime && endTime! <= ts.endTime
+          );
+          if (!isInSlot) {
+            throw new ConvexError(
+              `L'annonceur n'est pas disponible sur ce créneau horaire le ${date}`
+            );
+          }
         }
       }
 

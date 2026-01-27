@@ -494,8 +494,98 @@ export const validateVariantSlots = query({
 // MUTATIONS
 // ============================================
 
+// Helper: Vérifier si deux créneaux horaires se chevauchent
+function timeSlotsOverlap(
+  start1: string,
+  end1: string,
+  start2: string,
+  end2: string
+): boolean {
+  return start1 < end2 && end1 > start2;
+}
+
+// Helper: Vérifier conflit avec disponibilité individuelle
+async function checkIndividualAvailabilityConflict(
+  ctx: any,
+  userId: Id<"users">,
+  serviceId: Id<"services">,
+  date: string,
+  startTime: string,
+  endTime: string
+): Promise<{ hasConflict: boolean; message?: string }> {
+  // 1. Récupérer la catégorie du service
+  const service = await ctx.db.get(serviceId);
+  if (!service) {
+    return { hasConflict: false };
+  }
+
+  // 2. Récupérer la catégorie parente pour obtenir le typeId
+  const category = await ctx.db
+    .query("serviceCategories")
+    .withIndex("by_slug", (q: any) => q.eq("slug", service.category))
+    .first();
+
+  if (!category) {
+    return { hasConflict: false };
+  }
+
+  // Si c'est une sous-catégorie, récupérer la catégorie parente
+  let typeId = category.typeId;
+  if (!typeId && category.parentCategoryId) {
+    const parentCategory = await ctx.db.get(category.parentCategoryId);
+    typeId = parentCategory?.typeId;
+  }
+
+  if (!typeId) {
+    return { hasConflict: false };
+  }
+
+  // 3. Vérifier s'il y a une disponibilité individuelle pour ce type ce jour
+  const availability = await ctx.db
+    .query("availability")
+    .withIndex("by_user_date_type", (q: any) =>
+      q.eq("userId", userId).eq("date", date).eq("categoryTypeId", typeId)
+    )
+    .first();
+
+  // Pas de dispo = pas d'entrée = indisponible par défaut = pas de conflit (car indisponible)
+  if (!availability) {
+    return { hasConflict: false };
+  }
+
+  // Si unavailable, pas de conflit
+  if (availability.status === "unavailable") {
+    return { hasConflict: false };
+  }
+
+  // Si available sans timeSlots (toute la journée), conflit
+  if (availability.status === "available" && (!availability.timeSlots || availability.timeSlots.length === 0)) {
+    return {
+      hasConflict: true,
+      message: `Vous êtes marqué disponible pour des services individuels le ${date}. Modifiez d'abord votre disponibilité.`,
+    };
+  }
+
+  // Si partial ou available avec timeSlots, vérifier chevauchement
+  if (availability.timeSlots && availability.timeSlots.length > 0) {
+    const hasOverlap = availability.timeSlots.some((ts: { startTime: string; endTime: string }) =>
+      timeSlotsOverlap(startTime, endTime, ts.startTime, ts.endTime)
+    );
+
+    if (hasOverlap) {
+      return {
+        hasConflict: true,
+        message: `Vous êtes marqué disponible pour des services individuels sur ce créneau horaire le ${date}. Modifiez d'abord votre disponibilité.`,
+      };
+    }
+  }
+
+  return { hasConflict: false };
+}
+
 /**
  * Créer un créneau collectif (avec support récurrence)
+ * Vérifie l'exclusivité avec les disponibilités individuelles
  */
 export const addCollectiveSlot = mutation({
   args: {
@@ -534,6 +624,26 @@ export const addCollectiveSlot = mutation({
     // Calculer l'heure de fin basée sur la durée de la formule
     const duration = variant.duration || 60; // Par défaut 60 minutes
     const endTime = calculateEndTime(args.startTime, duration);
+
+    // Vérifier l'exclusivité avec les disponibilités individuelles
+    const datesToCheck = args.recurrence
+      ? generateRecurrenceDates(args.date, args.recurrence.endDate, args.recurrence.pattern)
+      : [args.date];
+
+    for (const date of datesToCheck) {
+      const conflict = await checkIndividualAvailabilityConflict(
+        ctx,
+        user._id,
+        variant.serviceId,
+        date,
+        args.startTime,
+        endTime
+      );
+
+      if (conflict.hasConflict) {
+        throw new ConvexError(conflict.message || "Conflit avec disponibilité individuelle");
+      }
+    }
 
     const now = Date.now();
     const baseSlot = {

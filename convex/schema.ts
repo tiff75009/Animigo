@@ -574,9 +574,15 @@ export default defineSchema({
     .index("by_auto_capture", ["autoCaptureScheduledAt"]),
 
   // Disponibilités / Indisponibilités des annonceurs
+  // NOTE: Par défaut, un annonceur est INDISPONIBLE. Une entrée dans cette table
+  // avec status "available" ou "partial" indique une disponibilité explicite.
+  // L'absence d'entrée = indisponible par défaut.
   availability: defineTable({
     userId: v.id("users"),
     date: v.string(), // "YYYY-MM-DD"
+    // Type de catégorie concerné (garde, service, santé, reproduction)
+    // Optionnel pour la rétrocompatibilité avec les anciennes entrées
+    categoryTypeId: v.optional(v.id("categoryTypes")),
     status: v.union(
       v.literal("available"), // Disponible
       v.literal("partial"), // Partiellement disponible
@@ -596,7 +602,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
-    .index("by_user_date", ["userId", "date"]),
+    .index("by_user_date", ["userId", "date"])
+    .index("by_user_date_type", ["userId", "date", "categoryTypeId"]),
 
   // Fiches animaux des utilisateurs
   animals: defineTable({

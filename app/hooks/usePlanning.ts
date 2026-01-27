@@ -89,12 +89,22 @@ export interface Mission {
 export interface Availability {
   id: Id<"availability">;
   date: string;
+  categoryTypeId?: string;
   status: "available" | "partial" | "unavailable";
   timeSlots?: Array<{
     startTime: string;
     endTime: string;
   }>;
   reason?: string;
+}
+
+export interface CategoryType {
+  _id: string;
+  id: string;
+  slug: string;
+  name: string;
+  icon: string;
+  color: string;
 }
 
 export interface MissionStats {
@@ -111,6 +121,7 @@ interface UsePlanningOptions {
   token: string | null;
   initialDate?: Date;
   initialViewMode?: ViewMode;
+  selectedTypeId?: string | null;
 }
 
 export function usePlanning({
@@ -200,6 +211,12 @@ export function usePlanning({
           year: currentDate.getFullYear(),
         }
       : "skip"
+  );
+
+  // Query pour les types de catégories (pour filtrage des disponibilités)
+  const categoryTypes = useQuery(
+    api.public.categoryTypes.listActiveTypes,
+    token ? { token } : "skip"
   );
 
   // Mutations
@@ -308,10 +325,11 @@ export function usePlanning({
     [token, completeMissionMut]
   );
 
-  // Availability actions
+  // Availability actions - NOUVEAU: Support pour categoryTypeId
   const setDayAvailability = useCallback(
     async (
       date: string,
+      categoryTypeId: string,
       status: "available" | "partial" | "unavailable",
       options?: {
         timeSlots?: Array<{ startTime: string; endTime: string }>;
@@ -322,6 +340,7 @@ export function usePlanning({
       return setAvailabilityMut({
         token,
         date,
+        categoryTypeId: categoryTypeId as Id<"categoryTypes">,
         status,
         timeSlots: options?.timeSlots,
         reason: options?.reason,
@@ -334,6 +353,7 @@ export function usePlanning({
     async (
       rangeStartDate: string,
       rangeEndDate: string,
+      categoryTypeId: string,
       status: "available" | "partial" | "unavailable",
       options?: {
         timeSlots?: Array<{ startTime: string; endTime: string }>;
@@ -345,6 +365,7 @@ export function usePlanning({
         token,
         startDate: rangeStartDate,
         endDate: rangeEndDate,
+        categoryTypeId: categoryTypeId as Id<"categoryTypes">,
         status,
         timeSlots: options?.timeSlots,
         reason: options?.reason,
@@ -354,26 +375,38 @@ export function usePlanning({
   );
 
   const toggleDayAvailability = useCallback(
-    async (date: string) => {
+    async (date: string, categoryTypeId: string) => {
       if (!token) return;
-      return toggleAvailabilityMut({ token, date });
+      return toggleAvailabilityMut({
+        token,
+        date,
+        categoryTypeId: categoryTypeId as Id<"categoryTypes">,
+      });
     },
     [token, toggleAvailabilityMut]
   );
 
-  const markWeekendsUnavailable = useCallback(async () => {
-    if (!token) return;
-    return setWeekendsUnavailableMut({
-      token,
-      month: currentDate.getMonth(),
-      year: currentDate.getFullYear(),
-    });
-  }, [token, currentDate, setWeekendsUnavailableMut]);
+  const markWeekendsUnavailable = useCallback(
+    async (categoryTypeId?: string) => {
+      if (!token) return;
+      return setWeekendsUnavailableMut({
+        token,
+        month: currentDate.getMonth(),
+        year: currentDate.getFullYear(),
+        categoryTypeId: categoryTypeId as Id<"categoryTypes"> | undefined,
+      });
+    },
+    [token, currentDate, setWeekendsUnavailableMut]
+  );
 
   const clearDayAvailability = useCallback(
-    async (date: string) => {
+    async (date: string, categoryTypeId?: string) => {
       if (!token) return;
-      return clearAvailabilityMut({ token, date });
+      return clearAvailabilityMut({
+        token,
+        date,
+        categoryTypeId: categoryTypeId as Id<"categoryTypes"> | undefined,
+      });
     },
     [token, clearAvailabilityMut]
   );
@@ -405,6 +438,29 @@ export function usePlanning({
     (date: string): Availability | null => {
       if (!availability) return null;
       return availability.find((a: Availability) => a.date === date) || null;
+    },
+    [availability]
+  );
+
+  // Helper pour obtenir le statut de disponibilité d'un jour par type
+  const getAvailabilityForDayByType = useCallback(
+    (date: string, categoryTypeId: string): Availability | null => {
+      if (!availability) return null;
+      return (
+        availability.find(
+          (a: Availability) =>
+            a.date === date && a.categoryTypeId === categoryTypeId
+        ) || null
+      );
+    },
+    [availability]
+  );
+
+  // Helper pour obtenir toutes les disponibilités d'un jour (tous types)
+  const getAllAvailabilitiesForDay = useCallback(
+    (date: string): Availability[] => {
+      if (!availability) return [];
+      return availability.filter((a: Availability) => a.date === date);
     },
     [availability]
   );
@@ -458,6 +514,7 @@ export function usePlanning({
     missions: missions || [],
     availability: availability || [],
     collectiveSlots: collectiveSlots || [],
+    categoryTypes: categoryTypes || [],
     stats: stats || {
       total: 0,
       pending: 0,
@@ -480,6 +537,8 @@ export function usePlanning({
     // Helpers
     getMissionsForDay,
     getAvailabilityForDay,
+    getAvailabilityForDayByType,
+    getAllAvailabilitiesForDay,
     getCollectiveSlotsForDay,
 
     // Mission actions

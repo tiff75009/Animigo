@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Calendar, Clock, Plus, Trash2, CalendarRange } from "lucide-react";
+import { X, Calendar, Clock, Plus, Trash2, CalendarRange, Info, Check } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import {
   Availability,
@@ -10,6 +10,7 @@ import {
   availabilityColors,
   availabilityLabels,
 } from "../types";
+import { CategoryType } from "@/app/hooks/usePlanning";
 
 interface TimeSlot {
   startTime: string;
@@ -21,18 +22,22 @@ interface AvailabilityModalProps {
   onClose: () => void;
   startDate: string;
   endDate?: string; // If provided, it's a range selection
-  currentAvailability?: Availability | null;
+  categoryTypes: CategoryType[];
+  selectedTypeId: string | null;
+  currentAvailabilities: Availability[];
   onSave: (
+    categoryTypeId: string,
     status: AvailabilityStatus,
     options?: { timeSlots?: TimeSlot[]; reason?: string }
   ) => Promise<void>;
   onSaveRange?: (
     startDate: string,
     endDate: string,
+    categoryTypeId: string,
     status: AvailabilityStatus,
     options?: { timeSlots?: TimeSlot[]; reason?: string }
   ) => Promise<void>;
-  onClear: () => Promise<void>;
+  onClear: (categoryTypeId?: string) => Promise<void>;
 }
 
 export function AvailabilityModal({
@@ -40,28 +45,34 @@ export function AvailabilityModal({
   onClose,
   startDate,
   endDate,
-  currentAvailability,
+  categoryTypes,
+  selectedTypeId,
+  currentAvailabilities,
   onSave,
   onSaveRange,
   onClear,
 }: AvailabilityModalProps) {
-  const [status, setStatus] = useState<AvailabilityStatus>(
-    currentAvailability?.status || "unavailable"
-  );
-  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>(
-    currentAvailability?.timeSlots || []
-  );
-  const [reason, setReason] = useState(currentAvailability?.reason || "");
+  // Multi-select mode: array of selected type IDs
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [status, setStatus] = useState<AvailabilityStatus>("available");
+  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
+  const [reason, setReason] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   // Reset form when modal opens
   useEffect(() => {
     if (isOpen) {
-      setStatus(currentAvailability?.status || "unavailable");
-      setTimeSlots(currentAvailability?.timeSlots || []);
-      setReason(currentAvailability?.reason || "");
+      // Pre-select the type from the filter, or none
+      if (selectedTypeId) {
+        setSelectedTypes([selectedTypeId]);
+      } else {
+        setSelectedTypes([]);
+      }
+      setStatus("available");
+      setTimeSlots([]);
+      setReason("");
     }
-  }, [isOpen, currentAvailability]);
+  }, [isOpen, selectedTypeId]);
 
   const isRange = endDate && endDate !== startDate;
 
@@ -100,19 +111,42 @@ export function AvailabilityModal({
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
   };
 
+  // Toggle type selection
+  const toggleType = (typeId: string) => {
+    setSelectedTypes((prev) =>
+      prev.includes(typeId)
+        ? prev.filter((id) => id !== typeId)
+        : [...prev, typeId]
+    );
+  };
+
+  // Select/deselect all types
+  const toggleAllTypes = () => {
+    if (selectedTypes.length === categoryTypes.length) {
+      setSelectedTypes([]);
+    } else {
+      setSelectedTypes(categoryTypes.map((t) => t._id));
+    }
+  };
+
   const handleSave = async () => {
+    if (selectedTypes.length === 0) return;
+
     setIsLoading(true);
     try {
-      if (isRange && onSaveRange) {
-        await onSaveRange(startDate, endDate, status, {
-          timeSlots: status === "partial" ? timeSlots : undefined,
-          reason: reason || undefined,
-        });
-      } else {
-        await onSave(status, {
-          timeSlots: status === "partial" ? timeSlots : undefined,
-          reason: reason || undefined,
-        });
+      // Save for each selected type
+      for (const typeId of selectedTypes) {
+        if (isRange && onSaveRange) {
+          await onSaveRange(startDate, endDate, typeId, status, {
+            timeSlots: status === "partial" ? timeSlots : undefined,
+            reason: reason || undefined,
+          });
+        } else {
+          await onSave(typeId, status, {
+            timeSlots: status === "partial" ? timeSlots : undefined,
+            reason: reason || undefined,
+          });
+        }
       }
       onClose();
     } catch (error) {
@@ -123,9 +157,14 @@ export function AvailabilityModal({
   };
 
   const handleClear = async () => {
+    if (selectedTypes.length === 0) return;
+
     setIsLoading(true);
     try {
-      await onClear();
+      // Clear for each selected type
+      for (const typeId of selectedTypes) {
+        await onClear(typeId);
+      }
       onClose();
     } catch (error) {
       console.error("Error clearing availability:", error);
@@ -153,6 +192,18 @@ export function AvailabilityModal({
       )
     );
   };
+
+  // Get display status for a type
+  const getTypeStatus = (typeId: string): AvailabilityStatus | "default" => {
+    const avail = currentAvailabilities.find((a) => a.categoryTypeId === typeId);
+    if (!avail) return "default"; // No entry = unavailable by default
+    return avail.status;
+  };
+
+  // Check if at least one selected type has an existing availability
+  const hasExistingAvailability = selectedTypes.some((typeId) =>
+    currentAvailabilities.some((a) => a.categoryTypeId === typeId)
+  );
 
   if (!isOpen) return null;
 
@@ -208,23 +259,110 @@ export function AvailabilityModal({
             </button>
           </div>
 
+          {/* Info banner */}
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm">
+            <div className="flex items-start gap-2">
+              <Info className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-amber-800">Services individuels uniquement</p>
+                <p className="text-amber-600 text-xs mt-1">
+                  Pour les seances collectives, creez des creneaux dans &quot;Mes services&quot;.
+                  Un creneau individuel et collectif ne peuvent pas se chevaucher.
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Past date warning */}
           {isPast && (
             <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
               <p className="text-sm text-amber-800 font-medium">
-                Cette date est passée
+                Cette date est passee
               </p>
               <p className="text-xs text-amber-600 mt-1">
-                Vous ne pouvez pas modifier la disponibilité des jours passés.
+                Vous ne pouvez pas modifier la disponibilite des jours passes.
+              </p>
+            </div>
+          )}
+
+          {/* Type selection - Multi-select */}
+          {!isPast && categoryTypes.length > 0 && (
+            <div className="space-y-3 mb-6">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-foreground">
+                  Types de service
+                </label>
+                <button
+                  onClick={toggleAllTypes}
+                  className="text-xs text-primary hover:underline"
+                >
+                  {selectedTypes.length === categoryTypes.length
+                    ? "Tout deselectionner"
+                    : "Tout selectionner"}
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {categoryTypes.map((type) => {
+                  const typeStatus = getTypeStatus(type._id);
+                  const isUnavailable = typeStatus === "default" || typeStatus === "unavailable";
+                  const isSelected = selectedTypes.includes(type._id);
+                  return (
+                    <button
+                      key={type._id}
+                      onClick={() => toggleType(type._id)}
+                      className={cn(
+                        "py-3 px-3 rounded-xl text-sm font-medium border-2 transition-all flex items-center gap-2 relative",
+                        isSelected
+                          ? "border-primary bg-primary/10"
+                          : "border-gray-200 hover:border-gray-300"
+                      )}
+                    >
+                      {/* Checkbox indicator */}
+                      <div
+                        className={cn(
+                          "w-5 h-5 rounded border-2 flex items-center justify-center transition-colors",
+                          isSelected
+                            ? "bg-primary border-primary"
+                            : "border-gray-300"
+                        )}
+                      >
+                        {isSelected && <Check className="w-3 h-3 text-white" />}
+                      </div>
+                      <span>{type.icon}</span>
+                      <span className="flex-1 text-left text-foreground">{type.name}</span>
+                      {/* Status indicator */}
+                      <span
+                        className={cn(
+                          "w-2.5 h-2.5 rounded-full",
+                          isUnavailable
+                            ? "bg-gray-300"
+                            : typeStatus === "available"
+                              ? "bg-green-500"
+                              : "bg-orange-500"
+                        )}
+                        title={
+                          isUnavailable
+                            ? "Indisponible"
+                            : typeStatus === "available"
+                              ? "Disponible"
+                              : "Partiel"
+                        }
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-text-light">
+                • Vert = disponible • Orange = partiel • Gris = indisponible (defaut)
               </p>
             </div>
           )}
 
           {/* Status selection */}
-          {!isPast && (
+          {!isPast && selectedTypes.length > 0 && (
             <div className="space-y-3 mb-6">
               <label className="text-sm font-medium text-foreground">
-                Statut
+                Statut a appliquer ({selectedTypes.length} type{selectedTypes.length > 1 ? "s" : ""})
               </label>
               <div className="grid grid-cols-3 gap-2">
                 {(
@@ -248,7 +386,7 @@ export function AvailabilityModal({
           )}
 
           {/* Time slots (for partial availability) */}
-          {!isPast && status === "partial" && (
+          {!isPast && selectedTypes.length > 0 && status === "partial" && (
             <div className="space-y-3 mb-6">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-foreground flex items-center gap-2">
@@ -307,7 +445,7 @@ export function AvailabilityModal({
           )}
 
           {/* Reason (for unavailable) */}
-          {!isPast && status === "unavailable" && (
+          {!isPast && selectedTypes.length > 0 && status === "unavailable" && (
             <div className="space-y-2 mb-6">
               <label className="text-sm font-medium text-foreground">
                 Raison (optionnel)
@@ -333,9 +471,18 @@ export function AvailabilityModal({
               >
                 Fermer
               </motion.button>
+            ) : selectedTypes.length === 0 ? (
+              <motion.button
+                onClick={onClose}
+                className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors"
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+              >
+                Annuler
+              </motion.button>
             ) : (
               <>
-                {currentAvailability && !isRange && (
+                {hasExistingAvailability && !isRange && (
                   <motion.button
                     onClick={handleClear}
                     disabled={isLoading}
@@ -357,7 +504,7 @@ export function AvailabilityModal({
                     ? "Enregistrement..."
                     : isRange
                       ? `Appliquer a ${getDaysCount()} jours`
-                      : "Enregistrer"}
+                      : `Enregistrer (${selectedTypes.length} type${selectedTypes.length > 1 ? "s" : ""})`}
                 </motion.button>
               </>
             )}

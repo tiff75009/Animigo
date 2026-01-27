@@ -9,18 +9,20 @@ import {
   Availability,
   CollectiveSlot,
   statusColors,
-  availabilityColors,
   getDaysInMonth,
   getFirstDayOfMonth,
   formatDateStr,
   dayNames,
 } from "../types";
+import { CategoryType } from "@/app/hooks/usePlanning";
 
 interface MonthViewProps {
   currentDate: Date;
   missions: Mission[];
   availability: Availability[];
   collectiveSlots?: CollectiveSlot[];
+  categoryTypes?: CategoryType[];
+  selectedTypeId?: string | null;
   onDayClick: (date: string) => void;
   onRangeSelect?: (startDate: string, endDate: string) => void;
   onMissionClick: (mission: Mission) => void;
@@ -32,6 +34,8 @@ export function MonthView({
   missions,
   availability,
   collectiveSlots = [],
+  categoryTypes = [],
+  selectedTypeId,
   onDayClick,
   onRangeSelect,
   onMissionClick,
@@ -146,10 +150,10 @@ export function MonthView({
     });
   };
 
-  // Get availability for a specific date
-  const getAvailabilityForDate = (day: number): Availability | null => {
+  // Get all availabilities for a specific date
+  const getAvailabilitiesForDate = (day: number): Availability[] => {
     const dateStr = formatDateStr(year, month, day);
-    return availability.find((a) => a.date === dateStr) || null;
+    return availability.filter((a) => a.date === dateStr);
   };
 
   // Get collective slots for a specific date
@@ -174,6 +178,30 @@ export function MonthView({
     today.setHours(0, 0, 0, 0);
     const checkDate = new Date(year, month, day);
     return checkDate < today;
+  };
+
+  // Get background color based on availabilities
+  const getDayBackgroundClass = (dayAvailabilities: Availability[], inSelection: boolean): string => {
+    if (inSelection) return "";
+
+    // Si filtre par type actif
+    if (selectedTypeId) {
+      const typeAvail = dayAvailabilities.find((a) => a.categoryTypeId === selectedTypeId);
+      if (!typeAvail) return ""; // Pas d'entrée = indisponible par défaut = gris clair
+      if (typeAvail.status === "available") return "bg-green-50 border-green-200";
+      if (typeAvail.status === "partial") return "bg-orange-50 border-orange-200";
+      return ""; // unavailable
+    }
+
+    // Mode "tous" - afficher le statut global
+    if (dayAvailabilities.length === 0) return ""; // Pas d'entrée = indisponible par défaut
+
+    const hasAvailable = dayAvailabilities.some((a) => a.status === "available");
+    const hasPartial = dayAvailabilities.some((a) => a.status === "partial");
+
+    if (hasAvailable) return "bg-green-50 border-green-200";
+    if (hasPartial) return "bg-orange-50 border-orange-200";
+    return "";
   };
 
   return (
@@ -209,12 +237,13 @@ export function MonthView({
           }
 
           const dayMissions = getMissionsForDate(item.day);
-          const dayAvailability = getAvailabilityForDate(item.day);
+          const dayAvailabilities = getAvailabilitiesForDate(item.day);
           const daySlots = getSlotsForDate(item.day);
           const today = isToday(item.day);
           const past = isPastDate(item.day);
           const dateStr = formatDateStr(year, month, item.day);
           const inSelection = isInSelectionRange(dateStr);
+          const bgClass = getDayBackgroundClass(dayAvailabilities, inSelection);
 
           return (
             <motion.div
@@ -233,13 +262,9 @@ export function MonthView({
                 // Today styling (only if not past)
                 !past && today && "border-primary bg-primary/5",
                 // Normal day styling (only if not past and not today)
-                !past && !today && "border-gray-100 hover:border-gray-200 hover:bg-gray-50",
-                // Availability colors (only if not past)
-                !past &&
-                  dayAvailability &&
-                  !dayMissions.length &&
-                  !inSelection &&
-                  availabilityColors[dayAvailability.status],
+                !past && !today && !bgClass && "border-gray-100 hover:border-gray-200 hover:bg-gray-50",
+                // Availability background colors (only if not past)
+                !past && !today && bgClass,
                 // Selection styling (only if not past)
                 !past && inSelection && "bg-primary/20 border-primary"
               )}
@@ -257,12 +282,32 @@ export function MonthView({
                 >
                   {item.day}
                 </span>
-                {dayAvailability && !dayMissions.length && !inSelection && (
-                  <span className="text-[10px]">
-                    {dayAvailability.status === "available" && "ok"}
-                    {dayAvailability.status === "partial" && "~"}
-                    {dayAvailability.status === "unavailable" && "x"}
-                  </span>
+
+                {/* Indicateurs de disponibilite par type */}
+                {!past && !inSelection && dayAvailabilities.length > 0 && categoryTypes.length > 0 && (
+                  <div className="flex gap-0.5">
+                    {categoryTypes.map((type) => {
+                      const typeAvail = dayAvailabilities.find(
+                        (a) => a.categoryTypeId === type._id
+                      );
+                      if (!typeAvail || typeAvail.status === "unavailable") {
+                        return null;
+                      }
+                      return (
+                        <span
+                          key={type._id}
+                          className="w-2 h-2 rounded-full"
+                          style={{ backgroundColor: type.color }}
+                          title={`${type.name}: ${typeAvail.status === "available" ? "Disponible" : "Partiel"}`}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Indicateur si aucune dispo (tous types indisponibles) */}
+                {!past && !inSelection && dayAvailabilities.length === 0 && categoryTypes.length > 0 && (
+                  <span className="text-[10px] text-gray-400">-</span>
                 )}
               </div>
 
