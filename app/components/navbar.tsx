@@ -28,6 +28,9 @@ import { useAuthState } from "@/app/hooks/useAuthState";
 import { useNotifications } from "@/app/hooks/useNotifications";
 import { NotificationDropdown } from "@/app/components/notifications";
 import Link from "next/link";
+import Image from "next/image";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 // Services/Categories pour la navigation
 const serviceCategories = [
@@ -124,6 +127,10 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
   const { isLoading, isAuthenticated, isAdmin, user, logout } = useAuthState();
   const { unreadCount } = useNotifications(50);
 
+  // Nom et logo dynamiques du site
+  const siteName = useQuery(api.admin.config.getSiteName) ?? "Animigo";
+  const siteLogo = useQuery(api.admin.config.getSiteLogo);
+
   // Detect if we're on a dashboard page
   const isOnAnnouncerDashboard = pathname.startsWith("/dashboard");
   const isOnClientDashboard = pathname.startsWith("/client");
@@ -172,12 +179,23 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
 
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2.5 group shrink-0">
-              <div className="relative w-9 h-9 bg-gradient-to-br from-primary via-primary to-secondary rounded-xl flex items-center justify-center shadow-md shadow-primary/25 group-hover:scale-105 group-hover:-rotate-3 transition-transform duration-200">
-                <span className="text-base">🐾</span>
-                <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-accent rounded-full" />
-              </div>
-              <span className="text-xl font-bold text-gray-900">
-                Anim<span className="text-primary">igo</span>
+              {siteLogo ? (
+                <Image
+                  src={siteLogo}
+                  alt={siteName}
+                  width={48}
+                  height={48}
+                  className="w-12 h-12 object-contain group-hover:scale-105 group-hover:-rotate-3 transition-transform duration-200"
+                  unoptimized
+                />
+              ) : (
+                <div className="relative w-9 h-9 bg-gradient-to-br from-primary via-primary to-secondary rounded-xl flex items-center justify-center shadow-md shadow-primary/25 group-hover:scale-105 group-hover:-rotate-3 transition-transform duration-200">
+                  <span className="text-base">🐾</span>
+                  <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-accent rounded-full" />
+                </div>
+              )}
+              <span className="text-2xl font-love-taking text-gray-900 translate-y-1.5">
+                <span className="text-primary">{siteName.slice(0, 2)}</span>{siteName.slice(2)}
               </span>
             </Link>
 
@@ -418,7 +436,23 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
             >
               {/* Header */}
               <div className="flex items-center justify-between p-4 border-b border-gray-100">
-                <span className="text-lg font-bold text-gray-900">Menu</span>
+                <div className="flex items-center gap-2">
+                  {siteLogo ? (
+                    <Image
+                      src={siteLogo}
+                      alt={siteName}
+                      width={28}
+                      height={28}
+                      className="w-7 h-7 object-contain"
+                      unoptimized
+                    />
+                  ) : (
+                    <span className="text-lg">🐾</span>
+                  )}
+                  <span className="text-lg font-love-taking text-gray-900">
+                    <span className="text-primary">{siteName.slice(0, 2)}</span>{siteName.slice(2)}
+                  </span>
+                </div>
                 <button
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"

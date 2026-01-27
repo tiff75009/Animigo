@@ -360,6 +360,19 @@ export const getSiteName = query({
   },
 });
 
+// Query publique: Récupérer le logo du site
+export const getSiteLogo = query({
+  args: {},
+  handler: async (ctx) => {
+    const config = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "site_logo"))
+      .first();
+
+    return config?.value || null;
+  },
+});
+
 // ==========================================
 // MODE MAINTENANCE
 // ==========================================

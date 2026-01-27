@@ -100,17 +100,23 @@ export async function uploadToCloudinary(
   const opts = { ...DEFAULT_OPTIONS, ...options };
 
   try {
-    // Compresser l'image côté client
-    const compressedBlob = await compressImage(
-      file,
-      opts.maxWidth!,
-      opts.maxHeight!,
-      opts.quality!
-    );
+    // SVG: envoyer directement sans compression canvas
+    const isSvg = file.type === "image/svg+xml";
+
+    let fileToUpload: Blob = file;
+    if (!isSvg) {
+      // Compresser l'image côté client
+      fileToUpload = await compressImage(
+        file,
+        opts.maxWidth!,
+        opts.maxHeight!,
+        opts.quality!
+      );
+    }
 
     // Préparer les données pour l'upload
     const formData = new FormData();
-    formData.append("file", compressedBlob, file.name);
+    formData.append("file", fileToUpload, file.name);
     formData.append("upload_preset", config.uploadPreset || "animigo_unsigned");
     formData.append("folder", opts.folder || "animigo/animals");
 

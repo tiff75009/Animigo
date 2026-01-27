@@ -26,8 +26,12 @@ import {
   Globe,
   X,
   Trash2,
+  Upload,
+  ImageIcon,
 } from "lucide-react";
 import { Id, Doc } from "@/convex/_generated/dataModel";
+import { uploadToCloudinary } from "@/app/lib/cloudinary";
+import Image from "next/image";
 
 // Fonction pour générer un secret aléatoire
 function generateSecret(length: number = 64): string {
@@ -72,6 +76,10 @@ export default function ParametresPage() {
     unchanged: number;
     errors: number;
   } | null>(null);
+
+  // États pour le logo du site
+  const [siteLogo, setSiteLogo] = useState<string | null>(null);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
   // États pour le mode maintenance
   const [isTogglingMaintenance, setIsTogglingMaintenance] = useState(false);
@@ -144,6 +152,9 @@ export default function ParametresPage() {
             break;
           case "internal_api_secret":
             setInternalApiSecret(config.value);
+            break;
+          case "site_logo":
+            setSiteLogo(config.value || null);
             break;
         }
       }
@@ -290,6 +301,56 @@ export default function ParametresPage() {
       console.error("Erreur lors de l'ajout:", error);
     } finally {
       setIsAddingIp(false);
+    }
+  };
+
+  // Query pour la config Cloudinary
+  const cloudinaryConfig = useQuery(api.config.getCloudinaryConfig);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !token || !cloudinaryConfig?.cloudName || !cloudinaryConfig?.apiKey) return;
+
+    setIsUploadingLogo(true);
+    try {
+      const result = await uploadToCloudinary(
+        file,
+        {
+          cloudName: cloudinaryConfig.cloudName,
+          apiKey: cloudinaryConfig.apiKey,
+          uploadPreset: cloudinaryConfig.uploadPreset,
+        },
+        { folder: "animigo/branding" }
+      );
+
+      if (result.success && result.url) {
+        setSiteLogo(result.url);
+        await updateConfig({
+          token,
+          key: "site_logo",
+          value: result.url,
+        });
+      }
+    } catch (error) {
+      console.error("Erreur upload logo:", error);
+    } finally {
+      setIsUploadingLogo(false);
+      // Reset le file input
+      e.target.value = "";
+    }
+  };
+
+  const handleDeleteLogo = async () => {
+    if (!token) return;
+    setSiteLogo(null);
+    try {
+      await updateConfig({
+        token,
+        key: "site_logo",
+        value: "",
+      });
+    } catch (error) {
+      console.error("Erreur suppression logo:", error);
     }
   };
 
@@ -680,6 +741,65 @@ export default function ParametresPage() {
                 onChange={(e) => setContactEmail(e.target.value)}
                 className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
               />
+            </div>
+
+            {/* Logo du site */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Logo du site
+              </label>
+              {siteLogo ? (
+                <div className="flex items-center gap-4 p-4 bg-slate-800 rounded-lg">
+                  <div className="relative w-16 h-16 bg-white rounded-lg flex items-center justify-center overflow-hidden">
+                    <Image
+                      src={siteLogo}
+                      alt="Logo du site"
+                      width={64}
+                      height={64}
+                      className="object-contain"
+                      unoptimized
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-slate-300 truncate">{siteLogo}</p>
+                  </div>
+                  <button
+                    onClick={handleDeleteLogo}
+                    className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
+                    title="Supprimer le logo"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 p-4 bg-slate-800 border border-dashed border-slate-600 rounded-lg">
+                  <ImageIcon className="w-8 h-8 text-slate-500" />
+                  <p className="text-sm text-slate-400">Aucun logo configuré</p>
+                </div>
+              )}
+              <label className="mt-3 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 font-medium rounded-lg cursor-pointer transition-colors">
+                {isUploadingLogo ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Upload en cours...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" />
+                    {siteLogo ? "Changer le logo" : "Uploader un logo"}
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept=".svg,.png,.jpg,.jpeg,.webp"
+                  onChange={handleLogoUpload}
+                  disabled={isUploadingLogo}
+                  className="hidden"
+                />
+              </label>
+              <p className="text-xs text-slate-500 mt-2">
+                Formats acceptés : SVG, PNG, JPG, WebP
+              </p>
             </div>
           </div>
         </motion.div>

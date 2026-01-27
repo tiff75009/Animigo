@@ -286,7 +286,7 @@ export default function FloatingSidebar() {
                 initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 5 }}
-                className="absolute top-1 left-1/2 -translate-x-1/2 z-10"
+                className="absolute top-1 right-2 z-10"
               >
                 <motion.div
                   animate={{ y: [0, -3, 0] }}
@@ -328,7 +328,7 @@ export default function FloatingSidebar() {
                 initial={{ opacity: 0, y: -5 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -5 }}
-                className="absolute bottom-1 left-1/2 -translate-x-1/2 z-10"
+                className="absolute bottom-1 right-2 z-10"
               >
                 <motion.div
                   animate={{ y: [0, 3, 0] }}
