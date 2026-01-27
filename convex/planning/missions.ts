@@ -266,6 +266,8 @@ export const getMissionsByStatus = query({
           animalCount: m.animalCount,
           // Séances multi-sessions
           sessions: m.sessions,
+          // Timestamp de réservation
+          bookedAt: m.bookedAt,
         };
       })
     );

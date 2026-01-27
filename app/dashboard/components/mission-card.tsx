@@ -78,6 +78,8 @@ export interface ConvexMission {
     startTime: string;
     endTime: string;
   }>;
+  // Timestamp de réservation
+  bookedAt?: number;
 }
 
 interface MissionCardProps {
@@ -227,6 +229,42 @@ function formatDistance(km: number): string {
   return `${km.toFixed(1)} km`;
 }
 
+// Formate le temps écoulé depuis la réservation
+// < 24h: "il y a 2h 30m 15s"
+// >= 24h: "il y a 2j 5h"
+function formatBookedAtElapsed(bookedAt: number): string {
+  const now = Date.now();
+  const diffMs = now - bookedAt;
+
+  // En secondes
+  const totalSeconds = Math.floor(diffMs / 1000);
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const totalHours = Math.floor(totalMinutes / 60);
+  const totalDays = Math.floor(totalHours / 24);
+
+  if (totalDays >= 1) {
+    // Plus de 24h: afficher jours et heures
+    const remainingHours = totalHours % 24;
+    if (remainingHours > 0) {
+      return `il y a ${totalDays}j ${remainingHours}h`;
+    }
+    return `il y a ${totalDays}j`;
+  } else {
+    // Moins de 24h: afficher heures, minutes, secondes
+    const hours = totalHours;
+    const minutes = totalMinutes % 60;
+    const seconds = totalSeconds % 60;
+
+    if (hours > 0) {
+      return `il y a ${hours}h ${minutes}m ${seconds}s`;
+    } else if (minutes > 0) {
+      return `il y a ${minutes}m ${seconds}s`;
+    } else {
+      return `il y a ${seconds}s`;
+    }
+  }
+}
+
 export function MissionCard({
   mission,
   showActions = false,
@@ -275,6 +313,12 @@ export function MissionCard({
             <p className="text-xs text-text-light truncate">
               {mission.animal.name} • {mission.serviceName}
             </p>
+            {/* Temps écoulé depuis la réservation */}
+            {mission.bookedAt && mission.status === "pending_acceptance" && (
+              <p className="text-[10px] text-orange-500 font-medium">
+                Réservé {formatBookedAtElapsed(mission.bookedAt)}
+              </p>
+            )}
           </div>
         </div>
 
