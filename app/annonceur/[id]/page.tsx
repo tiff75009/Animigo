@@ -344,6 +344,33 @@ export default function AnnouncerProfilePage() {
     return Math.min(maxAnimalsPerSlot, Math.max(1, compatibleAnimals.length));
   }, [bookingVariant, collectiveSlots, userAnimals]);
 
+  // Nettoyer les animaux sélectionnés si les conditions changent
+  useEffect(() => {
+    if (selectedAnimalIds.length === 0) return;
+
+    // Filtrer les animaux compatibles
+    const acceptedTypes = bookingVariant?.animalTypes || [];
+    const compatibleIds = selectedAnimalIds.filter((id) => {
+      const animal = userAnimals.find((a) => a.id === id);
+      if (!animal) return false;
+      return acceptedTypes.length === 0 || acceptedTypes.includes(animal.type);
+    });
+
+    // Limiter au max autorisé
+    const limitedIds = compatibleIds.slice(0, maxSelectableAnimals);
+
+    // Si les IDs ont changé, mettre à jour
+    if (limitedIds.length !== selectedAnimalIds.length ||
+        !limitedIds.every((id, i) => selectedAnimalIds[i] === id)) {
+      setSelectedAnimalIds(limitedIds);
+      setBookingSelection((prev) => ({
+        ...prev,
+        selectedAnimalIds: limitedIds,
+        animalCount: Math.max(1, limitedIds.length),
+      }));
+    }
+  }, [bookingVariant, maxSelectableAnimals, userAnimals, selectedAnimalIds]);
+
   // Calculate price breakdown
   const priceBreakdown = useMemo((): PriceBreakdown | null => {
     if (!bookingService || !bookingVariant) return null;
@@ -382,7 +409,10 @@ export default function AnnouncerProfilePage() {
       selectedServiceId: serviceId,
       selectedVariantId: variantId,
       selectedOptionIds: [],
+      selectedAnimalIds: [], // Reset animals when changing variant
+      animalCount: 1,
     }));
+    setSelectedAnimalIds([]); // Reset selected animals state
     if (announcer) {
       const service = announcer.services.find((s) => s.id === serviceId);
       if (service) {
@@ -465,6 +495,13 @@ export default function AnnouncerProfilePage() {
 
   // Handler pour la sélection/déselection d'animal (utilisateur connecté - sélection multiple)
   const handleAnimalToggle = useCallback((animalId: string, animalType: string) => {
+    // Vérifier que le type d'animal est accepté par la formule
+    const acceptedTypes = bookingVariant?.animalTypes || [];
+    if (acceptedTypes.length > 0 && !acceptedTypes.includes(animalType)) {
+      console.warn(`Animal type ${animalType} not accepted for this variant`);
+      return;
+    }
+
     setSelectedAnimalIds((prev) => {
       const isSelected = prev.includes(animalId);
       let newIds: string[];
@@ -474,6 +511,10 @@ export default function AnnouncerProfilePage() {
         newIds = prev.filter((id) => id !== animalId);
       } else {
         // Add the animal (respect max limit)
+        if (prev.length >= maxSelectableAnimals) {
+          console.warn(`Max ${maxSelectableAnimals} animals allowed`);
+          return prev; // Don't add if at max
+        }
         newIds = [...prev, animalId];
       }
 
@@ -488,7 +529,7 @@ export default function AnnouncerProfilePage() {
 
       return newIds;
     });
-  }, []);
+  }, [bookingVariant, maxSelectableAnimals]);
 
   const handleBook = useCallback(() => {
     if (!announcerData || !announcer) return;
