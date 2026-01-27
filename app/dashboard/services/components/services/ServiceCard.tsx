@@ -48,6 +48,9 @@ interface ServiceCategory {
   allowedPriceUnits?: ("hour" | "half_day" | "day" | "week" | "month")[];
   allowOvernightStay?: boolean;
   allowRangeBooking?: boolean;
+  announcerPriceMode?: "manual" | "automatic";
+  defaultNightlyPrice?: number; // Prix supplément nuit conseillé en centimes
+  displayPriceUnit?: "hour" | "half_day" | "day" | "week" | "month"; // Unité de prix à afficher
 }
 
 type PriceUnit = "hour" | "half_day" | "day" | "week" | "month" | "flat";
@@ -102,6 +105,8 @@ interface Option {
   isActive: boolean;
 }
 
+type DogCategoryAcceptance = "none" | "cat1" | "cat2" | "both";
+
 interface Service {
   id: Id<"services">;
   category: string;
@@ -111,6 +116,7 @@ interface Service {
   dayStartTime?: string;
   dayEndTime?: string;
   overnightPrice?: number;
+  dogCategoryAcceptance?: DogCategoryAcceptance;
   isActive: boolean;
   basePrice?: number;
   moderationStatus?: string;
@@ -204,10 +210,42 @@ const getMinPrice = (variant: Variant, allowedPriceUnits?: string[], allowOverni
   return prices[0];
 };
 
-const getPrimaryPrice = (variant: Variant, allowedPriceUnits?: string[], allowOvernightStay?: boolean) => {
+const getPrimaryPrice = (variant: Variant, allowedPriceUnits?: string[], allowOvernightStay?: boolean, displayPriceUnit?: string) => {
   const prices = getVariantPrices(variant, allowedPriceUnits, allowOvernightStay);
   if (prices.length === 0) return null;
-  // Retourner le premier prix selon l'ordre de priorité des allowedPriceUnits
+
+  // Si displayPriceUnit est défini, chercher ce prix en priorité
+  if (displayPriceUnit) {
+    const displayPrice = prices.find(p => p.unit === displayPriceUnit);
+    if (displayPrice) return displayPrice;
+
+    // Si le prix exact n'existe pas, essayer de le calculer depuis un autre prix
+    const pricing = variant.pricing;
+    if (pricing) {
+      let calculatedPrice: number | null = null;
+
+      // Essayer de calculer le prix demandé à partir du prix journalier ou horaire
+      if (displayPriceUnit === "day" && pricing.hourly) {
+        calculatedPrice = pricing.hourly * 8; // 8h = 1 jour
+      } else if (displayPriceUnit === "hour" && pricing.daily) {
+        calculatedPrice = Math.round(pricing.daily / 8);
+      } else if (displayPriceUnit === "half_day" && pricing.daily) {
+        calculatedPrice = Math.round(pricing.daily / 2);
+      } else if (displayPriceUnit === "half_day" && pricing.hourly) {
+        calculatedPrice = pricing.hourly * 4; // 4h = demi-journée
+      } else if (displayPriceUnit === "week" && pricing.daily) {
+        calculatedPrice = pricing.daily * 5; // 5 jours = 1 semaine
+      } else if (displayPriceUnit === "month" && pricing.daily) {
+        calculatedPrice = pricing.daily * 20; // 20 jours = 1 mois
+      }
+
+      if (calculatedPrice !== null) {
+        return { value: calculatedPrice, unit: displayPriceUnit, label: UNIT_LABELS[displayPriceUnit] || "" };
+      }
+    }
+  }
+
+  // Sinon, retourner le premier prix selon l'ordre de priorité des allowedPriceUnits
   return prices[0];
 };
 
@@ -269,8 +307,9 @@ export default function ServiceCard({
 
   const allowedPriceUnits = categoryData?.allowedPriceUnits;
   const allowOvernightStay = categoryData?.allowOvernightStay;
+  const displayPriceUnit = categoryData?.displayPriceUnit;
 
-  const allPrimaryPrices = activeVariants.map((v) => getPrimaryPrice(v, allowedPriceUnits, allowOvernightStay)).filter((p): p is NonNullable<typeof p> => p !== null);
+  const allPrimaryPrices = activeVariants.map((v) => getPrimaryPrice(v, allowedPriceUnits, allowOvernightStay, displayPriceUnit)).filter((p): p is NonNullable<typeof p> => p !== null);
   const globalMinPrice = allPrimaryPrices.length > 0
     ? allPrimaryPrices.reduce((min, p) => (p.value < min.value ? p : min), allPrimaryPrices[0])
     : null;
@@ -434,6 +473,8 @@ export default function ServiceCard({
                       <ServiceSettingsEditor
                         serviceId={service.id}
                         serviceLocation={service.serviceLocation}
+                        dogCategoryAcceptance={service.dogCategoryAcceptance}
+                        animalTypes={service.animalTypes}
                         hasCollectiveVariants={hasCollectiveVariants}
                         token={token}
                         onSaved={() => setEditingSection(null)}
@@ -921,6 +962,14 @@ export default function ServiceCard({
 // Variant Editor Component
 // ============================================================================
 
+// Type pour les activités admin
+interface AdminActivity {
+  _id: string;
+  name: string;
+  emoji: string;
+  description?: string;
+}
+
 interface VariantEditorProps {
   serviceId: Id<"services">;
   variants: Variant[];
@@ -946,6 +995,15 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
   const addVariantMutation = useMutation(api.services.variants.addVariant);
   const updateVariantMutation = useMutation(api.services.variants.updateVariant);
   const deleteVariantMutation = useMutation(api.services.variants.deleteVariant);
+
+  // Récupérer les activités depuis l'admin (comme dans ServiceForm)
+  const activities = useQuery(api.services.activities.getActiveActivities);
+  const availableActivities: AdminActivity[] = activities?.map((a: { _id: string; name: string; emoji: string; description?: string }) => ({
+    _id: a._id,
+    name: a.name,
+    emoji: a.emoji,
+    description: a.description,
+  })) || [];
 
   // Get price recommendation
   const priceRecommendation = useQuery(
@@ -1100,7 +1158,10 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
                 isGardeService={isGardeService}
                 allowOvernightStay={allowOvernightStay}
                 allowedPriceUnits={categoryData?.allowedPriceUnits}
+                announcerPriceMode={categoryData?.announcerPriceMode}
+                defaultNightlyPrice={categoryData?.defaultNightlyPrice}
                 serviceAnimalTypes={serviceAnimalTypes}
+                availableActivities={availableActivities}
                 onSave={async (data) => {
                   await updateVariantMutation({ token, variantId: variant.id, ...data });
                   setEditingId(null);
@@ -1383,7 +1444,10 @@ function VariantEditForm({
   isGardeService,
   allowOvernightStay,
   allowedPriceUnits,
+  announcerPriceMode,
+  defaultNightlyPrice,
   serviceAnimalTypes,
+  availableActivities = [],
   onSave,
   onCancel,
 }: {
@@ -1394,7 +1458,10 @@ function VariantEditForm({
   isGardeService: boolean;
   allowOvernightStay?: boolean;
   allowedPriceUnits?: ("hour" | "half_day" | "day" | "week" | "month")[];
+  announcerPriceMode?: "manual" | "automatic";
+  defaultNightlyPrice?: number;
   serviceAnimalTypes: string[];
+  availableActivities?: AdminActivity[];
   onSave: (data: {
     name?: string;
     description?: string;
@@ -1415,8 +1482,7 @@ function VariantEditForm({
   const [name, setName] = useState(variant.name);
   const [description, setDescription] = useState(variant.description || "");
   const [objectives, setObjectives] = useState<Objective[]>(variant.objectives || []);
-  const [newObjectiveIcon, setNewObjectiveIcon] = useState("🎯");
-  const [newObjectiveText, setNewObjectiveText] = useState("");
+  const [showActivitySelector, setShowActivitySelector] = useState(false);
   const [numberOfSessions, setNumberOfSessions] = useState(variant.numberOfSessions || 1);
   const [sessionInterval, setSessionInterval] = useState<number | undefined>(variant.sessionInterval);
   const [sessionType, setSessionType] = useState<"individual" | "collective">(variant.sessionType || "individual");
@@ -1429,6 +1495,61 @@ function VariantEditForm({
   const [includedFeatures, setIncludedFeatures] = useState<string[]>(variant.includedFeatures || []);
   const [newFeature, setNewFeature] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+
+  // Calcul du prix journalier recommandé (pour le slider)
+  // Si announcerPriceMode === "automatic", le prix recommandé est déjà un prix journalier
+  // Sinon, c'est un prix horaire qu'on multiplie par 8 pour avoir le prix journée
+  const dailyRecommendedPrice = announcerPriceMode === "automatic"
+    ? recommendedPrice  // Prix déjà en journalier
+    : (isGardeService ? recommendedPrice * 8 : recommendedPrice);
+
+  // Récupérer le prix journée actuel (en euros)
+  const getDailyPrice = () => {
+    if (!pricing.daily) return dailyRecommendedPrice / 100;
+    return pricing.daily / 100;
+  };
+
+  // Récupérer le prix nuit actuel (en euros)
+  const getNightlyPrice = () => {
+    if (!pricing.nightly) {
+      // Utiliser le prix nuit conseillé de l'admin si disponible, sinon 50% du prix journalier
+      return defaultNightlyPrice
+        ? defaultNightlyPrice / 100
+        : Math.round(dailyRecommendedPrice * 0.5) / 100;
+    }
+    return pricing.nightly / 100;
+  };
+
+  // Handler pour le prix journée (garde)
+  const handleDailyPriceChange = (newDailyPriceEuros: number) => {
+    const dailyInCents = Math.round(newDailyPriceEuros * 100);
+    const hourlyInCents = Math.round(dailyInCents / 8);
+
+    const currentNightly = pricing.nightly || 0;
+    const newNightly = currentNightly > dailyInCents ? dailyInCents : currentNightly;
+
+    setPricing({
+      ...pricing,
+      daily: dailyInCents,
+      hourly: hourlyInCents,
+      halfDaily: Math.round(dailyInCents / 2),
+      weekly: Math.round(dailyInCents * 5),
+      monthly: Math.round(dailyInCents * 20),
+      nightly: newNightly > 0 ? newNightly : undefined,
+    });
+  };
+
+  // Handler pour le prix nuit (garde)
+  const handleNightlyPriceChange = (newNightlyPriceEuros: number) => {
+    const nightlyInCents = Math.round(newNightlyPriceEuros * 100);
+    const dailyInCents = pricing.daily || dailyRecommendedPrice;
+    const clampedNightly = Math.min(nightlyInCents, dailyInCents);
+
+    setPricing({
+      ...pricing,
+      nightly: clampedNightly,
+    });
+  };
 
   const dailyPrice = pricing.daily || recommendedPrice * 8;
   const hourlyPrice = pricing.hourly || recommendedPrice;
@@ -1448,11 +1569,17 @@ function VariantEditForm({
   const showWeekly = hasConfiguredPriceUnits ? allowedPriceUnits.includes("week") : false;
   const showMonthly = hasConfiguredPriceUnits ? allowedPriceUnits.includes("month") : false;
 
-  const handleAddObjective = () => {
-    if (newObjectiveText.trim()) {
-      setObjectives([...objectives, { icon: newObjectiveIcon, text: newObjectiveText.trim() }]);
-      setNewObjectiveIcon("🎯");
-      setNewObjectiveText("");
+  // Vérifier si une activité est sélectionnée
+  const isActivitySelected = (activity: AdminActivity) => {
+    return objectives.some((obj) => obj.text === activity.name && obj.icon === activity.emoji);
+  };
+
+  // Toggle une activité
+  const toggleActivity = (activity: AdminActivity) => {
+    if (isActivitySelected(activity)) {
+      setObjectives(objectives.filter((obj) => !(obj.text === activity.name && obj.icon === activity.emoji)));
+    } else {
+      setObjectives([...objectives, { icon: activity.emoji, text: activity.name }]);
     }
   };
 
@@ -1534,58 +1661,82 @@ function VariantEditForm({
         />
       </div>
 
-      {/* Objectifs / Activités */}
+      {/* Objectifs / Activités - Sélecteur depuis admin */}
       <div>
-        <label className="block text-sm font-medium text-foreground mb-1">{isGardeService ? "Activités proposées (optionnel)" : "Objectifs (optionnel)"}</label>
-        <div className="flex gap-2 mb-2">
-          <select
-            value={newObjectiveIcon}
-            onChange={(e) => setNewObjectiveIcon(e.target.value)}
-            className="w-14 px-1 py-2 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none text-center text-lg"
-          >
-            <option value="🎯">🎯</option>
-            <option value="✅">✅</option>
-            <option value="⭐">⭐</option>
-            <option value="💪">💪</option>
-            <option value="🐕">🐕</option>
-            <option value="🐈">🐈</option>
-            <option value="❤️">❤️</option>
-            <option value="🏆">🏆</option>
-            <option value="📈">📈</option>
-            <option value="🔧">🔧</option>
-            <option value="🧠">🧠</option>
-            <option value="🎓">🎓</option>
-          </select>
-          <input
-            type="text"
-            value={newObjectiveText}
-            onChange={(e) => setNewObjectiveText(e.target.value)}
-            onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddObjective())}
-            placeholder={isGardeService ? "Ajouter une activité..." : "Ajouter un objectif..."}
-            className="flex-1 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-          />
-          <button
-            type="button"
-            onClick={handleAddObjective}
-            className="px-3 py-2 bg-gray-100 text-foreground rounded-lg hover:bg-gray-200"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-        </div>
-        {objectives.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {objectives.map((objective, index) => (
-              <span
-                key={index}
-                className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 text-blue-700 text-sm rounded-full"
-              >
-                <span>{objective.icon}</span>
-                <span>{objective.text}</span>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveObjective(index)}
-                  className="hover:text-red-500"
+        <label className="block text-sm font-medium text-foreground mb-2">
+          {isGardeService ? "Activités proposées pendant la garde (optionnel)" : "Objectifs de la prestation (optionnel)"}
+        </label>
+
+        {/* Sélecteur d'activités si disponibles depuis l'admin */}
+        {availableActivities.length > 0 ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setShowActivitySelector(!showActivitySelector)}
+              className={cn(
+                "w-full px-4 py-3 border-2 border-dashed rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2",
+                showActivitySelector
+                  ? "border-primary bg-primary/5 text-primary"
+                  : "border-gray-300 bg-gray-50 text-gray-600 hover:border-gray-400"
+              )}
+            >
+              <Sparkles className="w-4 h-4" />
+              {showActivitySelector ? "Fermer le sélecteur" : `Choisir des ${isGardeService ? "activités" : "objectifs"} (${objectives.length} sélectionné${objectives.length > 1 ? "s" : ""})`}
+            </button>
+
+            {/* Grille de sélection */}
+            <AnimatePresence>
+              {showActivitySelector && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="mt-3 p-3 bg-gray-50 rounded-xl border border-gray-200"
                 >
+                  <div className="grid grid-cols-2 gap-2">
+                    {availableActivities.map((activity) => (
+                      <button
+                        key={activity._id}
+                        type="button"
+                        onClick={() => toggleActivity(activity)}
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all text-left",
+                          isActivitySelected(activity)
+                            ? isGardeService
+                              ? "bg-emerald-100 border-2 border-emerald-400 text-emerald-800"
+                              : "bg-purple-100 border-2 border-purple-400 text-purple-800"
+                            : "bg-white border border-gray-200 hover:border-gray-300 text-gray-700"
+                        )}
+                      >
+                        <span className="text-lg">{activity.emoji}</span>
+                        <span className="flex-1 truncate">{activity.name}</span>
+                        {isActivitySelected(activity) && (
+                          <Check className="w-4 h-4 flex-shrink-0" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </>
+        ) : (
+          <p className="text-sm text-gray-500 italic">Aucune activité configurée par l&apos;administrateur</p>
+        )}
+
+        {/* Affichage des activités sélectionnées */}
+        {objectives.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-3">
+            {objectives.map((objective, idx) => (
+              <span
+                key={idx}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm",
+                  isGardeService ? "bg-emerald-50 text-emerald-700" : "bg-purple-50 text-purple-700"
+                )}
+              >
+                {objective.icon} {objective.text}
+                <button type="button" onClick={() => handleRemoveObjective(idx)} className="hover:text-red-500 ml-1">
                   <X className="w-3 h-3" />
                 </button>
               </span>
@@ -1796,122 +1947,231 @@ function VariantEditForm({
       <div className="space-y-3">
         <label className="block text-sm font-medium text-foreground">Tarifs</label>
 
-        <div className="grid grid-cols-2 gap-3">
-          {showHourly && (
-            <div>
-              <label className="block text-xs text-text-light mb-1">Par heure</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={(pricing.hourly || 0) / 100}
-                  onChange={(e) => setPricing({ ...pricing, hourly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                  step={0.5}
-                  placeholder="--"
-                  className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+        {isGardeService ? (
+          /* ═══ TARIFS GARDE - Système avec slider ═══ */
+          <div className="space-y-4">
+            {/* Prix journée */}
+            <div className="p-4 bg-gradient-to-br from-primary/5 to-orange-50 rounded-xl border border-primary/10">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-medium text-foreground">Prix par jour</span>
+                <span className="text-xs px-2 py-0.5 bg-white rounded-full text-gray-500">
+                  {getDailyPrice() <= dailyRecommendedPrice / 100 * 0.9 ? "Compétitif" :
+                   getDailyPrice() >= dailyRecommendedPrice / 100 * 1.1 ? "Premium" : "Standard"}
+                </span>
               </div>
-            </div>
-          )}
-          {showHalfDaily && (
-            <div>
-              <label className="block text-xs text-text-light mb-1">Par demi-journée</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={(pricing.halfDaily || 0) / 100}
-                  onChange={(e) => setPricing({ ...pricing, halfDaily: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                  step={0.5}
-                  placeholder="--"
-                  className="w-full px-3 py-2 pr-8 bg-white border border-cyan-200 rounded-lg focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <input
+                    type="range"
+                    min={Math.round(dailyRecommendedPrice * 0.8 / 100)}
+                    max={Math.round(dailyRecommendedPrice * 1.2 / 100)}
+                    step={1}
+                    value={getDailyPrice()}
+                    onChange={(e) => handleDailyPriceChange(parseFloat(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-full appearance-none cursor-pointer
+                      [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5
+                      [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-md
+                      [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110"
+                  />
+                  <div className="flex justify-between text-xs text-gray-400 mt-1">
+                    <span>{Math.round(dailyRecommendedPrice * 0.8 / 100)}€</span>
+                    <span className="text-primary">Conseillé: {Math.round(dailyRecommendedPrice / 100)}€</span>
+                    <span>{Math.round(dailyRecommendedPrice * 1.2 / 100)}€</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-2xl font-bold text-primary">{getDailyPrice().toFixed(0)}</span>
+                  <span className="text-sm text-gray-500">€/jour</span>
+                </div>
               </div>
-            </div>
-          )}
-          {showDaily && (
-            <div>
-              <label className="block text-xs text-text-light mb-1">Par jour</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={(pricing.daily || 0) / 100}
-                  onChange={(e) => setPricing({ ...pricing, daily: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                  step={0.5}
-                  placeholder="--"
-                  className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
-              </div>
-            </div>
-          )}
-          {showWeekly && (
-            <div>
-              <label className="block text-xs text-text-light mb-1">Par semaine</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={(pricing.weekly || 0) / 100}
-                  onChange={(e) => setPricing({ ...pricing, weekly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                  step={0.5}
-                  placeholder="--"
-                  className="w-full px-3 py-2 pr-8 bg-white border border-purple-200 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
-              </div>
-            </div>
-          )}
-          {showMonthly && (
-            <div>
-              <label className="block text-xs text-text-light mb-1">Par mois</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={(pricing.monthly || 0) / 100}
-                  onChange={(e) => setPricing({ ...pricing, monthly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                  step={0.5}
-                  placeholder="--"
-                  className="w-full px-3 py-2 pr-8 bg-white border border-amber-200 rounded-lg focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
-              </div>
-            </div>
-          )}
-          {/* Nightly price - only for garde services with overnight stay */}
-          {isGardeService && allowOvernightStay && (
-            <div>
-              <label className="block text-xs text-text-light mb-1">Par nuit</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={(pricing.nightly || 0) / 100}
-                  onChange={(e) => setPricing({ ...pricing, nightly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                  step={0.5}
-                  placeholder="--"
-                  className="w-full px-3 py-2 pr-8 bg-white border border-indigo-200 rounded-lg focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-400 text-sm">€</span>
-              </div>
-            </div>
-          )}
-        </div>
+              {/* Exemples de facturation garde */}
+              {(() => {
+                const currentDailyPrice = getDailyPrice();
+                const currentHourlyPrice = currentDailyPrice / 8;
+                const halfDailyPrice = currentDailyPrice / 2;
 
-        {/* Prix conseillé */}
-        <PriceRecommendationCompact
-          token={token}
-          category={category}
-          priceUnit={showDaily ? "day" : (showHalfDaily ? "half_day" : "hour")}
-          currentPrice={showDaily ? (pricing.daily || 0) : (showHalfDaily ? (pricing.halfDaily || 0) : (pricing.hourly || 0))}
-          onSelectPrice={(price) => {
-            if (showDaily) {
-              setPricing({ ...pricing, daily: price });
-            } else if (showHalfDaily) {
-              setPricing({ ...pricing, halfDaily: price });
-            } else {
-              setPricing({ ...pricing, hourly: price });
-            }
-          }}
-        />
+                return (
+                  <div className="mt-3 pt-3 border-t border-primary/10">
+                    <p className="text-xs font-medium text-gray-500 mb-2">
+                      Exemples de facturation :
+                    </p>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">2 heures</span>
+                        <span className="font-semibold text-gray-700">{(currentHourlyPrice * 2).toFixed(2).replace(".", ",")}€</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">6 heures</span>
+                        <span className="font-semibold text-gray-700">{(currentHourlyPrice * 6).toFixed(2).replace(".", ",")}€</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">1 demi-journée</span>
+                        <span className="font-semibold text-gray-700">{halfDailyPrice.toFixed(2).replace(".", ",")}€</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">1 journée</span>
+                        <span className="font-semibold text-gray-700">{currentDailyPrice.toFixed(2).replace(".", ",")}€</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">2 jours</span>
+                        <span className="font-semibold text-gray-700">{(currentDailyPrice * 2).toFixed(2).replace(".", ",")}€</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">1 semaine</span>
+                        <span className="font-semibold text-gray-700">{(currentDailyPrice * 5).toFixed(2).replace(".", ",")}€</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Prix nuit (si activé) */}
+            {allowOvernightStay && (() => {
+              // Utiliser le prix nuit conseillé de l'admin si disponible, sinon 50% du prix journalier
+              const nightlyRecommended = defaultNightlyPrice
+                ? defaultNightlyPrice / 100
+                : Math.round(dailyRecommendedPrice * 0.5 / 100);
+              const nightlyMax = Math.round(dailyRecommendedPrice / 100);
+
+              return (
+                <div className="p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border border-indigo-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Moon className="w-4 h-4 text-indigo-500" />
+                    <span className="text-sm font-medium text-indigo-800">Supplément nuit</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                      <input
+                        type="range"
+                        min={0}
+                        max={nightlyMax}
+                        step={0.5}
+                        value={getNightlyPrice()}
+                        onChange={(e) => handleNightlyPriceChange(parseFloat(e.target.value))}
+                        className="w-full h-2 bg-indigo-200 rounded-full appearance-none cursor-pointer
+                          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5
+                          [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-indigo-500 [&::-webkit-slider-thumb]:shadow-md"
+                      />
+                      <div className="flex justify-between text-xs text-indigo-400 mt-1">
+                        <span>0€</span>
+                        <span>Conseillé: {nightlyRecommended.toFixed(2).replace(".", ",")}€</span>
+                        <span>{nightlyMax}€</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-2xl font-bold text-indigo-600">{getNightlyPrice().toFixed(0)}</span>
+                      <span className="text-sm text-indigo-400">€/nuit</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        ) : (
+          /* ═══ TARIFS SERVICES - Système classique ═══ */
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              {showHourly && (
+                <div>
+                  <label className="block text-xs text-text-light mb-1">Par heure</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={(pricing.hourly || 0) / 100}
+                      onChange={(e) => setPricing({ ...pricing, hourly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                      step={0.5}
+                      placeholder="--"
+                      className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+                  </div>
+                </div>
+              )}
+              {showHalfDaily && (
+                <div>
+                  <label className="block text-xs text-text-light mb-1">Par demi-journée</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={(pricing.halfDaily || 0) / 100}
+                      onChange={(e) => setPricing({ ...pricing, halfDaily: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                      step={0.5}
+                      placeholder="--"
+                      className="w-full px-3 py-2 pr-8 bg-white border border-cyan-200 rounded-lg focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+                  </div>
+                </div>
+              )}
+              {showDaily && (
+                <div>
+                  <label className="block text-xs text-text-light mb-1">Par jour</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={(pricing.daily || 0) / 100}
+                      onChange={(e) => setPricing({ ...pricing, daily: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                      step={0.5}
+                      placeholder="--"
+                      className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+                  </div>
+                </div>
+              )}
+              {showWeekly && (
+                <div>
+                  <label className="block text-xs text-text-light mb-1">Par semaine</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={(pricing.weekly || 0) / 100}
+                      onChange={(e) => setPricing({ ...pricing, weekly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                      step={0.5}
+                      placeholder="--"
+                      className="w-full px-3 py-2 pr-8 bg-white border border-purple-200 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+                  </div>
+                </div>
+              )}
+              {showMonthly && (
+                <div>
+                  <label className="block text-xs text-text-light mb-1">Par mois</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={(pricing.monthly || 0) / 100}
+                      onChange={(e) => setPricing({ ...pricing, monthly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                      step={0.5}
+                      placeholder="--"
+                      className="w-full px-3 py-2 pr-8 bg-white border border-amber-200 rounded-lg focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Prix conseillé pour services */}
+            <PriceRecommendationCompact
+              token={token}
+              category={category}
+              priceUnit={showDaily ? "day" : (showHalfDaily ? "half_day" : "hour")}
+              currentPrice={showDaily ? (pricing.daily || 0) : (showHalfDaily ? (pricing.halfDaily || 0) : (pricing.hourly || 0))}
+              onSelectPrice={(price) => {
+                if (showDaily) {
+                  setPricing({ ...pricing, daily: price });
+                } else if (showHalfDaily) {
+                  setPricing({ ...pricing, halfDaily: price });
+                } else {
+                  setPricing({ ...pricing, hourly: price });
+                }
+              }}
+            />
+          </>
+        )}
       </div>
 
       {/* Caractéristiques incluses / Activités prévues */}
@@ -2970,6 +3230,8 @@ function OptionAddForm({
 interface ServiceSettingsEditorProps {
   serviceId: Id<"services">;
   serviceLocation?: ServiceLocation;
+  dogCategoryAcceptance?: DogCategoryAcceptance;
+  animalTypes: string[];
   hasCollectiveVariants: boolean;
   token: string;
   onSaved: () => void;
@@ -2978,12 +3240,17 @@ interface ServiceSettingsEditorProps {
 function ServiceSettingsEditor({
   serviceId,
   serviceLocation,
+  dogCategoryAcceptance: initialDogCategory,
+  animalTypes,
   hasCollectiveVariants,
   token,
   onSaved,
 }: ServiceSettingsEditorProps) {
   const [location, setLocation] = useState<ServiceLocation>(
     hasCollectiveVariants ? "announcer_home" : (serviceLocation || "announcer_home")
+  );
+  const [dogCategory, setDogCategory] = useState<DogCategoryAcceptance>(
+    initialDogCategory || "none"
   );
   const [isSaving, setIsSaving] = useState(false);
 
@@ -2992,6 +3259,9 @@ function ServiceSettingsEditor({
   // If collective variants exist, force announcer_home
   const effectiveLocation = hasCollectiveVariants ? "announcer_home" : location;
 
+  // Vérifier si le service accepte les chiens
+  const acceptsDogs = animalTypes.includes("chien");
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
@@ -2999,6 +3269,7 @@ function ServiceSettingsEditor({
         token,
         serviceId,
         serviceLocation: effectiveLocation,
+        dogCategoryAcceptance: acceptsDogs ? dogCategory : undefined,
       });
       onSaved();
     } catch (error) {
@@ -3102,6 +3373,91 @@ function ServiceSettingsEditor({
           </motion.button>
         </div>
       </div>
+
+      {/* Chiens catégorisés */}
+      {acceptsDogs && (
+        <div className="pt-2 border-t border-gray-200">
+          <label className="block text-sm font-medium text-foreground mb-2">
+            Chiens catégorisés (législation française)
+          </label>
+          <p className="text-xs text-gray-500 mb-3">
+            Acceptez-vous les chiens de catégorie 1 (attaque) ou 2 (garde/défense) ?
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <motion.button
+              type="button"
+              onClick={() => setDogCategory("none")}
+              className={cn(
+                "p-3 rounded-xl border-2 text-left transition-all",
+                dogCategory === "none"
+                  ? "border-amber-500 bg-amber-50"
+                  : "border-gray-200 bg-white hover:border-amber-300"
+              )}
+              whileTap={{ scale: 0.98 }}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                {dogCategory === "none" && <Check className="w-4 h-4 text-amber-600" />}
+                <span className="font-medium text-amber-900 text-sm">Non catégorisés</span>
+              </div>
+              <p className="text-xs text-amber-600">Je n&apos;accepte pas les chiens catégorisés</p>
+            </motion.button>
+
+            <motion.button
+              type="button"
+              onClick={() => setDogCategory("cat2")}
+              className={cn(
+                "p-3 rounded-xl border-2 text-left transition-all",
+                dogCategory === "cat2"
+                  ? "border-amber-500 bg-amber-50"
+                  : "border-gray-200 bg-white hover:border-amber-300"
+              )}
+              whileTap={{ scale: 0.98 }}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                {dogCategory === "cat2" && <Check className="w-4 h-4 text-amber-600" />}
+                <span className="font-medium text-amber-900 text-sm">Catégorie 2</span>
+              </div>
+              <p className="text-xs text-amber-600">Chiens de garde/défense</p>
+            </motion.button>
+
+            <motion.button
+              type="button"
+              onClick={() => setDogCategory("cat1")}
+              className={cn(
+                "p-3 rounded-xl border-2 text-left transition-all",
+                dogCategory === "cat1"
+                  ? "border-amber-500 bg-amber-50"
+                  : "border-gray-200 bg-white hover:border-amber-300"
+              )}
+              whileTap={{ scale: 0.98 }}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                {dogCategory === "cat1" && <Check className="w-4 h-4 text-amber-600" />}
+                <span className="font-medium text-amber-900 text-sm">Catégorie 1</span>
+              </div>
+              <p className="text-xs text-amber-600">Chiens d&apos;attaque</p>
+            </motion.button>
+
+            <motion.button
+              type="button"
+              onClick={() => setDogCategory("both")}
+              className={cn(
+                "p-3 rounded-xl border-2 text-left transition-all",
+                dogCategory === "both"
+                  ? "border-amber-500 bg-amber-50"
+                  : "border-gray-200 bg-white hover:border-amber-300"
+              )}
+              whileTap={{ scale: 0.98 }}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                {dogCategory === "both" && <Check className="w-4 h-4 text-amber-600" />}
+                <span className="font-medium text-amber-900 text-sm">Cat. 1 et 2</span>
+              </div>
+              <p className="text-xs text-amber-600">Tous les chiens catégorisés</p>
+            </motion.button>
+          </div>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex items-center gap-2 pt-2">

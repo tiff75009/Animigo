@@ -60,6 +60,12 @@ export interface ServiceData {
   enableDurationBasedBlocking?: boolean;
   // Pricing configuration from category
   allowedPriceUnits?: ("hour" | "half_day" | "day" | "week" | "month")[];
+  // Unité d'affichage du prix configurée dans l'admin
+  displayPriceUnit?: "hour" | "half_day" | "day" | "week" | "month";
+  // Mode de facturation client configuré dans l'admin
+  clientBillingMode?: "exact_hourly" | "round_half_day" | "round_full_day";
+  // Surcharge/remise pour facturation horaire exacte
+  hourlyBillingSurchargePercent?: number;
 }
 
 export interface FormuleData {

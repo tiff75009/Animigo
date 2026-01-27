@@ -42,9 +42,39 @@ const isGardeService = (service: ServiceData) => {
   return categorySlug.toString().includes("garde") || categorySlug === "garde";
 };
 
-// Obtenir le meilleur prix et unité pour une formule
-const getFormuleBestPrice = (formule: FormuleData, isGarde: boolean): { price: number; unit: string } => {
+// Mapping des unités d'affichage
+const DISPLAY_UNIT_LABELS: Record<string, string> = {
+  hour: "heure",
+  half_day: "demi-j",
+  day: "jour",
+  week: "semaine",
+  month: "mois",
+};
+
+// Obtenir le meilleur prix et unité pour une formule selon l'unité d'affichage configurée
+const getFormuleBestPrice = (
+  formule: FormuleData,
+  isGarde: boolean,
+  displayPriceUnit?: "hour" | "half_day" | "day" | "week" | "month"
+): { price: number; unit: string } => {
   const pricing = formule.pricing;
+
+  // Si une unité d'affichage est configurée, l'utiliser en priorité
+  if (displayPriceUnit && pricing) {
+    const priceMap: Record<string, { value?: number; label: string }> = {
+      hour: { value: pricing.hourly, label: "heure" },
+      half_day: { value: pricing.halfDaily, label: "demi-j" },
+      day: { value: pricing.daily, label: "jour" },
+      week: { value: pricing.weekly, label: "semaine" },
+      month: { value: pricing.monthly, label: "mois" },
+    };
+
+    const selected = priceMap[displayPriceUnit];
+    if (selected?.value) {
+      return { price: selected.value, unit: selected.label };
+    }
+    // Fallback au premier prix disponible si l'unité configurée n'est pas disponible
+  }
 
   if (pricing) {
     if (isGarde) {
@@ -79,11 +109,12 @@ const getFormuleBestPrice = (formule: FormuleData, isGarde: boolean): { price: n
 // Obtenir le prix minimum pour un service
 const getServiceMinPrice = (service: ServiceData): { price: number; unit: string } => {
   const isGarde = isGardeService(service);
+  const displayPriceUnit = service.displayPriceUnit;
   let minPrice = Infinity;
   let minUnit = "";
 
   for (const formule of service.formules) {
-    const { price, unit } = getFormuleBestPrice(formule, isGarde);
+    const { price, unit } = getFormuleBestPrice(formule, isGarde, displayPriceUnit);
     if (price > 0 && price < minPrice) {
       minPrice = price;
       minUnit = unit;
@@ -179,7 +210,7 @@ export default function AnnouncerServices({ services, initialExpandedService, co
                     <div className="p-4 sm:p-5 space-y-3">
                       {/* Formules */}
                       {service.formules.map((formule) => {
-                        const { price: formulePrice, unit: formuleUnit } = getFormuleBestPrice(formule, isGarde);
+                        const { price: formulePrice, unit: formuleUnit } = getFormuleBestPrice(formule, isGarde, service.displayPriceUnit);
                         // Calculer le prix total si plusieurs séances ou durée différente de 60min
                         const hasMultipleSessions = formule.numberOfSessions && formule.numberOfSessions > 1;
                         const hasDifferentDuration = formule.duration && formule.duration !== 60;

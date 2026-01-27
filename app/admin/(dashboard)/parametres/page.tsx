@@ -60,6 +60,8 @@ export default function ParametresPage() {
   const [emailFrom, setEmailFrom] = useState("noreply@animigo.fr");
   const [emailFromName, setEmailFromName] = useState("Animigo");
   const [workdayHours, setWorkdayHours] = useState(8);
+  const [dayStartTime, setDayStartTime] = useState("07:00");
+  const [dayEndTime, setDayEndTime] = useState("21:00");
 
   // États pour le secret API interne
   const [internalApiSecret, setInternalApiSecret] = useState("");
@@ -149,6 +151,12 @@ export default function ParametresPage() {
             break;
           case "workday_hours":
             setWorkdayHours(parseInt(config.value, 10) || 8);
+            break;
+          case "day_start_time":
+            setDayStartTime(config.value || "07:00");
+            break;
+          case "day_end_time":
+            setDayEndTime(config.value || "21:00");
             break;
           case "internal_api_secret":
             setInternalApiSecret(config.value);
@@ -371,6 +379,8 @@ export default function ParametresPage() {
         { key: "email_from", value: emailFrom },
         { key: "email_from_name", value: emailFromName },
         { key: "workday_hours", value: workdayHours.toString() },
+        { key: "day_start_time", value: dayStartTime },
+        { key: "day_end_time", value: dayEndTime },
       ];
 
       for (const config of configsToSave) {
@@ -673,12 +683,13 @@ export default function ParametresPage() {
             <div className="p-2 bg-purple-500/20 rounded-lg">
               <Clock className="w-5 h-5 text-purple-400" />
             </div>
-            <h2 className="text-lg font-semibold text-white">Tarification</h2>
+            <h2 className="text-lg font-semibold text-white">Tarification & Horaires</h2>
           </div>
-          <div className="space-y-4">
+          <div className="space-y-6">
+            {/* Durée journée */}
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                Durée d'une journée de travail
+                Durée d&apos;une journée de travail
               </label>
               <div className="flex items-center gap-4">
                 <input
@@ -697,10 +708,52 @@ export default function ParametresPage() {
                 Demi-journée : {Math.round(workdayHours / 2)}h (calculée automatiquement)
               </p>
             </div>
+
+            {/* Horaires de journée (pour garde de nuit) */}
+            <div className="pt-4 border-t border-slate-700">
+              <label className="block text-sm font-medium text-slate-300 mb-3">
+                Horaires de journée (garde)
+              </label>
+              <p className="text-xs text-slate-500 mb-4">
+                Définit quand commence et finit une journée pour les services de garde.
+                La période nocturne (garde de nuit) commence après l&apos;heure de fin.
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">
+                    Début de journée
+                  </label>
+                  <input
+                    type="time"
+                    value={dayStartTime}
+                    onChange={(e) => setDayStartTime(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">
+                    Fin de journée
+                  </label>
+                  <input
+                    type="time"
+                    value={dayEndTime}
+                    onChange={(e) => setDayEndTime(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-2 text-sm text-slate-400">
+                <span className="px-2 py-1 bg-indigo-500/20 text-indigo-300 rounded">
+                  🌙 Nuit : {dayEndTime} → {dayStartTime}
+                </span>
+              </div>
+            </div>
+
             <div className="flex items-start gap-2 p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
               <Clock className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-purple-300">
                 Ces valeurs sont utilisées pour le calcul des tarifs de tous les annonceurs.
+                Les gardes de nuit sont facturées entre {dayEndTime} et {dayStartTime}.
               </p>
             </div>
           </div>

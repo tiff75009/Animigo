@@ -253,6 +253,13 @@ export default defineSchema({
     dayStartTime: v.optional(v.string()),          // Heure début journée "08:00"
     dayEndTime: v.optional(v.string()),            // Heure fin journée "20:00"
     overnightPrice: v.optional(v.number()),        // Prix de la nuit en centimes
+    // Chiens catégorisés (législation française)
+    dogCategoryAcceptance: v.optional(v.union(
+      v.literal("none"),   // Non catégorisés uniquement
+      v.literal("cat1"),   // Catégorie 1 acceptée
+      v.literal("cat2"),   // Catégorie 2 acceptée
+      v.literal("both")    // Catégories 1 et 2 acceptées
+    )),
     // Modération (simplifiée - catégories gérées par admin)
     moderationStatus: v.optional(v.union(
       v.literal("approved"),
@@ -603,6 +610,7 @@ export default defineSchema({
     }))),
 
     // Timestamps
+    bookedAt: v.optional(v.number()), // Date/heure de la réservation par le client
     createdAt: v.number(),
     updatedAt: v.number(),
   })

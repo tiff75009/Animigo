@@ -155,6 +155,7 @@ export const verifyEmail = mutation({
           clientNotes: pendingBooking.clientData?.notes,
           createdAt: Date.now(),
           updatedAt: Date.now(),
+          bookedAt: pendingBooking.createdAt, // Date de finalisation de la réservation par le client
         });
 
         // Mettre à jour la pending booking

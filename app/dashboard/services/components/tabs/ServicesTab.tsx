@@ -22,6 +22,23 @@ interface ServiceCategory {
   allowCustomVariants?: boolean;
   allowRangeBooking?: boolean;
   allowOvernightStay?: boolean;
+  // Type de catégorie
+  typeId?: string | null;
+  typeName?: string | null;
+  typeIcon?: string | null;
+  typeColor?: string | null;
+  // Configuration tarification avancée
+  announcerPriceMode?: "manual" | "automatic";
+  displayPriceUnit?: "hour" | "half_day" | "day" | "week" | "month";
+  defaultNightlyPrice?: number;
+}
+
+interface CategoryType {
+  id: string;
+  slug: string;
+  name: string;
+  icon?: string | null;
+  color?: string | null;
 }
 
 type PriceUnit = "hour" | "half_day" | "day" | "week" | "month" | "flat";
@@ -70,6 +87,7 @@ interface Service {
 interface ServicesTabProps {
   services: Service[];
   categories: ServiceCategory[];
+  categoryTypes?: CategoryType[];
   token: string;
   onAddService: (data: {
     category: string;
@@ -112,6 +130,7 @@ interface ServicesTabProps {
 export default function ServicesTab({
   services,
   categories,
+  categoryTypes = [],
   token,
   onAddService,
   onEditService,
@@ -214,6 +233,7 @@ export default function ServicesTab({
         {isAddingService && (
           <ServiceForm
             categories={categories}
+            categoryTypes={categoryTypes}
             existingCategories={existingCategories}
             onSubmit={async (data) => {
               const success = await onAddService(data);

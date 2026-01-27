@@ -11,6 +11,12 @@ interface ServiceCategory {
   name: string;
   icon?: string;
   billingType?: "hourly" | "daily" | "flexible";
+  allowedPriceUnits?: ("hour" | "half_day" | "day" | "week" | "month")[];
+  allowOvernightStay?: boolean;
+  allowRangeBooking?: boolean;
+  announcerPriceMode?: "manual" | "automatic";
+  defaultNightlyPrice?: number;
+  displayPriceUnit?: "hour" | "half_day" | "day" | "week" | "month";
 }
 
 type PriceUnit = "hour" | "half_day" | "day" | "week" | "month" | "flat";

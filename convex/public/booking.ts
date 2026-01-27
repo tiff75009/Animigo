@@ -554,18 +554,35 @@ export const finalizeBooking = mutation({
       throw new ConvexError("Formule non trouvée");
     }
 
-    // Vérifier la disponibilité
-    const unavailabilities = await ctx.db
+    // Vérifier la disponibilité selon le categoryType
+    // Récupérer le categoryTypeId de cette catégorie
+    let categoryTypeId: Id<"categoryTypes"> | null = null;
+    if (category) {
+      if (category.typeId) {
+        categoryTypeId = category.typeId;
+      } else if (category.parentCategoryId) {
+        const parentCat = await ctx.db.get(category.parentCategoryId);
+        categoryTypeId = parentCat?.typeId ?? null;
+      }
+    }
+
+    // Récupérer toutes les disponibilités de l'annonceur
+    const availabilities = await ctx.db
       .query("availability")
       .withIndex("by_user", (q) => q.eq("userId", pendingBooking.announcerId))
-      .filter((q) => q.eq(q.field("status"), "unavailable"))
       .collect();
 
-    const unavailableDates = new Set(unavailabilities.map((a) => a.date));
     const requestedDates = getDatesBetween(pendingBooking.startDate, pendingBooking.endDate);
 
     for (const date of requestedDates) {
-      if (unavailableDates.has(date)) {
+      // Chercher une disponibilité pour ce jour et ce type de catégorie
+      const availabilityForDate = availabilities.find(
+        (a) => a.date === date &&
+               (categoryTypeId ? String(a.categoryTypeId) === String(categoryTypeId) : !a.categoryTypeId)
+      );
+
+      // Si pas de disponibilité explicite "available", le jour est indisponible
+      if (!availabilityForDate || availabilityForDate.status !== "available") {
         throw new ConvexError(`L'annonceur n'est plus disponible le ${date}`);
       }
     }
@@ -685,6 +702,8 @@ export const finalizeBooking = mutation({
       animalCount: pendingBooking.animalCount,
       // Séances multi-sessions
       sessions: pendingBooking.sessions,
+      // Timestamps
+      bookedAt: now, // Date/heure de la réservation par le client
       createdAt: now,
       updatedAt: now,
     });
@@ -883,6 +902,12 @@ export const finalizeBookingAsGuest = mutation({
       throw new ConvexError("Service non trouvé");
     }
 
+    // Récupérer la catégorie
+    const categoryGuest = await ctx.db
+      .query("serviceCategories")
+      .withIndex("by_slug", (q) => q.eq("slug", service.category))
+      .first();
+
     // Récupérer la variante
     const variant = await ctx.db
       .query("serviceVariants")
@@ -894,18 +919,31 @@ export const finalizeBookingAsGuest = mutation({
       throw new ConvexError("Formule non trouvée");
     }
 
-    // Vérifier la disponibilité
-    const unavailabilities = await ctx.db
+    // Vérifier la disponibilité selon le categoryType
+    let categoryTypeIdGuest: Id<"categoryTypes"> | null = null;
+    if (categoryGuest) {
+      if (categoryGuest.typeId) {
+        categoryTypeIdGuest = categoryGuest.typeId;
+      } else if (categoryGuest.parentCategoryId) {
+        const parentCatGuest = await ctx.db.get(categoryGuest.parentCategoryId);
+        categoryTypeIdGuest = parentCatGuest?.typeId ?? null;
+      }
+    }
+
+    const availabilitiesGuest = await ctx.db
       .query("availability")
       .withIndex("by_user", (q) => q.eq("userId", pendingBooking.announcerId))
-      .filter((q) => q.eq(q.field("status"), "unavailable"))
       .collect();
 
-    const unavailableDates = new Set(unavailabilities.map((a) => a.date));
     const requestedDates = getDatesBetween(pendingBooking.startDate, pendingBooking.endDate);
 
     for (const date of requestedDates) {
-      if (unavailableDates.has(date)) {
+      const availabilityForDateGuest = availabilitiesGuest.find(
+        (a) => a.date === date &&
+               (categoryTypeIdGuest ? String(a.categoryTypeId) === String(categoryTypeIdGuest) : !a.categoryTypeId)
+      );
+
+      if (!availabilityForDateGuest || availabilityForDateGuest.status !== "available") {
         throw new ConvexError(`L'annonceur n'est plus disponible le ${date}`);
       }
     }

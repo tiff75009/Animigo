@@ -125,12 +125,33 @@ export function isGardeService(service: ServiceData): boolean {
   return categorySlug.toString().includes("garde") || categorySlug === "garde";
 }
 
+// Type for display price unit
+export type DisplayPriceUnit = "hour" | "half_day" | "day" | "week" | "month";
+
 // Get best price and unit for a formule
 export function getFormuleBestPrice(
   formule: FormuleData,
-  isGarde: boolean
+  isGarde: boolean,
+  displayPriceUnit?: DisplayPriceUnit
 ): { price: number; unit: string } {
   const pricing = formule.pricing;
+
+  // Si une unité d'affichage est configurée, l'utiliser en priorité
+  if (displayPriceUnit && pricing) {
+    const priceMap: Record<string, { value?: number; label: string }> = {
+      hour: { value: pricing.hourly, label: "heure" },
+      half_day: { value: (pricing as { halfDaily?: number }).halfDaily, label: "demi-j" },
+      day: { value: pricing.daily, label: "jour" },
+      week: { value: pricing.weekly, label: "semaine" },
+      month: { value: pricing.monthly, label: "mois" },
+    };
+
+    const selected = priceMap[displayPriceUnit];
+    if (selected?.value) {
+      return { price: selected.value, unit: selected.label };
+    }
+    // Fallback au premier prix disponible si l'unité configurée n'est pas disponible
+  }
 
   if (pricing) {
     if (isGarde) {
@@ -163,11 +184,12 @@ export function getFormuleBestPrice(
 // Get minimum price for a service
 export function getServiceMinPrice(service: ServiceData): { price: number; unit: string } {
   const isGarde = isGardeService(service);
+  const displayPriceUnit = (service as { displayPriceUnit?: DisplayPriceUnit }).displayPriceUnit;
   let minPrice = Infinity;
   let minUnit = "";
 
   for (const formule of service.formules) {
-    const { price, unit } = getFormuleBestPrice(formule, isGarde);
+    const { price, unit } = getFormuleBestPrice(formule, isGarde, displayPriceUnit);
     if (price > 0 && price < minPrice) {
       minPrice = price;
       minUnit = unit;
@@ -179,6 +201,71 @@ export function getServiceMinPrice(service: ServiceData): { price: number; unit:
 
 // Types de prix autorisés
 export type PriceUnit = "hour" | "half_day" | "day" | "week" | "month";
+
+// Types pour la configuration de facturation client
+export type ClientBillingMode = "exact_hourly" | "round_half_day" | "round_full_day";
+
+export interface ClientBillingConfig {
+  mode: ClientBillingMode;
+  surchargePercent: number;  // -50 à +100
+  workdayHours: number;      // Ex: 14 (7h-21h)
+  halfDayHours: number;      // Ex: 7 (workdayHours/2)
+}
+
+/**
+ * Applique le mode de facturation client configuré
+ * @param requestedHours - Nombre d'heures demandées
+ * @param hourlyRate - Tarif horaire en centimes
+ * @param halfDailyRate - Tarif demi-journée en centimes
+ * @param dailyRate - Tarif journalier en centimes
+ * @param config - Configuration du mode de facturation
+ * @returns Le montant à facturer et un libellé explicatif
+ */
+export function applyClientBilling(
+  requestedHours: number,
+  hourlyRate: number,
+  halfDailyRate: number,
+  dailyRate: number,
+  config: ClientBillingConfig
+): { amount: number; label: string; billingMode: ClientBillingMode } {
+
+  switch (config.mode) {
+    case "exact_hourly": {
+      const base = hourlyRate * requestedHours;
+      const surcharge = Math.round(base * config.surchargePercent / 100);
+      const suffix = config.surchargePercent > 0 ? ` (+${config.surchargePercent}%)` :
+                     config.surchargePercent < 0 ? ` (${config.surchargePercent}%)` : "";
+      return {
+        amount: base + surcharge,
+        label: `${requestedHours}h${suffix}`,
+        billingMode: "exact_hourly",
+      };
+    }
+
+    case "round_half_day": {
+      if (requestedHours <= config.halfDayHours) {
+        return {
+          amount: halfDailyRate,
+          label: "Demi-journée",
+          billingMode: "round_half_day",
+        };
+      }
+      return {
+        amount: dailyRate,
+        label: "Journée",
+        billingMode: "round_half_day",
+      };
+    }
+
+    case "round_full_day": {
+      return {
+        amount: dailyRate,
+        label: "Journée",
+        billingMode: "round_full_day",
+      };
+    }
+  }
+}
 
 // Calculate smart price with partial day support
 interface SmartPriceParams {
@@ -202,6 +289,8 @@ interface SmartPriceParams {
   serviceDurationMinutes?: number;
   // Types de prix autorisés - si défini, on arrondit au type le plus proche
   allowedPriceUnits?: PriceUnit[];
+  // Configuration du mode de facturation client (optionnel, depuis la catégorie admin)
+  clientBillingConfig?: ClientBillingConfig;
 }
 
 export function calculateSmartPrice(params: SmartPriceParams): Omit<PriceBreakdown, "subtotal" | "commission" | "total"> {
@@ -220,21 +309,42 @@ export function calculateSmartPrice(params: SmartPriceParams): Omit<PriceBreakdo
     fixedServicePrice,
     serviceDurationMinutes,
     allowedPriceUnits,
+    clientBillingConfig,
   } = params;
 
   // Calculate half-day hours (default to workdayHours / 2)
   const halfDayHours = customHalfDayHours || workdayHours / 2;
 
-  // Check which price units are allowed
-  const allowHourly = !allowedPriceUnits || allowedPriceUnits.includes("hour");
-  const allowHalfDay = allowedPriceUnits?.includes("half_day") ?? false;
+  // Check which price units are allowed based on client billing config or allowedPriceUnits
+  let allowHourly = !allowedPriceUnits || allowedPriceUnits.includes("hour");
+  let allowHalfDay = allowedPriceUnits?.includes("half_day") ?? false;
   const allowDaily = !allowedPriceUnits || allowedPriceUnits.includes("day");
+
+  // Override based on client billing config if provided
+  if (clientBillingConfig) {
+    switch (clientBillingConfig.mode) {
+      case "exact_hourly":
+        allowHourly = true;
+        break;
+      case "round_half_day":
+        allowHourly = false;
+        allowHalfDay = true;
+        break;
+      case "round_full_day":
+        allowHourly = false;
+        allowHalfDay = false;
+        break;
+    }
+  }
 
   // Determine rates
   const hourlyRate = pricing.hourly || (pricing.daily ? Math.round(pricing.daily / workdayHours) : 0);
   const halfDailyRate = pricing.halfDaily || (pricing.daily ? Math.round(pricing.daily / 2) : (hourlyRate ? hourlyRate * halfDayHours : 0));
   const dailyRate = pricing.daily || (hourlyRate ? hourlyRate * workdayHours : 0);
   const nightlyRate = pricing.nightly || 0;
+
+  // Surcharge/remise from client billing config
+  const surchargePercent = clientBillingConfig?.surchargePercent || 0;
 
   // Helper: Calculate amount for a partial day based on allowed price units
   const calculatePartialDayAmount = (hours: number): { amount: number; isFullDay: boolean; isHalfDay: boolean } => {
@@ -263,7 +373,12 @@ export function calculateSmartPrice(params: SmartPriceParams): Omit<PriceBreakdo
 
     // Facturation horaire autorisée
     if (hourlyRate > 0) {
-      const hourlyAmount = Math.round(hourlyRate * hours);
+      let hourlyAmount = Math.round(hourlyRate * hours);
+      // Apply surcharge/remise if configured
+      if (surchargePercent !== 0) {
+        const surcharge = Math.round(hourlyAmount * surchargePercent / 100);
+        hourlyAmount = hourlyAmount + surcharge;
+      }
       // Cap hourly amount at daily rate to avoid paying more for fewer hours
       const cappedAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
       return { amount: cappedAmount, isFullDay: cappedAmount >= dailyRate, isHalfDay: false };
@@ -427,7 +542,8 @@ export function calculatePriceBreakdown(
   dayEndTime: string = "20:00",
   overnightPrice?: number,
   enableDurationBasedBlocking?: boolean,
-  allowedPriceUnits?: PriceUnit[]
+  allowedPriceUnits?: PriceUnit[],
+  clientBillingConfig?: ClientBillingConfig
 ): PriceBreakdown | null {
   if (!service || !variant || !selection.startDate) {
     return null;
@@ -478,6 +594,7 @@ export function calculatePriceBreakdown(
     fixedServicePrice,
     serviceDurationMinutes,
     allowedPriceUnits,
+    clientBillingConfig,
   });
 
   const subtotal = smartPrice.baseAmount + smartPrice.nightsAmount + smartPrice.optionsAmount;

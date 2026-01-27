@@ -249,6 +249,8 @@ export function useServicesPageData(token: string | undefined) {
     dayStartTime?: string;
     dayEndTime?: string;
     overnightPrice?: number;
+    // Chiens catégorisés
+    dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
     initialVariants: Array<{
       name: string;
       description?: string;
@@ -288,6 +290,7 @@ export function useServicesPageData(token: string | undefined) {
         dayStartTime: data.dayStartTime,
         dayEndTime: data.dayEndTime,
         overnightPrice: data.overnightPrice,
+        dogCategoryAcceptance: data.dogCategoryAcceptance,
         initialVariants: data.initialVariants,
         initialOptions: data.initialOptions?.length ? data.initialOptions : undefined,
       });

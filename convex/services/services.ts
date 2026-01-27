@@ -205,6 +205,13 @@ export const addService = mutation({
     dayStartTime: v.optional(v.string()),
     dayEndTime: v.optional(v.string()),
     overnightPrice: v.optional(v.number()),
+    // Chiens catégorisés (législation française)
+    dogCategoryAcceptance: v.optional(v.union(
+      v.literal("none"),
+      v.literal("cat1"),
+      v.literal("cat2"),
+      v.literal("both")
+    )),
     // Formule initiale obligatoire
     initialVariants: v.array(v.object({
       name: v.string(),
@@ -321,6 +328,7 @@ export const addService = mutation({
       dayStartTime: args.dayStartTime,
       dayEndTime: args.dayEndTime,
       overnightPrice: args.overnightPrice,
+      dogCategoryAcceptance: args.dogCategoryAcceptance,
       isActive: true,
       basePrice: basePrice,
       moderationStatus: "approved", // Catégories gérées par admin = pas de modération
@@ -400,6 +408,13 @@ export const updateService = mutation({
     dayStartTime: v.optional(v.string()),
     dayEndTime: v.optional(v.string()),
     overnightPrice: v.optional(v.number()),
+    // Chiens catégorisés
+    dogCategoryAcceptance: v.optional(v.union(
+      v.literal("none"),
+      v.literal("cat1"),
+      v.literal("cat2"),
+      v.literal("both")
+    )),
     isActive: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
@@ -454,6 +469,7 @@ export const updateService = mutation({
     if (args.dayStartTime !== undefined) updates.dayStartTime = args.dayStartTime;
     if (args.dayEndTime !== undefined) updates.dayEndTime = args.dayEndTime;
     if (args.overnightPrice !== undefined) updates.overnightPrice = args.overnightPrice;
+    if (args.dogCategoryAcceptance !== undefined) updates.dogCategoryAcceptance = args.dogCategoryAcceptance;
     if (args.isActive !== undefined) updates.isActive = args.isActive;
 
     await ctx.db.patch(args.serviceId, updates);

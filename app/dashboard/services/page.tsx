@@ -13,6 +13,7 @@ export default function ServicesPage() {
   const {
     services,
     categories,
+    categoryTypes,
     isSaving,
     error,
     successMessage,
@@ -48,6 +49,7 @@ export default function ServicesPage() {
           <ServicesTab
             services={services || []}
             categories={categories}
+            categoryTypes={categoryTypes}
             token={token}
             onAddService={addService}
             onEditService={(serviceId, data) => updateService(serviceId, data)}
