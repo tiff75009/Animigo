@@ -113,7 +113,6 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
   const pathname = usePathname();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [hoveredLink, setHoveredLink] = useState<string | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<string[]>([]);
@@ -162,10 +161,10 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
       {/* Main Navbar */}
       <nav
         className={cn(
-          "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
+          "fixed top-0 left-0 right-0 z-50 transition-colors duration-200",
           isScrolled
-            ? "bg-white/95 backdrop-blur-xl shadow-sm border-b border-gray-100"
-            : "bg-white/80 backdrop-blur-md"
+            ? "bg-white shadow-sm border-b border-gray-100"
+            : "bg-white/95"
         )}
       >
         <div className="max-w-7xl mx-auto px-4 lg:px-6">
@@ -173,18 +172,10 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
 
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2.5 group shrink-0">
-              <motion.div
-                className="relative w-9 h-9 bg-gradient-to-br from-primary via-primary to-secondary rounded-xl flex items-center justify-center shadow-md shadow-primary/25"
-                whileHover={{ scale: 1.05, rotate: -3 }}
-                transition={{ type: "spring", stiffness: 400 }}
-              >
+              <div className="relative w-9 h-9 bg-gradient-to-br from-primary via-primary to-secondary rounded-xl flex items-center justify-center shadow-md shadow-primary/25 group-hover:scale-105 group-hover:-rotate-3 transition-transform duration-200">
                 <span className="text-base">🐾</span>
-                <motion.div
-                  className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-accent rounded-full"
-                  animate={{ scale: [1, 1.2, 1] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                />
-              </motion.div>
+                <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-accent rounded-full" />
+              </div>
               <span className="text-xl font-bold text-gray-900">
                 Anim<span className="text-primary">igo</span>
               </span>
@@ -197,27 +188,12 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                   <Link
                     key={service.slug}
                     href={service.href}
-                    className="relative px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors rounded-full"
-                    onMouseEnter={() => setHoveredLink(service.slug)}
-                    onMouseLeave={() => setHoveredLink(null)}
+                    className="relative px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-white hover:shadow-sm rounded-full transition-all duration-150"
                   >
-                    <span className="relative z-10 flex items-center gap-1.5">
+                    <span className="flex items-center gap-1.5">
                       <span className="text-base">{service.emoji}</span>
                       <span>{service.label}</span>
                     </span>
-                    <AnimatePresence>
-                      {hoveredLink === service.slug && (
-                        <motion.div
-                          layoutId="navHover"
-                          className="absolute inset-0 bg-white rounded-full shadow-sm"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                          transition={{ duration: 0.15 }}
-                          style={{ zIndex: 0 }}
-                        />
-                      )}
-                    </AnimatePresence>
                   </Link>
                 ))}
 

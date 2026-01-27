@@ -18,28 +18,10 @@ export function CTA() {
         </div>
       </div>
 
-      {/* Floating elements */}
-      <motion.div
-        className="absolute top-10 left-10 text-6xl opacity-20"
-        animate={{ y: [0, -20, 0], rotate: [0, 10, 0] }}
-        transition={{ duration: 5, repeat: Infinity }}
-      >
-        🐕
-      </motion.div>
-      <motion.div
-        className="absolute bottom-10 right-10 text-6xl opacity-20"
-        animate={{ y: [0, 20, 0], rotate: [0, -10, 0] }}
-        transition={{ duration: 6, repeat: Infinity }}
-      >
-        🐈
-      </motion.div>
-      <motion.div
-        className="absolute top-1/2 right-20 text-5xl opacity-20 hidden lg:block"
-        animate={{ y: [0, -15, 0] }}
-        transition={{ duration: 4, repeat: Infinity }}
-      >
-        🐰
-      </motion.div>
+      {/* Decorative elements - static */}
+      <div className="absolute top-10 left-10 text-6xl opacity-20">🐕</div>
+      <div className="absolute bottom-10 right-10 text-6xl opacity-20">🐈</div>
+      <div className="absolute top-1/2 right-20 text-5xl opacity-20 hidden lg:block">🐰</div>
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
         <motion.div
@@ -50,15 +32,11 @@ export function CTA() {
           className="space-y-8"
         >
           {/* Icon */}
-          <motion.div
-            animate={{ scale: [1, 1.1, 1] }}
-            transition={{ duration: 2, repeat: Infinity }}
-            className="inline-block"
-          >
+          <div className="inline-block">
             <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto">
               <Heart className="w-10 h-10 text-white fill-white" />
             </div>
-          </motion.div>
+          </div>
 
           {/* Title */}
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white">

@@ -73,13 +73,7 @@ export function HowItWorks() {
                 {/* Arrow (mobile) */}
                 {index < steps.length - 1 && (
                   <div className="lg:hidden flex justify-center my-4">
-                    <motion.div
-                      animate={{ y: [0, 5, 0] }}
-                      transition={{ duration: 1.5, repeat: Infinity }}
-                      className="text-3xl text-text-light"
-                    >
-                      ↓
-                    </motion.div>
+                    <div className="text-3xl text-text-light">↓</div>
                   </div>
                 )}
               </motion.div>
