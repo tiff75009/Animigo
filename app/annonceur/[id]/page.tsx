@@ -52,6 +52,26 @@ function calculateDistance(
   return R * c;
 }
 
+// Extraire ville + code postal d'une adresse, ou retourner undefined si c'est une adresse de rue
+function extractCityDisplay(location: string | null | undefined): string | undefined {
+  if (!location) return undefined;
+
+  // Si l'adresse contient des indicateurs de rue, ne pas l'afficher
+  const streetIndicators = /^\d+\s|rue|avenue|boulevard|allée|impasse|chemin|place|passage/i;
+  if (streetIndicators.test(location)) {
+    // Essayer d'extraire code postal + ville (format: "75001 Paris" ou "Paris 75001")
+    const postalCityMatch = location.match(/(\d{5})\s+([A-Za-zÀ-ÿ\s-]+)/);
+    if (postalCityMatch) {
+      return `${postalCityMatch[1]} ${postalCityMatch[2].trim()}`;
+    }
+    // Si on ne trouve pas, ne rien afficher
+    return undefined;
+  }
+
+  // Si c'est déjà au format "75001 Paris" ou juste une ville, le garder
+  return location;
+}
+
 export default function AnnouncerProfilePage() {
   const params = useParams();
   const router = useRouter();
@@ -188,7 +208,7 @@ export default function AnnouncerProfilePage() {
     token ? { token } : "skip"
   );
   const userAnimals = (userAnimalsData || []).map((animal: any) => ({
-    id: String(animal._id), // Convertir en string pour assurer la comparaison
+    id: String(animal.id), // Le backend retourne déjà 'id' (pas '_id')
     name: animal.name,
     type: animal.type,
     breed: animal.breed,
@@ -731,8 +751,8 @@ export default function AnnouncerProfilePage() {
                 selectedAnimalIds={selectedAnimalIds}
                 onAnimalToggle={handleAnimalToggle}
                 maxSelectableAnimals={maxSelectableAnimals}
-                // Infos annonceur pour la section lieu
-                announcerCity={announcer.location ?? undefined}
+                // Infos annonceur pour la section lieu (ville + CP uniquement)
+                announcerCity={extractCityDisplay(announcer.location)}
                 announcerFirstName={announcer.firstName}
                 // Callback connexion inline
                 onLoginSuccess={refreshToken}
