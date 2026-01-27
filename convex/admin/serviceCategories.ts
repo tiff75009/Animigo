@@ -93,6 +93,11 @@ export const listCategories = query({
           displayFormat: cat.displayFormat,
           isCapacityBased: cat.isCapacityBased,
           enableDurationBasedBlocking: cat.enableDurationBasedBlocking,
+          // Configuration tarification avancée
+          announcerPriceMode: cat.announcerPriceMode,
+          clientBillingMode: cat.clientBillingMode,
+          hourlyBillingSurchargePercent: cat.hourlyBillingSurchargePercent,
+          displayPriceUnit: cat.displayPriceUnit,
           createdAt: cat.createdAt,
           updatedAt: cat.updatedAt,
         };
@@ -162,6 +167,13 @@ export const getActiveCategories = query({
       .withIndex("by_active", (q) => q.eq("isActive", true))
       .collect();
 
+    // Récupérer tous les types de catégories
+    const allTypes = await ctx.db
+      .query("categoryTypes")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .collect();
+    const typeMap = new Map(allTypes.map(t => [t._id, t]));
+
     // Créer un map pour lookup rapide
     const categoryMap = new Map(categories.map(c => [c._id, c]));
 
@@ -182,6 +194,9 @@ export const getActiveCategories = query({
         if (parent.imageStorageId) {
           imageUrl = await ctx.storage.getUrl(parent.imageStorageId);
         }
+
+        // Récupérer les infos du type
+        const type = parent.typeId ? typeMap.get(parent.typeId) : null;
 
         // Trouver les sous-catégories de ce parent
         const children = subcategories.filter(c => c.parentCategoryId === parent._id);
@@ -208,8 +223,19 @@ export const getActiveCategories = query({
               allowCustomVariants: child.allowCustomVariants,
               allowOvernightStay: child.allowOvernightStay,
               enableDurationBasedBlocking: child.enableDurationBasedBlocking,
+              // Configuration tarification avancée
+              announcerPriceMode: child.announcerPriceMode,
+              displayPriceUnit: child.displayPriceUnit,
+              clientBillingMode: child.clientBillingMode,
+              hourlyBillingSurchargePercent: child.hourlyBillingSurchargePercent,
+              defaultNightlyPrice: child.defaultNightlyPrice,
               // Propagé depuis le parent
               isCapacityBased: parent.isCapacityBased,
+              // Type hérité du parent
+              typeId: parent.typeId || null,
+              typeName: type?.name || null,
+              typeIcon: type?.icon || null,
+              typeColor: type?.color || null,
             };
           })
         );
@@ -224,6 +250,11 @@ export const getActiveCategories = query({
           imageUrl,
           isParent: true,
           displayFormat: parent.displayFormat,
+          // Type de la catégorie parente
+          typeId: parent.typeId || null,
+          typeName: type?.name || null,
+          typeIcon: type?.icon || null,
+          typeColor: type?.color || null,
           subcategories: childrenWithUrls,
         };
       })
@@ -251,13 +282,37 @@ export const getActiveCategories = query({
           allowCustomVariants: cat.allowCustomVariants,
           allowOvernightStay: cat.allowOvernightStay,
           enableDurationBasedBlocking: cat.enableDurationBasedBlocking,
+          // Configuration tarification avancée
+          announcerPriceMode: cat.announcerPriceMode,
+          displayPriceUnit: cat.displayPriceUnit,
+          clientBillingMode: cat.clientBillingMode,
+          hourlyBillingSurchargePercent: cat.hourlyBillingSurchargePercent,
+          defaultNightlyPrice: cat.defaultNightlyPrice,
+          // Pas de type pour les catégories orphelines
+          typeId: null,
+          typeName: null,
+          typeIcon: null,
+          typeColor: null,
         };
       })
     );
 
+    // Récupérer la liste des types avec leurs catégories pour le groupement par type
+    const typesList = allTypes
+      .sort((a, b) => a.order - b.order)
+      .map(type => ({
+        id: type._id,
+        slug: type.slug,
+        name: type.name,
+        icon: type.icon || null,
+        color: type.color || null,
+      }));
+
     return {
       parentCategories: hierarchy,
       rootCategories: rootWithUrls,
+      // Nouvelle propriété: liste des types pour le groupement
+      categoryTypes: typesList,
     };
   },
 });
@@ -292,6 +347,7 @@ export const createCategory = mutation({
       v.literal("flexible")
     )),
     defaultHourlyPrice: v.optional(v.number()),
+    defaultNightlyPrice: v.optional(v.number()),
     allowRangeBooking: v.optional(v.boolean()),
     allowedPriceUnits: v.optional(v.array(v.union(
       v.literal("hour"),
@@ -318,6 +374,18 @@ export const createCategory = mutation({
     isCapacityBased: v.optional(v.boolean()),
     // Blocage basé sur la durée (uniquement pour sous-catégories)
     enableDurationBasedBlocking: v.optional(v.boolean()),
+    // === Configuration tarification avancée ===
+    announcerPriceMode: v.optional(v.union(v.literal("manual"), v.literal("automatic"))),
+    clientBillingMode: v.optional(v.union(
+      v.literal("exact_hourly"),
+      v.literal("round_half_day"),
+      v.literal("round_full_day")
+    )),
+    hourlyBillingSurchargePercent: v.optional(v.number()),
+    displayPriceUnit: v.optional(v.union(
+      v.literal("hour"), v.literal("half_day"), v.literal("day"),
+      v.literal("week"), v.literal("month")
+    )),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx, args.token);
@@ -362,6 +430,7 @@ export const createCategory = mutation({
       // Champs métier (ignorés pour les catégories parentes)
       billingType: args.parentCategoryId ? args.billingType : undefined,
       defaultHourlyPrice: args.parentCategoryId ? args.defaultHourlyPrice : undefined,
+      defaultNightlyPrice: args.parentCategoryId ? args.defaultNightlyPrice : undefined,
       allowRangeBooking: args.parentCategoryId ? args.allowRangeBooking : undefined,
       allowedPriceUnits: args.parentCategoryId ? args.allowedPriceUnits : undefined,
       defaultVariants: args.parentCategoryId ? args.defaultVariants : undefined,
@@ -373,6 +442,11 @@ export const createCategory = mutation({
       displayFormat: !args.parentCategoryId ? args.displayFormat : undefined,
       // Catégorie basée sur la capacité (uniquement pour les catégories parentes)
       isCapacityBased: !args.parentCategoryId ? args.isCapacityBased : undefined,
+      // Configuration tarification avancée (uniquement pour les sous-catégories)
+      announcerPriceMode: args.parentCategoryId ? args.announcerPriceMode : undefined,
+      clientBillingMode: args.parentCategoryId ? args.clientBillingMode : undefined,
+      hourlyBillingSurchargePercent: args.parentCategoryId ? args.hourlyBillingSurchargePercent : undefined,
+      displayPriceUnit: args.parentCategoryId ? args.displayPriceUnit : undefined,
       order: maxOrder + 1,
       isActive: true,
       createdAt: now,
@@ -404,6 +478,7 @@ export const updateCategory = mutation({
       v.literal("flexible")
     )),
     defaultHourlyPrice: v.optional(v.number()),
+    defaultNightlyPrice: v.optional(v.number()),
     allowRangeBooking: v.optional(v.boolean()),
     allowedPriceUnits: v.optional(v.array(v.union(
       v.literal("hour"),
@@ -430,6 +505,18 @@ export const updateCategory = mutation({
     isCapacityBased: v.optional(v.boolean()),
     // Blocage basé sur la durée (uniquement pour sous-catégories)
     enableDurationBasedBlocking: v.optional(v.boolean()),
+    // === Configuration tarification avancée ===
+    announcerPriceMode: v.optional(v.union(v.literal("manual"), v.literal("automatic"))),
+    clientBillingMode: v.optional(v.union(
+      v.literal("exact_hourly"),
+      v.literal("round_half_day"),
+      v.literal("round_full_day")
+    )),
+    hourlyBillingSurchargePercent: v.optional(v.number()),
+    displayPriceUnit: v.optional(v.union(
+      v.literal("hour"), v.literal("half_day"), v.literal("day"),
+      v.literal("week"), v.literal("month")
+    )),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx, args.token);
@@ -494,6 +581,7 @@ export const updateCategory = mutation({
 
     if (args.billingType !== undefined) updates.billingType = args.billingType;
     if (args.defaultHourlyPrice !== undefined) updates.defaultHourlyPrice = args.defaultHourlyPrice;
+    if (args.defaultNightlyPrice !== undefined) updates.defaultNightlyPrice = args.defaultNightlyPrice;
     if (args.allowRangeBooking !== undefined) updates.allowRangeBooking = args.allowRangeBooking;
     if (args.allowedPriceUnits !== undefined) updates.allowedPriceUnits = args.allowedPriceUnits;
     if (args.defaultVariants !== undefined) updates.defaultVariants = args.defaultVariants;
@@ -502,6 +590,11 @@ export const updateCategory = mutation({
     if (args.displayFormat !== undefined) updates.displayFormat = args.displayFormat;
     if (args.isCapacityBased !== undefined) updates.isCapacityBased = args.isCapacityBased;
     if (args.enableDurationBasedBlocking !== undefined) updates.enableDurationBasedBlocking = args.enableDurationBasedBlocking;
+    // Configuration tarification avancée
+    if (args.announcerPriceMode !== undefined) updates.announcerPriceMode = args.announcerPriceMode;
+    if (args.clientBillingMode !== undefined) updates.clientBillingMode = args.clientBillingMode;
+    if (args.hourlyBillingSurchargePercent !== undefined) updates.hourlyBillingSurchargePercent = args.hourlyBillingSurchargePercent;
+    if (args.displayPriceUnit !== undefined) updates.displayPriceUnit = args.displayPriceUnit;
 
     // Gérer typeId (uniquement pour les catégories parentes)
     // On détermine si la catégorie est/sera une catégorie parente
@@ -653,6 +746,13 @@ export const listPrestations = query({
           allowRangeBooking: prestation.allowRangeBooking,
           allowOvernightStay: prestation.allowOvernightStay,
           enableDurationBasedBlocking: prestation.enableDurationBasedBlocking,
+          // Configuration tarification avancée
+          announcerPriceMode: prestation.announcerPriceMode,
+          clientBillingMode: prestation.clientBillingMode,
+          hourlyBillingSurchargePercent: prestation.hourlyBillingSurchargePercent,
+          displayPriceUnit: prestation.displayPriceUnit,
+          defaultHourlyPrice: prestation.defaultHourlyPrice,
+          defaultNightlyPrice: prestation.defaultNightlyPrice,
           createdAt: prestation.createdAt,
           updatedAt: prestation.updatedAt,
         };

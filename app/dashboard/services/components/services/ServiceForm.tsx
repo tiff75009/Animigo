@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import {
   X,
   ChevronLeft,
@@ -13,14 +15,17 @@ import {
   PawPrint,
   Layers,
   Zap,
-  Moon,
-  Sun,
+  Info,
+  AlertTriangle,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import AnimalTypeSelector from "../shared/AnimalTypeSelector";
 import VariantManager, { LocalVariant } from "../VariantManager";
 import OptionManager, { LocalOption } from "../OptionManager";
 import { cn } from "@/app/lib/utils";
+
+// Types pour les catégories de chiens (législation française)
+type DogCategoryAcceptance = "none" | "cat1" | "cat2" | "both";
 
 type ServiceLocation = "announcer_home" | "client_home" | "both";
 type PriceUnit = "hour" | "half_day" | "day" | "week" | "month";
@@ -46,6 +51,25 @@ interface ServiceCategory {
   allowOvernightStay?: boolean;
   allowRangeBooking?: boolean;
   isCapacityBased?: boolean; // Mode garde (propagé depuis le parent)
+  // Type de catégorie
+  typeId?: string | null;
+  typeName?: string | null;
+  typeIcon?: string | null;
+  typeColor?: string | null;
+  // Configuration tarification avancée
+  announcerPriceMode?: "manual" | "automatic";
+  displayPriceUnit?: PriceUnit;
+  clientBillingMode?: "exact_hourly" | "round_half_day" | "round_full_day";
+  hourlyBillingSurchargePercent?: number;
+  defaultNightlyPrice?: number;
+}
+
+interface CategoryType {
+  id: string;
+  slug: string;
+  name: string;
+  icon?: string | null;
+  color?: string | null;
 }
 
 type FormStep = 1 | 2 | 3 | 4;
@@ -59,15 +83,16 @@ const STEPS = [
 
 interface ServiceFormProps {
   categories: ServiceCategory[];
+  categoryTypes?: CategoryType[];
   existingCategories: string[]; // Categories already used by user
   onSubmit: (data: {
     category: string;
     description?: string;
     animalTypes: string[];
+    // Catégories de chiens acceptées
+    dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
     // Garde de nuit
     allowOvernightStay?: boolean;
-    dayStartTime?: string;
-    dayEndTime?: string;
     overnightPrice?: number;
     initialVariants: Array<{
       name: string;
@@ -110,6 +135,7 @@ interface ServiceFormProps {
 
 export default function ServiceForm({
   categories,
+  categoryTypes = [],
   existingCategories,
   onSubmit,
   onCancel,
@@ -125,10 +151,15 @@ export default function ServiceForm({
 
   // Garde de nuit
   const [allowOvernightStay, setAllowOvernightStay] = useState(false);
-  const [dayStartTime, setDayStartTime] = useState("08:00");
-  const [dayEndTime, setDayEndTime] = useState("20:00");
+
+  // Catégories de chiens acceptées (législation française)
+  const [dogCategoryAcceptance, setDogCategoryAcceptance] = useState<DogCategoryAcceptance>("none");
+
+  // Récupérer les activités depuis l'admin
+  const activities = useQuery(api.services.activities.getActiveActivities);
 
   const selectedCategory = categories.find((c) => c.slug === category);
+  const acceptsDogs = animalTypes.includes("chien");
 
   // Available categories (not yet used)
   const availableCategories = categories.filter(
@@ -193,12 +224,11 @@ export default function ServiceForm({
 
     // Préparer les données overnight si la catégorie le permet
     // Le prix nuit est maintenant dans chaque variant (pricing.nightly)
+    // Les horaires de jour/nuit sont maintenant définis globalement dans l'admin
     const firstVariantNightlyPrice = localVariants[0]?.pricing?.nightly;
     const overnightData = selectedCategory?.allowOvernightStay
       ? {
           allowOvernightStay,
-          dayStartTime,
-          dayEndTime,
           overnightPrice: allowOvernightStay && firstVariantNightlyPrice ? firstVariantNightlyPrice : undefined,
         }
       : {};
@@ -207,6 +237,7 @@ export default function ServiceForm({
       category,
       description: description || undefined,
       animalTypes,
+      dogCategoryAcceptance: acceptsDogs ? dogCategoryAcceptance : undefined,
       ...overnightData,
       initialVariants,
       initialOptions: initialOptions.length > 0 ? initialOptions : undefined,
@@ -329,90 +360,160 @@ export default function ServiceForm({
                     Vous avez déjà créé un service pour chaque catégorie
                   </p>
                 </div>
+              ) : category && selectedCategory ? (
+                // Vue compacte après sélection
+                <div className="space-y-3">
+                  <div
+                    className="p-4 rounded-xl border-2 flex items-center gap-3"
+                    style={{
+                      borderColor: selectedCategory.typeColor || "#6B7280",
+                      backgroundColor: `${selectedCategory.typeColor || "#6B7280"}10`,
+                    }}
+                  >
+                    <span className="text-3xl">{selectedCategory.icon || "✨"}</span>
+                    <div className="flex-1">
+                      <p className="text-xs font-medium" style={{ color: selectedCategory.typeColor || "#6B7280" }}>
+                        {selectedCategory.typeIcon} {selectedCategory.typeName || "Service"}
+                      </p>
+                      <p className="font-semibold text-foreground">{selectedCategory.name}</p>
+                      {selectedCategory.parentName && (
+                        <p className="text-xs text-text-light">{selectedCategory.parentName}</p>
+                      )}
+                    </div>
+                    <motion.button
+                      type="button"
+                      onClick={() => setCategory("")}
+                      className="px-3 py-1.5 text-sm font-medium rounded-lg border border-foreground/20 hover:border-foreground/40 text-text-light hover:text-foreground transition-colors"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      Changer
+                    </motion.button>
+                  </div>
+                </div>
               ) : (
                 (() => {
-                  // Grouper les catégories par parent
-                  const grouped = availableCategories.reduce((acc, cat) => {
-                    const parentKey = cat.parentName || "Autres";
-                    if (!acc[parentKey]) {
-                      acc[parentKey] = [];
+                  // Grouper les catégories par TYPE puis par PARENT
+                  const groupedByType = availableCategories.reduce((acc, cat) => {
+                    const typeKey = cat.typeId || "autres";
+                    if (!acc[typeKey]) {
+                      acc[typeKey] = {
+                        typeName: cat.typeName || "Autres",
+                        typeIcon: cat.typeIcon || "✨",
+                        typeColor: cat.typeColor || "#6B7280",
+                        byParent: {} as Record<string, ServiceCategory[]>,
+                      };
                     }
-                    acc[parentKey].push(cat);
+                    const parentKey = cat.parentName || "Général";
+                    if (!acc[typeKey].byParent[parentKey]) {
+                      acc[typeKey].byParent[parentKey] = [];
+                    }
+                    acc[typeKey].byParent[parentKey].push(cat);
                     return acc;
-                  }, {} as Record<string, ServiceCategory[]>);
+                  }, {} as Record<string, { typeName: string; typeIcon: string; typeColor: string; byParent: Record<string, ServiceCategory[]> }>);
 
-                  const groupKeys = Object.keys(grouped);
-                  const hasGroups = groupKeys.length > 1 || (groupKeys.length === 1 && groupKeys[0] !== "Autres");
+                  // Trier les types selon l'ordre de categoryTypes
+                  const sortedTypeKeys = categoryTypes.length > 0
+                    ? categoryTypes.map(t => t.id).filter(id => groupedByType[id])
+                    : Object.keys(groupedByType);
 
-                  if (!hasGroups) {
-                    // Affichage plat si pas de groupes
-                    return (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {availableCategories.map((cat) => (
-                          <motion.button
-                            key={cat.slug}
-                            type="button"
-                            onClick={() => setCategory(cat.slug)}
-                            className={cn(
-                              "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
-                              category === cat.slug
-                                ? "border-primary bg-primary/5"
-                                : "border-foreground/10 hover:border-foreground/20"
-                            )}
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                          >
-                            <span className="text-3xl">{cat.icon || "✨"}</span>
-                            <span className="text-sm font-medium text-foreground">
-                              {cat.name}
-                            </span>
-                          </motion.button>
-                        ))}
-                      </div>
-                    );
-                  }
+                  // Ajouter les types non référencés (comme "autres")
+                  Object.keys(groupedByType).forEach(key => {
+                    if (!sortedTypeKeys.includes(key)) {
+                      sortedTypeKeys.push(key);
+                    }
+                  });
 
-                  // Affichage groupé par parent
                   return (
-                    <div className="space-y-4">
-                      {groupKeys.map((parentName) => (
-                        <div key={parentName} className="space-y-2">
-                          <div className="flex items-center gap-2 px-2">
-                            <span className="text-xs font-semibold text-text-light uppercase tracking-wider">
-                              {parentName}
-                            </span>
-                          </div>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                            {grouped[parentName].map((cat) => (
-                              <motion.button
-                                key={cat.slug}
-                                type="button"
-                                onClick={() => setCategory(cat.slug)}
-                                className={cn(
-                                  "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
-                                  category === cat.slug
-                                    ? "border-primary bg-primary/5"
-                                    : "border-foreground/10 hover:border-foreground/20"
-                                )}
-                                whileHover={{ scale: 1.02 }}
-                                whileTap={{ scale: 0.98 }}
+                    <div className="space-y-6">
+                      {sortedTypeKeys.map((typeKey) => {
+                        const typeData = groupedByType[typeKey];
+                        const parentKeys = Object.keys(typeData.byParent);
+
+                        return (
+                          <div key={typeKey} className="space-y-3">
+                            {/* En-tête du type avec badge coloré */}
+                            <div
+                              className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                              style={{ backgroundColor: `${typeData.typeColor}15` }}
+                            >
+                              <span className="text-xl">{typeData.typeIcon}</span>
+                              <span
+                                className="text-sm font-bold uppercase tracking-wider"
+                                style={{ color: typeData.typeColor }}
                               >
-                                <span className="text-3xl">{cat.icon || "✨"}</span>
-                                <span className="text-sm font-medium text-foreground">
-                                  {cat.name}
-                                </span>
-                              </motion.button>
-                            ))}
+                                {typeData.typeName}
+                              </span>
+                              <span
+                                className="ml-auto text-xs px-2 py-0.5 rounded-full font-medium"
+                                style={{
+                                  backgroundColor: typeData.typeColor,
+                                  color: "white",
+                                }}
+                              >
+                                {Object.values(typeData.byParent).flat().length} prestation{Object.values(typeData.byParent).flat().length > 1 ? "s" : ""}
+                              </span>
+                            </div>
+
+                            {/* Sous-groupes par catégorie parente */}
+                            <div className="pl-2 space-y-4">
+                              {parentKeys.map((parentName) => (
+                                <div key={parentName} className="space-y-2">
+                                  {/* Nom de la catégorie parente */}
+                                  <div className="flex items-center gap-2 px-2">
+                                    <div
+                                      className="w-1.5 h-1.5 rounded-full"
+                                      style={{ backgroundColor: typeData.typeColor }}
+                                    />
+                                    <span className="text-xs font-medium text-text-light">
+                                      {parentName}
+                                    </span>
+                                  </div>
+
+                                  {/* Grille des prestations */}
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                    {typeData.byParent[parentName].map((cat) => (
+                                      <motion.button
+                                        key={cat.slug}
+                                        type="button"
+                                        onClick={() => setCategory(cat.slug)}
+                                        className={cn(
+                                          "flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all",
+                                          category === cat.slug
+                                            ? "border-current bg-opacity-10"
+                                            : "border-foreground/10 hover:border-foreground/20"
+                                        )}
+                                        style={
+                                          category === cat.slug
+                                            ? {
+                                                borderColor: typeData.typeColor,
+                                                backgroundColor: `${typeData.typeColor}10`,
+                                              }
+                                            : undefined
+                                        }
+                                        whileHover={{ scale: 1.02 }}
+                                        whileTap={{ scale: 0.98 }}
+                                      >
+                                        <span className="text-2xl">{cat.icon || "✨"}</span>
+                                        <span className="text-xs font-medium text-foreground text-center leading-tight">
+                                          {cat.name}
+                                        </span>
+                                      </motion.button>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   );
                 })()
               )}
 
               {/* Description du service */}
-              {category && (
+              {category && selectedCategory && (
                 <div className="mt-6 pt-6 border-t border-foreground/10">
                   <h4 className="font-medium text-foreground mb-1">
                     Description de votre service
@@ -429,83 +530,6 @@ export default function ServiceForm({
                   />
                 </div>
               )}
-
-              {/* Section Garde de nuit - seulement si la catégorie le permet */}
-              {category && selectedCategory?.allowOvernightStay && (
-                <div className="mt-6 pt-6 border-t border-foreground/10">
-                  <h4 className="font-medium text-foreground mb-1 flex items-center gap-2">
-                    <Moon className="w-5 h-5 text-indigo-500" />
-                    Horaires et garde de nuit
-                  </h4>
-                  <p className="text-sm text-text-light mb-4">
-                    Définissez vos horaires de journée et si vous acceptez la garde de nuit
-                  </p>
-
-                  {/* Horaires de journée */}
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-2 flex items-center gap-2">
-                        <Sun className="w-4 h-4 text-amber-500" />
-                        Début de journée
-                      </label>
-                      <select
-                        value={dayStartTime}
-                        onChange={(e) => setDayStartTime(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-white border-2 border-foreground/10 rounded-xl text-foreground focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                      >
-                        {Array.from({ length: 24 }, (_, i) => {
-                          const hour = i.toString().padStart(2, "0");
-                          return (
-                            <option key={hour} value={`${hour}:00`}>
-                              {hour}:00
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-2 flex items-center gap-2">
-                        <Moon className="w-4 h-4 text-indigo-500" />
-                        Fin de journée
-                      </label>
-                      <select
-                        value={dayEndTime}
-                        onChange={(e) => setDayEndTime(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-white border-2 border-foreground/10 rounded-xl text-foreground focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                      >
-                        {Array.from({ length: 24 }, (_, i) => {
-                          const hour = i.toString().padStart(2, "0");
-                          return (
-                            <option key={hour} value={`${hour}:00`}>
-                              {hour}:00
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Checkbox garde de nuit */}
-                  <label className="flex items-start gap-3 p-4 rounded-xl border-2 border-foreground/10 hover:border-indigo-300 cursor-pointer transition-all mb-4">
-                    <input
-                      type="checkbox"
-                      checked={allowOvernightStay}
-                      onChange={(e) => setAllowOvernightStay(e.target.checked)}
-                      className="mt-1 w-5 h-5 rounded border-foreground/20 text-indigo-500 focus:ring-indigo-500"
-                    />
-                    <div className="flex-1">
-                      <span className="font-medium text-foreground flex items-center gap-2">
-                        <Moon className="w-4 h-4 text-indigo-500" />
-                        J&apos;accepte la garde de nuit
-                      </span>
-                      <p className="text-xs text-text-light mt-1">
-                        L&apos;animal peut rester la nuit (de {dayEndTime} à {dayStartTime} le lendemain)
-                      </p>
-                    </div>
-                  </label>
-
-                </div>
-              )}
             </motion.div>
           )}
 
@@ -516,27 +540,159 @@ export default function ServiceForm({
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              className="space-y-4"
+              className="space-y-6"
             >
               <div>
                 <h4 className="font-medium text-foreground mb-1">
                   Quels animaux acceptez-vous ?
                 </h4>
                 <p className="text-sm text-text-light">
-                  Sélectionnez tous les types d'animaux pour ce service
+                  Sélectionnez tous les types d&apos;animaux pour ce service
                 </p>
               </div>
 
               <AnimalTypeSelector
                 selected={animalTypes}
-                onChange={setAnimalTypes}
+                onChange={(types) => {
+                  setAnimalTypes(types);
+                  // Reset dog categories if dogs are unselected
+                  if (!types.includes("chien")) {
+                    setDogCategoryAcceptance("none");
+                  }
+                }}
                 variant="cards"
               />
 
               {animalTypes.length === 0 && (
                 <p className="text-xs text-amber-500">
-                  Sélectionnez au moins un type d'animal
+                  Sélectionnez au moins un type d&apos;animal
                 </p>
+              )}
+
+              {/* Section catégories de chiens */}
+              {acceptsDogs && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-4"
+                >
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h5 className="font-medium text-amber-900">
+                        Chiens catégorisés
+                      </h5>
+                      <p className="text-sm text-amber-700 mt-1">
+                        En France, certains chiens sont soumis à une réglementation spécifique.
+                        Indiquez si vous acceptez les chiens de catégorie 1 et/ou 2.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setDogCategoryAcceptance("none")}
+                      className={cn(
+                        "p-3 rounded-xl border-2 text-left transition-all",
+                        dogCategoryAcceptance === "none"
+                          ? "border-amber-500 bg-white shadow-sm"
+                          : "border-amber-200 hover:border-amber-300"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        {dogCategoryAcceptance === "none" && (
+                          <Check className="w-4 h-4 text-amber-600" />
+                        )}
+                        <span className="font-medium text-amber-900 text-sm">
+                          Non catégorisés uniquement
+                        </span>
+                      </div>
+                      <p className="text-xs text-amber-600">
+                        Je n&apos;accepte pas les chiens de catégorie 1 ou 2
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDogCategoryAcceptance("cat2")}
+                      className={cn(
+                        "p-3 rounded-xl border-2 text-left transition-all",
+                        dogCategoryAcceptance === "cat2"
+                          ? "border-amber-500 bg-white shadow-sm"
+                          : "border-amber-200 hover:border-amber-300"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        {dogCategoryAcceptance === "cat2" && (
+                          <Check className="w-4 h-4 text-amber-600" />
+                        )}
+                        <span className="font-medium text-amber-900 text-sm">
+                          Catégorie 2 acceptée
+                        </span>
+                      </div>
+                      <p className="text-xs text-amber-600">
+                        Chiens de garde et défense (avec permis)
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDogCategoryAcceptance("cat1")}
+                      className={cn(
+                        "p-3 rounded-xl border-2 text-left transition-all",
+                        dogCategoryAcceptance === "cat1"
+                          ? "border-amber-500 bg-white shadow-sm"
+                          : "border-amber-200 hover:border-amber-300"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        {dogCategoryAcceptance === "cat1" && (
+                          <Check className="w-4 h-4 text-amber-600" />
+                        )}
+                        <span className="font-medium text-amber-900 text-sm">
+                          Catégorie 1 acceptée
+                        </span>
+                      </div>
+                      <p className="text-xs text-amber-600">
+                        Chiens d&apos;attaque (interdit à la reproduction)
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDogCategoryAcceptance("both")}
+                      className={cn(
+                        "p-3 rounded-xl border-2 text-left transition-all",
+                        dogCategoryAcceptance === "both"
+                          ? "border-amber-500 bg-white shadow-sm"
+                          : "border-amber-200 hover:border-amber-300"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        {dogCategoryAcceptance === "both" && (
+                          <Check className="w-4 h-4 text-amber-600" />
+                        )}
+                        <span className="font-medium text-amber-900 text-sm">
+                          Catégories 1 et 2
+                        </span>
+                      </div>
+                      <p className="text-xs text-amber-600">
+                        J&apos;accepte tous les chiens catégorisés
+                      </p>
+                    </button>
+                  </div>
+
+                  {/* Info légale */}
+                  <div className="flex items-start gap-2 p-3 bg-white rounded-lg text-xs text-amber-700">
+                    <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <strong>Rappel légal :</strong> Les propriétaires de chiens catégorisés doivent détenir un permis de détention.
+                      Catégorie 1 : Staffordshire terrier, American Staffordshire terrier (sans pedigree), Mastiff, Tosa (sans pedigree).
+                      Catégorie 2 : Mêmes races avec pedigree + Rottweiler.
+                    </div>
+                  </div>
+                </motion.div>
               )}
             </motion.div>
           )}
@@ -571,8 +727,22 @@ export default function ServiceForm({
                 allowCustomVariants={selectedCategory?.allowCustomVariants}
                 autoAddFirst={true}
                 allowOvernightStay={allowOvernightStay}
+                onAllowOvernightStayChange={setAllowOvernightStay}
                 isGardeService={selectedCategory?.isCapacityBased === true}
+                categoryAllowsOvernightStay={selectedCategory?.allowOvernightStay === true}
                 serviceAnimalTypes={animalTypes}
+                availableActivities={activities?.map((a: { _id: string; name: string; emoji: string; description?: string }) => ({
+                  _id: a._id,
+                  name: a.name,
+                  emoji: a.emoji,
+                  description: a.description,
+                })) || []}
+                acceptsDogs={acceptsDogs}
+                dogCategoryAcceptance={dogCategoryAcceptance}
+                announcerPriceMode={selectedCategory?.announcerPriceMode}
+                clientBillingMode={selectedCategory?.clientBillingMode}
+                hourlyBillingSurchargePercent={selectedCategory?.hourlyBillingSurchargePercent}
+                defaultNightlyPrice={selectedCategory?.defaultNightlyPrice}
               />
             </motion.div>
           )}

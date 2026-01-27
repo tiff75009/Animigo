@@ -15,10 +15,16 @@ export interface PrestationFormData {
   parentCategoryId: Id<"serviceCategories"> | null;
   billingType: "hourly" | "daily" | "flexible";
   defaultHourlyPrice: number;
+  defaultNightlyPrice: number;
   allowRangeBooking: boolean;
   allowOvernightStay: boolean;
   enableDurationBasedBlocking: boolean;
   allowedPriceUnits: ("hour" | "half_day" | "day" | "week" | "month")[];
+  // Configuration tarification avancée
+  announcerPriceMode: "manual" | "automatic";
+  clientBillingMode: "exact_hourly" | "round_half_day" | "round_full_day";
+  hourlyBillingSurchargePercent: number;
+  displayPriceUnit: "hour" | "half_day" | "day" | "week" | "month";
 }
 
 export const DEFAULT_PRESTATION_FORM: PrestationFormData = {
@@ -30,10 +36,16 @@ export const DEFAULT_PRESTATION_FORM: PrestationFormData = {
   parentCategoryId: null,
   billingType: "hourly",
   defaultHourlyPrice: 0,
+  defaultNightlyPrice: 0,
   allowRangeBooking: false,
   allowOvernightStay: false,
   enableDurationBasedBlocking: false,
   allowedPriceUnits: ["hour"],
+  // Configuration tarification avancée - valeurs par défaut
+  announcerPriceMode: "manual",
+  clientBillingMode: "exact_hourly",
+  hourlyBillingSurchargePercent: 0,
+  displayPriceUnit: "hour",
 };
 
 interface UsePrestationActionsResult {
@@ -82,11 +94,17 @@ export function usePrestationActions(
     color: prestation.color || "#FF6B6B",
     parentCategoryId: prestation.parentCategoryId,
     billingType: prestation.billingType || "hourly",
-    defaultHourlyPrice: 0, // Not stored in prestation type, will be fetched if needed
+    defaultHourlyPrice: prestation.defaultHourlyPrice ? prestation.defaultHourlyPrice / 100 : 0, // Convert from cents to euros
+    defaultNightlyPrice: prestation.defaultNightlyPrice ? prestation.defaultNightlyPrice / 100 : 0, // Convert from cents to euros
     allowRangeBooking: prestation.allowRangeBooking || false,
     allowOvernightStay: prestation.allowOvernightStay || false,
     enableDurationBasedBlocking: prestation.enableDurationBasedBlocking || false,
     allowedPriceUnits: ["hour"],
+    // Configuration tarification avancée
+    announcerPriceMode: prestation.announcerPriceMode || "manual",
+    clientBillingMode: prestation.clientBillingMode || "exact_hourly",
+    hourlyBillingSurchargePercent: prestation.hourlyBillingSurchargePercent || 0,
+    displayPriceUnit: prestation.displayPriceUnit || "hour",
   });
 
   // Start editing a prestation
@@ -145,6 +163,14 @@ export function usePrestationActions(
           defaultHourlyPrice: formData.defaultHourlyPrice > 0
             ? Math.round(formData.defaultHourlyPrice * 100)
             : undefined,
+          defaultNightlyPrice: formData.defaultNightlyPrice > 0
+            ? Math.round(formData.defaultNightlyPrice * 100)
+            : undefined,
+          // Configuration tarification avancée
+          announcerPriceMode: formData.announcerPriceMode,
+          clientBillingMode: formData.clientBillingMode,
+          hourlyBillingSurchargePercent: formData.hourlyBillingSurchargePercent,
+          displayPriceUnit: formData.displayPriceUnit,
         });
       } else {
         // Create new prestation
@@ -164,6 +190,14 @@ export function usePrestationActions(
           defaultHourlyPrice: formData.defaultHourlyPrice > 0
             ? Math.round(formData.defaultHourlyPrice * 100)
             : undefined,
+          defaultNightlyPrice: formData.defaultNightlyPrice > 0
+            ? Math.round(formData.defaultNightlyPrice * 100)
+            : undefined,
+          // Configuration tarification avancée
+          announcerPriceMode: formData.announcerPriceMode,
+          clientBillingMode: formData.clientBillingMode,
+          hourlyBillingSurchargePercent: formData.hourlyBillingSurchargePercent,
+          displayPriceUnit: formData.displayPriceUnit,
         });
       }
 

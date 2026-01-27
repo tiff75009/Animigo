@@ -83,6 +83,20 @@ interface DefaultVariant {
   includedFeatures?: string[];
 }
 
+// Type pour les activités admin
+interface AdminActivity {
+  _id: string;
+  name: string;
+  emoji: string;
+  description?: string;
+}
+
+// Types pour les catégories de chiens
+type DogCategoryAcceptance = "none" | "cat1" | "cat2" | "both";
+
+// Type pour le mode de saisie des prix annonceur
+type AnnouncerPriceMode = "manual" | "automatic";
+
 interface VariantManagerProps {
   // Mode édition (service existant)
   serviceId?: Id<"services">;
@@ -110,10 +124,26 @@ interface VariantManagerProps {
 
   // Garde de nuit
   allowOvernightStay?: boolean;
+  onAllowOvernightStayChange?: (value: boolean) => void;
   isGardeService?: boolean;
+  categoryAllowsOvernightStay?: boolean; // Si la catégorie permet la garde de nuit
 
   // Animaux sélectionnés pour ce service (pour filtrer dans les formules)
   serviceAnimalTypes?: string[];
+
+  // Activités prédéfinies depuis l'admin
+  availableActivities?: AdminActivity[];
+
+  // Catégories de chiens acceptées
+  dogCategoryAcceptance?: DogCategoryAcceptance;
+  acceptsDogs?: boolean;
+
+  // Configuration tarification avancée depuis l'admin
+  announcerPriceMode?: AnnouncerPriceMode;
+  workdayHours?: number; // Nombre d'heures par journée de travail (ex: 14 pour 7h-21h)
+  clientBillingMode?: "exact_hourly" | "round_half_day" | "round_full_day";
+  hourlyBillingSurchargePercent?: number;
+  defaultNightlyPrice?: number; // Prix supplément nuit conseillé en centimes
 }
 
 // Helper pour formater le prix
@@ -152,6 +182,17 @@ const getComputedPriceUnits = (
 
 // Générer un ID local unique
 const generateLocalId = () => `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+// Calculer automatiquement les prix depuis le prix journée
+const calculateAutoPricing = (dailyPriceCents: number, workdayHours: number = 14): Pricing => {
+  return {
+    hourly: Math.round(dailyPriceCents / workdayHours),
+    halfDaily: Math.round(dailyPriceCents / 2),
+    daily: dailyPriceCents,
+    weekly: Math.round(dailyPriceCents * 5),
+    monthly: Math.round(dailyPriceCents * 20),
+  };
+};
 
 // Labels pour les types d'animaux
 const animalLabels: Record<string, string> = {
@@ -271,6 +312,9 @@ function PriceSlider({
 }
 
 // Composant pour une formule en mode création simplifié
+// Type pour le mode de facturation client
+type ClientBillingMode = "exact_hourly" | "round_half_day" | "round_full_day";
+
 function SimpleVariantCard({
   variant,
   index,
@@ -283,6 +327,12 @@ function SimpleVariantCard({
   isGardeService,
   allowOvernightStay,
   serviceAnimalTypes,
+  availableActivities = [],
+  announcerPriceMode = "manual",
+  workdayHours = 14,
+  clientBillingMode,
+  hourlyBillingSurchargePercent = 0,
+  defaultNightlyPrice,
 }: {
   variant: LocalVariant;
   index: number;
@@ -295,33 +345,47 @@ function SimpleVariantCard({
   isGardeService?: boolean;
   allowOvernightStay?: boolean;
   serviceAnimalTypes: string[];
+  availableActivities?: AdminActivity[];
+  announcerPriceMode?: AnnouncerPriceMode;
+  workdayHours?: number;
+  clientBillingMode?: ClientBillingMode;
+  hourlyBillingSurchargePercent?: number;
+  defaultNightlyPrice?: number;
 }) {
   const [newFeature, setNewFeature] = useState("");
-  const [newObjectiveText, setNewObjectiveText] = useState("");
-  const [newObjectiveIcon, setNewObjectiveIcon] = useState("🎯");
-  const [showIconPicker, setShowIconPicker] = useState(false);
+  const [showActivitySelector, setShowActivitySelector] = useState(false);
 
-  // Emojis disponibles pour les objectifs
-  const objectiveIcons = ["🎯", "✨", "🏆", "💪", "🧠", "❤️", "🐾", "⭐", "🔧", "📈", "🎓", "🤝", "🌟", "👍", "✅"];
+  // Ajouter une activité prédéfinie
+  const handleToggleActivity = (activity: AdminActivity) => {
+    const currentObjectives = variant.objectives || [];
+    const existingIdx = currentObjectives.findIndex(obj => obj.text === activity.name);
 
-  // Ajouter un objectif
-  const handleAddObjective = () => {
-    if (newObjectiveText.trim()) {
-      const currentObjectives = variant.objectives || [];
-      onUpdate({ objectives: [...currentObjectives, { icon: newObjectiveIcon, text: newObjectiveText.trim() }] });
-      setNewObjectiveText("");
-      setNewObjectiveIcon("🎯");
+    if (existingIdx >= 0) {
+      // Retirer l'activité
+      onUpdate({ objectives: currentObjectives.filter((_, i) => i !== existingIdx) });
+    } else {
+      // Ajouter l'activité
+      onUpdate({ objectives: [...currentObjectives, { icon: activity.emoji, text: activity.name }] });
     }
   };
 
-  // Supprimer un objectif
+  // Vérifier si une activité est sélectionnée
+  const isActivitySelected = (activity: AdminActivity) => {
+    return (variant.objectives || []).some(obj => obj.text === activity.name);
+  };
+
+  // Supprimer une activité/objectif
   const handleRemoveObjective = (idx: number) => {
     const currentObjectives = variant.objectives || [];
     onUpdate({ objectives: currentObjectives.filter((_, i) => i !== idx) });
   };
 
-  // Pour les gardes: prix journée recommandé (8x le prix horaire)
-  const dailyRecommendedPrice = isGardeService ? recommendedPrice * 8 : recommendedPrice;
+  // Pour les gardes ou mode automatique: le prix conseillé est déjà journalier si l'admin l'a saisi ainsi
+  // Si announcerPriceMode === "automatic", l'admin a saisi un prix journalier
+  // Sinon, c'est un prix horaire qu'on multiplie par 8 pour avoir le prix journée
+  const dailyRecommendedPrice = announcerPriceMode === "automatic"
+    ? recommendedPrice  // Prix déjà en journalier
+    : (isGardeService ? recommendedPrice * 8 : recommendedPrice);
 
   // Récupérer le prix journée actuel
   const getDailyPrice = () => {
@@ -335,23 +399,40 @@ function SimpleVariantCard({
     return variant.pricing.nightly / 100;
   };
 
-  // Handler pour le prix journée (garde)
+  // Handler pour le prix journée (garde ou mode automatique)
   const handleDailyPriceChange = (newDailyPriceEuros: number) => {
     const dailyInCents = Math.round(newDailyPriceEuros * 100);
-    const hourlyInCents = Math.round(dailyInCents / 8);
 
-    const currentNightly = variant.pricing?.nightly || 0;
-    const newNightly = currentNightly > dailyInCents ? dailyInCents : currentNightly;
+    // En mode automatique, calculer tous les prix automatiquement
+    if (announcerPriceMode === "automatic") {
+      const autoPricing = calculateAutoPricing(dailyInCents, workdayHours);
+      const currentNightly = variant.pricing?.nightly || 0;
+      const newNightly = currentNightly > dailyInCents ? dailyInCents : currentNightly;
 
-    onUpdate({
-      pricing: {
-        ...variant.pricing,
-        daily: dailyInCents,
-        hourly: hourlyInCents,
-        nightly: newNightly > 0 ? newNightly : undefined,
-      },
-      price: dailyInCents,
-    });
+      onUpdate({
+        pricing: {
+          ...autoPricing,
+          nightly: newNightly > 0 ? newNightly : undefined,
+        },
+        price: dailyInCents,
+      });
+    } else {
+      // Mode manuel: comportement par défaut
+      const hourlyInCents = Math.round(dailyInCents / 8);
+
+      const currentNightly = variant.pricing?.nightly || 0;
+      const newNightly = currentNightly > dailyInCents ? dailyInCents : currentNightly;
+
+      onUpdate({
+        pricing: {
+          ...variant.pricing,
+          daily: dailyInCents,
+          hourly: hourlyInCents,
+          nightly: newNightly > 0 ? newNightly : undefined,
+        },
+        price: dailyInCents,
+      });
+    }
   };
 
   // Handler pour le prix nuit (garde)
@@ -714,59 +795,75 @@ function SimpleVariantCard({
             Personnalisation <span className="text-xs font-normal text-gray-400">(optionnel)</span>
           </div>
 
-          {/* Objectifs / Activités */}
+          {/* Activités proposées (sélection depuis admin) */}
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-2">
-              {isGardeService ? "Activités proposées" : "Objectifs"}
+              {isGardeService ? "Activités proposées pendant la garde" : "Objectifs de la prestation"}
             </label>
-            <div className="flex gap-2">
-              <div className="relative">
+
+            {/* Bouton pour ouvrir le sélecteur */}
+            {availableActivities.length > 0 ? (
+              <>
                 <button
                   type="button"
-                  onClick={() => setShowIconPicker(!showIconPicker)}
-                  className="w-10 h-10 flex items-center justify-center bg-gray-50 border border-gray-200 rounded-xl hover:bg-gray-100 text-lg"
+                  onClick={() => setShowActivitySelector(!showActivitySelector)}
+                  className={cn(
+                    "w-full px-4 py-3 border-2 border-dashed rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2",
+                    showActivitySelector
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-gray-200 hover:border-gray-300 text-text-light hover:text-foreground"
+                  )}
                 >
-                  {newObjectiveIcon}
+                  <Sparkles className="w-4 h-4" />
+                  {showActivitySelector ? "Fermer la sélection" : "Sélectionner les activités"}
+                  <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+                    {(variant.objectives || []).length} sélectionnée{(variant.objectives || []).length > 1 ? "s" : ""}
+                  </span>
                 </button>
-                {showIconPicker && (
-                  <div className="absolute top-12 left-0 z-10 p-2 bg-white border border-gray-200 rounded-xl shadow-lg">
-                    <div className="grid grid-cols-5 gap-1">
-                      {objectiveIcons.map((icon) => (
+
+                {/* Grille de sélection des activités */}
+                {showActivitySelector && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="mt-3 p-3 bg-gray-50 rounded-xl border border-gray-200"
+                  >
+                    <div className="grid grid-cols-2 gap-2">
+                      {availableActivities.map((activity) => (
                         <button
-                          key={icon}
+                          key={activity._id}
                           type="button"
-                          onClick={() => { setNewObjectiveIcon(icon); setShowIconPicker(false); }}
+                          onClick={() => handleToggleActivity(activity)}
                           className={cn(
-                            "w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-lg",
-                            newObjectiveIcon === icon && "bg-primary/10"
+                            "flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all text-left",
+                            isActivitySelected(activity)
+                              ? isGardeService
+                                ? "bg-emerald-100 border-2 border-emerald-400 text-emerald-800"
+                                : "bg-purple-100 border-2 border-purple-400 text-purple-800"
+                              : "bg-white border border-gray-200 hover:border-gray-300 text-gray-700"
                           )}
                         >
-                          {icon}
+                          <span className="text-lg">{activity.emoji}</span>
+                          <span className="flex-1 truncate">{activity.name}</span>
+                          {isActivitySelected(activity) && (
+                            <Check className="w-4 h-4 flex-shrink-0" />
+                          )}
                         </button>
                       ))}
                     </div>
-                  </div>
+                  </motion.div>
                 )}
-              </div>
-              <input
-                type="text"
-                value={newObjectiveText}
-                onChange={(e) => setNewObjectiveText(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddObjective())}
-                placeholder={isGardeService ? "Ex: Promenades quotidiennes..." : "Ex: Améliorer le rappel..."}
-                className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:border-primary/50 text-sm transition-all"
-              />
-              <button
-                type="button"
-                onClick={handleAddObjective}
-                disabled={!newObjectiveText.trim()}
-                className="px-3 py-2 bg-primary text-white rounded-xl hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-            </div>
+              </>
+            ) : (
+              <p className="text-sm text-gray-400 italic py-2">
+                Aucune activité configurée par l&apos;administrateur.
+              </p>
+            )}
+
+            {/* Activités sélectionnées */}
             {variant.objectives && variant.objectives.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-2">
+              <div className="flex flex-wrap gap-2 mt-3">
                 {variant.objectives.map((objective, idx) => (
                   <span
                     key={idx}
@@ -832,7 +929,28 @@ function SimpleVariantCard({
               {isGardeService ? "3" : "4"}
             </div>
             Tarification
+            {announcerPriceMode === "automatic" && (
+              <span className="ml-auto px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
+                Mode auto
+              </span>
+            )}
           </div>
+
+          {/* Prix conseillé */}
+          {recommendedPrice > 0 && !isLoadingPrice && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+              <div className="flex items-center gap-2">
+                <Info className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                <span className="text-xs text-blue-700 font-medium">
+                  Prix conseillé : {announcerPriceMode === "automatic"
+                    ? `${formatPrice(recommendedPrice)}/jour`
+                    : isGardeService
+                      ? `${formatPrice(recommendedPrice * 8)}/jour`
+                      : `${formatPrice(recommendedPrice)}/h`}
+                </span>
+              </div>
+            </div>
+          )}
 
           {isLoadingPrice ? (
             <div className="h-20 bg-gray-100 rounded-xl animate-pulse" />
@@ -873,49 +991,243 @@ function SimpleVariantCard({
                     <span className="text-sm text-gray-500">€/jour</span>
                   </div>
                 </div>
-                {/* Prix horaire calculé auto */}
-                {calculatedHourlyFromDaily && (
-                  <div className="mt-3 pt-3 border-t border-primary/10 text-xs text-gray-500">
-                    Prix horaire auto : <span className="font-medium text-primary">{calculatedHourlyFromDaily}€/h</span>
-                  </div>
-                )}
+                {/* Exemples de facturation garde */}
+                {(() => {
+                  const dailyPrice = getDailyPrice();
+                  const hourlyPrice = dailyPrice / (workdayHours || 14);
+                  const halfDailyPrice = dailyPrice / 2;
+
+                  return (
+                    <div className="mt-3 pt-3 border-t border-primary/10">
+                      <p className="text-xs font-medium text-gray-500 mb-2">
+                        Exemples de facturation
+                        {clientBillingMode === "round_half_day" && (
+                          <span className="ml-1 text-blue-600">(arrondi demi-journée)</span>
+                        )}
+                        {clientBillingMode === "round_full_day" && (
+                          <span className="ml-1 text-blue-600">(arrondi journée)</span>
+                        )}
+                        {clientBillingMode === "exact_hourly" && hourlyBillingSurchargePercent !== 0 && (
+                          <span className="ml-1 text-amber-600">
+                            ({hourlyBillingSurchargePercent > 0 ? "+" : ""}{hourlyBillingSurchargePercent}%)
+                          </span>
+                        )}
+                        :
+                      </p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                        {/* 2 heures */}
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">2 heures</span>
+                          <span className="font-semibold text-gray-700">
+                            {clientBillingMode === "round_full_day"
+                              ? `${dailyPrice.toFixed(2).replace(".", ",")}€`
+                              : clientBillingMode === "round_half_day"
+                                ? `${halfDailyPrice.toFixed(2).replace(".", ",")}€`
+                                : `${(hourlyPrice * 2 * (1 + hourlyBillingSurchargePercent / 100)).toFixed(2).replace(".", ",")}€`
+                            }
+                          </span>
+                        </div>
+                        {/* 6 heures */}
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">6 heures</span>
+                          <span className="font-semibold text-gray-700">
+                            {clientBillingMode === "round_full_day"
+                              ? `${dailyPrice.toFixed(2).replace(".", ",")}€`
+                              : clientBillingMode === "round_half_day"
+                                ? `${dailyPrice.toFixed(2).replace(".", ",")}€`
+                                : `${(hourlyPrice * 6 * (1 + hourlyBillingSurchargePercent / 100)).toFixed(2).replace(".", ",")}€`
+                            }
+                          </span>
+                        </div>
+                        {/* 1 demi-journée */}
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">1 demi-journée</span>
+                          <span className="font-semibold text-gray-700">{halfDailyPrice.toFixed(2).replace(".", ",")}€</span>
+                        </div>
+                        {/* 1 journée */}
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">1 journée</span>
+                          <span className="font-semibold text-gray-700">{dailyPrice.toFixed(2).replace(".", ",")}€</span>
+                        </div>
+                        {/* 2 jours */}
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">2 jours</span>
+                          <span className="font-semibold text-gray-700">{(dailyPrice * 2).toFixed(2).replace(".", ",")}€</span>
+                        </div>
+                        {/* 1 semaine */}
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">1 semaine</span>
+                          <span className="font-semibold text-gray-700">{(dailyPrice * 5).toFixed(2).replace(".", ",")}€</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Prix nuit (si activé) */}
-              {allowOvernightStay && (
-                <div className="p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border border-indigo-200">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Moon className="w-4 h-4 text-indigo-500" />
-                    <span className="text-sm font-medium text-indigo-800">Supplément nuit</span>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="flex-1">
-                      <input
-                        type="range"
-                        min={0}
-                        max={getDailyPrice()}
-                        step={1}
-                        value={getNightlyPrice()}
-                        onChange={(e) => handleNightlyPriceChange(parseFloat(e.target.value))}
-                        className="w-full h-2 bg-indigo-200 rounded-full appearance-none cursor-pointer
-                          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5
-                          [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-indigo-500 [&::-webkit-slider-thumb]:shadow-md"
-                      />
-                      <div className="flex justify-between text-xs text-indigo-400 mt-1">
-                        <span>0€</span>
-                        <span>Max: {getDailyPrice().toFixed(0)}€</span>
+              {allowOvernightStay && (() => {
+                const nightlyRecommended = defaultNightlyPrice
+                  ? defaultNightlyPrice / 100
+                  : Math.round(dailyRecommendedPrice * 0.5 / 100);
+                const nightlyMax = Math.round(dailyRecommendedPrice / 100);
+
+                return (
+                  <div className="p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border border-indigo-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Moon className="w-4 h-4 text-indigo-500" />
+                      <span className="text-sm font-medium text-indigo-800">Supplément nuit</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1">
+                        <input
+                          type="range"
+                          min={0}
+                          max={nightlyMax}
+                          step={0.5}
+                          value={getNightlyPrice()}
+                          onChange={(e) => handleNightlyPriceChange(parseFloat(e.target.value))}
+                          className="w-full h-2 bg-indigo-200 rounded-full appearance-none cursor-pointer
+                            [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5
+                            [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-indigo-500 [&::-webkit-slider-thumb]:shadow-md"
+                        />
+                        <div className="flex justify-between text-xs text-indigo-400 mt-1">
+                          <span>0€</span>
+                          <span>Conseillé: {nightlyRecommended.toFixed(2).replace(".", ",")}€</span>
+                          <span>{nightlyMax}€</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-2xl font-bold text-indigo-600">{getNightlyPrice().toFixed(2).replace(".", ",")}</span>
+                        <span className="text-sm text-indigo-400">€/nuit</span>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <span className="text-2xl font-bold text-indigo-600">{getNightlyPrice().toFixed(0)}</span>
-                      <span className="text-sm text-indigo-400">€/nuit</span>
+                  </div>
+                );
+              })()}
+            </div>
+          ) : announcerPriceMode === "automatic" ? (
+            /* ═══ TARIFS SERVICES - MODE AUTOMATIQUE ═══ */
+            <div className="space-y-4">
+              {/* Prix journée (base de calcul) */}
+              <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-200">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-foreground">Prix par jour</span>
+                    <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
+                      Mode auto
+                    </span>
+                  </div>
+                  <span className="text-xs px-2 py-0.5 bg-white rounded-full text-gray-500">
+                    {getDailyPrice() <= dailyRecommendedPrice / 100 * 0.9 ? "Compétitif" :
+                     getDailyPrice() >= dailyRecommendedPrice / 100 * 1.1 ? "Premium" : "Standard"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex-1">
+                    <input
+                      type="range"
+                      min={Math.round(dailyRecommendedPrice * 0.8 / 100)}
+                      max={Math.round(dailyRecommendedPrice * 1.2 / 100)}
+                      step={1}
+                      value={getDailyPrice()}
+                      onChange={(e) => handleDailyPriceChange(parseFloat(e.target.value))}
+                      className="w-full h-2 bg-amber-200 rounded-full appearance-none cursor-pointer
+                        [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5
+                        [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-500 [&::-webkit-slider-thumb]:shadow-md
+                        [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110"
+                    />
+                    <div className="flex justify-between text-xs text-amber-600 mt-1">
+                      <span>{Math.round(dailyRecommendedPrice * 0.8 / 100)}€</span>
+                      <span className="text-amber-700">Conseillé: {Math.round(dailyRecommendedPrice / 100)}€</span>
+                      <span>{Math.round(dailyRecommendedPrice * 1.2 / 100)}€</span>
                     </div>
                   </div>
+                  <div className="text-right">
+                    <span className="text-2xl font-bold text-amber-600">{getDailyPrice().toFixed(0)}</span>
+                    <span className="text-sm text-amber-500">€/jour</span>
+                  </div>
                 </div>
-              )}
+              </div>
+
+              {/* Exemples de prix pour différentes durées selon le mode de facturation */}
+              {(() => {
+                // Calculer les prix depuis le prix journée actuel
+                const currentDailyPrice = getDailyPrice() * 100; // en centimes
+                const currentHourlyPrice = Math.round(currentDailyPrice / (workdayHours || 14));
+                const currentHalfDailyPrice = Math.round(currentDailyPrice / 2);
+                const currentWeeklyPrice = Math.round(currentDailyPrice * 5);
+                const currentMonthlyPrice = Math.round(currentDailyPrice * 20);
+
+                return (
+                  <div className="mt-4 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                    <p className="text-xs font-medium text-gray-500 mb-2">
+                      Exemples de facturation
+                      {clientBillingMode === "round_half_day" && (
+                        <span className="ml-1 text-blue-600">(arrondi demi-journée)</span>
+                      )}
+                      {clientBillingMode === "round_full_day" && (
+                        <span className="ml-1 text-blue-600">(arrondi journée)</span>
+                      )}
+                      {clientBillingMode === "exact_hourly" && hourlyBillingSurchargePercent !== 0 && (
+                        <span className="ml-1 text-amber-600">
+                          ({hourlyBillingSurchargePercent > 0 ? "+" : ""}{hourlyBillingSurchargePercent}%)
+                        </span>
+                      )}
+                      :
+                    </p>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                      {/* 2 heures */}
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">2 heures</span>
+                        <span className="font-semibold text-gray-700">
+                          {clientBillingMode === "round_full_day"
+                            ? `${(currentDailyPrice / 100).toFixed(2).replace(".", ",")}€`
+                            : clientBillingMode === "round_half_day"
+                              ? `${(currentHalfDailyPrice / 100).toFixed(2).replace(".", ",")}€`
+                              : `${((currentHourlyPrice * 2 * (1 + hourlyBillingSurchargePercent / 100)) / 100).toFixed(2).replace(".", ",")}€`
+                          }
+                        </span>
+                      </div>
+                      {/* 6 heures */}
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">6 heures</span>
+                        <span className="font-semibold text-gray-700">
+                          {clientBillingMode === "round_full_day"
+                            ? `${(currentDailyPrice / 100).toFixed(2).replace(".", ",")}€`
+                            : clientBillingMode === "round_half_day"
+                              ? `${(currentDailyPrice / 100).toFixed(2).replace(".", ",")}€`
+                              : `${((currentHourlyPrice * 6 * (1 + hourlyBillingSurchargePercent / 100)) / 100).toFixed(2).replace(".", ",")}€`
+                          }
+                        </span>
+                      </div>
+                      {/* 1 demi-journée */}
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">1 demi-journée</span>
+                        <span className="font-semibold text-gray-700">{(currentHalfDailyPrice / 100).toFixed(2).replace(".", ",")}€</span>
+                      </div>
+                      {/* 1 journée */}
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">1 journée</span>
+                        <span className="font-semibold text-gray-700">{(currentDailyPrice / 100).toFixed(2).replace(".", ",")}€</span>
+                      </div>
+                      {/* 1 semaine */}
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">1 semaine</span>
+                        <span className="font-semibold text-gray-700">{(currentWeeklyPrice / 100).toFixed(2).replace(".", ",")}€</span>
+                      </div>
+                      {/* 1 mois */}
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">1 mois</span>
+                        <span className="font-semibold text-gray-700">{(currentMonthlyPrice / 100).toFixed(2).replace(".", ",")}€</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           ) : (
-            /* ═══ TARIFS SERVICES ═══ */
+            /* ═══ TARIFS SERVICES - MODE MANUEL ═══ */
             <div className="p-4 bg-gradient-to-br from-primary/5 to-secondary/5 rounded-xl border border-primary/10">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-medium text-foreground">Prix par heure</span>
@@ -949,6 +1261,67 @@ function SimpleVariantCard({
                   <span className="text-sm text-gray-500">€/h</span>
                 </div>
               </div>
+              {/* Exemples de facturation horaire selon le mode de facturation */}
+              <div className="mt-3 pt-3 border-t border-primary/10">
+                <p className="text-xs font-medium text-gray-500 mb-2">
+                  Exemples de facturation
+                  {clientBillingMode === "round_half_day" && (
+                    <span className="ml-1 text-blue-600">(arrondi demi-journée)</span>
+                  )}
+                  {clientBillingMode === "round_full_day" && (
+                    <span className="ml-1 text-blue-600">(arrondi journée)</span>
+                  )}
+                  {clientBillingMode === "exact_hourly" && hourlyBillingSurchargePercent !== 0 && (
+                    <span className="ml-1 text-amber-600">
+                      ({hourlyBillingSurchargePercent > 0 ? "+" : ""}{hourlyBillingSurchargePercent}%)
+                    </span>
+                  )}
+                  :
+                </p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                  {/* 1 heure */}
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">1 heure</span>
+                    <span className="font-semibold text-gray-700">
+                      {clientBillingMode === "round_full_day"
+                        ? `${(getHourlyPrice() * 8).toFixed(2).replace(".", ",")}€`
+                        : clientBillingMode === "round_half_day"
+                          ? `${(getHourlyPrice() * 4).toFixed(2).replace(".", ",")}€`
+                          : `${(getHourlyPrice() * (1 + hourlyBillingSurchargePercent / 100)).toFixed(2).replace(".", ",")}€`
+                      }
+                    </span>
+                  </div>
+                  {/* 2 heures */}
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">2 heures</span>
+                    <span className="font-semibold text-gray-700">
+                      {clientBillingMode === "round_full_day"
+                        ? `${(getHourlyPrice() * 8).toFixed(2).replace(".", ",")}€`
+                        : clientBillingMode === "round_half_day"
+                          ? `${(getHourlyPrice() * 4).toFixed(2).replace(".", ",")}€`
+                          : `${(getHourlyPrice() * 2 * (1 + hourlyBillingSurchargePercent / 100)).toFixed(2).replace(".", ",")}€`
+                      }
+                    </span>
+                  </div>
+                  {/* 6 heures */}
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">6 heures</span>
+                    <span className="font-semibold text-gray-700">
+                      {clientBillingMode === "round_full_day"
+                        ? `${(getHourlyPrice() * 8).toFixed(2).replace(".", ",")}€`
+                        : clientBillingMode === "round_half_day"
+                          ? `${(getHourlyPrice() * 8).toFixed(2).replace(".", ",")}€`
+                          : `${(getHourlyPrice() * 6 * (1 + hourlyBillingSurchargePercent / 100)).toFixed(2).replace(".", ",")}€`
+                      }
+                    </span>
+                  </div>
+                  {/* 1 journée (8h) */}
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">1 journée</span>
+                    <span className="font-semibold text-gray-700">{(getHourlyPrice() * 8).toFixed(2).replace(".", ",")}€</span>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -973,8 +1346,18 @@ export default function VariantManager({
   allowCustomVariants = true,
   autoAddFirst = false,
   allowOvernightStay = false,
+  onAllowOvernightStayChange,
   isGardeService = false,
+  categoryAllowsOvernightStay = false,
   serviceAnimalTypes = [],
+  availableActivities = [],
+  dogCategoryAcceptance = "none",
+  acceptsDogs = false,
+  announcerPriceMode = "manual",
+  workdayHours = 14,
+  clientBillingMode = "exact_hourly",
+  hourlyBillingSurchargePercent = 0,
+  defaultNightlyPrice,
 }: VariantManagerProps) {
   const { token: authToken } = useAuth();
   const [isExpanded, setIsExpanded] = useState(true);
@@ -1149,34 +1532,68 @@ export default function VariantManager({
   if (isCreateMode) {
     return (
       <div className="space-y-4">
-        {/* Info sur les prix conseillés */}
-        {priceRecommendation && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-4 bg-blue-50 border border-blue-200 rounded-xl"
-          >
+        {/* Checkbox Garde de nuit - seulement pour les services de garde qui le permettent */}
+        {isGardeService && categoryAllowsOvernightStay && (
+          <div className="p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border border-indigo-200">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={allowOvernightStay}
+                onChange={(e) => onAllowOvernightStayChange?.(e.target.checked)}
+                className="mt-1 w-5 h-5 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <div className="flex-1">
+                <span className="font-medium text-indigo-800 flex items-center gap-2">
+                  <Moon className="w-4 h-4 text-indigo-500" />
+                  J&apos;accepte la garde de nuit
+                </span>
+                <p className="text-xs text-indigo-600 mt-1">
+                  L&apos;animal peut rester la nuit chez vous. Un supplément nuit sera ajouté
+                  automatiquement aux tarifs de chaque formule.
+                </p>
+              </div>
+            </label>
+          </div>
+        )}
+
+        {/* Récapitulatif chiens catégorisés - affiché si l'annonceur accepte les chiens */}
+        {acceptsDogs && (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
             <div className="flex items-center gap-2 mb-2">
-              <Info className="w-5 h-5 text-blue-500 flex-shrink-0" />
-              <p className="text-sm text-blue-800 font-medium">Prix conseillés sur la plateforme</p>
+              <span className="text-lg">🐕</span>
+              <span className="font-medium text-amber-900">Chiens catégorisés acceptés</span>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {computedPriceUnits.map((unit) => {
-                const multiplier = unit.id === "hour" ? 1 :
-                                   unit.id === "half_day" ? 4 :
-                                   unit.id === "day" ? 8 :
-                                   unit.id === "week" ? 40 :
-                                   unit.id === "month" ? 160 : 1;
-                const price = priceRecommendation.avgPrice * multiplier;
-                return (
-                  <div key={unit.id} className="text-center p-2 bg-white/50 rounded-lg">
-                    <p className="text-lg text-blue-700 font-bold">{formatPrice(price)}</p>
-                    <p className="text-xs text-blue-500">{unit.label}</p>
-                  </div>
-                );
-              })}
+            <div className="flex flex-wrap gap-2">
+              {dogCategoryAcceptance === "none" && (
+                <span className="px-3 py-1.5 bg-white border border-amber-300 rounded-full text-sm text-amber-700">
+                  Uniquement non catégorisés
+                </span>
+              )}
+              {dogCategoryAcceptance === "cat1" && (
+                <span className="px-3 py-1.5 bg-amber-100 border border-amber-400 rounded-full text-sm font-medium text-amber-800">
+                  Catégorie 1 acceptée
+                </span>
+              )}
+              {dogCategoryAcceptance === "cat2" && (
+                <span className="px-3 py-1.5 bg-amber-100 border border-amber-400 rounded-full text-sm font-medium text-amber-800">
+                  Catégorie 2 acceptée
+                </span>
+              )}
+              {dogCategoryAcceptance === "both" && (
+                <>
+                  <span className="px-3 py-1.5 bg-amber-100 border border-amber-400 rounded-full text-sm font-medium text-amber-800">
+                    Catégorie 1 acceptée
+                  </span>
+                  <span className="px-3 py-1.5 bg-amber-100 border border-amber-400 rounded-full text-sm font-medium text-amber-800">
+                    Catégorie 2 acceptée
+                  </span>
+                </>
+              )}
             </div>
-          </motion.div>
+            <p className="text-xs text-amber-600 mt-2">
+              Cette information sera affichée sur votre profil pour les clients propriétaires de chiens catégorisés.
+            </p>
+          </div>
         )}
 
         {/* Liste des formules */}
@@ -1195,6 +1612,12 @@ export default function VariantManager({
               isGardeService={isGardeService}
               allowOvernightStay={allowOvernightStay}
               serviceAnimalTypes={serviceAnimalTypes}
+              availableActivities={availableActivities}
+              announcerPriceMode={announcerPriceMode}
+              workdayHours={workdayHours}
+              clientBillingMode={clientBillingMode}
+              hourlyBillingSurchargePercent={hourlyBillingSurchargePercent}
+              defaultNightlyPrice={defaultNightlyPrice}
             />
           ))}
         </AnimatePresence>

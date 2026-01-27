@@ -11,13 +11,21 @@ import {
   Moon,
   Clock,
   AlertCircle,
+  Coins,
+  Info,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import {
   PrestationFormData,
   DEFAULT_PRESTATION_FORM,
 } from "../hooks/usePrestationActions";
-import { Prestation, ParentOption } from "../types";
+import {
+  Prestation,
+  ParentOption,
+  ANNOUNCER_PRICE_MODE_OPTIONS,
+  CLIENT_BILLING_MODE_OPTIONS,
+  DISPLAY_PRICE_UNIT_OPTIONS,
+} from "../types";
 
 // Couleurs prédéfinies
 const COLORS = [
@@ -369,6 +377,255 @@ export function PrestationForm({
                 </p>
               </div>
             </label>
+          </div>
+
+          {/* Configuration tarification avancée */}
+          <div className="p-4 bg-slate-900/50 rounded-lg border border-slate-700 space-y-5">
+            <div className="flex items-center gap-2 mb-2">
+              <Coins className="w-5 h-5 text-amber-400" />
+              <h4 className="font-medium text-white">Configuration des tarifs</h4>
+            </div>
+
+            {/* Mode de saisie des prix (annonceur) */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Mode de saisie des prix (annonceur)
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {ANNOUNCER_PRICE_MODE_OPTIONS.map((option) => (
+                  <label
+                    key={option.value}
+                    className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border cursor-pointer transition-all ${
+                      formData.announcerPriceMode === option.value
+                        ? "border-amber-500 bg-amber-500/10"
+                        : "border-slate-700 bg-slate-800 hover:border-slate-600"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="announcerPriceMode"
+                      value={option.value}
+                      checked={formData.announcerPriceMode === option.value}
+                      onChange={(e) =>
+                        onFormDataChange((prev) => ({
+                          ...prev,
+                          announcerPriceMode: e.target.value as "manual" | "automatic",
+                        }))
+                      }
+                      className="sr-only"
+                    />
+                    <span className="text-xl">{option.icon}</span>
+                    <span className="font-medium text-white text-sm">{option.label}</span>
+                    <span className="text-xs text-slate-400 text-center">{option.description}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Mode de facturation client - uniquement si réservation par plage activée */}
+            {formData.allowRangeBooking && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Mode de facturation client
+                    <span className="ml-2 text-xs text-blue-400 font-normal">(réservation par plage)</span>
+                  </label>
+                  <div className="space-y-2">
+                    {CLIENT_BILLING_MODE_OPTIONS.map((option) => (
+                      <label
+                        key={option.value}
+                        className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                          formData.clientBillingMode === option.value
+                            ? "border-blue-500 bg-blue-500/10"
+                            : "border-slate-700 bg-slate-800 hover:border-slate-600"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="clientBillingMode"
+                          value={option.value}
+                          checked={formData.clientBillingMode === option.value}
+                          onChange={(e) =>
+                            onFormDataChange((prev) => ({
+                              ...prev,
+                              clientBillingMode: e.target.value as "exact_hourly" | "round_half_day" | "round_full_day",
+                            }))
+                          }
+                          className="mt-1 w-4 h-4 rounded-full border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500"
+                        />
+                        <div className="flex-1">
+                          <span className="font-medium text-white text-sm flex items-center gap-2">
+                            <span>{option.icon}</span>
+                            {option.label}
+                          </span>
+                          <p className="text-xs text-slate-400 mt-0.5">{option.description}</p>
+                          <p className="text-xs text-slate-500 mt-1 font-mono">{option.example}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Surcharge/remise horaire (uniquement si exact_hourly) */}
+                {formData.clientBillingMode === "exact_hourly" && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Surcharge/Remise horaire: <span className="text-amber-400 font-bold">{formData.hourlyBillingSurchargePercent > 0 ? "+" : ""}{formData.hourlyBillingSurchargePercent}%</span>
+                    </label>
+                    <div className="flex items-center gap-4">
+                      <span className="text-xs text-slate-400">-50%</span>
+                      <input
+                        type="range"
+                        min="-50"
+                        max="100"
+                        step="5"
+                        value={formData.hourlyBillingSurchargePercent}
+                        onChange={(e) =>
+                          onFormDataChange((prev) => ({
+                            ...prev,
+                            hourlyBillingSurchargePercent: parseInt(e.target.value),
+                          }))
+                        }
+                        className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                      />
+                      <span className="text-xs text-slate-400">+100%</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-2">
+                      {formData.hourlyBillingSurchargePercent === 0 ? (
+                        "Pas de surcharge ni de remise"
+                      ) : formData.hourlyBillingSurchargePercent > 0 ? (
+                        `Le prix horaire sera majoré de ${formData.hourlyBillingSurchargePercent}%`
+                      ) : (
+                        `Le prix horaire sera réduit de ${Math.abs(formData.hourlyBillingSurchargePercent)}%`
+                      )}
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Message si réservation par plage non activée */}
+            {!formData.allowRangeBooking && (
+              <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-600">
+                <p className="text-xs text-slate-400 flex items-center gap-2">
+                  <Info className="w-4 h-4 text-slate-500" />
+                  Activez &quot;Réservation par plage&quot; pour configurer le mode de facturation client
+                </p>
+              </div>
+            )}
+
+            {/* Prix conseillé - adapté selon le type de facturation */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                {formData.billingType === "daily" || formData.announcerPriceMode === "automatic"
+                  ? "Prix journalier conseillé (€)"
+                  : "Prix horaire conseillé (€)"}
+                <span className="ml-2 text-xs text-slate-400 font-normal">(affiché aux annonceurs)</span>
+              </label>
+              <div className="flex items-center gap-3">
+                <div className="relative flex-1">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={formData.defaultHourlyPrice || ""}
+                    onChange={(e) =>
+                      onFormDataChange((prev) => ({
+                        ...prev,
+                        defaultHourlyPrice: parseFloat(e.target.value) || 0,
+                      }))
+                    }
+                    placeholder={formData.billingType === "daily" || formData.announcerPriceMode === "automatic" ? "Ex: 80" : "Ex: 15"}
+                    className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none transition-colors pr-16"
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">
+                    {formData.billingType === "daily" || formData.announcerPriceMode === "automatic" ? "€/jour" : "€/h"}
+                  </span>
+                </div>
+                {formData.defaultHourlyPrice > 0 && (
+                  <div className="text-xs text-slate-400">
+                    {formData.billingType === "daily" || formData.announcerPriceMode === "automatic" ? (
+                      <>
+                        <div>Heure: {(formData.defaultHourlyPrice / 8).toFixed(1)}€</div>
+                        <div>Mois: {(formData.defaultHourlyPrice * 20).toFixed(0)}€</div>
+                      </>
+                    ) : (
+                      <>
+                        <div>Jour: {(formData.defaultHourlyPrice * 8).toFixed(0)}€</div>
+                        <div>Mois: {(formData.defaultHourlyPrice * 8 * 20).toFixed(0)}€</div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 mt-1.5">
+                Ce prix sera suggéré aux annonceurs lors de la création de leurs services
+              </p>
+            </div>
+
+            {/* Prix supplément nuit conseillé (si garde de nuit activée) */}
+            {formData.allowOvernightStay && (
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Supplément nuit conseillé (€)
+                  <span className="ml-2 text-xs text-indigo-400 font-normal">(garde de nuit)</span>
+                </label>
+                <div className="flex items-center gap-3">
+                  <div className="relative flex-1">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={formData.defaultNightlyPrice || ""}
+                      onChange={(e) =>
+                        onFormDataChange((prev) => ({
+                          ...prev,
+                          defaultNightlyPrice: parseFloat(e.target.value) || 0,
+                        }))
+                      }
+                      placeholder="Ex: 10"
+                      className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors pr-16"
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">€/nuit</span>
+                  </div>
+                  {formData.defaultHourlyPrice > 0 && formData.defaultNightlyPrice > 0 && (
+                    <div className="text-xs text-slate-400">
+                      <div>
+                        {((formData.defaultNightlyPrice / (formData.billingType === "daily" || formData.announcerPriceMode === "automatic"
+                          ? formData.defaultHourlyPrice
+                          : formData.defaultHourlyPrice * 8)) * 100).toFixed(0)}% du prix jour
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 mt-1.5">
+                  Prix conseillé pour le supplément garde de nuit
+                </p>
+              </div>
+            )}
+
+            {/* Unité d'affichage du prix */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Prix affiché dans les annonces
+              </label>
+              <select
+                value={formData.displayPriceUnit}
+                onChange={(e) =>
+                  onFormDataChange((prev) => ({
+                    ...prev,
+                    displayPriceUnit: e.target.value as "hour" | "half_day" | "day" | "week" | "month",
+                  }))
+                }
+                className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors"
+              >
+                {DISPLAY_PRICE_UNIT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.display}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 

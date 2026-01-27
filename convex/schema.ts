@@ -384,6 +384,9 @@ export default defineSchema({
     // Prix horaire conseillé par défaut (en centimes)
     // Utilisé quand pas assez de données pour calculer une moyenne
     defaultHourlyPrice: v.optional(v.number()),
+    // Prix supplément nuit conseillé par défaut (en centimes)
+    // Utilisé pour les services de garde avec option nuit
+    defaultNightlyPrice: v.optional(v.number()),
     // Permettre la réservation par plage (dates ou heures)
     // true = le client peut sélectionner une plage de dates ou d'heures
     allowRangeBooking: v.optional(v.boolean()),
@@ -430,6 +433,42 @@ export default defineSchema({
     // Si true: créneau bloqué = startTime + durée_variant + bufferAfter
     // Les formules doivent avoir une durée définie quand ce mode est activé
     enableDurationBasedBlocking: v.optional(v.boolean()),
+
+    // === CONFIGURATION TARIFICATION AVANCÉE ===
+
+    // Mode de saisie des prix pour l'annonceur
+    // manual = L'annonceur saisit chaque tarif séparément (heure, demi-journée, jour, etc.)
+    // automatic = L'annonceur saisit UN prix de base (journée), les autres sont calculés automatiquement
+    announcerPriceMode: v.optional(v.union(
+      v.literal("manual"),
+      v.literal("automatic")
+    )),
+
+    // Mode de facturation pour le client
+    // exact_hourly = Heures exactes + surcharge/remise (-50% à +100%)
+    // round_half_day = Arrondi à la tranche supérieure (demi-journée/journée)
+    // round_full_day = Toute durée = journée complète
+    clientBillingMode: v.optional(v.union(
+      v.literal("exact_hourly"),
+      v.literal("round_half_day"),
+      v.literal("round_full_day")
+    )),
+
+    // Surcharge/remise pour facturation horaire exacte (-50 à +100)
+    // Appliqué quand clientBillingMode = "exact_hourly"
+    // Ex: +15% signifie que 2h = (prix_jour/8) × 2 × 1.15
+    hourlyBillingSurchargePercent: v.optional(v.number()),
+
+    // Unité d'affichage du prix dans les annonces
+    // Détermine comment le prix est affiché : "À partir de X€/heure" ou "À partir de X€/jour"
+    displayPriceUnit: v.optional(v.union(
+      v.literal("hour"),
+      v.literal("half_day"),
+      v.literal("day"),
+      v.literal("week"),
+      v.literal("month")
+    )),
+
     createdAt: v.number(),
     updatedAt: v.number(),
   })

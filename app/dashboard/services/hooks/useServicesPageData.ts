@@ -59,6 +59,25 @@ export interface ServiceCategory {
   allowRangeBooking?: boolean;
   allowOvernightStay?: boolean;
   isCapacityBased?: boolean; // Mode garde (propagé depuis le parent)
+  // Type de catégorie (hérité du parent pour les prestations)
+  typeId?: string | null;
+  typeName?: string | null;
+  typeIcon?: string | null;
+  typeColor?: string | null;
+  // Configuration tarification avancée
+  announcerPriceMode?: "manual" | "automatic";
+  displayPriceUnit?: "hour" | "half_day" | "day" | "week" | "month";
+  clientBillingMode?: "exact_hourly" | "round_half_day" | "round_full_day";
+  hourlyBillingSurchargePercent?: number;
+  defaultNightlyPrice?: number;
+}
+
+export interface CategoryType {
+  id: string;
+  slug: string;
+  name: string;
+  icon?: string | null;
+  color?: string | null;
 }
 
 // Structure hiérarchique retournée par getActiveCategories
@@ -69,9 +88,14 @@ interface CategoriesData {
     name: string;
     icon?: string;
     isParent: boolean;
+    typeId?: string | null;
+    typeName?: string | null;
+    typeIcon?: string | null;
+    typeColor?: string | null;
     subcategories: ServiceCategory[];
   }>;
   rootCategories: ServiceCategory[];
+  categoryTypes: CategoryType[];
 }
 
 const DEFAULT_CATEGORIES: ServiceCategory[] = [
@@ -163,6 +187,11 @@ export function useServicesPageData(token: string | undefined) {
         allCategories.push({
           ...sub,
           parentName: parent.name,
+          // Type hérité du parent (déjà inclus dans sub depuis le backend)
+          typeId: sub.typeId || parent.typeId,
+          typeName: sub.typeName || parent.typeName,
+          typeIcon: sub.typeIcon || parent.typeIcon,
+          typeColor: sub.typeColor || parent.typeColor,
         });
       });
     });
@@ -174,6 +203,9 @@ export function useServicesPageData(token: string | undefined) {
 
     return allCategories.length > 0 ? allCategories : DEFAULT_CATEGORIES;
   })();
+
+  // Liste des types de catégories
+  const categoryTypes: CategoryType[] = categoriesData?.categoryTypes || [];
 
   // Données hiérarchiques pour l'affichage groupé
   const categoriesHierarchy = categoriesData;
@@ -359,6 +391,7 @@ export function useServicesPageData(token: string | undefined) {
     photos,
     categories,
     categoriesHierarchy,
+    categoryTypes,
 
     // Loading states
     isLoading: !profileData && !services && !photos,
