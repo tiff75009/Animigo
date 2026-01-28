@@ -482,6 +482,13 @@ export default function AnnouncerProfilePage() {
     }
   }, [announcer, setSelectedServiceSlug]);
 
+  const handleVariantDeselect = useCallback(() => {
+    setBookingSelection((prev) => ({
+      ...prev,
+      selectedVariantId: null,
+    }));
+  }, []);
+
   const handleOptionToggle = useCallback((optionId: string) => {
     setBookingSelection((prev) => ({
       ...prev,
@@ -886,6 +893,7 @@ export default function AnnouncerProfilePage() {
                 bufferBefore={availabilityCalendar?.bufferBefore || 0}
                 bufferAfter={availabilityCalendar?.bufferAfter || 0}
                 onVariantSelect={handleVariantSelect}
+                onVariantDeselect={handleVariantDeselect}
                 onOptionToggle={handleOptionToggle}
                 onLocationSelect={handleLocationSelect}
                 isLoggedIn={!!token}

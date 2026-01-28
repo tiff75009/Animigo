@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, ArrowRight, Calendar, Clock, Moon, Sun, Users, ChevronRight, Check } from "lucide-react";
+import { ArrowLeft, ArrowRight, Calendar, Clock, Moon, Sun, Users, ChevronRight, Check, Pencil } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import type { CalendarEntry } from "./types";
 import { formatDateDisplay } from "./pricing";
@@ -912,8 +912,17 @@ export default function BookingCalendar({
               <div className="p-2 bg-primary/10 rounded-lg">
                 <Calendar className="w-5 h-5 text-primary" />
               </div>
-              <div>
-                <p className="text-sm text-gray-600">Période sélectionnée</p>
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-gray-600">Période sélectionnée</p>
+                  <button
+                    onClick={() => goBackToStep("start_date")}
+                    className="text-xs text-primary hover:text-primary/80 font-medium transition-colors flex items-center gap-1"
+                  >
+                    <Pencil className="w-3 h-3" />
+                    Modifier
+                  </button>
+                </div>
                 <p className="font-semibold text-gray-900">
                   {formatDateDisplay(selectedDate!)} {selectedTime && `à ${selectedTime}`}
                   <ArrowRight className="w-4 h-4 inline mx-2 text-gray-400" />
@@ -977,13 +986,6 @@ export default function BookingCalendar({
             </label>
           )}
 
-          {/* Bouton modifier */}
-          <button
-            onClick={() => goBackToStep("start_date")}
-            className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
-          >
-            Modifier les dates
-          </button>
         </div>
       )}
 

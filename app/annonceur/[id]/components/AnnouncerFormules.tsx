@@ -73,6 +73,7 @@ interface AnnouncerFormulesProps {
   bufferBefore?: number;
   bufferAfter?: number;
   onVariantSelect?: (serviceId: string, variantId: string) => void;
+  onVariantDeselect?: () => void;
   onOptionToggle?: (optionId: string) => void;
   onLocationSelect?: (location: "announcer_home" | "client_home") => void;
   // Address selection for client_home
@@ -153,6 +154,7 @@ export default function AnnouncerFormules({
   bufferBefore = 0,
   bufferAfter = 0,
   onVariantSelect,
+  onVariantDeselect,
   onOptionToggle,
   onLocationSelect,
   isLoggedIn = false,
@@ -486,8 +488,13 @@ export default function AnnouncerFormules({
   const goToPrevStep = () => {
     const prevIndex = currentStepIndex - 1;
     if (prevIndex >= 0) {
+      const prevStep = availableDesktopSteps[prevIndex];
       setSlideDirection("left");
-      setDesktopStep(availableDesktopSteps[prevIndex]);
+      // Si on revient à l'étape formule, désélectionner la formule
+      if (prevStep === "formule") {
+        onVariantDeselect?.();
+      }
+      setDesktopStep(prevStep);
     }
   };
 
@@ -703,6 +710,7 @@ export default function AnnouncerFormules({
                         )}
                       </div>
                     </div>
+
                   </motion.div>
                 )}
 
