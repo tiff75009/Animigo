@@ -202,6 +202,7 @@ function ChatView({ conversationId, onBack, userType }: ChatViewProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { conversation, isLoading: isLoadingConversation } = useConversation(token, conversationId);
   const {
@@ -252,6 +253,8 @@ function ChatView({ conversationId, onBack, userType }: ChatViewProps) {
     try {
       await sendMessage(newMessage.trim());
       setNewMessage("");
+      // Re-focus le textarea après l'envoi
+      setTimeout(() => textareaRef.current?.focus(), 0);
     } catch (error) {
       console.error("Erreur lors de l'envoi du message:", error);
     } finally {
@@ -368,6 +371,7 @@ function ChatView({ conversationId, onBack, userType }: ChatViewProps) {
         <div className="flex items-end gap-3">
           <div className="flex-1 relative">
             <textarea
+              ref={textareaRef}
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyDown={handleKeyPress}
