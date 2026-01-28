@@ -41,9 +41,9 @@ async function loadBreeds(): Promise<BreedData[]> {
   }
 }
 
-// Fonction de recherche avec scoring
+// Fonction de recherche avec scoring (minimum 3 caractères)
 function searchBreeds(breeds: BreedData[], query: string): BreedData[] {
-  if (!query.trim()) return [];
+  if (!query.trim() || query.trim().length < 3) return [];
 
   const normalizedQuery = query
     .toLowerCase()
@@ -361,7 +361,7 @@ export default function BreedAutocomplete({
 
       {/* Message si pas de résultats */}
       <AnimatePresence>
-        {isOpen && inputValue.trim().length >= 2 && searchResults.length === 0 && !isLoading && (
+        {isOpen && inputValue.trim().length >= 3 && searchResults.length === 0 && !isLoading && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}

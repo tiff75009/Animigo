@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, PawPrint, ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { X, PawPrint, ChevronDown, ChevronUp, Plus, Check } from "lucide-react";
 import TraitSelector from "./TraitSelector";
+import BreedAutocomplete from "@/app/components/ui/BreedAutocomplete";
 
 // Types d'animaux
 const ANIMAL_TYPES = [
@@ -60,6 +61,9 @@ export interface GuestAnimalData {
   type: string;
   gender: "male" | "female" | "unknown";
   breed?: string;
+  isMixedBreed?: boolean;
+  primaryBreed?: string;
+  secondaryBreed?: string;
   birthDate?: string;
   description?: string;
   compatibilityTraits: string[];
@@ -105,7 +109,13 @@ export default function GuestAnimalForm({
             <p className="font-semibold text-foreground">{data.name}</p>
             <p className="text-sm text-text-light">
               {selectedType?.name || data.type}
-              {data.breed && ` • ${data.breed}`}
+              {data.isMixedBreed
+                ? data.primaryBreed && data.secondaryBreed
+                  ? ` • ${data.primaryBreed} x ${data.secondaryBreed}`
+                  : data.primaryBreed
+                  ? ` • Croisé ${data.primaryBreed}`
+                  : ""
+                : data.breed && ` • ${data.breed}`}
               {data.gender !== "unknown" && ` • ${GENDERS.find((g) => g.id === data.gender)?.name}`}
             </p>
           </div>
@@ -164,6 +174,38 @@ export default function GuestAnimalForm({
           </div>
         </div>
 
+        {/* Checkbox Race croisée - au-dessus des champs pour les chiens */}
+        {data.type === "chien" && (
+          <label className="flex items-center gap-2 cursor-pointer group mb-2">
+            <div
+              className={`relative w-4 h-4 rounded border-2 transition-all ${
+                data.isMixedBreed
+                  ? "bg-primary border-primary"
+                  : "border-gray-300 group-hover:border-primary/50"
+              }`}
+            >
+              {data.isMixedBreed && (
+                <Check className="w-2.5 h-2.5 text-white absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+              )}
+              <input
+                type="checkbox"
+                checked={data.isMixedBreed || false}
+                onChange={(e) =>
+                  onChange({
+                    ...data,
+                    isMixedBreed: e.target.checked,
+                    breed: "",
+                    primaryBreed: "",
+                    secondaryBreed: "",
+                  })
+                }
+                className="sr-only"
+              />
+            </div>
+            <span className="text-sm text-gray-600">Race croisée / Métis</span>
+          </label>
+        )}
+
         <div className="grid grid-cols-2 gap-4">
           {/* Nom */}
           <div>
@@ -185,17 +227,54 @@ export default function GuestAnimalForm({
           {/* Race */}
           <div>
             <label className="block text-sm font-medium text-foreground mb-2">
-              Race
+              Race {data.isMixedBreed && <span className="text-xs text-gray-400">(dominante)</span>}
             </label>
-            <input
-              type="text"
-              value={data.breed || ""}
-              onChange={(e) => onChange({ ...data, breed: e.target.value })}
-              placeholder="Ex: Labrador"
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-            />
+            {data.type === "chien" ? (
+              <BreedAutocomplete
+                value={data.isMixedBreed ? (data.primaryBreed || "") : (data.breed || "")}
+                onChange={(breed) =>
+                  data.isMixedBreed
+                    ? onChange({ ...data, primaryBreed: breed })
+                    : onChange({ ...data, breed })
+                }
+                placeholder={data.isMixedBreed ? "Race dominante..." : "Rechercher une race..."}
+              />
+            ) : (
+              <input
+                type="text"
+                value={data.breed || ""}
+                onChange={(e) => onChange({ ...data, breed: e.target.value })}
+                placeholder="Ex: Persan, Canari..."
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+              />
+            )}
           </div>
         </div>
+
+        {/* Race secondaire pour les croisés */}
+        {data.type === "chien" && data.isMixedBreed && (
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Race secondaire <span className="text-xs text-gray-400">(optionnel)</span>
+            </label>
+            <BreedAutocomplete
+              value={data.secondaryBreed || ""}
+              onChange={(breed) => onChange({ ...data, secondaryBreed: breed })}
+              placeholder="Inconnue ou laissez vide..."
+            />
+            {(data.primaryBreed || data.secondaryBreed) && (
+              <p className="text-xs text-gray-500 mt-2">
+                Affiché comme : <span className="font-medium text-gray-700">
+                  {data.primaryBreed && data.secondaryBreed
+                    ? `${data.primaryBreed} x ${data.secondaryBreed}`
+                    : data.primaryBreed
+                    ? `Croisé ${data.primaryBreed}`
+                    : "Croisé"}
+                </span>
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Description */}
         <div>

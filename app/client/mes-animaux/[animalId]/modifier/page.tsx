@@ -72,6 +72,9 @@ interface FormData {
   gender: "male" | "female" | "unknown";
   birthDate: string;
   breed: string;
+  isMixedBreed: boolean;
+  primaryBreed: string;
+  secondaryBreed: string;
   weight: string;
   size: string;
   description: string;
@@ -120,6 +123,9 @@ export default function EditAnimalPage() {
     gender: "unknown",
     birthDate: "",
     breed: "",
+    isMixedBreed: false,
+    primaryBreed: "",
+    secondaryBreed: "",
     weight: "",
     size: "",
     description: "",
@@ -139,12 +145,33 @@ export default function EditAnimalPage() {
   // Charger les données de l'animal
   useEffect(() => {
     if (animal && !isLoaded) {
+      // Détecter si c'est une race croisée
+      const breedStr = animal.breed || "";
+      const isMixed = breedStr.includes(" x ") || breedStr.toLowerCase().startsWith("croisé");
+      let primaryBreed = "";
+      let secondaryBreed = "";
+
+      if (isMixed) {
+        if (breedStr.includes(" x ")) {
+          // Format: "Race1 x Race2"
+          const parts = breedStr.split(" x ");
+          primaryBreed = parts[0]?.trim() || "";
+          secondaryBreed = parts[1]?.trim() || "";
+        } else if (breedStr.toLowerCase().startsWith("croisé ")) {
+          // Format: "Croisé Race1"
+          primaryBreed = breedStr.replace(/^croisé\s+/i, "").trim();
+        }
+      }
+
       setFormData({
         name: animal.name || "",
         type: animal.type || "",
         gender: animal.gender || "unknown",
         birthDate: animal.birthDate || "",
-        breed: animal.breed || "",
+        breed: isMixed ? "" : breedStr,
+        isMixedBreed: isMixed,
+        primaryBreed,
+        secondaryBreed,
         weight: animal.weight?.toString() || "",
         size: animal.size || "",
         description: animal.description || "",
@@ -183,6 +210,23 @@ export default function EditAnimalPage() {
       return `${years} an${months > 0 ? ` et ${months} mois` : ""}`;
     }
     return `${years} ans`;
+  };
+
+  // Calculer la race finale (pour les croisés)
+  const computeBreedString = (): string => {
+    if (!formData.isMixedBreed) {
+      return formData.breed.trim();
+    }
+    const primary = formData.primaryBreed.trim();
+    const secondary = formData.secondaryBreed.trim();
+
+    if (primary && secondary) {
+      return `${primary} x ${secondary}`;
+    }
+    if (primary) {
+      return `Croisé ${primary}`;
+    }
+    return "Croisé";
   };
 
   // Upload de photo de profil
@@ -288,6 +332,7 @@ export default function EditAnimalPage() {
     setError(null);
 
     try {
+      const finalBreed = computeBreedString();
       await updateAnimal({
         token,
         animalId: animalId as Id<"animals">,
@@ -295,7 +340,7 @@ export default function EditAnimalPage() {
         type: formData.type,
         gender: formData.gender,
         birthDate: formData.birthDate || undefined,
-        breed: formData.breed.trim() || undefined,
+        breed: finalBreed || undefined,
         weight: formData.weight ? parseFloat(formData.weight) : undefined,
         size: formData.size || undefined,
         description: formData.description.trim() || undefined,
@@ -559,28 +604,110 @@ export default function EditAnimalPage() {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Race / Espèce</label>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-sm font-medium text-gray-700">Race / Espèce</label>
+                    {/* Checkbox Race croisée (uniquement pour les chiens) */}
+                    {formData.type === "chien" && (
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <div
+                          className={`relative w-4 h-4 rounded border-2 transition-all ${
+                            formData.isMixedBreed
+                              ? "bg-primary border-primary"
+                              : "border-gray-300 group-hover:border-primary/50"
+                          }`}
+                        >
+                          {formData.isMixedBreed && (
+                            <Check className="w-2.5 h-2.5 text-white absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                          )}
+                          <input
+                            type="checkbox"
+                            checked={formData.isMixedBreed}
+                            onChange={(e) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                isMixedBreed: e.target.checked,
+                                breed: "",
+                                primaryBreed: "",
+                                secondaryBreed: "",
+                              }))
+                            }
+                            className="sr-only"
+                          />
+                        </div>
+                        <span className="text-sm text-gray-600">Race croisée</span>
+                      </label>
+                    )}
+                  </div>
+
                   {formData.type === "chien" ? (
-                    <BreedAutocomplete
-                      value={formData.breed}
-                      onChange={(breed, breedData) => {
-                        setFormData((prev) => ({
-                          ...prev,
-                          breed,
-                          size: breedData?.size
-                            ? breedData.size === "small"
-                              ? "petit"
-                              : breedData.size === "medium"
-                              ? "moyen"
-                              : breedData.size === "large"
-                              ? "grand"
-                              : prev.size
-                            : prev.size,
-                        }));
-                      }}
-                      placeholder="Rechercher une race de chien..."
-                    />
+                    formData.isMixedBreed ? (
+                      /* Mode race croisée */
+                      <div className="space-y-3">
+                        <BreedAutocomplete
+                          value={formData.primaryBreed}
+                          onChange={(breed, breedData) => {
+                            setFormData((prev) => ({
+                              ...prev,
+                              primaryBreed: breed,
+                              size: breedData?.size
+                                ? breedData.size === "small"
+                                  ? "petit"
+                                  : breedData.size === "medium"
+                                  ? "moyen"
+                                  : breedData.size === "large"
+                                  ? "grand"
+                                  : prev.size
+                                : prev.size,
+                            }));
+                          }}
+                          placeholder="Race dominante..."
+                        />
+                        <BreedAutocomplete
+                          value={formData.secondaryBreed}
+                          onChange={(breed) => {
+                            setFormData((prev) => ({
+                              ...prev,
+                              secondaryBreed: breed,
+                            }));
+                          }}
+                          placeholder="Race secondaire (optionnel)..."
+                        />
+                        {/* Aperçu du résultat */}
+                        {(formData.primaryBreed || formData.secondaryBreed) && (
+                          <p className="text-sm text-gray-500">
+                            Affiché : <span className="font-medium text-gray-700">
+                              {formData.primaryBreed && formData.secondaryBreed
+                                ? `${formData.primaryBreed} x ${formData.secondaryBreed}`
+                                : formData.primaryBreed
+                                ? `Croisé ${formData.primaryBreed}`
+                                : "Croisé"}
+                            </span>
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      /* Mode race pure */
+                      <BreedAutocomplete
+                        value={formData.breed}
+                        onChange={(breed, breedData) => {
+                          setFormData((prev) => ({
+                            ...prev,
+                            breed,
+                            size: breedData?.size
+                              ? breedData.size === "small"
+                                ? "petit"
+                                : breedData.size === "medium"
+                                ? "moyen"
+                                : breedData.size === "large"
+                                ? "grand"
+                                : prev.size
+                              : prev.size,
+                          }));
+                        }}
+                        placeholder="Rechercher une race de chien..."
+                      />
+                    )
                   ) : (
                     <input
                       type="text"
