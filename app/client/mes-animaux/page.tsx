@@ -19,6 +19,7 @@ import {
   AlertCircle,
   Check,
   ChevronRight,
+  Eye,
 } from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -173,119 +174,133 @@ export default function MesAnimauxPage() {
               transition={{ delay: index * 0.1 }}
               className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-lg transition-shadow group"
             >
-              <Link href={`/client/mes-animaux/${animal.id}/modifier`}>
-                <div className="flex">
-                  {/* Photo */}
-                  <div className="w-32 sm:w-40 flex-shrink-0">
-                    {animal.profilePhoto || animal.primaryPhotoUrl ? (
-                      <div className="w-full h-full aspect-square relative">
-                        <img
-                          src={animal.profilePhoto || animal.primaryPhotoUrl || ""}
-                          alt={animal.name}
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
-                      </div>
-                    ) : (
-                      <div className="w-full h-full aspect-square bg-gradient-to-br from-secondary/20 to-secondary/5 flex items-center justify-center">
-                        <span className="text-5xl">{animal.emoji}</span>
-                      </div>
+              <div className="flex">
+                {/* Photo */}
+                <Link href={`/client/mes-animaux/${animal.id}`} className="w-32 sm:w-40 flex-shrink-0">
+                  {animal.profilePhoto || animal.primaryPhotoUrl ? (
+                    <div className="w-full h-full aspect-square relative">
+                      <img
+                        src={animal.profilePhoto || animal.primaryPhotoUrl || ""}
+                        alt={animal.name}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+                    </div>
+                  ) : (
+                    <div className="w-full h-full aspect-square bg-gradient-to-br from-secondary/20 to-secondary/5 flex items-center justify-center">
+                      <span className="text-5xl">{animal.emoji}</span>
+                    </div>
+                  )}
+                </Link>
+
+                {/* Infos */}
+                <div className="flex-1 p-4 sm:p-5">
+                  <div className="flex items-start justify-between mb-2">
+                    <Link href={`/client/mes-animaux/${animal.id}`}>
+                      <h3 className="font-bold text-lg text-foreground group-hover:text-primary transition-colors">
+                        {animal.name}
+                      </h3>
+                      <p className="text-gray-500 text-sm">
+                        {ANIMAL_TYPES.find((t) => t.id === animal.type)?.name}
+                        {animal.breed && ` • ${animal.breed}`}
+                      </p>
+                    </Link>
+                    {/* Boutons d'action */}
+                    <div className="flex gap-2">
+                      <Link
+                        href={`/client/mes-animaux/${animal.id}`}
+                        className="p-2 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                        title="Voir la fiche"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Link>
+                      <Link
+                        href={`/client/mes-animaux/${animal.id}/modifier`}
+                        className="p-2 text-gray-400 hover:text-secondary hover:bg-secondary/10 rounded-lg transition-colors"
+                        title="Modifier"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </Link>
+                    </div>
+                  </div>
+
+                  {/* Badges */}
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {animal.gender && animal.gender !== "unknown" && (
+                      <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg ${
+                        animal.gender === "male" ? "bg-blue-50 text-blue-600" : "bg-pink-50 text-pink-600"
+                      }`}>
+                        {animal.gender === "male" ? "♂ Mâle" : "♀ Femelle"}
+                      </span>
+                    )}
+                    {animal.birthDate && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary text-xs font-medium rounded-lg">
+                        <Calendar className="w-3 h-3" />
+                        {getAnimalAge(animal.birthDate)}
+                      </span>
+                    )}
+                    {animal.weight && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-600 text-xs font-medium rounded-lg">
+                        <Scale className="w-3 h-3" />
+                        {animal.weight} kg
+                      </span>
+                    )}
+                    {animal.size && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-600 text-xs font-medium rounded-lg">
+                        <Ruler className="w-3 h-3" />
+                        {SIZE_LABELS[animal.size] || animal.size}
+                      </span>
                     )}
                   </div>
 
-                  {/* Infos */}
-                  <div className="flex-1 p-4 sm:p-5">
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <h3 className="font-bold text-lg text-foreground group-hover:text-primary transition-colors">
-                          {animal.name}
-                        </h3>
-                        <p className="text-gray-500 text-sm">
-                          {ANIMAL_TYPES.find((t) => t.id === animal.type)?.name}
-                          {animal.breed && ` • ${animal.breed}`}
-                        </p>
-                      </div>
-                      <div className="text-gray-400 group-hover:text-primary transition-colors">
-                        <ChevronRight className="w-5 h-5" />
-                      </div>
-                    </div>
-
-                    {/* Badges */}
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      {animal.gender && animal.gender !== "unknown" && (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-pink-50 text-pink-600 text-xs font-medium rounded-lg">
-                          {animal.gender === "male" ? "♂ Mâle" : "♀ Femelle"}
-                        </span>
-                      )}
-                      {animal.birthDate && (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary text-xs font-medium rounded-lg">
-                          <Calendar className="w-3 h-3" />
-                          {getAnimalAge(animal.birthDate)}
-                        </span>
-                      )}
-                      {animal.weight && (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-600 text-xs font-medium rounded-lg">
-                          <Scale className="w-3 h-3" />
-                          {animal.weight} kg
-                        </span>
-                      )}
-                      {animal.size && (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-600 text-xs font-medium rounded-lg">
-                          <Ruler className="w-3 h-3" />
-                          {SIZE_LABELS[animal.size] || animal.size}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Compatibilité */}
-                    <div className="flex flex-wrap gap-1.5">
-                      {animal.goodWithChildren === true && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-600 text-xs rounded-full">
-                          <Baby className="w-3 h-3" />
-                          Enfants
-                        </span>
-                      )}
-                      {animal.goodWithDogs === true && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-600 text-xs rounded-full">
-                          <Dog className="w-3 h-3" />
-                          Chiens
-                        </span>
-                      )}
-                      {animal.goodWithCats === true && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-600 text-xs rounded-full">
-                          <Cat className="w-3 h-3" />
-                          Chats
-                        </span>
-                      )}
-                      {animal.behaviorTraits && animal.behaviorTraits.length > 0 && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-secondary/10 text-secondary text-xs rounded-full">
-                          <Sparkles className="w-3 h-3" />
-                          {animal.behaviorTraits.slice(0, 2).join(", ")}
-                          {animal.behaviorTraits.length > 2 && ` +${animal.behaviorTraits.length - 2}`}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Alertes */}
-                    {(animal.hasAllergies || animal.specialNeeds || animal.medicalConditions) && (
-                      <div className="mt-3 pt-3 border-t border-gray-100">
-                        <div className="flex items-center gap-1.5 text-orange-600 text-xs">
-                          <AlertCircle className="w-3.5 h-3.5" />
-                          <span className="font-medium">
-                            {[
-                              animal.hasAllergies && "Allergies",
-                              animal.medicalConditions && "Suivi médical",
-                              animal.specialNeeds && "Besoins spéciaux",
-                            ]
-                              .filter(Boolean)
-                              .join(" • ")}
-                          </span>
-                        </div>
-                      </div>
+                  {/* Compatibilité */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {animal.goodWithChildren === true && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-600 text-xs rounded-full">
+                        <Baby className="w-3 h-3" />
+                        Enfants
+                      </span>
+                    )}
+                    {animal.goodWithDogs === true && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-600 text-xs rounded-full">
+                        <Dog className="w-3 h-3" />
+                        Chiens
+                      </span>
+                    )}
+                    {animal.goodWithCats === true && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-600 text-xs rounded-full">
+                        <Cat className="w-3 h-3" />
+                        Chats
+                      </span>
+                    )}
+                    {animal.behaviorTraits && animal.behaviorTraits.length > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-secondary/10 text-secondary text-xs rounded-full">
+                        <Sparkles className="w-3 h-3" />
+                        {animal.behaviorTraits.slice(0, 2).join(", ")}
+                        {animal.behaviorTraits.length > 2 && ` +${animal.behaviorTraits.length - 2}`}
+                      </span>
                     )}
                   </div>
+
+                  {/* Alertes */}
+                  {(animal.hasAllergies || animal.specialNeeds || animal.medicalConditions) && (
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      <div className="flex items-center gap-1.5 text-orange-600 text-xs">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        <span className="font-medium">
+                          {[
+                            animal.hasAllergies && "Allergies",
+                            animal.medicalConditions && "Suivi médical",
+                            animal.specialNeeds && "Besoins spéciaux",
+                          ]
+                            .filter(Boolean)
+                            .join(" • ")}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </Link>
+              </div>
             </motion.div>
           ))}
         </div>
