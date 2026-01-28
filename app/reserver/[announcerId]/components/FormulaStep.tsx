@@ -61,6 +61,7 @@ interface FormulaStepProps {
   selectedServiceLocation: "announcer_home" | "client_home" | null;
   selectedOptionIds?: string[];
   selectedDate?: string | null;
+  selectedEndDate?: string | null;
   selectedTime?: string | null;
   selectedEndTime?: string | null;
   commissionRate?: number;
@@ -374,6 +375,7 @@ export default function FormulaStep({
   selectedServiceLocation,
   selectedOptionIds = [],
   selectedDate,
+  selectedEndDate,
   selectedTime,
   selectedEndTime,
   commissionRate = 15,
@@ -620,14 +622,32 @@ export default function FormulaStep({
           {selectedDate && (
             <div className="p-4 bg-purple-50 rounded-xl">
               <p className="font-medium text-purple-800 mb-1">Date et horaire</p>
-              <p className="text-sm text-purple-700 capitalize">
-                {formatDateDisplay(selectedDate)}
-              </p>
-              {selectedTime && (
-                <p className="text-sm text-purple-600 mt-1">
-                  {selectedTime}
-                  {selectedEndTime && ` - ${selectedEndTime}`}
-                </p>
+              {selectedEndDate && selectedEndDate !== selectedDate ? (
+                // Multi-jours (garde avec nuits)
+                <div className="text-sm text-purple-700">
+                  <p>
+                    <span className="capitalize">{formatDateDisplay(selectedDate)}</span>
+                    {selectedTime && <span className="text-purple-600"> à {selectedTime}</span>}
+                  </p>
+                  <p className="mt-1">
+                    <span className="text-purple-500">→</span>{" "}
+                    <span className="capitalize">{formatDateDisplay(selectedEndDate)}</span>
+                    {selectedEndTime && <span className="text-purple-600"> à {selectedEndTime}</span>}
+                  </p>
+                </div>
+              ) : (
+                // Même jour
+                <>
+                  <p className="text-sm text-purple-700 capitalize">
+                    {formatDateDisplay(selectedDate)}
+                  </p>
+                  {selectedTime && (
+                    <p className="text-sm text-purple-600 mt-1">
+                      {selectedTime}
+                      {selectedEndTime && ` - ${selectedEndTime}`}
+                    </p>
+                  )}
+                </>
               )}
             </div>
           )}

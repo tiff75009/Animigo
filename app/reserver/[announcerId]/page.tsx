@@ -1224,6 +1224,7 @@ export default function ReserverPage({
                 selectedServiceLocation={bookingData.serviceLocation}
                 selectedOptionIds={bookingData.selectedOptionIds}
                 selectedDate={bookingData.selectedDate}
+                selectedEndDate={bookingData.selectedEndDate}
                 selectedTime={bookingData.selectedTime}
                 selectedEndTime={bookingData.selectedEndTime}
                 commissionRate={commissionRate}
