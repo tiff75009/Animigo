@@ -17,6 +17,7 @@ import {
   Users,
   CalendarCheck,
   Info,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import type { ServiceData, FormuleData, OptionData } from "../types";
@@ -58,6 +59,10 @@ interface BookingSummaryProps {
   // Props pour formules individuelles multi-séances
   selectedSessions?: SelectedSession[];
   announcerFirstName?: string; // Prénom de l'annonceur pour "Chez [prénom]"
+  // Vérification du chien pour les invités
+  requiresDogVerification?: boolean;
+  guestDogValid?: boolean;
+  guestDogError?: string;
   onBook?: () => void;
   onFinalize?: () => void; // Aller directement à la page de finalisation
   className?: string;
@@ -81,6 +86,9 @@ export default function BookingSummary({
   animalCount = 1,
   selectedSessions = [],
   announcerFirstName,
+  requiresDogVerification = false,
+  guestDogValid = false,
+  guestDogError,
   onBook,
   onFinalize,
   className,
@@ -123,11 +131,15 @@ export default function BookingSummary({
     ? Boolean(clientAddress || selection.guestAddress?.address)
     : true;
 
+  // Vérification du chien pour les invités
+  const isDogVerificationOk = !requiresDogVerification || guestDogValid;
+
   const isReadyToBook = Boolean(
     selection.selectedServiceId &&
     selection.selectedVariantId &&
     isDateTimeComplete &&
     hasAddress &&
+    isDogVerificationOk &&
     (isCollectiveFormule || isMultiSessionIndividual || priceBreakdown)
   );
 
@@ -153,6 +165,10 @@ export default function BookingSummary({
     // Vérifier l'adresse pour les services à domicile
     if (isAddressRequired && !hasAddress) {
       missing.push("adresse de prestation");
+    }
+    // Vérifier la race du chien pour les invités
+    if (requiresDogVerification && !guestDogValid) {
+      missing.push("vérification du chien");
     }
     return missing;
   };
@@ -597,6 +613,7 @@ export default function BookingSummary({
           {priceBreakdown && (() => {
             const daysCount = priceBreakdown.daysCount;
             const hoursCount = priceBreakdown.hoursCount;
+            const billingUnit = priceBreakdown.billingUnit;
 
             // Fonction pour formater les heures (arrondir aux 30 min car les tranches planning sont de 30 min)
             const formatHours = (hours: number) => {
@@ -609,8 +626,57 @@ export default function BookingSummary({
               return `${Math.floor(rounded)}h30`;
             };
 
+            // Fonction pour afficher la durée en jours/demi-journées
+            const formatBillingDuration = () => {
+              let fullDaysCount = priceBreakdown.fullDays || 0;
+              let halfDaysCount = 0;
+
+              if (daysCount === 1) {
+                // Un seul jour
+                if (priceBreakdown.firstDayIsFullDay) {
+                  fullDaysCount = 1;
+                } else if (priceBreakdown.firstDayIsHalfDay) {
+                  halfDaysCount = 1;
+                } else {
+                  fullDaysCount = 1; // Par défaut
+                }
+              } else {
+                // Multi-jours
+                if (priceBreakdown.firstDayIsFullDay) fullDaysCount++;
+                else if (priceBreakdown.firstDayIsHalfDay) halfDaysCount++;
+                else fullDaysCount++;
+
+                if (priceBreakdown.lastDayIsFullDay) fullDaysCount++;
+                else if (priceBreakdown.lastDayIsHalfDay) halfDaysCount++;
+                else fullDaysCount++;
+              }
+
+              const parts: string[] = [];
+              if (fullDaysCount > 0) {
+                parts.push(`${fullDaysCount} journée${fullDaysCount > 1 ? "s" : ""}`);
+              }
+              if (halfDaysCount > 0) {
+                parts.push(`${halfDaysCount} demi-journée${halfDaysCount > 1 ? "s" : ""}`);
+              }
+
+              return parts.join(" + ") || "1 journée";
+            };
+
+            // Si le mode de facturation est demi-journée ou journée, afficher en jours/demi-journées
+            const isHalfDayOrDayBilling = billingUnit === "half_day" || billingUnit === "day" ||
+              priceBreakdown.firstDayIsHalfDay || priceBreakdown.lastDayIsHalfDay;
+
             if (daysCount > 1) {
-              // Multi-jours : afficher jours + total heures
+              if (isHalfDayOrDayBilling) {
+                // Mode arrondi : afficher en jours/demi-journées
+                return (
+                  <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+                    <Clock className="w-3 h-3" />
+                    <span>{formatBillingDuration()}</span>
+                  </div>
+                );
+              }
+              // Mode horaire : afficher jours + total heures
               const avgHoursPerDay = hoursCount / daysCount;
               return (
                 <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
@@ -622,7 +688,16 @@ export default function BookingSummary({
                 </div>
               );
             } else if (hoursCount > 0) {
-              // Même jour : afficher heures
+              if (isHalfDayOrDayBilling) {
+                // Mode arrondi : afficher en jours/demi-journées
+                return (
+                  <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+                    <Clock className="w-3 h-3" />
+                    <span>Durée : {formatBillingDuration()}</span>
+                  </div>
+                );
+              }
+              // Mode horaire : afficher heures
               return (
                 <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
                   <Clock className="w-3 h-3" />
@@ -908,8 +983,25 @@ export default function BookingSummary({
           </div>
         </div>
 
+        {/* Message d'erreur si le chien n'est pas accepté */}
+        {requiresDogVerification && guestDogError && (
+          <div className="p-3 bg-red-50 rounded-xl border border-red-200">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm text-red-700 font-medium">
+                  Chien non accepté
+                </p>
+                <p className="text-xs text-red-600 mt-1">
+                  {guestDogError}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Validation message for missing fields */}
-        {hasMissingFields && (
+        {hasMissingFields && !guestDogError && (
           <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
             <div className="flex items-start gap-2">
               <Clock className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />

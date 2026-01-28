@@ -63,6 +63,15 @@ interface DateTimeStepProps {
   // Props pour CollectiveSlotPicker
   animalCount?: number;
   animalType?: string;
+  // Billing info pour affichage jours/demi-journées
+  billingInfo?: {
+    billingUnit?: string;
+    fullDays: number;
+    halfDays: number;
+    firstDayIsHalfDay?: boolean;
+    lastDayIsHalfDay?: boolean;
+  };
+  clientBillingMode?: "exact_hourly" | "round_half_day" | "round_full_day";
   onDateSelect: (date: string) => void;
   onEndDateSelect: (date: string | null) => void;
   onTimeSelect: (time: string) => void;
@@ -103,6 +112,9 @@ export default function DateTimeStep({
   // Props pour CollectiveSlotPicker
   animalCount = 1,
   animalType = "chien",
+  // Billing info pour affichage jours/demi-journées
+  billingInfo,
+  clientBillingMode,
   onDateSelect,
   onEndDateSelect,
   onTimeSelect,
@@ -271,6 +283,8 @@ export default function DateTimeStep({
           overnightPrice={selectedVariant.pricing?.nightly || selectedService.overnightPrice}
           dayStartTime={selectedService.dayStartTime}
           dayEndTime={selectedService.dayEndTime}
+          billingInfo={billingInfo}
+          clientBillingMode={clientBillingMode}
           onDateSelect={onDateSelect}
           onEndDateSelect={onEndDateSelect}
           onTimeSelect={onTimeSelect}

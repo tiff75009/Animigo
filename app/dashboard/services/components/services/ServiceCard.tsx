@@ -82,6 +82,9 @@ interface Variant {
   maxAnimalsPerSession?: number;
   serviceLocation?: ServiceLocation; // Lieu de prestation
   animalTypes?: string[]; // Animaux acceptés
+  // Restrictions chiens (au niveau de la formule)
+  dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
+  acceptedDogSizes?: ("small" | "medium" | "large")[];
   price: number;
   priceUnit: PriceUnit;
   pricing?: Pricing;
@@ -766,6 +769,49 @@ export default function ServiceCard({
                                         ))}
                                       </div>
                                     )}
+                                    {/* Restrictions chiens */}
+                                    {(() => {
+                                      const formuleAcceptsDogs = variant.animalTypes?.includes("chien") ||
+                                        (!variant.animalTypes?.length && service.animalTypes?.includes("chien"));
+                                      if (!formuleAcceptsDogs) return null;
+
+                                      const dogSizes = variant.acceptedDogSizes || ["small", "medium", "large"];
+                                      const dogCategory = variant.dogCategoryAcceptance || "none";
+                                      const allSizes = dogSizes.length === 3;
+
+                                      return (
+                                        <div className="flex flex-wrap items-center gap-1 mt-1">
+                                          <span className="text-xs text-text-light">🐕</span>
+                                          {allSizes ? (
+                                            <span className="px-1.5 py-0.5 bg-green-100 text-green-600 text-xs rounded-full">Toutes tailles</span>
+                                          ) : (
+                                            <>
+                                              {dogSizes.includes("small") && (
+                                                <span className="px-1.5 py-0.5 bg-green-100 text-green-600 text-xs rounded-full">Petit</span>
+                                              )}
+                                              {dogSizes.includes("medium") && (
+                                                <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-600 text-xs rounded-full">Moyen</span>
+                                              )}
+                                              {dogSizes.includes("large") && (
+                                                <span className="px-1.5 py-0.5 bg-orange-100 text-orange-600 text-xs rounded-full">Grand</span>
+                                              )}
+                                            </>
+                                          )}
+                                          <span className={cn(
+                                            "px-1.5 py-0.5 text-xs rounded-full",
+                                            dogCategory === "none" && "bg-gray-100 text-gray-600",
+                                            dogCategory === "cat1" && "bg-amber-100 text-amber-700",
+                                            dogCategory === "cat2" && "bg-orange-100 text-orange-700",
+                                            dogCategory === "both" && "bg-red-100 text-red-700"
+                                          )}>
+                                            {dogCategory === "none" && "Cat. ✗"}
+                                            {dogCategory === "cat1" && "Cat. 1 ✓"}
+                                            {dogCategory === "cat2" && "Cat. 2 ✓"}
+                                            {dogCategory === "both" && "Cat. 1&2 ✓"}
+                                          </span>
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
                                 </div>
                                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
@@ -1180,6 +1226,7 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
                 canDelete={variants.length > 1}
                 onManageSlots={onManageSlots}
                 allowedPriceUnits={categoryData?.allowedPriceUnits}
+                serviceAnimalTypes={serviceAnimalTypes}
                 allowOvernightStay={categoryData?.allowOvernightStay}
               />
             )}
@@ -1203,7 +1250,10 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
               isGardeService={isGardeService}
               allowOvernightStay={allowOvernightStay}
               allowedPriceUnits={categoryData?.allowedPriceUnits}
+              announcerPriceMode={categoryData?.announcerPriceMode}
+              defaultNightlyPrice={categoryData?.defaultNightlyPrice}
               serviceAnimalTypes={serviceAnimalTypes}
+              availableActivities={availableActivities}
               existingCount={variants.length}
               onSave={async (data) => {
                 await addVariantMutation({ token, serviceId, ...data });
@@ -1253,6 +1303,7 @@ function VariantPreviewCard({
   onManageSlots,
   allowedPriceUnits,
   allowOvernightStay,
+  serviceAnimalTypes,
 }: {
   variant: Variant;
   index: number;
@@ -1262,6 +1313,7 @@ function VariantPreviewCard({
   onManageSlots?: (variant: Variant) => void;
   allowedPriceUnits?: string[];
   allowOvernightStay?: boolean;
+  serviceAnimalTypes: string[];
 }) {
   const prices = getVariantPrices(variant, allowedPriceUnits, allowOvernightStay);
 
@@ -1368,6 +1420,56 @@ function VariantPreviewCard({
                   ))}
                 </div>
               )}
+              {/* Restrictions chiens */}
+              {(() => {
+                // Vérifier si cette formule accepte les chiens (fallback sur service)
+                const formuleAcceptsDogs = variant.animalTypes?.includes("chien") ||
+                  (!variant.animalTypes?.length && serviceAnimalTypes.includes("chien"));
+                if (!formuleAcceptsDogs) return null;
+
+                const dogSizes = variant.acceptedDogSizes || ["small", "medium", "large"];
+                const dogCategory = variant.dogCategoryAcceptance || "none";
+                const allSizes = dogSizes.length === 3;
+
+                return (
+                  <>
+                    {/* Tailles acceptées */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-text-light">🐕</span>
+                      <div className="flex gap-1">
+                        {allSizes ? (
+                          <span className="px-2 py-0.5 bg-green-100 text-green-600 text-xs rounded-full">Toutes tailles</span>
+                        ) : (
+                          <>
+                            {dogSizes.includes("small") && (
+                              <span className="px-2 py-0.5 bg-green-100 text-green-600 text-xs rounded-full">Petit</span>
+                            )}
+                            {dogSizes.includes("medium") && (
+                              <span className="px-2 py-0.5 bg-yellow-100 text-yellow-600 text-xs rounded-full">Moyen</span>
+                            )}
+                            {dogSizes.includes("large") && (
+                              <span className="px-2 py-0.5 bg-orange-100 text-orange-600 text-xs rounded-full">Grand</span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {/* Catégories acceptées */}
+                    <span className={cn(
+                      "px-2 py-0.5 text-xs rounded-full font-medium",
+                      dogCategory === "none" && "bg-gray-100 text-gray-600",
+                      dogCategory === "cat1" && "bg-amber-100 text-amber-700",
+                      dogCategory === "cat2" && "bg-orange-100 text-orange-700",
+                      dogCategory === "both" && "bg-red-100 text-red-700"
+                    )}>
+                      {dogCategory === "none" && "Cat. non acceptées"}
+                      {dogCategory === "cat1" && "Cat. 1 ✓"}
+                      {dogCategory === "cat2" && "Cat. 2 ✓"}
+                      {dogCategory === "both" && "Cat. 1 & 2 ✓"}
+                    </span>
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -1472,6 +1574,8 @@ function VariantEditForm({
     maxAnimalsPerSession?: number;
     serviceLocation?: ServiceLocation;
     animalTypes?: string[];
+    dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
+    acceptedDogSizes?: ("small" | "medium" | "large")[];
     pricing?: Pricing;
     duration?: number;
     includedFeatures?: string[];
@@ -1495,6 +1599,14 @@ function VariantEditForm({
   const [includedFeatures, setIncludedFeatures] = useState<string[]>(variant.includedFeatures || []);
   const [newFeature, setNewFeature] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+
+  // Restrictions chiens
+  const [dogCategoryAcceptance, setDogCategoryAcceptance] = useState<"none" | "cat1" | "cat2" | "both">(
+    variant.dogCategoryAcceptance || "none"
+  );
+  const [acceptedDogSizes, setAcceptedDogSizes] = useState<("small" | "medium" | "large")[]>(
+    variant.acceptedDogSizes || ["small", "medium", "large"]
+  );
 
   // Calcul du prix journalier recommandé (pour le slider)
   // Si announcerPriceMode === "automatic", le prix recommandé est déjà un prix journalier
@@ -1601,6 +1713,9 @@ function VariantEditForm({
   const handleSave = async () => {
     setIsSaving(true);
     try {
+      // Déterminer si les restrictions chiens s'appliquent
+      const acceptsDogs = selectedAnimalTypes.includes("chien");
+
       await onSave({
         name,
         description: description || undefined,
@@ -1611,6 +1726,8 @@ function VariantEditForm({
         maxAnimalsPerSession: sessionType === "collective" ? maxAnimalsPerSession : undefined,
         serviceLocation: effectiveServiceLocation,
         animalTypes: selectedAnimalTypes.length > 0 ? selectedAnimalTypes : undefined,
+        dogCategoryAcceptance: acceptsDogs ? dogCategoryAcceptance : undefined,
+        acceptedDogSizes: acceptsDogs ? acceptedDogSizes : undefined,
         pricing,
         duration,
         includedFeatures: includedFeatures.length > 0 ? includedFeatures : undefined,
@@ -1943,6 +2060,90 @@ function VariantEditForm({
         )}
       </div>
 
+      {/* Restrictions chiens - visible seulement si chien est accepté */}
+      {selectedAnimalTypes.includes("chien") && (
+        <div className="p-4 bg-amber-50/50 rounded-xl border border-amber-200 space-y-4">
+          <label className="block text-sm font-medium text-amber-800 flex items-center gap-2">
+            <span>🐕</span>
+            Restrictions chiens (optionnel)
+          </label>
+
+          {/* Tailles de chiens acceptées */}
+          <div>
+            <p className="text-xs font-medium text-amber-700 mb-2">Tailles acceptées</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { id: "small" as const, label: "Petit", desc: "< 10 kg" },
+                { id: "medium" as const, label: "Moyen", desc: "10-25 kg" },
+                { id: "large" as const, label: "Grand", desc: "> 25 kg" },
+              ].map((size) => {
+                const isSelected = acceptedDogSizes.includes(size.id);
+                return (
+                  <button
+                    key={size.id}
+                    type="button"
+                    onClick={() => {
+                      if (isSelected) {
+                        if (acceptedDogSizes.length > 1) {
+                          setAcceptedDogSizes(acceptedDogSizes.filter((s) => s !== size.id));
+                        }
+                      } else {
+                        setAcceptedDogSizes([...acceptedDogSizes, size.id]);
+                      }
+                    }}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all",
+                      isSelected
+                        ? "bg-amber-200 border-2 border-amber-400 text-amber-900 font-medium"
+                        : "bg-white border border-gray-200 text-gray-500 hover:border-gray-300"
+                    )}
+                  >
+                    <span>{size.label}</span>
+                    <span className="text-xs opacity-70">({size.desc})</span>
+                    {isSelected && <Check className="w-3.5 h-3.5" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Chiens catégorisés */}
+          <div>
+            <p className="text-xs font-medium text-amber-700 mb-2">Chiens catégorisés (législation française)</p>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: "none" as const, label: "Non catégorisés uniquement", desc: "Pas de chien dangereux" },
+                { id: "cat2" as const, label: "Catégorie 2 acceptée", desc: "Chiens de garde" },
+                { id: "cat1" as const, label: "Catégorie 1 acceptée", desc: "Chiens d'attaque" },
+                { id: "both" as const, label: "Toutes catégories", desc: "Cat. 1 et 2 acceptées" },
+              ].map((cat) => {
+                const isSelected = dogCategoryAcceptance === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setDogCategoryAcceptance(cat.id)}
+                    className={cn(
+                      "flex flex-col items-start gap-0.5 px-3 py-2 rounded-lg text-sm transition-all text-left",
+                      isSelected
+                        ? "bg-amber-200 border-2 border-amber-400"
+                        : "bg-white border border-gray-200 hover:border-gray-300"
+                    )}
+                  >
+                    <span className={cn("font-medium", isSelected ? "text-amber-900" : "text-gray-700")}>
+                      {cat.label}
+                    </span>
+                    <span className={cn("text-xs", isSelected ? "text-amber-700" : "text-gray-400")}>
+                      {cat.desc}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Pricing */}
       <div className="space-y-3">
         <label className="block text-sm font-medium text-foreground">Tarifs</label>
@@ -2174,47 +2375,6 @@ function VariantEditForm({
         )}
       </div>
 
-      {/* Caractéristiques incluses / Activités prévues */}
-      <div>
-        <label className="block text-sm font-medium text-foreground mb-1">{isGardeService ? "Activités prévues" : "Caractéristiques incluses"}</label>
-        <div className="flex gap-2 mb-2">
-          <input
-            type="text"
-            value={newFeature}
-            onChange={(e) => setNewFeature(e.target.value)}
-            onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddFeature())}
-            placeholder={isGardeService ? "Ajouter une activité..." : "Ajouter une caractéristique..."}
-            className="flex-1 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-          />
-          <button
-            type="button"
-            onClick={handleAddFeature}
-            className="px-3 py-2 bg-gray-100 text-foreground rounded-lg hover:bg-gray-200"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-        </div>
-        {includedFeatures.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {includedFeatures.map((feature, index) => (
-              <span
-                key={index}
-                className="flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary text-sm rounded-full"
-              >
-                {feature}
-                <button
-                  type="button"
-                  onClick={() => handleRemoveFeature(index)}
-                  className="hover:text-red-500"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-
       {/* Actions */}
       <div className="flex items-center gap-2 pt-2">
         <motion.button
@@ -2246,7 +2406,10 @@ function VariantAddForm({
   isGardeService,
   allowOvernightStay,
   allowedPriceUnits,
+  announcerPriceMode,
+  defaultNightlyPrice,
   serviceAnimalTypes,
+  availableActivities = [],
   existingCount,
   onSave,
   onCancel,
@@ -2258,7 +2421,10 @@ function VariantAddForm({
   isGardeService: boolean;
   allowOvernightStay?: boolean;
   allowedPriceUnits?: ("hour" | "half_day" | "day" | "week" | "month")[];
+  announcerPriceMode?: "manual" | "automatic";
+  defaultNightlyPrice?: number;
   serviceAnimalTypes: string[];
+  availableActivities?: AdminActivity[];
   existingCount: number;
   onSave: (data: {
     name: string;
@@ -2270,6 +2436,8 @@ function VariantAddForm({
     maxAnimalsPerSession?: number;
     serviceLocation?: ServiceLocation;
     animalTypes?: string[];
+    dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
+    acceptedDogSizes?: ("small" | "medium" | "large")[];
     price: number;
     priceUnit: PriceUnit;
     pricing?: Pricing;
@@ -2281,8 +2449,7 @@ function VariantAddForm({
   const [name, setName] = useState(`Formule ${existingCount + 1}`);
   const [description, setDescription] = useState("");
   const [objectives, setObjectives] = useState<Objective[]>([]);
-  const [newObjectiveIcon, setNewObjectiveIcon] = useState("🎯");
-  const [newObjectiveText, setNewObjectiveText] = useState("");
+  const [showActivitySelector, setShowActivitySelector] = useState(false);
   const [numberOfSessions, setNumberOfSessions] = useState(1);
   const [sessionInterval, setSessionInterval] = useState<number | undefined>(undefined);
   const [sessionType, setSessionType] = useState<"individual" | "collective">("individual");
@@ -2294,15 +2461,68 @@ function VariantAddForm({
   const [newFeature, setNewFeature] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  const dailyPrice = recommendedPrice * 8;
-  const hourlyPrice = recommendedPrice;
-  const nightlyPrice = Math.round(dailyPrice * 0.5);
+  // Restrictions chiens
+  const [dogCategoryAcceptance, setDogCategoryAcceptance] = useState<"none" | "cat1" | "cat2" | "both">("none");
+  const [acceptedDogSizes, setAcceptedDogSizes] = useState<("small" | "medium" | "large")[]>(["small", "medium", "large"]);
+
+  // Calcul du prix journalier recommandé (pour le slider)
+  const dailyRecommendedPrice = announcerPriceMode === "automatic"
+    ? recommendedPrice
+    : (isGardeService ? recommendedPrice * 8 : recommendedPrice);
+
+  const dailyPrice = dailyRecommendedPrice;
+  const hourlyPrice = Math.round(dailyPrice / 8);
+  const nightlyPrice = defaultNightlyPrice || Math.round(dailyPrice * 0.5);
 
   const [pricing, setPricing] = useState<Pricing>(
     isGardeService
-      ? { daily: dailyPrice, hourly: hourlyPrice, nightly: allowOvernightStay ? nightlyPrice : undefined }
+      ? { daily: dailyPrice, hourly: hourlyPrice, halfDaily: Math.round(dailyPrice / 2), weekly: Math.round(dailyPrice * 5), monthly: Math.round(dailyPrice * 20), nightly: allowOvernightStay ? nightlyPrice : undefined }
       : { hourly: recommendedPrice }
   );
+
+  // Récupérer le prix journée actuel (en euros)
+  const getDailyPrice = () => {
+    if (!pricing.daily) return dailyRecommendedPrice / 100;
+    return pricing.daily / 100;
+  };
+
+  // Récupérer le prix nuit actuel (en euros)
+  const getNightlyPrice = () => {
+    if (!pricing.nightly) {
+      return defaultNightlyPrice
+        ? defaultNightlyPrice / 100
+        : Math.round(dailyRecommendedPrice * 0.5) / 100;
+    }
+    return pricing.nightly / 100;
+  };
+
+  // Handler pour le prix journée (garde)
+  const handleDailyPriceChange = (newDailyPriceEuros: number) => {
+    const dailyInCents = Math.round(newDailyPriceEuros * 100);
+    const hourlyInCents = Math.round(dailyInCents / 8);
+    const currentNightly = pricing.nightly || 0;
+    const newNightly = currentNightly > dailyInCents ? dailyInCents : currentNightly;
+    setPricing({
+      ...pricing,
+      daily: dailyInCents,
+      hourly: hourlyInCents,
+      halfDaily: Math.round(dailyInCents / 2),
+      weekly: Math.round(dailyInCents * 5),
+      monthly: Math.round(dailyInCents * 20),
+      nightly: newNightly > 0 ? newNightly : undefined,
+    });
+  };
+
+  // Handler pour le prix nuit (garde)
+  const handleNightlyPriceChange = (newNightlyPriceEuros: number) => {
+    const nightlyInCents = Math.round(newNightlyPriceEuros * 100);
+    const dailyInCents = pricing.daily || dailyRecommendedPrice;
+    const clampedNightly = Math.min(nightlyInCents, dailyInCents);
+    setPricing({
+      ...pricing,
+      nightly: clampedNightly,
+    });
+  };
 
   // Si collective, forcer le lieu à announcer_home
   const isCollective = sessionType === "collective";
@@ -2318,11 +2538,17 @@ function VariantAddForm({
   const showWeekly = hasConfiguredPriceUnits ? allowedPriceUnits.includes("week") : false;
   const showMonthly = hasConfiguredPriceUnits ? allowedPriceUnits.includes("month") : false;
 
-  const handleAddObjective = () => {
-    if (newObjectiveText.trim()) {
-      setObjectives([...objectives, { icon: newObjectiveIcon, text: newObjectiveText.trim() }]);
-      setNewObjectiveIcon("🎯");
-      setNewObjectiveText("");
+  // Vérifier si une activité est sélectionnée
+  const isActivitySelected = (activity: AdminActivity) => {
+    return objectives.some((obj) => obj.text === activity.name && obj.icon === activity.emoji);
+  };
+
+  // Toggle une activité
+  const toggleActivity = (activity: AdminActivity) => {
+    if (isActivitySelected(activity)) {
+      setObjectives(objectives.filter((obj) => !(obj.text === activity.name && obj.icon === activity.emoji)));
+    } else {
+      setObjectives([...objectives, { icon: activity.emoji, text: activity.name }]);
     }
   };
 
@@ -2345,6 +2571,9 @@ function VariantAddForm({
     setIsSaving(true);
     try {
       const mainPrice = pricing.daily || pricing.hourly || recommendedPrice;
+      // Déterminer si les restrictions chiens s'appliquent
+      const acceptsDogs = selectedAnimalTypes.includes("chien");
+
       await onSave({
         name,
         description: description || undefined,
@@ -2355,6 +2584,8 @@ function VariantAddForm({
         maxAnimalsPerSession: sessionType === "collective" ? maxAnimalsPerSession : undefined,
         serviceLocation: effectiveServiceLocation,
         animalTypes: selectedAnimalTypes.length > 0 ? selectedAnimalTypes : undefined,
+        dogCategoryAcceptance: acceptsDogs ? dogCategoryAcceptance : undefined,
+        acceptedDogSizes: acceptsDogs ? acceptedDogSizes : undefined,
         price: mainPrice,
         priceUnit: isGardeService || !showHourly ? "day" : "hour",
         pricing,
@@ -2395,58 +2626,82 @@ function VariantAddForm({
         />
       </div>
 
-      {/* Objectifs / Activités */}
+      {/* Objectifs / Activités - Sélecteur depuis admin */}
       <div>
-        <label className="block text-sm font-medium text-foreground mb-1">{isGardeService ? "Activités proposées (optionnel)" : "Objectifs (optionnel)"}</label>
-        <div className="flex gap-2 mb-2">
-          <select
-            value={newObjectiveIcon}
-            onChange={(e) => setNewObjectiveIcon(e.target.value)}
-            className="w-14 px-1 py-2 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none text-center text-lg"
-          >
-            <option value="🎯">🎯</option>
-            <option value="✅">✅</option>
-            <option value="⭐">⭐</option>
-            <option value="💪">💪</option>
-            <option value="🐕">🐕</option>
-            <option value="🐈">🐈</option>
-            <option value="❤️">❤️</option>
-            <option value="🏆">🏆</option>
-            <option value="📈">📈</option>
-            <option value="🔧">🔧</option>
-            <option value="🧠">🧠</option>
-            <option value="🎓">🎓</option>
-          </select>
-          <input
-            type="text"
-            value={newObjectiveText}
-            onChange={(e) => setNewObjectiveText(e.target.value)}
-            onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddObjective())}
-            placeholder={isGardeService ? "Ajouter une activité..." : "Ajouter un objectif..."}
-            className="flex-1 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
-          />
-          <button
-            type="button"
-            onClick={handleAddObjective}
-            className="px-3 py-2 bg-gray-100 text-foreground rounded-lg hover:bg-gray-200"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-        </div>
-        {objectives.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {objectives.map((objective, index) => (
-              <span
-                key={index}
-                className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 text-blue-700 text-sm rounded-full"
-              >
-                <span>{objective.icon}</span>
-                <span>{objective.text}</span>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveObjective(index)}
-                  className="hover:text-red-500"
+        <label className="block text-sm font-medium text-foreground mb-2">
+          {isGardeService ? "Activités proposées pendant la garde (optionnel)" : "Objectifs de la prestation (optionnel)"}
+        </label>
+
+        {/* Sélecteur d'activités si disponibles depuis l'admin */}
+        {availableActivities.length > 0 ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setShowActivitySelector(!showActivitySelector)}
+              className={cn(
+                "w-full px-4 py-3 border-2 border-dashed rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2",
+                showActivitySelector
+                  ? "border-secondary bg-secondary/5 text-secondary"
+                  : "border-gray-300 bg-gray-50 text-gray-600 hover:border-gray-400"
+              )}
+            >
+              <Sparkles className="w-4 h-4" />
+              {showActivitySelector ? "Fermer le sélecteur" : `Choisir des ${isGardeService ? "activités" : "objectifs"} (${objectives.length} sélectionné${objectives.length > 1 ? "s" : ""})`}
+            </button>
+
+            {/* Grille de sélection */}
+            <AnimatePresence>
+              {showActivitySelector && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="mt-3 p-3 bg-gray-50 rounded-xl border border-gray-200"
                 >
+                  <div className="grid grid-cols-2 gap-2">
+                    {availableActivities.map((activity) => (
+                      <button
+                        key={activity._id}
+                        type="button"
+                        onClick={() => toggleActivity(activity)}
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all text-left",
+                          isActivitySelected(activity)
+                            ? isGardeService
+                              ? "bg-emerald-100 border-2 border-emerald-400 text-emerald-800"
+                              : "bg-purple-100 border-2 border-purple-400 text-purple-800"
+                            : "bg-white border border-gray-200 hover:border-gray-300 text-gray-700"
+                        )}
+                      >
+                        <span className="text-lg">{activity.emoji}</span>
+                        <span className="flex-1 truncate">{activity.name}</span>
+                        {isActivitySelected(activity) && (
+                          <Check className="w-4 h-4 flex-shrink-0" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </>
+        ) : (
+          <p className="text-sm text-gray-500 italic">Aucune activité configurée par l&apos;administrateur</p>
+        )}
+
+        {/* Affichage des activités sélectionnées */}
+        {objectives.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-3">
+            {objectives.map((objective, idx) => (
+              <span
+                key={idx}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm",
+                  isGardeService ? "bg-emerald-50 text-emerald-700" : "bg-purple-50 text-purple-700"
+                )}
+              >
+                {objective.icon} {objective.text}
+                <button type="button" onClick={() => handleRemoveObjective(idx)} className="hover:text-red-500 ml-1">
                   <X className="w-3 h-3" />
                 </button>
               </span>
@@ -2653,166 +2908,274 @@ function VariantAddForm({
         )}
       </div>
 
+      {/* Restrictions chiens - visible seulement si chien est accepté */}
+      {selectedAnimalTypes.includes("chien") && (
+        <div className="p-4 bg-amber-50/50 rounded-xl border border-amber-200 space-y-4">
+          <label className="block text-sm font-medium text-amber-800 flex items-center gap-2">
+            <span>🐕</span>
+            Restrictions chiens (optionnel)
+          </label>
+
+          {/* Tailles de chiens acceptées */}
+          <div>
+            <p className="text-xs font-medium text-amber-700 mb-2">Tailles acceptées</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { id: "small" as const, label: "Petit", desc: "< 10 kg" },
+                { id: "medium" as const, label: "Moyen", desc: "10-25 kg" },
+                { id: "large" as const, label: "Grand", desc: "> 25 kg" },
+              ].map((size) => {
+                const isSelected = acceptedDogSizes.includes(size.id);
+                return (
+                  <button
+                    key={size.id}
+                    type="button"
+                    onClick={() => {
+                      if (isSelected) {
+                        if (acceptedDogSizes.length > 1) {
+                          setAcceptedDogSizes(acceptedDogSizes.filter((s) => s !== size.id));
+                        }
+                      } else {
+                        setAcceptedDogSizes([...acceptedDogSizes, size.id]);
+                      }
+                    }}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all",
+                      isSelected
+                        ? "bg-amber-200 border-2 border-amber-400 text-amber-900 font-medium"
+                        : "bg-white border border-gray-200 text-gray-500 hover:border-gray-300"
+                    )}
+                  >
+                    <span>{size.label}</span>
+                    <span className="text-xs opacity-70">({size.desc})</span>
+                    {isSelected && <Check className="w-3.5 h-3.5" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Chiens catégorisés */}
+          <div>
+            <p className="text-xs font-medium text-amber-700 mb-2">Chiens catégorisés (législation française)</p>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: "none" as const, label: "Non catégorisés uniquement", desc: "Pas de chien dangereux" },
+                { id: "cat2" as const, label: "Catégorie 2 acceptée", desc: "Chiens de garde" },
+                { id: "cat1" as const, label: "Catégorie 1 acceptée", desc: "Chiens d'attaque" },
+                { id: "both" as const, label: "Toutes catégories", desc: "Cat. 1 et 2 acceptées" },
+              ].map((cat) => {
+                const isSelected = dogCategoryAcceptance === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setDogCategoryAcceptance(cat.id)}
+                    className={cn(
+                      "flex flex-col items-start gap-0.5 px-3 py-2 rounded-lg text-sm transition-all text-left",
+                      isSelected
+                        ? "bg-amber-200 border-2 border-amber-400"
+                        : "bg-white border border-gray-200 hover:border-gray-300"
+                    )}
+                  >
+                    <span className={cn("font-medium", isSelected ? "text-amber-900" : "text-gray-700")}>
+                      {cat.label}
+                    </span>
+                    <span className={cn("text-xs", isSelected ? "text-amber-700" : "text-gray-400")}>
+                      {cat.desc}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Pricing */}
       <div className="space-y-3">
         <label className="block text-sm font-medium text-foreground">Tarifs</label>
 
-        <div className="grid grid-cols-2 gap-3">
-          {showHourly && (
-            <div>
-              <label className="block text-xs text-text-light mb-1">Par heure</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={(pricing.hourly || 0) / 100}
-                  onChange={(e) => setPricing({ ...pricing, hourly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                  step={0.5}
-                  placeholder="--"
-                  className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+        {isGardeService ? (
+          /* ═══ TARIFS GARDE - Système avec slider ═══ */
+          <div className="space-y-4">
+            {/* Prix journée */}
+            <div className="p-4 bg-gradient-to-br from-secondary/5 to-orange-50 rounded-xl border border-secondary/10">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-medium text-foreground">Prix par jour</span>
+                <span className="text-xs px-2 py-0.5 bg-white rounded-full text-gray-500">
+                  {getDailyPrice() <= dailyRecommendedPrice / 100 * 0.9 ? "Compétitif" :
+                   getDailyPrice() >= dailyRecommendedPrice / 100 * 1.1 ? "Premium" : "Standard"}
+                </span>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <input
+                    type="range"
+                    min={Math.round(dailyRecommendedPrice * 0.8 / 100)}
+                    max={Math.round(dailyRecommendedPrice * 1.2 / 100)}
+                    step={1}
+                    value={getDailyPrice()}
+                    onChange={(e) => handleDailyPriceChange(parseFloat(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-full appearance-none cursor-pointer
+                      [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5
+                      [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-secondary [&::-webkit-slider-thumb]:shadow-md
+                      [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110"
+                  />
+                  <div className="flex justify-between text-xs text-gray-400 mt-1">
+                    <span>{Math.round(dailyRecommendedPrice * 0.8 / 100)}€</span>
+                    <span className="text-secondary">Conseillé: {Math.round(dailyRecommendedPrice / 100)}€</span>
+                    <span>{Math.round(dailyRecommendedPrice * 1.2 / 100)}€</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-2xl font-bold text-secondary">{getDailyPrice().toFixed(0)}</span>
+                  <span className="text-sm text-gray-500">€/jour</span>
+                </div>
               </div>
             </div>
-          )}
-          {showHalfDaily && (
-            <div>
-              <label className="block text-xs text-text-light mb-1">Par demi-journée</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={(pricing.halfDaily || 0) / 100}
-                  onChange={(e) => setPricing({ ...pricing, halfDaily: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                  step={0.5}
-                  placeholder="--"
-                  className="w-full px-3 py-2 pr-8 bg-white border border-cyan-200 rounded-lg focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
-              </div>
-            </div>
-          )}
-          {showDaily && (
-            <div>
-              <label className="block text-xs text-text-light mb-1">Par jour</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={(pricing.daily || 0) / 100}
-                  onChange={(e) => setPricing({ ...pricing, daily: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                  step={0.5}
-                  placeholder="--"
-                  className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
-              </div>
-            </div>
-          )}
-          {showWeekly && (
-            <div>
-              <label className="block text-xs text-text-light mb-1">Par semaine</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={(pricing.weekly || 0) / 100}
-                  onChange={(e) => setPricing({ ...pricing, weekly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                  step={0.5}
-                  placeholder="--"
-                  className="w-full px-3 py-2 pr-8 bg-white border border-purple-200 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
-              </div>
-            </div>
-          )}
-          {showMonthly && (
-            <div>
-              <label className="block text-xs text-text-light mb-1">Par mois</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={(pricing.monthly || 0) / 100}
-                  onChange={(e) => setPricing({ ...pricing, monthly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                  step={0.5}
-                  placeholder="--"
-                  className="w-full px-3 py-2 pr-8 bg-white border border-amber-200 rounded-lg focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
-              </div>
-            </div>
-          )}
-          {/* Nightly price - only for garde services with overnight stay */}
-          {isGardeService && allowOvernightStay && (
-            <div>
-              <label className="block text-xs text-text-light mb-1">Par nuit</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={(pricing.nightly || 0) / 100}
-                  onChange={(e) => setPricing({ ...pricing, nightly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
-                  step={0.5}
-                  placeholder="--"
-                  className="w-full px-3 py-2 pr-8 bg-white border border-indigo-200 rounded-lg focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-400 text-sm">€</span>
-              </div>
-            </div>
-          )}
-        </div>
 
-        {/* Prix conseillé */}
-        <PriceRecommendationCompact
-          token={token}
-          category={category}
-          priceUnit={showDaily ? "day" : (showHalfDaily ? "half_day" : "hour")}
-          currentPrice={showDaily ? (pricing.daily || 0) : (showHalfDaily ? (pricing.halfDaily || 0) : (pricing.hourly || 0))}
-          onSelectPrice={(price) => {
-            if (showDaily) {
-              setPricing({ ...pricing, daily: price });
-            } else if (showHalfDaily) {
-              setPricing({ ...pricing, halfDaily: price });
-            } else {
-              setPricing({ ...pricing, hourly: price });
-            }
-          }}
-        />
-      </div>
-
-      {/* Caractéristiques incluses / Activités prévues */}
-      <div>
-        <label className="block text-sm font-medium text-foreground mb-1">{isGardeService ? "Activités prévues" : "Caractéristiques incluses"}</label>
-        <div className="flex gap-2 mb-2">
-          <input
-            type="text"
-            value={newFeature}
-            onChange={(e) => setNewFeature(e.target.value)}
-            onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddFeature())}
-            placeholder={isGardeService ? "Ajouter une activité..." : "Ajouter une caractéristique..."}
-            className="flex-1 px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
-          />
-          <button
-            type="button"
-            onClick={handleAddFeature}
-            className="px-3 py-2 bg-gray-100 text-foreground rounded-lg hover:bg-gray-200"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-        </div>
-        {includedFeatures.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {includedFeatures.map((feature, index) => (
-              <span
-                key={index}
-                className="flex items-center gap-1 px-2 py-1 bg-secondary/10 text-secondary text-sm rounded-full"
-              >
-                {feature}
-                <button
-                  type="button"
-                  onClick={() => handleRemoveFeature(index)}
-                  className="hover:text-red-500"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
+            {/* Prix nuit - si autorisé */}
+            {allowOvernightStay && (
+              <div className="p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border border-indigo-100">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Moon className="w-4 h-4 text-indigo-500" />
+                    <span className="text-sm font-medium text-foreground">Supplément nuit</span>
+                  </div>
+                  <span className="text-xs px-2 py-0.5 bg-white rounded-full text-indigo-500">Optionnel</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex-1">
+                    <input
+                      type="range"
+                      min={0}
+                      max={Math.round(getDailyPrice())}
+                      step={1}
+                      value={getNightlyPrice()}
+                      onChange={(e) => handleNightlyPriceChange(parseFloat(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-full appearance-none cursor-pointer
+                        [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5
+                        [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-indigo-500 [&::-webkit-slider-thumb]:shadow-md
+                        [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110"
+                    />
+                    <div className="flex justify-between text-xs text-gray-400 mt-1">
+                      <span>0€</span>
+                      <span className="text-indigo-500">Conseillé: {defaultNightlyPrice ? Math.round(defaultNightlyPrice / 100) : Math.round(getDailyPrice() * 0.5)}€</span>
+                      <span>{Math.round(getDailyPrice())}€</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-2xl font-bold text-indigo-600">{getNightlyPrice().toFixed(0)}</span>
+                    <span className="text-sm text-gray-500">€/nuit</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
+        ) : (
+          /* ═══ TARIFS SERVICES - Grille classique ═══ */
+          <div className="grid grid-cols-2 gap-3">
+            {showHourly && (
+              <div>
+                <label className="block text-xs text-text-light mb-1">Par heure</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={(pricing.hourly || 0) / 100}
+                    onChange={(e) => setPricing({ ...pricing, hourly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                    step={0.5}
+                    placeholder="--"
+                    className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+                </div>
+              </div>
+            )}
+            {showHalfDaily && (
+              <div>
+                <label className="block text-xs text-text-light mb-1">Par demi-journée</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={(pricing.halfDaily || 0) / 100}
+                    onChange={(e) => setPricing({ ...pricing, halfDaily: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                    step={0.5}
+                    placeholder="--"
+                    className="w-full px-3 py-2 pr-8 bg-white border border-cyan-200 rounded-lg focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+                </div>
+              </div>
+            )}
+            {showDaily && (
+              <div>
+                <label className="block text-xs text-text-light mb-1">Par jour</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={(pricing.daily || 0) / 100}
+                    onChange={(e) => setPricing({ ...pricing, daily: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                    step={0.5}
+                    placeholder="--"
+                    className="w-full px-3 py-2 pr-8 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+                </div>
+              </div>
+            )}
+            {showWeekly && (
+              <div>
+                <label className="block text-xs text-text-light mb-1">Par semaine</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={(pricing.weekly || 0) / 100}
+                    onChange={(e) => setPricing({ ...pricing, weekly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                    step={0.5}
+                    placeholder="--"
+                    className="w-full px-3 py-2 pr-8 bg-white border border-purple-200 rounded-lg focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+                </div>
+              </div>
+            )}
+            {showMonthly && (
+              <div>
+                <label className="block text-xs text-text-light mb-1">Par mois</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={(pricing.monthly || 0) / 100}
+                    onChange={(e) => setPricing({ ...pricing, monthly: Math.round(parseFloat(e.target.value) * 100) || undefined })}
+                    step={0.5}
+                    placeholder="--"
+                    className="w-full px-3 py-2 pr-8 bg-white border border-amber-200 rounded-lg focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Prix conseillé - uniquement pour les services non-garde */}
+        {!isGardeService && (
+          <PriceRecommendationCompact
+            token={token}
+            category={category}
+            priceUnit={showDaily ? "day" : (showHalfDaily ? "half_day" : "hour")}
+            currentPrice={showDaily ? (pricing.daily || 0) : (showHalfDaily ? (pricing.halfDaily || 0) : (pricing.hourly || 0))}
+            onSelectPrice={(price) => {
+              if (showDaily) {
+                setPricing({ ...pricing, daily: price });
+              } else if (showHalfDaily) {
+                setPricing({ ...pricing, halfDaily: price });
+              } else {
+                setPricing({ ...pricing, hourly: price });
+              }
+            }}
+          />
         )}
       </div>
 

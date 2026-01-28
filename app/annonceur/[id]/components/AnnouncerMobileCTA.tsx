@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, ArrowRight, Check, ShoppingCart, Calendar, Clock, CreditCard, Eye, PawPrint, MapPin, Home, Plus, ChevronLeft } from "lucide-react";
+import { X, ArrowRight, Check, ShoppingCart, Calendar, Clock, CreditCard, Eye, PawPrint, MapPin, Home, Plus, ChevronLeft, AlertTriangle, Dog } from "lucide-react";
+import GuestDogVerification, { type GuestDogData } from "@/app/reserver/[announcerId]/components/GuestDogVerification";
 import { ServiceData, FormuleData } from "./types";
 import { cn } from "@/app/lib/utils";
 import {
@@ -28,8 +29,8 @@ import {
 } from "./booking";
 
 // Types pour les étapes du flux mobile garde
-// Étape 1: Formule, Étape 2: Animaux, Étape 3: Lieu, Étape 4: Dates, Étape 5: Options, Final: Summary
-type MobileBookingStep = "formule" | "animals" | "location" | "dates" | "options" | "summary";
+// Étape 1: Formule, Étape 1.5: Dog (invités), Étape 2: Animaux, Étape 3: Lieu, Étape 4: Dates, Étape 5: Options, Final: Summary
+type MobileBookingStep = "formule" | "dog" | "animals" | "location" | "dates" | "options" | "summary";
 
 interface UserAnimal {
   id: string;
@@ -91,6 +92,19 @@ interface AnnouncerMobileCTAProps {
   // Props pour les options
   onOptionToggle?: (optionId: string) => void;
   selectedOptionIds?: string[];
+  // Vérification du chien pour les invités
+  requiresDogVerification?: boolean;
+  guestDogValid?: boolean;
+  guestDogError?: string;
+  dogRestrictions?: {
+    acceptedDogSizes: ("small" | "medium" | "large")[];
+    dogCategoryAcceptance: "none" | "cat1" | "cat2" | "both";
+  };
+  guestDogData?: GuestDogData | null;
+  onGuestDogDataChange?: (data: GuestDogData | null) => void;
+  onGuestDogValidationChange?: (isValid: boolean, error?: string) => void;
+  // Erreurs de restriction pour les chiens des utilisateurs connectés
+  connectedDogErrors?: Record<string, string>;
 }
 
 // Get minimum price for a service
@@ -181,6 +195,15 @@ export default function AnnouncerMobileCTA({
   // Props pour les options
   onOptionToggle,
   selectedOptionIds = [],
+  // Vérification du chien pour les invités
+  requiresDogVerification = false,
+  guestDogValid = false,
+  guestDogError,
+  dogRestrictions,
+  guestDogData,
+  onGuestDogDataChange,
+  onGuestDogValidationChange,
+  connectedDogErrors = {},
 }: AnnouncerMobileCTAProps) {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isCalendarSheetOpen, setIsCalendarSheetOpen] = useState(false);
@@ -189,6 +212,33 @@ export default function AnnouncerMobileCTA({
   // État pour le flux par étapes (services garde)
   const [mobileStep, setMobileStep] = useState<MobileBookingStep>("formule");
   const [isStepSheetOpen, setIsStepSheetOpen] = useState(false);
+
+  // Bloquer le scroll du body quand une modale est ouverte (mobile uniquement)
+  useEffect(() => {
+    const isAnySheetOpen = isSheetOpen || isCalendarSheetOpen || isStepSheetOpen;
+    // Vérifier si on est sur mobile (écran < 768px)
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
+    if (isAnySheetOpen && isMobile) {
+      // Sauvegarder la position de scroll actuelle
+      const scrollY = window.scrollY;
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.left = '0';
+      document.body.style.right = '0';
+      document.body.style.overflow = 'hidden';
+
+      return () => {
+        // Restaurer le scroll
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.left = '';
+        document.body.style.right = '';
+        document.body.style.overflow = '';
+        window.scrollTo(0, scrollY);
+      };
+    }
+  }, [isSheetOpen, isCalendarSheetOpen, isStepSheetOpen]);
 
   // Determine if duration-based blocking is enabled
   const enableDurationBasedBlocking = Boolean(bookingService?.enableDurationBasedBlocking && bookingVariant?.duration);
@@ -249,9 +299,14 @@ export default function AnnouncerMobileCTA({
     return acceptedTypes.length === 0 || acceptedTypes.includes(animal.type);
   });
 
+  // Vérification du chien pour les invités (bloque les étapes si non vérifié)
+  const isDogVerificationOk = !requiresDogVerification || guestDogValid;
+
   // Déterminer l'étape actuelle pour le flux garde mobile
   const getCurrentGardeStep = (): MobileBookingStep => {
     if (!hasVariantSelected) return "formule";
+    // Étape vérification du chien pour les invités (après formule, avant dates)
+    if (requiresDogVerification && !guestDogValid) return "dog";
     if (isLoggedIn && userAnimals.length > 0 && !hasAnimalsSelected) return "animals";
     // N'afficher l'étape location que si les deux options sont disponibles
     if (needsLocationChoice && !hasLocationSelected) return "location";
@@ -283,11 +338,12 @@ export default function AnnouncerMobileCTA({
 
   // Pour les formules collectives, la réservation est complète quand tous les créneaux sont sélectionnés
   // Pour les formules multi-séances individuelles, quand toutes les séances sont sélectionnées
+  // La vérification du chien doit être OK pour les invités
   const hasFullBooking = isCollectiveFormule
-    ? hasVariantSelected && hasAllSlotsSelected && hasAddress
+    ? hasVariantSelected && hasAllSlotsSelected && hasAddress && isDogVerificationOk
     : isMultiSessionIndividual
-      ? hasVariantSelected && hasAllSessionsSelected && hasAddress
-      : hasVariantSelected && hasDateSelected && Boolean(priceBreakdown) && hasAddress;
+      ? hasVariantSelected && hasAllSessionsSelected && hasAddress && isDogVerificationOk
+      : hasVariantSelected && hasDateSelected && Boolean(priceBreakdown) && hasAddress && isDogVerificationOk;
 
   // Get price to display
   const { price: minPrice, unit: minUnit } = selectedService
@@ -297,6 +353,16 @@ export default function AnnouncerMobileCTA({
 
   // Handle direct booking
   const handleBookClick = () => {
+    // Vérification du chien requise pour les invités (tous types de services)
+    // Si le chien n'est pas encore vérifié, ouvrir le sheet de vérification
+    if (requiresDogVerification && hasVariantSelected) {
+      // Déterminer l'étape : si chien déjà vérifié, passer aux dates, sinon vérification
+      const stepToShow = guestDogValid ? "dates" : "dog";
+      setMobileStep(stepToShow);
+      setIsStepSheetOpen(true);
+      return;
+    }
+
     // Flux par étapes pour les services garde
     if (isRangeMode && hasVariantSelected) {
       const currentStep = getCurrentGardeStep();
@@ -350,6 +416,23 @@ export default function AnnouncerMobileCTA({
   // Gérer la navigation entre les étapes du flux garde
   const handleNextStep = () => {
     switch (mobileStep) {
+      case "dog":
+        // Après vérification du chien
+        if (isRangeMode) {
+          // Mode garde : continuer le flux par étapes
+          if (isLoggedIn && userAnimals.length > 0) {
+            setMobileStep("animals");
+          } else if (needsLocationChoice) {
+            setMobileStep("location");
+          } else {
+            setMobileStep("dates");
+          }
+        } else {
+          // Mode non-garde : fermer le sheet et ouvrir le calendrier
+          setIsStepSheetOpen(false);
+          setIsCalendarSheetOpen(true);
+        }
+        break;
       case "animals":
         if (needsLocationChoice) {
           setMobileStep("location");
@@ -378,12 +461,23 @@ export default function AnnouncerMobileCTA({
 
   const handlePrevStep = () => {
     switch (mobileStep) {
-      case "animals":
+      case "dog":
+        // Retour = fermer le sheet (on était à la formule avant)
         setIsStepSheetOpen(false);
+        break;
+      case "animals":
+        // Retour à dog si requis, sinon fermer
+        if (requiresDogVerification) {
+          setMobileStep("dog");
+        } else {
+          setIsStepSheetOpen(false);
+        }
         break;
       case "location":
         if (isLoggedIn && userAnimals.length > 0) {
           setMobileStep("animals");
+        } else if (requiresDogVerification) {
+          setMobileStep("dog");
         } else {
           setIsStepSheetOpen(false);
         }
@@ -393,6 +487,8 @@ export default function AnnouncerMobileCTA({
           setMobileStep("location");
         } else if (isLoggedIn && userAnimals.length > 0) {
           setMobileStep("animals");
+        } else if (requiresDogVerification) {
+          setMobileStep("dog");
         } else {
           setIsStepSheetOpen(false);
         }
@@ -413,6 +509,8 @@ export default function AnnouncerMobileCTA({
   // Vérifier si on peut passer à l'étape suivante
   const canProceedToNextStep = (): boolean => {
     switch (mobileStep) {
+      case "dog":
+        return guestDogValid;
       case "animals":
         return hasAnimalsSelected;
       case "location":
@@ -431,6 +529,11 @@ export default function AnnouncerMobileCTA({
   // Texte du bouton selon l'étape
   const getStepButtonText = (): string => {
     switch (mobileStep) {
+      case "dog":
+        if (guestDogError) {
+          return "Chien non accepté";
+        }
+        return guestDogValid ? "Continuer" : "Vérifiez votre chien";
       case "animals":
         return hasAnimalsSelected ? "Continuer" : "Sélectionnez vos animaux";
       case "location":
@@ -736,6 +839,13 @@ export default function AnnouncerMobileCTA({
     if (isRangeMode && hasVariantSelected) {
       const currentStep = getCurrentGardeStep();
       switch (currentStep) {
+        case "dog":
+          return (
+            <>
+              <Dog className="w-4 h-4" />
+              Vérifier votre chien
+            </>
+          );
         case "animals":
           return (
             <>
@@ -865,22 +975,27 @@ export default function AnnouncerMobileCTA({
           <AnimatePresence>
             {isSheetOpen && (
               <>
-                {/* Backdrop */}
+                {/* Backdrop - bloque les interactions en dessous */}
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   onClick={() => setIsSheetOpen(false)}
                   className="fixed inset-0 bg-black/50 z-[9998] md:hidden"
+                  style={{ touchAction: 'none' }}
                 />
 
-                {/* Sheet */}
+                {/* Sheet - avec support clavier mobile */}
                 <motion.div
                   initial={{ y: "100%" }}
                   animate={{ y: 0 }}
                   exit={{ y: "100%" }}
                   transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                  className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-[9999] md:hidden max-h-[85vh] flex flex-col"
+                  className="fixed inset-x-0 bottom-0 bg-white rounded-t-2xl z-[9999] md:hidden flex flex-col"
+                  style={{
+                    maxHeight: '85dvh',
+                    height: 'auto',
+                  }}
                 >
                   {/* Sheet Header */}
                   <div className="flex items-center justify-between p-4 border-b border-gray-100 flex-shrink-0">
@@ -895,8 +1010,15 @@ export default function AnnouncerMobileCTA({
                     </button>
                   </div>
 
-                  {/* Sheet Content */}
-                  <div className="overflow-y-auto flex-1 p-4">
+                  {/* Sheet Content - zone scrollable */}
+                  <div
+                    className="flex-1 overflow-y-auto p-4"
+                    style={{
+                      WebkitOverflowScrolling: 'touch',
+                      overscrollBehavior: 'contain',
+                      minHeight: 0,
+                    }}
+                  >
                     {hasFullBooking && bookingService && bookingVariant && bookingSelection ? (
                       // Show booking summary
                       <div className="space-y-4">
@@ -911,6 +1033,9 @@ export default function AnnouncerMobileCTA({
                           isRangeMode={isRangeMode}
                           animalCount={selectedAnimalIds.length > 0 ? selectedAnimalIds.length : animalCount}
                           announcerFirstName={announcerFirstName}
+                          requiresDogVerification={requiresDogVerification}
+                          guestDogValid={guestDogValid}
+                          guestDogError={guestDogError}
                           compact
                         />
 
@@ -1040,22 +1165,27 @@ export default function AnnouncerMobileCTA({
               (calendarMonth && onDateSelect && onEndDateSelect && onTimeSelect && onEndTimeSelect && onOvernightChange && onMonthChange)
             ) && (
               <>
-                {/* Backdrop */}
+                {/* Backdrop - bloque les interactions en dessous */}
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   onClick={() => setIsCalendarSheetOpen(false)}
                   className="fixed inset-0 bg-black/50 z-[9998] md:hidden"
+                  style={{ touchAction: 'none' }}
                 />
 
-                {/* Calendar Sheet */}
+                {/* Calendar Sheet - avec support clavier mobile */}
                 <motion.div
                   initial={{ y: "100%" }}
                   animate={{ y: 0 }}
                   exit={{ y: "100%" }}
                   transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                  className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-[9999] md:hidden max-h-[90vh] flex flex-col"
+                  className="fixed inset-x-0 bottom-0 bg-white rounded-t-2xl z-[9999] md:hidden flex flex-col"
+                  style={{
+                    maxHeight: '90dvh',
+                    height: 'auto',
+                  }}
                 >
                   {/* Sheet Header */}
                   <div className="flex items-center justify-between p-4 border-b border-gray-100 flex-shrink-0">
@@ -1094,8 +1224,15 @@ export default function AnnouncerMobileCTA({
                     </button>
                   </div>
 
-                  {/* Sheet Content */}
-                  <div className="overflow-y-auto flex-1 p-4">
+                  {/* Sheet Content - zone scrollable */}
+                  <div
+                    className="flex-1 overflow-y-auto p-4"
+                    style={{
+                      WebkitOverflowScrolling: 'touch',
+                      overscrollBehavior: 'contain',
+                      minHeight: 0,
+                    }}
+                  >
                     {isCollectiveFormule && bookingVariant && onSlotsSelected ? (
                       // Afficher le CollectiveSlotPicker pour les formules collectives
                       <div className="space-y-4">
@@ -1254,28 +1391,33 @@ export default function AnnouncerMobileCTA({
           document.body
         )}
 
-      {/* Step Sheet pour services garde (Portal) */}
+      {/* Step Sheet pour services garde et vérification chien (Portal) */}
       {typeof document !== "undefined" &&
         createPortal(
           <AnimatePresence>
-            {isStepSheetOpen && isRangeMode && hasVariantSelected && (
+            {isStepSheetOpen && hasVariantSelected && (isRangeMode || mobileStep === "dog") && (
               <>
-                {/* Backdrop */}
+                {/* Backdrop - bloque les interactions en dessous */}
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   onClick={() => setIsStepSheetOpen(false)}
                   className="fixed inset-0 bg-black/50 z-[9998] md:hidden"
+                  style={{ touchAction: 'none' }}
                 />
 
-                {/* Step Sheet */}
+                {/* Step Sheet - avec support clavier mobile */}
                 <motion.div
                   initial={{ y: "100%" }}
                   animate={{ y: 0 }}
                   exit={{ y: "100%" }}
                   transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                  className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-[9999] md:hidden max-h-[90vh] flex flex-col"
+                  className="fixed inset-x-0 bottom-0 bg-white rounded-t-2xl z-[9999] md:hidden flex flex-col"
+                  style={{
+                    maxHeight: '90dvh',
+                    height: 'auto',
+                  }}
                 >
                   {/* Sheet Header avec navigation */}
                   <div className="flex items-center justify-between p-4 border-b border-gray-100 flex-shrink-0">
@@ -1288,6 +1430,7 @@ export default function AnnouncerMobileCTA({
                       </button>
                       <div>
                         <h3 className="text-lg font-semibold text-gray-900">
+                          {mobileStep === "dog" && "Votre chien"}
                           {mobileStep === "animals" && "Vos animaux"}
                           {mobileStep === "location" && "Lieu de garde"}
                           {mobileStep === "dates" && "Dates de garde"}
@@ -1310,23 +1453,22 @@ export default function AnnouncerMobileCTA({
                     </button>
                   </div>
 
-                  {/* Indicateur d'étapes */}
+                  {/* Indicateur d'étapes - commence à 1 avec Formule (déjà complétée) */}
                   <div className="flex items-center gap-1 px-4 py-3 border-b border-gray-50">
                     {(() => {
-                      // Construire la liste des étapes à afficher
-                      const steps: MobileBookingStep[] = [];
-                      if (isLoggedIn && userAnimals.length > 0) steps.push("animals");
-                      steps.push("location", "dates");
+                      // Construire la liste des étapes : Formule (1) est toujours complétée
+                      const steps: MobileBookingStep[] = ["formule"];
+                      if (requiresDogVerification) steps.push("dog");
+                      steps.push("dates");
                       if (hasOptionsStep) steps.push("options");
                       steps.push("summary");
 
-                      let stepNumber = 1;
                       return steps.map((step, index) => {
                         const isActive = mobileStep === step;
                         const stepIndex = steps.indexOf(mobileStep);
-                        const isPast = index < stepIndex;
-
-                        const currentNumber = stepNumber++;
+                        // Formule est toujours passée (index 0), les autres dépendent de l'étape actuelle
+                        const isPast = step === "formule" || index < stepIndex;
+                        const stepNumber = index + 1;
 
                         return (
                           <div key={step} className="flex items-center gap-1 flex-1">
@@ -1336,7 +1478,7 @@ export default function AnnouncerMobileCTA({
                               isPast ? "bg-secondary/20 text-secondary" :
                               "bg-gray-100 text-gray-400"
                             )}>
-                              {isPast ? <Check className="w-3 h-3" /> : currentNumber}
+                              {isPast ? <Check className="w-3 h-3" /> : stepNumber}
                             </div>
                             {index < steps.length - 1 && <div className={cn(
                               "flex-1 h-0.5 transition-colors",
@@ -1348,8 +1490,32 @@ export default function AnnouncerMobileCTA({
                     })()}
                   </div>
 
-                  {/* Sheet Content */}
-                  <div className="overflow-y-auto flex-1 p-4">
+                  {/* Sheet Content - zone scrollable */}
+                  <div
+                    className="flex-1 overflow-y-auto p-4"
+                    style={{
+                      WebkitOverflowScrolling: 'touch',
+                      overscrollBehavior: 'contain',
+                      minHeight: 0, // Important pour flex avec overflow
+                    }}
+                  >
+                    {/* Étape Vérification du chien */}
+                    {mobileStep === "dog" && dogRestrictions && onGuestDogDataChange && onGuestDogValidationChange && (
+                      <div className="space-y-4">
+                        <p className="text-sm text-gray-500">
+                          Renseignez les informations de votre chien pour vérifier qu'il correspond aux critères de cette formule.
+                        </p>
+
+                        <GuestDogVerification
+                          acceptedDogSizes={dogRestrictions.acceptedDogSizes}
+                          dogCategoryAcceptance={dogRestrictions.dogCategoryAcceptance}
+                          onDogDataChange={onGuestDogDataChange}
+                          onValidationChange={onGuestDogValidationChange}
+                          initialData={guestDogData}
+                        />
+                      </div>
+                    )}
+
                     {/* Étape Animaux */}
                     {mobileStep === "animals" && isLoggedIn && onAnimalToggle && (
                       <div className="space-y-4">
@@ -1534,6 +1700,9 @@ export default function AnnouncerMobileCTA({
                           isRangeMode={isRangeMode}
                           animalCount={selectedAnimalIds.length > 0 ? selectedAnimalIds.length : animalCount}
                           announcerFirstName={announcerFirstName}
+                          requiresDogVerification={requiresDogVerification}
+                          guestDogValid={guestDogValid}
+                          guestDogError={guestDogError}
                           compact
                         />
                       </div>
@@ -1543,31 +1712,18 @@ export default function AnnouncerMobileCTA({
                   {/* Bouton de navigation */}
                   <div className="p-4 border-t border-gray-100 flex-shrink-0 space-y-3">
                     {mobileStep === "summary" ? (
-                      <>
-                        <motion.button
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => {
-                            setIsStepSheetOpen(false);
-                            onBook?.();
-                          }}
-                          className="w-full py-3.5 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold rounded-xl shadow-lg shadow-primary/25 flex items-center justify-center gap-2"
-                        >
-                          <Eye className="w-4 h-4" />
-                          Vérifier la réservation
-                        </motion.button>
-                        <motion.button
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => {
-                            setIsStepSheetOpen(false);
-                            onFinalize?.();
-                          }}
-                          className="w-full py-3.5 border-2 border-secondary bg-secondary/5 text-secondary font-semibold rounded-xl flex items-center justify-center gap-2 hover:bg-secondary/10 transition-colors"
-                        >
-                          <CreditCard className="w-4 h-4" />
-                          Finaliser la réservation
-                          <ArrowRight className="w-4 h-4" />
-                        </motion.button>
-                      </>
+                      <motion.button
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => {
+                          setIsStepSheetOpen(false);
+                          onFinalize?.();
+                        }}
+                        className="w-full py-3.5 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold rounded-xl shadow-lg shadow-primary/25 flex items-center justify-center gap-2"
+                      >
+                        <CreditCard className="w-4 h-4" />
+                        Finaliser la réservation
+                        <ArrowRight className="w-4 h-4" />
+                      </motion.button>
                     ) : (
                       <motion.button
                         whileTap={{ scale: 0.98 }}
@@ -1575,11 +1731,14 @@ export default function AnnouncerMobileCTA({
                         disabled={!canProceedToNextStep()}
                         className={cn(
                           "w-full py-3.5 font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors",
-                          canProceedToNextStep()
-                            ? "bg-gradient-to-r from-primary to-primary/90 text-white shadow-lg shadow-primary/25"
-                            : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          mobileStep === "dog" && guestDogError
+                            ? "bg-red-500 text-white cursor-not-allowed"
+                            : canProceedToNextStep()
+                              ? "bg-gradient-to-r from-primary to-primary/90 text-white shadow-lg shadow-primary/25"
+                              : "bg-gray-100 text-gray-400 cursor-not-allowed"
                         )}
                       >
+                        {mobileStep === "dog" && guestDogError && <AlertTriangle className="w-4 h-4" />}
                         {getStepButtonText()}
                         {canProceedToNextStep() && <ArrowRight className="w-4 h-4" />}
                       </motion.button>

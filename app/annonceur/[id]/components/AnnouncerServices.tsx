@@ -208,6 +208,7 @@ export default function AnnouncerServices({ services, initialExpandedService, co
                     className="border-t border-gray-100"
                   >
                     <div className="p-4 sm:p-5 space-y-3">
+                      {/* Note: Les restrictions chiens sont maintenant affichées par formule ci-dessous */}
                       {/* Formules */}
                       {service.formules.map((formule) => {
                         const { price: formulePrice, unit: formuleUnit } = getFormuleBestPrice(formule, isGarde, service.displayPriceUnit);
@@ -298,6 +299,57 @@ export default function AnnouncerServices({ services, initialExpandedService, co
                                 ))}
                               </div>
                             )}
+
+                            {/* Restrictions chiens (au niveau de la formule) */}
+                            {(() => {
+                              // Vérifier si cette formule accepte les chiens
+                              const formuleAcceptsDogs = formule.animalTypes?.includes("chien") ||
+                                (!formule.animalTypes?.length && service.animalTypes?.includes("chien"));
+                              if (!formuleAcceptsDogs) return null;
+
+                              const dogSizes = formule.acceptedDogSizes || ["small", "medium", "large"];
+                              const dogCategory = formule.dogCategoryAcceptance || "none";
+                              const allSizes = dogSizes.length === 3;
+
+                              return (
+                                <div className="mt-3 pt-2 border-t border-gray-200/50">
+                                  <p className="flex items-center gap-1 text-xs font-medium text-amber-700 mb-1.5">
+                                    <span>🐕</span>
+                                    Chiens acceptés
+                                  </p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {/* Tailles de chiens acceptées */}
+                                    {allSizes ? (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">
+                                        ✓ Toutes tailles
+                                      </span>
+                                    ) : (
+                                      dogSizes.map((size) => (
+                                        <span
+                                          key={size}
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-800 text-xs rounded-full"
+                                        >
+                                          {size === "small" ? "Petit (<10kg)" : size === "medium" ? "Moyen (10-25kg)" : "Grand (>25kg)"}
+                                        </span>
+                                      ))
+                                    )}
+                                    {/* Catégories de chiens */}
+                                    <span className={cn(
+                                      "inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full",
+                                      dogCategory === "none" && "bg-gray-100 text-gray-600",
+                                      dogCategory === "cat1" && "bg-orange-100 text-orange-700",
+                                      dogCategory === "cat2" && "bg-orange-100 text-orange-700",
+                                      dogCategory === "both" && "bg-green-100 text-green-700"
+                                    )}>
+                                      {dogCategory === "none" && "Cat. non acceptées"}
+                                      {dogCategory === "cat1" && "✓ Cat. 1"}
+                                      {dogCategory === "cat2" && "✓ Cat. 2"}
+                                      {dogCategory === "both" && "✓ Cat. 1 & 2"}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       })}

@@ -15,17 +15,12 @@ import {
   PawPrint,
   Layers,
   Zap,
-  Info,
-  AlertTriangle,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import AnimalTypeSelector from "../shared/AnimalTypeSelector";
 import VariantManager, { LocalVariant } from "../VariantManager";
 import OptionManager, { LocalOption } from "../OptionManager";
 import { cn } from "@/app/lib/utils";
-
-// Types pour les catégories de chiens (législation française)
-type DogCategoryAcceptance = "none" | "cat1" | "cat2" | "both";
 
 type ServiceLocation = "announcer_home" | "client_home" | "both";
 type PriceUnit = "hour" | "half_day" | "day" | "week" | "month";
@@ -91,6 +86,8 @@ interface ServiceFormProps {
     animalTypes: string[];
     // Catégories de chiens acceptées
     dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
+    // Tailles de chiens acceptées
+    acceptedDogSizes?: ("small" | "medium" | "large")[];
     // Garde de nuit
     allowOvernightStay?: boolean;
     overnightPrice?: number;
@@ -152,8 +149,8 @@ export default function ServiceForm({
   // Garde de nuit
   const [allowOvernightStay, setAllowOvernightStay] = useState(false);
 
-  // Catégories de chiens acceptées (législation française)
-  const [dogCategoryAcceptance, setDogCategoryAcceptance] = useState<DogCategoryAcceptance>("none");
+  // Note: Les restrictions chiens (dogCategoryAcceptance, acceptedDogSizes) sont maintenant
+  // au niveau de chaque formule (variant) dans VariantManager, pas au niveau du service.
 
   // Récupérer les activités depuis l'admin
   const activities = useQuery(api.services.activities.getActiveActivities);
@@ -237,7 +234,7 @@ export default function ServiceForm({
       category,
       description: description || undefined,
       animalTypes,
-      dogCategoryAcceptance: acceptsDogs ? dogCategoryAcceptance : undefined,
+      // Note: dogCategoryAcceptance et acceptedDogSizes sont maintenant au niveau de chaque variant
       ...overnightData,
       initialVariants,
       initialOptions: initialOptions.length > 0 ? initialOptions : undefined,
@@ -553,13 +550,7 @@ export default function ServiceForm({
 
               <AnimalTypeSelector
                 selected={animalTypes}
-                onChange={(types) => {
-                  setAnimalTypes(types);
-                  // Reset dog categories if dogs are unselected
-                  if (!types.includes("chien")) {
-                    setDogCategoryAcceptance("none");
-                  }
-                }}
+                onChange={setAnimalTypes}
                 variant="cards"
               />
 
@@ -569,131 +560,8 @@ export default function ServiceForm({
                 </p>
               )}
 
-              {/* Section catégories de chiens */}
-              {acceptsDogs && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-4"
-                >
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <h5 className="font-medium text-amber-900">
-                        Chiens catégorisés
-                      </h5>
-                      <p className="text-sm text-amber-700 mt-1">
-                        En France, certains chiens sont soumis à une réglementation spécifique.
-                        Indiquez si vous acceptez les chiens de catégorie 1 et/ou 2.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setDogCategoryAcceptance("none")}
-                      className={cn(
-                        "p-3 rounded-xl border-2 text-left transition-all",
-                        dogCategoryAcceptance === "none"
-                          ? "border-amber-500 bg-white shadow-sm"
-                          : "border-amber-200 hover:border-amber-300"
-                      )}
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        {dogCategoryAcceptance === "none" && (
-                          <Check className="w-4 h-4 text-amber-600" />
-                        )}
-                        <span className="font-medium text-amber-900 text-sm">
-                          Non catégorisés uniquement
-                        </span>
-                      </div>
-                      <p className="text-xs text-amber-600">
-                        Je n&apos;accepte pas les chiens de catégorie 1 ou 2
-                      </p>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setDogCategoryAcceptance("cat2")}
-                      className={cn(
-                        "p-3 rounded-xl border-2 text-left transition-all",
-                        dogCategoryAcceptance === "cat2"
-                          ? "border-amber-500 bg-white shadow-sm"
-                          : "border-amber-200 hover:border-amber-300"
-                      )}
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        {dogCategoryAcceptance === "cat2" && (
-                          <Check className="w-4 h-4 text-amber-600" />
-                        )}
-                        <span className="font-medium text-amber-900 text-sm">
-                          Catégorie 2 acceptée
-                        </span>
-                      </div>
-                      <p className="text-xs text-amber-600">
-                        Chiens de garde et défense (avec permis)
-                      </p>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setDogCategoryAcceptance("cat1")}
-                      className={cn(
-                        "p-3 rounded-xl border-2 text-left transition-all",
-                        dogCategoryAcceptance === "cat1"
-                          ? "border-amber-500 bg-white shadow-sm"
-                          : "border-amber-200 hover:border-amber-300"
-                      )}
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        {dogCategoryAcceptance === "cat1" && (
-                          <Check className="w-4 h-4 text-amber-600" />
-                        )}
-                        <span className="font-medium text-amber-900 text-sm">
-                          Catégorie 1 acceptée
-                        </span>
-                      </div>
-                      <p className="text-xs text-amber-600">
-                        Chiens d&apos;attaque (interdit à la reproduction)
-                      </p>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setDogCategoryAcceptance("both")}
-                      className={cn(
-                        "p-3 rounded-xl border-2 text-left transition-all",
-                        dogCategoryAcceptance === "both"
-                          ? "border-amber-500 bg-white shadow-sm"
-                          : "border-amber-200 hover:border-amber-300"
-                      )}
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        {dogCategoryAcceptance === "both" && (
-                          <Check className="w-4 h-4 text-amber-600" />
-                        )}
-                        <span className="font-medium text-amber-900 text-sm">
-                          Catégories 1 et 2
-                        </span>
-                      </div>
-                      <p className="text-xs text-amber-600">
-                        J&apos;accepte tous les chiens catégorisés
-                      </p>
-                    </button>
-                  </div>
-
-                  {/* Info légale */}
-                  <div className="flex items-start gap-2 p-3 bg-white rounded-lg text-xs text-amber-700">
-                    <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <strong>Rappel légal :</strong> Les propriétaires de chiens catégorisés doivent détenir un permis de détention.
-                      Catégorie 1 : Staffordshire terrier, American Staffordshire terrier (sans pedigree), Mastiff, Tosa (sans pedigree).
-                      Catégorie 2 : Mêmes races avec pedigree + Rottweiler.
-                    </div>
-                  </div>
-                </motion.div>
-              )}
+              {/* Note: Les restrictions chiens (catégories et tailles) sont configurées
+                  par formule dans l'étape 3 (VariantManager) */}
             </motion.div>
           )}
 
@@ -737,8 +605,6 @@ export default function ServiceForm({
                   emoji: a.emoji,
                   description: a.description,
                 })) || []}
-                acceptsDogs={acceptsDogs}
-                dogCategoryAcceptance={dogCategoryAcceptance}
                 announcerPriceMode={selectedCategory?.announcerPriceMode}
                 clientBillingMode={selectedCategory?.clientBillingMode}
                 hourlyBillingSurchargePercent={selectedCategory?.hourlyBillingSurchargePercent}

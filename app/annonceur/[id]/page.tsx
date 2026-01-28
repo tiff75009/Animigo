@@ -32,6 +32,13 @@ import {
   calculatePriceBreakdown,
   isGardeService,
 } from "./components/booking";
+import GuestDogVerification, { type GuestDogData } from "@/app/reserver/[announcerId]/components/GuestDogVerification";
+import {
+  checkBreedCategory,
+  getSizeFromWeight,
+  isDogAccepted,
+  type DogSize,
+} from "@/data/categorized-dog-breeds";
 
 // Calcul de distance avec la formule de Haversine (en km)
 function calculateDistance(
@@ -219,11 +226,22 @@ export default function AnnouncerProfilePage() {
     name: animal.name,
     type: animal.type,
     breed: animal.breed,
+    breedSlug: animal.breed?.toLowerCase().replace(/\s+/g, '-').normalize("NFD").replace(/[\u0300-\u036f]/g, ""),
+    weight: animal.weight,
+    size: animal.size,
     profilePhoto: animal.profilePhoto,
   }));
 
   // State for selected animals in collective sessions (supports multiple selection)
   const [selectedAnimalIds, setSelectedAnimalIds] = useState<string[]>([]);
+
+  // État pour la vérification du chien (invités)
+  const [guestDogData, setGuestDogData] = useState<GuestDogData | null>(null);
+  const [guestDogValid, setGuestDogValid] = useState(false);
+  const [guestDogError, setGuestDogError] = useState<string | undefined>(undefined);
+
+  // État pour les erreurs de restriction des chiens (utilisateurs connectés)
+  const [connectedDogErrors, setConnectedDogErrors] = useState<Record<string, string>>({});
 
   // Calculer la distance entre le client et l'annonceur
   // (doit être avant les early returns pour respecter les règles des hooks)
@@ -399,6 +417,48 @@ export default function AnnouncerProfilePage() {
     return clientAddresses.find(a => a._id === bookingSelection.selectedAddressId) ?? null;
   }, [bookingSelection.selectedAddressId, clientAddresses]);
 
+  // Déterminer si la vérification du chien est requise pour les invités
+  const requiresDogVerification = useMemo(() => {
+    // Seulement pour les invités (non connectés)
+    if (token) return false;
+    // Doit avoir un service et un variant sélectionnés
+    if (!bookingService || !bookingVariant) return false;
+    // Le service doit accepter les chiens
+    const serviceAcceptsDogs = bookingService.animalTypes?.includes("chien");
+    if (!serviceAcceptsDogs) return false;
+    // Le variant doit accepter les chiens
+    const variantAcceptsDogs = !bookingVariant.animalTypes?.length || bookingVariant.animalTypes.includes("chien");
+    return variantAcceptsDogs;
+  }, [token, bookingService, bookingVariant]);
+
+  // Restrictions du chien depuis le variant (avec fallback vers le service)
+  const dogRestrictions = useMemo(() => {
+    if (!bookingVariant || !bookingService) {
+      return {
+        acceptedDogSizes: ["small", "medium", "large"] as ("small" | "medium" | "large")[],
+        dogCategoryAcceptance: "none" as "none" | "cat1" | "cat2" | "both",
+      };
+    }
+    // Priorité au variant, sinon au service
+    const acceptedDogSizes = (bookingVariant as { acceptedDogSizes?: ("small" | "medium" | "large")[] }).acceptedDogSizes
+      || (bookingService as { acceptedDogSizes?: ("small" | "medium" | "large")[] }).acceptedDogSizes
+      || ["small", "medium", "large"];
+    const dogCategoryAcceptance = (bookingVariant as { dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both" }).dogCategoryAcceptance
+      || (bookingService as { dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both" }).dogCategoryAcceptance
+      || "none";
+    return { acceptedDogSizes, dogCategoryAcceptance };
+  }, [bookingVariant, bookingService]);
+
+  // Handlers pour la vérification du chien
+  const handleGuestDogDataChange = useCallback((data: GuestDogData | null) => {
+    setGuestDogData(data);
+  }, []);
+
+  const handleGuestDogValidationChange = useCallback((isValid: boolean, error?: string) => {
+    setGuestDogValid(isValid);
+    setGuestDogError(error);
+  }, []);
+
   // Booking handlers (doivent être avant les early returns)
   const handleVariantSelect = useCallback((serviceId: string, variantId: string) => {
     setBookingSelection((prev) => ({
@@ -410,6 +470,10 @@ export default function AnnouncerProfilePage() {
       animalCount: 1,
     }));
     setSelectedAnimalIds([]); // Reset selected animals state
+    // Réinitialiser la vérification du chien quand on change de formule
+    setGuestDogData(null);
+    setGuestDogValid(false);
+    setGuestDogError(undefined);
     if (announcer) {
       const service = announcer.services.find((s) => s.id === serviceId);
       if (service) {
@@ -501,6 +565,65 @@ export default function AnnouncerProfilePage() {
       return;
     }
 
+    // Pour les chiens, vérifier les restrictions de la formule
+    if (animalType === "chien") {
+      const animal = userAnimals.find((a: { id: string }) => a.id === animalId);
+      if (animal) {
+        // Récupérer les restrictions de la formule
+        const variantDogSizes = bookingVariant?.acceptedDogSizes || ["small", "medium", "large"];
+        const variantDogCategory = bookingVariant?.dogCategoryAcceptance || "none";
+
+        // Déterminer la taille du chien
+        let dogSize: DogSize = "medium";
+        if (animal.weight) {
+          dogSize = getSizeFromWeight(animal.weight);
+        } else if (animal.size) {
+          // Mapper la taille du schéma vers DogSize
+          const sizeMapping: Record<string, DogSize> = {
+            petit: "small",
+            moyen: "medium",
+            grand: "large",
+            tres_grand: "large",
+          };
+          dogSize = sizeMapping[animal.size] || "medium";
+        }
+
+        // Vérifier la catégorie du chien (basée sur la race)
+        let dogCategory: "none" | "cat1" | "cat2" = "none";
+        if (animal.breed && animal.breedSlug) {
+          const categoryResult = checkBreedCategory(animal.breed, animal.breedSlug);
+          if (categoryResult.isCategorized) {
+            // Pour les chiens catégorisés, sans info LOF on assume cat1 par défaut (plus restrictif)
+            dogCategory = categoryResult.category === "unknown" ? "cat1" : categoryResult.category as "cat1" | "cat2";
+          }
+        }
+
+        // Vérifier si le chien est accepté
+        const acceptanceResult = isDogAccepted(
+          dogSize,
+          dogCategory,
+          variantDogSizes as DogSize[],
+          variantDogCategory
+        );
+
+        if (!acceptanceResult.accepted) {
+          // Stocker l'erreur et ne pas sélectionner
+          setConnectedDogErrors((prev) => ({
+            ...prev,
+            [animalId]: acceptanceResult.reason || "Ce chien ne respecte pas les restrictions de cette formule",
+          }));
+          return;
+        } else {
+          // Supprimer l'erreur si elle existait
+          setConnectedDogErrors((prev) => {
+            const newErrors = { ...prev };
+            delete newErrors[animalId];
+            return newErrors;
+          });
+        }
+      }
+    }
+
     setSelectedAnimalIds((prev) => {
       const isSelected = prev.includes(animalId);
       let newIds: string[];
@@ -508,6 +631,12 @@ export default function AnnouncerProfilePage() {
       if (isSelected) {
         // Remove the animal
         newIds = prev.filter((id) => id !== animalId);
+        // Supprimer l'erreur si elle existait
+        setConnectedDogErrors((prevErrors) => {
+          const newErrors = { ...prevErrors };
+          delete newErrors[animalId];
+          return newErrors;
+        });
       } else {
         // Add the animal (pas de limite)
         newIds = [...prev, animalId];
@@ -524,7 +653,7 @@ export default function AnnouncerProfilePage() {
 
       return newIds;
     });
-  }, [bookingVariant]);
+  }, [bookingVariant, userAnimals]);
 
   const handleBook = useCallback(() => {
     if (!announcerData || !announcer) return;
@@ -792,6 +921,16 @@ export default function AnnouncerProfilePage() {
                 announcerFirstName={announcer.firstName}
                 // Callback connexion inline
                 onLoginSuccess={refreshToken}
+                // Vérification du chien pour les invités (intégré dans AnnouncerFormules)
+                requiresDogVerification={requiresDogVerification}
+                guestDogValid={guestDogValid}
+                guestDogError={guestDogError}
+                dogRestrictions={dogRestrictions}
+                guestDogData={guestDogData}
+                onGuestDogDataChange={handleGuestDogDataChange}
+                onGuestDogValidationChange={handleGuestDogValidationChange}
+                // Erreurs de restriction pour les chiens des utilisateurs connectés
+                connectedDogErrors={connectedDogErrors}
               />
             )}
 
@@ -832,6 +971,10 @@ export default function AnnouncerProfilePage() {
               animalCount={bookingSelection.animalCount}
               selectedSessions={bookingSelection.selectedSessions}
               announcerFirstName={announcer.firstName}
+              // Vérification du chien pour les invités
+              requiresDogVerification={requiresDogVerification}
+              guestDogValid={guestDogValid}
+              guestDogError={guestDogError}
               onServiceChange={(serviceId) => {
                 // Trouver le categorySlug du service sélectionné et mettre à jour l'URL
                 const service = announcer.services.find((s) => s.id === serviceId);
@@ -897,6 +1040,16 @@ export default function AnnouncerProfilePage() {
         // Props pour les options
         onOptionToggle={handleOptionToggle}
         selectedOptionIds={bookingSelection.selectedOptionIds}
+        // Vérification du chien pour les invités
+        requiresDogVerification={requiresDogVerification}
+        guestDogValid={guestDogValid}
+        guestDogError={guestDogError}
+        dogRestrictions={dogRestrictions}
+        guestDogData={guestDogData}
+        onGuestDogDataChange={handleGuestDogDataChange}
+        onGuestDogValidationChange={handleGuestDogValidationChange}
+        // Erreurs de restriction pour les chiens des utilisateurs connectés
+        connectedDogErrors={connectedDogErrors}
       />
     </div>
   );

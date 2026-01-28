@@ -534,6 +534,9 @@ interface ServiceVariant {
     monthly?: number;
     nightly?: number;
   };
+  // Restrictions chiens (au niveau de la formule)
+  dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
+  acceptedDogSizes?: ("small" | "medium" | "large")[];
 }
 
 interface ServiceOption {
@@ -554,6 +557,10 @@ interface ServiceDetail {
   categoryIcon?: string;
   categoryDescription?: string;
   animalTypes: string[];
+  // Tailles de chiens acceptées
+  acceptedDogSizes?: ("small" | "medium" | "large")[];
+  // Chiens catégorisés (législation française)
+  dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
   variants: ServiceVariant[];
   options: ServiceOption[];
   // Overnight stay support
@@ -565,6 +572,9 @@ interface ServiceDetail {
   serviceLocation?: "announcer_home" | "client_home" | "both";
   // Duration-based blocking (from category settings)
   enableDurationBasedBlocking?: boolean;
+  // Pricing configuration from category
+  allowedPriceUnits?: ("hour" | "half_day" | "day" | "week" | "month")[];
+  clientBillingMode?: "exact_hourly" | "round_half_day" | "round_full_day";
   // Price range for positioning indicator
   priceRange?: { min: number; max: number; avg: number };
 }
@@ -637,6 +647,10 @@ export const getAnnouncerServiceDetails = query({
         categoryIcon: categoryData?.icon,
         categoryDescription: categoryData?.description,
         animalTypes: service.animalTypes,
+        // Tailles de chiens acceptées
+        acceptedDogSizes: service.acceptedDogSizes as ("small" | "medium" | "large")[] | undefined,
+        // Chiens catégorisés (législation française)
+        dogCategoryAcceptance: service.dogCategoryAcceptance as "none" | "cat1" | "cat2" | "both" | undefined,
         // Overnight fields from service
         allowOvernightStay: service.allowOvernightStay,
         dayStartTime: service.dayStartTime,
@@ -646,6 +660,9 @@ export const getAnnouncerServiceDetails = query({
         serviceLocation: service.serviceLocation as "announcer_home" | "client_home" | "both" | undefined,
         // Duration-based blocking (from category settings)
         enableDurationBasedBlocking: categoryData?.enableDurationBasedBlocking,
+        // Pricing configuration from category
+        allowedPriceUnits: categoryData?.allowedPriceUnits as ("hour" | "half_day" | "day" | "week" | "month")[] | undefined,
+        clientBillingMode: categoryData?.clientBillingMode as ("exact_hourly" | "round_half_day" | "round_full_day") | undefined,
         // Price range
         priceRange,
         variants: variants.map((v) => ({
@@ -669,6 +686,9 @@ export const getAnnouncerServiceDetails = query({
           animalTypes: v.animalTypes,
           // Max animals for collective sessions
           maxAnimalsPerSession: v.maxAnimalsPerSession,
+          // Restrictions chiens (au niveau de la formule)
+          dogCategoryAcceptance: v.dogCategoryAcceptance as "none" | "cat1" | "cat2" | "both" | undefined,
+          acceptedDogSizes: v.acceptedDogSizes as ("small" | "medium" | "large")[] | undefined,
         })),
         options: options.map((o) => ({
           id: o._id,

@@ -93,6 +93,9 @@ export interface FormuleData {
     monthly?: number;  // Prix au mois en centimes
     nightly?: number;  // Prix de la nuit en centimes
   } | null;
+  // Restrictions chiens (au niveau de la formule)
+  dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
+  acceptedDogSizes?: ("small" | "medium" | "large")[];
 }
 
 export interface OptionData {

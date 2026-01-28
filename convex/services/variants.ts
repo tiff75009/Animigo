@@ -164,6 +164,18 @@ export const addVariant = mutation({
       v.literal("both")
     )), // Lieu de prestation (si collective, forcé à announcer_home)
     animalTypes: v.optional(v.array(v.string())), // Animaux acceptés pour cette formule
+    // Restrictions chiens
+    dogCategoryAcceptance: v.optional(v.union(
+      v.literal("none"),
+      v.literal("cat1"),
+      v.literal("cat2"),
+      v.literal("both")
+    )),
+    acceptedDogSizes: v.optional(v.array(v.union(
+      v.literal("small"),
+      v.literal("medium"),
+      v.literal("large")
+    ))),
     price: v.number(),
     priceUnit: v.union(
       v.literal("hour"),
@@ -218,6 +230,8 @@ export const addVariant = mutation({
       maxAnimalsPerSession: args.maxAnimalsPerSession,
       serviceLocation: effectiveLocation,
       animalTypes: args.animalTypes,
+      dogCategoryAcceptance: args.dogCategoryAcceptance,
+      acceptedDogSizes: args.acceptedDogSizes,
       price: args.price,
       priceUnit: args.priceUnit,
       pricing: args.pricing,
@@ -266,6 +280,18 @@ export const updateVariant = mutation({
       v.literal("both")
     )), // Lieu de prestation
     animalTypes: v.optional(v.array(v.string())), // Animaux acceptés
+    // Restrictions chiens
+    dogCategoryAcceptance: v.optional(v.union(
+      v.literal("none"),
+      v.literal("cat1"),
+      v.literal("cat2"),
+      v.literal("both")
+    )),
+    acceptedDogSizes: v.optional(v.array(v.union(
+      v.literal("small"),
+      v.literal("medium"),
+      v.literal("large")
+    ))),
     price: v.optional(v.number()),
     priceUnit: v.optional(
       v.union(
@@ -318,6 +344,8 @@ export const updateVariant = mutation({
       updates.serviceLocation = "announcer_home";
     }
     if (args.animalTypes !== undefined) updates.animalTypes = args.animalTypes;
+    if (args.dogCategoryAcceptance !== undefined) updates.dogCategoryAcceptance = args.dogCategoryAcceptance;
+    if (args.acceptedDogSizes !== undefined) updates.acceptedDogSizes = args.acceptedDogSizes;
     if (args.price !== undefined) updates.price = args.price;
     if (args.priceUnit !== undefined) updates.priceUnit = args.priceUnit;
     if (args.pricing !== undefined) updates.pricing = args.pricing;

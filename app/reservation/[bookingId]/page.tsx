@@ -554,9 +554,9 @@ export default function ReservationPage({
     { bookingId: bookingId as Id<"pendingBookings"> }
   );
 
-  // Récupérer le taux de commission basé sur le type d'annonceur
-  const commissionData = useQuery(
-    api.admin.commissions.getCommissionRate,
+  // Récupérer la config pricing (commission, TVA, frais Stripe) basé sur le type d'annonceur
+  const pricingConfig = useQuery(
+    api.admin.commissions.getPricingConfig,
     bookingData?.announcer?.statusType
       ? { announcerType: bookingData.announcer.statusType }
       : "skip"
@@ -730,10 +730,97 @@ export default function ReservationPage({
 
   const isMultiDay = bookingData?.dates.endDate !== bookingData?.dates.startDate;
 
-  // Calculer la commission
-  const commissionRate = commissionData?.rate ?? 0;
-  const commissionAmount = Math.round((totalAmount * commissionRate) / 100);
-  const totalWithCommission = totalAmount + commissionAmount;
+  // Calculer les infos de facturation (jours/demi-journées)
+  const billingInfo = (() => {
+    if (!bookingData?.dates || !priceCalculation) return null;
+
+    const dayStartTime = bookingData.service.dayStartTime || announcerPreferences?.acceptReservationsFrom || "08:00";
+    const dayEndTime = bookingData.service.dayEndTime || announcerPreferences?.acceptReservationsTo || "18:00";
+
+    // Calculer les heures de début/fin de journée
+    const dayStartHour = parseInt(dayStartTime.split(":")[0]);
+    const dayEndHour = parseInt(dayEndTime.split(":")[0]);
+    const midDayHour = Math.floor((dayStartHour + dayEndHour) / 2);
+
+    // Déterminer si premier/dernier jour est une demi-journée
+    let firstDayIsHalfDay = false;
+    let lastDayIsHalfDay = false;
+
+    if (bookingData.dates.startTime) {
+      const startHour = parseInt(bookingData.dates.startTime.split(":")[0]);
+      // Si on commence après la mi-journée, c'est une demi-journée
+      if (startHour >= midDayHour) {
+        firstDayIsHalfDay = true;
+      }
+    }
+
+    if (bookingData.dates.endTime && isMultiDay) {
+      const endHour = parseInt(bookingData.dates.endTime.split(":")[0]);
+      // Si on finit avant la mi-journée, c'est une demi-journée
+      if (endHour <= midDayHour) {
+        lastDayIsHalfDay = true;
+      }
+    }
+
+    // Calculer le nombre de journées complètes et demi-journées
+    let fullDays = 0;
+    let halfDays = 0;
+
+    if (daysCount === 1) {
+      // Un seul jour
+      if (firstDayIsHalfDay) {
+        halfDays = 1;
+      } else {
+        fullDays = 1;
+      }
+    } else if (daysCount > 1) {
+      // Multi-jours
+      const middleDays = daysCount - 2;
+
+      // Premier jour
+      if (firstDayIsHalfDay) {
+        halfDays++;
+      } else {
+        fullDays++;
+      }
+
+      // Jours intermédiaires (tous complets)
+      fullDays += middleDays;
+
+      // Dernier jour
+      if (lastDayIsHalfDay) {
+        halfDays++;
+      } else {
+        fullDays++;
+      }
+    }
+
+    return {
+      billingUnit: "day",
+      fullDays,
+      halfDays,
+      firstDayIsHalfDay,
+      lastDayIsHalfDay,
+      dayStartTime,
+      dayEndTime,
+    };
+  })();
+
+  // Calculer les frais (commission plateforme + frais de paiement)
+  const commissionRate = pricingConfig?.commissionRate ?? 15;
+  const stripeFeeRate = pricingConfig?.stripeFeeRate ?? 3;
+  const announcerStatusType = bookingData?.announcer?.statusType ?? "particulier";
+
+  // Prix HT (ce que reçoit l'annonceur)
+  const baseAmountHT = totalAmount;
+  // Commission plateforme
+  const platformCommission = Math.round((baseAmountHT * commissionRate) / 100);
+  // Total avant frais de paiement
+  const totalBeforePaymentFees = baseAmountHT + platformCommission;
+  // Frais de gestion de paiement
+  const paymentFees = Math.round((totalBeforePaymentFees * stripeFeeRate) / 100);
+  // Total final TTC
+  const totalWithCommission = totalBeforePaymentFees + paymentFees;
 
   // Toggle option selection
   const toggleOption = (optionId: string) => {
@@ -1705,20 +1792,27 @@ export default function ReservationPage({
                             <span>{formatShortDate(bookingData.dates.startDate)}</span>
                           )}
 
-                          {/* Durée */}
-                          {priceCalculation && (daysCount > 1 || priceCalculation.firstDayHours > 0) && (
+                          {/* Durée - affichage jours/demi-journées */}
+                          {priceCalculation && (daysCount >= 1 || priceCalculation.firstDayHours > 0) && (
                             <div className="flex items-center gap-1 mt-1.5 text-xs text-text-light">
                               <Clock className="w-3 h-3" />
-                              {daysCount > 1 ? (
-                                <span>
-                                  {daysCount} jour{daysCount > 1 ? "s" : ""}
-                                  {priceCalculation.firstDayHours + priceCalculation.lastDayHours + (priceCalculation.fullDays * 8) > 0 && (
-                                    <> · {formatHoursDisplay(priceCalculation.firstDayHours + priceCalculation.lastDayHours + (priceCalculation.fullDays * 8))} au total</>
-                                  )}
-                                </span>
-                              ) : priceCalculation.firstDayHours > 0 ? (
-                                <span>Durée : {formatHoursDisplay(priceCalculation.firstDayHours)}</span>
-                              ) : null}
+                              <span>
+                                {billingInfo && (billingInfo.fullDays > 0 || billingInfo.halfDays > 0) ? (
+                                  <>
+                                    {billingInfo.fullDays > 0 && `${billingInfo.fullDays} journée${billingInfo.fullDays > 1 ? "s" : ""}`}
+                                    {billingInfo.fullDays > 0 && billingInfo.halfDays > 0 && " + "}
+                                    {billingInfo.halfDays > 0 && `${billingInfo.halfDays} demi-journée${billingInfo.halfDays > 1 ? "s" : ""}`}
+                                    {priceCalculation.nights > 0 && ` • ${priceCalculation.nights} nuit${priceCalculation.nights > 1 ? "s" : ""}`}
+                                  </>
+                                ) : daysCount > 1 ? (
+                                  <>
+                                    {daysCount} jour{daysCount > 1 ? "s" : ""}
+                                    {priceCalculation.nights > 0 && ` • ${priceCalculation.nights} nuit${priceCalculation.nights > 1 ? "s" : ""}`}
+                                  </>
+                                ) : priceCalculation.firstDayHours > 0 ? (
+                                  `Durée : ${formatHoursDisplay(priceCalculation.firstDayHours)}`
+                                ) : null}
+                              </span>
                             </div>
                           )}
                         </div>
@@ -1729,14 +1823,11 @@ export default function ReservationPage({
 
                 {/* Prix - Détail adapté selon le type de formule */}
                 <div className="pt-4">
-                  {/* Formule collective ou multi-séances */}
+                  {/* Formule collective ou multi-séances - Prix HT */}
                   {(isCollectiveFormula || isMultiSessionFormula) && bookingData.variant && (() => {
-                    const withCommission = (amount: number) => Math.round(amount * (1 + commissionRate / 100));
-                    const variantPriceWithComm = withCommission(bookingData.variant.price);
                     const basePrice = isCollectiveFormula
                       ? bookingData.variant.price * numberOfSessions * effectiveAnimalCount
                       : bookingData.variant.price * numberOfSessions;
-                    const basePriceWithComm = withCommission(basePrice);
 
                     return (
                       <div className={`rounded-xl p-4 space-y-3 mb-3 ${isCollectiveFormula ? "bg-purple-50" : "bg-primary/5"}`}>
@@ -1750,83 +1841,109 @@ export default function ReservationPage({
                               </span>
                             </div>
                             <p className="text-xs text-gray-500 ml-6">
-                              └ {formatPrice(variantPriceWithComm)} × {numberOfSessions} séance{numberOfSessions > 1 ? "s" : ""}
+                              └ {formatPrice(bookingData.variant.price)} × {numberOfSessions} séance{numberOfSessions > 1 ? "s" : ""}
                               {isCollectiveFormula && effectiveAnimalCount > 1 && ` × ${effectiveAnimalCount} animaux`}
                             </p>
                           </div>
                           <span className={`font-bold text-lg ${isCollectiveFormula ? "text-purple-700" : "text-primary"}`}>
-                            {formatPrice(basePriceWithComm)}
+                            {formatPrice(basePrice)}
                           </span>
                         </div>
                       </div>
                     );
                   })()}
 
-                  {/* Formule uni-séance (calcul smart) */}
+                  {/* Formule uni-séance - Prix HT avec détail jours/demi-journées */}
                   {priceCalculation && !isCollectiveFormula && !isMultiSessionFormula && (() => {
-                    const withCommission = (amount: number) => Math.round(amount * (1 + commissionRate / 100));
-                    const firstDayWithComm = withCommission(priceCalculation.firstDayAmount);
-                    const fullDaysWithComm = withCommission(priceCalculation.fullDaysAmount);
-                    const dailyRateWithComm = withCommission(priceCalculation.dailyRate);
-                    const hourlyRateWithComm = withCommission(priceCalculation.hourlyRate);
-                    const lastDayWithComm = withCommission(priceCalculation.lastDayAmount);
-                    const nightlyRateWithComm = withCommission(priceCalculation.nightlyRate);
-                    const nightsAmountWithComm = withCommission(priceCalculation.nightsAmount);
+                    const dailyRate = priceCalculation.dailyRate;
+                    const halfDayRate = Math.round(dailyRate / 2);
+                    const dayStartDisplay = billingInfo?.dayStartTime?.replace(":", "h") || "8h00";
+                    const dayEndDisplay = billingInfo?.dayEndTime?.replace(":", "h") || "18h00";
 
                     return (
                     <div className="bg-gray-50 rounded-xl p-3 space-y-2 mb-3">
-                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Détail des tarifs</p>
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Détail des tarifs HT</p>
 
-                      {/* Multi-jours */}
-                      {isMultiDay ? (
+                      {/* Affichage avec jours/demi-journées si disponible */}
+                      {billingInfo && (billingInfo.fullDays > 0 || billingInfo.halfDays > 0) ? (
+                        <div className="space-y-1.5">
+                          {daysCount === 1 ? (
+                            // Un seul jour
+                            <div className="flex justify-between text-sm">
+                              <span className="text-text-light">
+                                └ {billingInfo.firstDayIsHalfDay ? "Demi-journée" : "Journée complète"} ({bookingData.dates.startTime ? formatTime(bookingData.dates.startTime) : dayStartDisplay} → {bookingData.dates.endTime ? formatTime(bookingData.dates.endTime) : dayEndDisplay})
+                              </span>
+                              <span className="font-medium">{formatPrice(billingInfo.firstDayIsHalfDay ? halfDayRate : dailyRate)}</span>
+                            </div>
+                          ) : (
+                            // Multi-jours
+                            <>
+                              {/* Premier jour */}
+                              <div className="flex justify-between text-sm">
+                                <span className="text-text-light">
+                                  └ 1er jour : {billingInfo.firstDayIsHalfDay ? "demi-journée" : "journée"} ({bookingData.dates.startTime ? formatTime(bookingData.dates.startTime) : dayStartDisplay} → {dayEndDisplay})
+                                </span>
+                                <span className="font-medium">{formatPrice(billingInfo.firstDayIsHalfDay ? halfDayRate : dailyRate)}</span>
+                              </div>
+
+                              {/* Jours intermédiaires */}
+                              {daysCount > 2 && (
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-text-light">
+                                    └ {daysCount - 2} jour{daysCount - 2 > 1 ? "s" : ""} complet{daysCount - 2 > 1 ? "s" : ""} ({dayStartDisplay} → {dayEndDisplay})
+                                  </span>
+                                  <span className="font-medium">{formatPrice(dailyRate * (daysCount - 2))}</span>
+                                </div>
+                              )}
+
+                              {/* Dernier jour */}
+                              <div className="flex justify-between text-sm">
+                                <span className="text-text-light">
+                                  └ Dernier jour : {billingInfo.lastDayIsHalfDay ? "demi-journée" : "journée"} ({dayStartDisplay} → {bookingData.dates.endTime ? formatTime(bookingData.dates.endTime) : dayEndDisplay})
+                                </span>
+                                <span className="font-medium">{formatPrice(billingInfo.lastDayIsHalfDay ? halfDayRate : dailyRate)}</span>
+                              </div>
+                            </>
+                          )}
+
+                          {/* Ligne récap tarifs */}
+                          <div className="flex justify-between pt-1 border-t border-gray-200/50 mt-1 text-xs text-gray-500">
+                            <span>
+                              {billingInfo.fullDays > 0 && `${billingInfo.fullDays} journée${billingInfo.fullDays > 1 ? "s" : ""} × ${formatPrice(dailyRate)}`}
+                              {billingInfo.fullDays > 0 && billingInfo.halfDays > 0 && " + "}
+                              {billingInfo.halfDays > 0 && `${billingInfo.halfDays} demi-journée${billingInfo.halfDays > 1 ? "s" : ""} × ${formatPrice(halfDayRate)}`}
+                            </span>
+                          </div>
+                        </div>
+                      ) : isMultiDay ? (
+                        // Affichage standard multi-jours (fallback)
                         <>
-                          {/* Premier jour */}
                           <div className="flex justify-between text-sm">
                             <span className="text-text-light flex items-center gap-2">
                               <Sun className="w-4 h-4 text-amber-500" />
                               <span>
                                 {formatShortDate(bookingData.dates.startDate)}
                                 <span className="text-gray-400 ml-1">
-                                  {bookingData.dates.startTime ? (
-                                    `(${formatTime(bookingData.dates.startTime)} → 20h · ${formatHoursDisplay(priceCalculation.firstDayHours)})`
-                                  ) : (
-                                    `(${formatHoursDisplay(priceCalculation.firstDayHours)})`
-                                  )}
+                                  ({bookingData.dates.startTime ? `${formatTime(bookingData.dates.startTime)} → ${dayEndDisplay}` : ""})
                                 </span>
                               </span>
                             </span>
-                            <span className="font-medium">{formatPrice(firstDayWithComm)}</span>
+                            <span className="font-medium">{formatPrice(priceCalculation.firstDayAmount)}</span>
                           </div>
 
-                          {/* Jours complets intermédiaires */}
-                          {priceCalculation.fullDays > 0 && (() => {
-                            const startDateObj = new Date(bookingData.dates.startDate);
-                            const firstMiddleDay = new Date(startDateObj);
-                            firstMiddleDay.setDate(startDateObj.getDate() + 1);
-                            const lastMiddleDay = new Date(firstMiddleDay);
-                            lastMiddleDay.setDate(firstMiddleDay.getDate() + priceCalculation.fullDays - 1);
-
-                            return (
-                              <div className="flex justify-between text-sm">
-                                <span className="text-text-light flex items-center gap-2">
-                                  <Sun className="w-4 h-4 text-amber-500" />
-                                  <span>
-                                    {priceCalculation.fullDays === 1 ? (
-                                      formatShortDate(firstMiddleDay.toISOString())
-                                    ) : (
-                                      `${formatShortDate(firstMiddleDay.toISOString())} → ${formatShortDate(lastMiddleDay.toISOString())}`
-                                    )}
-                                    <span className="text-gray-400 ml-1">
-                                      ({priceCalculation.fullDays} jour{priceCalculation.fullDays > 1 ? "s" : ""} · {formatPrice(dailyRateWithComm)}/jour)
-                                    </span>
-                                  </span>
+                          {priceCalculation.fullDays > 0 && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-text-light flex items-center gap-2">
+                                <Sun className="w-4 h-4 text-amber-500" />
+                                <span>
+                                  {priceCalculation.fullDays} jour{priceCalculation.fullDays > 1 ? "s" : ""} complet{priceCalculation.fullDays > 1 ? "s" : ""}
+                                  <span className="text-gray-400 ml-1">({formatPrice(dailyRate)}/jour)</span>
                                 </span>
-                                <span className="font-medium">{formatPrice(fullDaysWithComm)}</span>
-                              </div>
-                            );
-                          })()}
+                              </span>
+                              <span className="font-medium">{formatPrice(priceCalculation.fullDaysAmount)}</span>
+                            </div>
+                          )}
 
-                          {/* Dernier jour */}
                           {priceCalculation.lastDayHours > 0 && (
                             <div className="flex justify-between text-sm">
                               <span className="text-text-light flex items-center gap-2">
@@ -1834,20 +1951,16 @@ export default function ReservationPage({
                                 <span>
                                   {formatShortDate(bookingData.dates.endDate)}
                                   <span className="text-gray-400 ml-1">
-                                    {bookingData.dates.endTime ? (
-                                      `(8h → ${formatTime(bookingData.dates.endTime)} · ${formatHoursDisplay(priceCalculation.lastDayHours)})`
-                                    ) : (
-                                      `(${formatHoursDisplay(priceCalculation.lastDayHours)})`
-                                    )}
+                                    ({dayStartDisplay} → {bookingData.dates.endTime ? formatTime(bookingData.dates.endTime) : ""})
                                   </span>
                                 </span>
                               </span>
-                              <span className="font-medium">{formatPrice(lastDayWithComm)}</span>
+                              <span className="font-medium">{formatPrice(priceCalculation.lastDayAmount)}</span>
                             </div>
                           )}
                         </>
                       ) : (
-                        /* Même jour */
+                        // Même jour (fallback)
                         priceCalculation.firstDayHours > 0 && (
                           <div className="flex justify-between text-sm">
                             <span className="text-text-light flex items-center gap-2">
@@ -1858,35 +1971,20 @@ export default function ReservationPage({
                                     {formatTime(bookingData.dates.startTime)} → {formatTime(bookingData.dates.endTime)}
                                     <span className="text-gray-400 ml-1">
                                       ({formatHoursDisplay(priceCalculation.firstDayHours)}
-                                      {priceCalculation.firstDayIsFullDay || priceCalculation.firstDayAmount === priceCalculation.dailyRate
-                                        ? ` · ${formatPrice(dailyRateWithComm)}/jour`
-                                        : priceCalculation.hourlyRate > 0
-                                          ? ` · ${formatPrice(hourlyRateWithComm)}/h`
-                                          : ""
-                                      })
+                                      {priceCalculation.hourlyRate > 0 && ` · ${formatPrice(priceCalculation.hourlyRate)}/h`})
                                     </span>
                                   </>
                                 ) : (
-                                  <>
-                                    {formatHoursDisplay(priceCalculation.firstDayHours)} de prestation
-                                    <span className="text-gray-400 ml-1">
-                                      ({priceCalculation.firstDayIsFullDay || priceCalculation.firstDayAmount === priceCalculation.dailyRate
-                                        ? `${formatPrice(dailyRateWithComm)}/jour`
-                                        : priceCalculation.hourlyRate > 0
-                                          ? `${formatPrice(hourlyRateWithComm)}/h`
-                                          : ""
-                                      })
-                                    </span>
-                                  </>
+                                  <>{formatHoursDisplay(priceCalculation.firstDayHours)} de prestation</>
                                 )}
                               </span>
                             </span>
-                            <span className="font-medium">{formatPrice(firstDayWithComm)}</span>
+                            <span className="font-medium">{formatPrice(priceCalculation.firstDayAmount)}</span>
                           </div>
                         )
                       )}
 
-                      {/* Nuits - prix avec commission incluse */}
+                      {/* Nuits - prix HT */}
                       {bookingData.overnight?.includeOvernightStay && priceCalculation.nights > 0 && (
                         <div className="flex justify-between text-sm">
                           <span className="text-indigo-700 flex items-center gap-2">
@@ -1895,19 +1993,19 @@ export default function ReservationPage({
                               {priceCalculation.nights} nuit{priceCalculation.nights > 1 ? "s" : ""}
                               {priceCalculation.nightlyRate > 0 && (
                                 <span className="text-indigo-400 ml-1">
-                                  ({formatPrice(nightlyRateWithComm)}/nuit)
+                                  ({formatPrice(priceCalculation.nightlyRate)}/nuit)
                                 </span>
                               )}
                             </span>
                           </span>
-                          <span className="font-medium text-indigo-700">+{formatPrice(nightsAmountWithComm)}</span>
+                          <span className="font-medium text-indigo-700">+{formatPrice(priceCalculation.nightsAmount)}</span>
                         </div>
                       )}
                     </div>
                   );
                   })()}
 
-                  {/* Options - prix avec commission incluse */}
+                  {/* Options - prix HT */}
                   {selectedOptionIds.length > 0 && (
                     <div className="space-y-2 mb-3">
                       <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Options</p>
@@ -1916,7 +2014,6 @@ export default function ReservationPage({
                           (o: ServiceOption) => o.id === optId
                         );
                         if (!opt) return null;
-                        const optPriceWithComm = Math.round(opt.price * (1 + commissionRate / 100));
                         return (
                           <div
                             key={optId}
@@ -1926,24 +2023,52 @@ export default function ReservationPage({
                               <span className="w-4 h-4 flex items-center justify-center text-xs">✓</span>
                               {opt.name}
                             </span>
-                            <span className="font-medium">+{formatPrice(optPriceWithComm)}</span>
+                            <span className="font-medium">+{formatPrice(opt.price)}</span>
                           </div>
                         );
                       })}
                     </div>
                   )}
 
-                  {/* Total - frais de service inclus */}
-                  <div className="pt-3 border-t border-gray-200 mt-2">
-                    <div className="flex justify-between text-lg font-bold">
-                      <span>Total à payer</span>
-                      <span className="text-primary">
+                  {/* Récapitulatif prix HT + Commissions + Total */}
+                  <div className="bg-gray-100 rounded-xl p-4 space-y-2">
+                    {/* Prix prestataire HT */}
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Prix prestataire HT</span>
+                      <span className="font-medium text-foreground">
+                        {formatPrice(baseAmountHT)}
+                      </span>
+                    </div>
+
+                    {/* Mention TVA pour micro-entrepreneurs */}
+                    {announcerStatusType === "micro_entrepreneur" && (
+                      <div className="text-xs text-gray-500 italic">
+                        TVA non applicable - Autoliquidation de TVA (art. 293 B du CGI)
+                      </div>
+                    )}
+
+                    {/* Commission plateforme */}
+                    <div className="flex justify-between text-sm text-gray-500">
+                      <span>Commission plateforme ({commissionRate}%)</span>
+                      <span>{formatPrice(platformCommission)}</span>
+                    </div>
+
+                    {/* Frais de gestion de paiement */}
+                    <div className="flex justify-between text-sm text-gray-500">
+                      <span>Frais de gestion paiement ({stripeFeeRate}%)</span>
+                      <span>{formatPrice(paymentFees)}</span>
+                    </div>
+
+                    {/* Ligne de séparation */}
+                    <div className="border-t-2 border-primary/20 my-2" />
+
+                    {/* Total à payer */}
+                    <div className="flex justify-between">
+                      <span className="font-bold text-lg text-foreground">Total à payer</span>
+                      <span className="font-bold text-xl text-primary">
                         {formatPrice(totalWithCommission)}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-400 mt-1 text-right">
-                      Frais de service inclus
-                    </p>
                   </div>
                 </div>
 

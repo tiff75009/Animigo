@@ -28,6 +28,9 @@ export interface ServiceVariant {
   };
   includedFeatures?: string[];
   isActive?: boolean;
+  // Restrictions chiens (au niveau de la formule)
+  dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
+  acceptedDogSizes?: ("small" | "medium" | "large")[];
 }
 
 export interface PriceRange {
@@ -43,15 +46,31 @@ export interface ServiceDetail {
   categoryIcon?: string;
   categoryDescription?: string;
   animalTypes: string[];
+  // Tailles de chiens acceptées
+  acceptedDogSizes?: ("small" | "medium" | "large")[];
+  // Chiens catégorisés (législation française)
+  dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
   allowOvernightStay?: boolean;
   dayStartTime?: string;
   dayEndTime?: string;
   overnightPrice?: number;
   serviceLocation?: "announcer_home" | "client_home" | "both";
   enableDurationBasedBlocking?: boolean;
+  // Pricing configuration from category
+  allowedPriceUnits?: ("hour" | "half_day" | "day" | "week" | "month")[];
+  clientBillingMode?: "exact_hourly" | "round_half_day" | "round_full_day";
   priceRange?: PriceRange;
   variants: ServiceVariant[];
   options: Array<{ id: string; name: string; price: number; priceType?: string; isActive?: boolean }>;
+}
+
+// Type pour les informations de facturation (demi-journées, journées)
+export interface BillingInfo {
+  billingUnit?: "hour" | "half_day" | "day" | "fixed";
+  fullDays?: number;
+  halfDays?: number;
+  firstDayIsHalfDay?: boolean;
+  lastDayIsHalfDay?: boolean;
 }
 
 interface FormulaStepProps {
@@ -69,6 +88,7 @@ interface FormulaStepProps {
   includeOvernightStay?: boolean;
   commissionRate?: number;
   preSelectedFromSidebar?: boolean;
+  billingInfo?: BillingInfo;
   onSelect: (serviceId: string, variantId: string, autoServiceLocation?: "announcer_home" | "client_home" | null) => void;
   onServiceLocationSelect: (location: "announcer_home" | "client_home") => void;
 }
@@ -110,6 +130,21 @@ const animalLabels: Record<string, { emoji: string; label: string }> = {
   reptile: { emoji: "🦎", label: "Reptile" },
   nac: { emoji: "🐾", label: "NAC" },
   autre: { emoji: "🐾", label: "Autre" },
+};
+
+// Labels pour les tailles de chiens
+const dogSizeLabels: Record<string, { emoji: string; label: string }> = {
+  small: { emoji: "🐕", label: "Petit (<10kg)" },
+  medium: { emoji: "🐕", label: "Moyen (10-25kg)" },
+  large: { emoji: "🐕", label: "Grand (>25kg)" },
+};
+
+// Labels pour les catégories de chiens (législation française)
+const dogCategoryLabels: Record<string, { emoji: string; label: string; description: string }> = {
+  none: { emoji: "🚫", label: "Chiens non catégorisés uniquement", description: "N'accepte pas les chiens de catégorie 1 ou 2" },
+  cat1: { emoji: "⚠️", label: "Catégorie 1 acceptée", description: "Accepte les chiens d'attaque (cat. 1)" },
+  cat2: { emoji: "⚠️", label: "Catégorie 2 acceptée", description: "Accepte les chiens de garde/défense (cat. 2)" },
+  both: { emoji: "✅", label: "Catégories 1 & 2 acceptées", description: "Accepte tous les chiens catégorisés" },
 };
 
 // Composant panneau de détails de la formule sélectionnée
@@ -262,6 +297,50 @@ function SelectedFormuleDetails({
                   );
                 })}
               </div>
+              {/* Restrictions chiens (priorité variant, fallback service) */}
+              {(() => {
+                if (!acceptedAnimals.includes("chien")) return null;
+
+                const dogSizes = variant.acceptedDogSizes ?? service.acceptedDogSizes ?? ["small", "medium", "large"];
+                const dogCategory = variant.dogCategoryAcceptance ?? service.dogCategoryAcceptance ?? "none";
+                const allSizes = dogSizes.length === 3;
+
+                return (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {/* Tailles */}
+                    {allSizes ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">
+                        🐕 Toutes tailles
+                      </span>
+                    ) : (
+                      dogSizes.map((size) => {
+                        const info = dogSizeLabels[size] || { emoji: "🐕", label: size };
+                        return (
+                          <span
+                            key={size}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full"
+                          >
+                            {info.emoji} {info.label}
+                          </span>
+                        );
+                      })
+                    )}
+                    {/* Catégories */}
+                    <span className={cn(
+                      "inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full",
+                      dogCategory === "none" && "bg-gray-100 text-gray-600",
+                      dogCategory === "cat1" && "bg-orange-100 text-orange-700",
+                      dogCategory === "cat2" && "bg-orange-100 text-orange-700",
+                      dogCategory === "both" && "bg-green-100 text-green-700"
+                    )}>
+                      {dogCategory === "none" && "Cat. non acceptées"}
+                      {dogCategory === "cat1" && "✓ Cat. 1"}
+                      {dogCategory === "cat2" && "✓ Cat. 2"}
+                      {dogCategory === "both" && "✓ Cat. 1 & 2"}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -386,6 +465,7 @@ export default function FormulaStep({
   includeOvernightStay = false,
   commissionRate = 15,
   preSelectedFromSidebar = false,
+  billingInfo,
   onSelect,
   onServiceLocationSelect,
 }: FormulaStepProps) {
@@ -535,29 +615,6 @@ export default function FormulaStep({
                 </div>
               )}
 
-              {/* Animaux acceptés */}
-              {acceptedAnimals.length > 0 && (
-                <div className="p-2 bg-white/80 rounded-lg sm:col-span-2">
-                  <div className="flex items-center gap-2 mb-1">
-                    <PawPrint className="w-3 h-3 text-amber-600" />
-                    <span className="text-xs font-medium text-foreground">Animaux acceptés</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {acceptedAnimals.map((animal) => {
-                      const info = animalLabels[animal] || { emoji: "🐾", label: animal };
-                      return (
-                        <span
-                          key={animal}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full"
-                        >
-                          {info.emoji} {info.label}
-                        </span>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
               {/* Max animaux par séance (collectif) */}
               {isCollective && selectedVariant.maxAnimalsPerSession && (
                 <div className="p-2 bg-white/80 rounded-lg">
@@ -588,6 +645,75 @@ export default function FormulaStep({
               </div>
             )}
           </div>
+
+          {/* Animaux acceptés - Section séparée pour plus de visibilité */}
+          {acceptedAnimals.length > 0 && (
+            <div className="p-4 bg-amber-50 rounded-xl">
+              <div className="flex items-center gap-2 mb-2">
+                <PawPrint className="w-5 h-5 text-amber-600" />
+                <p className="font-medium text-amber-800">Animaux acceptés</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {acceptedAnimals.map((animal) => {
+                  const info = animalLabels[animal] || { emoji: "🐾", label: animal };
+                  return (
+                    <span
+                      key={animal}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 text-amber-800 text-sm rounded-full font-medium"
+                    >
+                      <span className="text-base">{info.emoji}</span>
+                      {info.label}
+                    </span>
+                  );
+                })}
+              </div>
+              {/* Restrictions chiens (priorité variant, fallback service) */}
+              {(() => {
+                if (!acceptedAnimals.includes("chien")) return null;
+
+                const dogSizes = selectedVariant?.acceptedDogSizes ?? selectedService?.acceptedDogSizes ?? ["small", "medium", "large"];
+                const dogCategory = selectedVariant?.dogCategoryAcceptance ?? selectedService?.dogCategoryAcceptance ?? "none";
+                const allSizes = dogSizes.length === 3;
+
+                return (
+                  <div className="mt-3 pt-3 border-t border-amber-200">
+                    <p className="text-xs text-amber-700 mb-2">🐕 Chiens acceptés :</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {allSizes ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
+                          Toutes tailles
+                        </span>
+                      ) : (
+                        dogSizes.map((size) => {
+                          const info = dogSizeLabels[size] || { emoji: "🐕", label: size };
+                          return (
+                            <span
+                              key={size}
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-amber-200 text-amber-900 text-xs rounded-full"
+                            >
+                              {info.label}
+                            </span>
+                          );
+                        })
+                      )}
+                      <span className={cn(
+                        "inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full font-medium",
+                        dogCategory === "none" && "bg-gray-100 text-gray-600",
+                        dogCategory === "cat1" && "bg-orange-100 text-orange-700",
+                        dogCategory === "cat2" && "bg-orange-100 text-orange-700",
+                        dogCategory === "both" && "bg-green-100 text-green-700"
+                      )}>
+                        {dogCategory === "none" && "Cat. non acceptées"}
+                        {dogCategory === "cat1" && "✓ Cat. 1"}
+                        {dogCategory === "cat2" && "✓ Cat. 2"}
+                        {dogCategory === "both" && "✓ Cat. 1 & 2"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
 
           {/* Options sélectionnées */}
           {selectedOptions.length > 0 && (
@@ -640,11 +766,34 @@ export default function FormulaStep({
                     <span className="capitalize">{formatDateDisplay(selectedEndDate)}</span>
                     {selectedEndTime && <span className="text-purple-600"> à {selectedEndTime}</span>}
                   </p>
-                  {/* Durée : jours et nuits */}
+                  {/* Durée : jours/demi-journées ou jours simples */}
                   <p className="mt-2 text-xs text-purple-500 flex items-center gap-2">
                     <Clock className="w-3 h-3" />
                     <span>
-                      {days} jour{days > 1 ? "s" : ""}
+                      {(() => {
+                        // Si on a des infos de facturation avec demi-journées
+                        const isHalfDayBilling = billingInfo?.billingUnit === "half_day" || billingInfo?.billingUnit === "day" ||
+                          billingInfo?.firstDayIsHalfDay || billingInfo?.lastDayIsHalfDay ||
+                          selectedService?.clientBillingMode === "round_half_day";
+
+                        if (isHalfDayBilling && billingInfo) {
+                          const fullDays = billingInfo.fullDays ?? 0;
+                          const halfDays = billingInfo.halfDays ?? 0;
+
+                          const parts: string[] = [];
+                          if (fullDays > 0) {
+                            parts.push(`${fullDays} journée${fullDays > 1 ? "s" : ""}`);
+                          }
+                          if (halfDays > 0) {
+                            parts.push(`${halfDays} demi-journée${halfDays > 1 ? "s" : ""}`);
+                          }
+
+                          return parts.length > 0 ? parts.join(" + ") : `${days} jour${days > 1 ? "s" : ""}`;
+                        }
+
+                        // Affichage par défaut en jours
+                        return `${days} jour${days > 1 ? "s" : ""}`;
+                      })()}
                       {includeOvernightStay && nights > 0 && (
                         <span className="ml-1">• {nights} nuit{nights > 1 ? "s" : ""}</span>
                       )}
@@ -661,6 +810,16 @@ export default function FormulaStep({
                     <p className="text-sm text-purple-600 mt-1">
                       {selectedTime}
                       {selectedEndTime && ` - ${selectedEndTime}`}
+                    </p>
+                  )}
+                  {/* Durée en demi-journée/journée si applicable */}
+                  {billingInfo && (billingInfo.billingUnit === "half_day" || billingInfo.billingUnit === "day" ||
+                    billingInfo.firstDayIsHalfDay || selectedService?.clientBillingMode === "round_half_day") && (
+                    <p className="mt-2 text-xs text-purple-500 flex items-center gap-2">
+                      <Clock className="w-3 h-3" />
+                      <span>
+                        {billingInfo.firstDayIsHalfDay ? "1 demi-journée" : "1 journée"}
+                      </span>
                     </p>
                   )}
                 </>
@@ -883,6 +1042,80 @@ export default function FormulaStep({
           </div>
         )}
 
+        {/* Animaux acceptés */}
+        {(() => {
+          const currentVariant = selectedService.variants.find(v => v.id === selectedVariantId);
+          const acceptedAnimals = currentVariant?.animalTypes || selectedService.animalTypes || [];
+          if (acceptedAnimals.length === 0) return null;
+          return (
+            <div className="p-4 bg-amber-50 rounded-xl mt-4">
+              <div className="flex items-center gap-2 mb-2">
+                <PawPrint className="w-5 h-5 text-amber-600" />
+                <p className="font-medium text-amber-800">Animaux acceptés</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {acceptedAnimals.map((animal) => {
+                  const info = animalLabels[animal] || { emoji: "🐾", label: animal };
+                  return (
+                    <span
+                      key={animal}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 text-amber-800 text-sm rounded-full font-medium"
+                    >
+                      <span className="text-base">{info.emoji}</span>
+                      {info.label}
+                    </span>
+                  );
+                })}
+              </div>
+              {/* Restrictions chiens (priorité variant, fallback service) */}
+              {(() => {
+                if (!acceptedAnimals.includes("chien")) return null;
+
+                const dogSizes = currentVariant?.acceptedDogSizes ?? selectedService?.acceptedDogSizes ?? ["small", "medium", "large"];
+                const dogCategory = currentVariant?.dogCategoryAcceptance ?? selectedService?.dogCategoryAcceptance ?? "none";
+                const allSizes = dogSizes.length === 3;
+
+                return (
+                  <div className="mt-3 pt-3 border-t border-amber-200">
+                    <p className="text-xs text-amber-700 mb-2">🐕 Chiens acceptés :</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {allSizes ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
+                          Toutes tailles
+                        </span>
+                      ) : (
+                        dogSizes.map((size) => {
+                          const info = dogSizeLabels[size] || { emoji: "🐕", label: size };
+                          return (
+                            <span
+                              key={size}
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-amber-200 text-amber-900 text-xs rounded-full"
+                            >
+                              {info.label}
+                            </span>
+                          );
+                        })
+                      )}
+                      <span className={cn(
+                        "inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full font-medium",
+                        dogCategory === "none" && "bg-gray-100 text-gray-600",
+                        dogCategory === "cat1" && "bg-orange-100 text-orange-700",
+                        dogCategory === "cat2" && "bg-orange-100 text-orange-700",
+                        dogCategory === "both" && "bg-green-100 text-green-700"
+                      )}>
+                        {dogCategory === "none" && "Cat. non acceptées"}
+                        {dogCategory === "cat1" && "✓ Cat. 1"}
+                        {dogCategory === "cat2" && "✓ Cat. 2"}
+                        {dogCategory === "both" && "✓ Cat. 1 & 2"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          );
+        })()}
+
         {/* Choix du lieu de prestation */}
         {selectedService.serviceLocation === "both" && (
           <div className="pt-4 border-t border-gray-200">
@@ -959,13 +1192,73 @@ export default function FormulaStep({
             className="border border-gray-200 rounded-xl overflow-hidden"
           >
             {/* Service Header */}
-            <div className="p-3 bg-gray-50 flex items-center gap-2">
-              {service.categoryIcon && (
-                <span className="text-lg">{service.categoryIcon}</span>
+            <div className="p-3 bg-gray-50">
+              <div className="flex items-center gap-2">
+                {service.categoryIcon && (
+                  <span className="text-lg">{service.categoryIcon}</span>
+                )}
+                <span className="font-semibold text-foreground">
+                  {service.categoryName}
+                </span>
+              </div>
+              {/* Animaux acceptés */}
+              {service.animalTypes && service.animalTypes.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {service.animalTypes.map((animal) => {
+                    const info = animalLabels[animal] || { emoji: "🐾", label: animal };
+                    return (
+                      <span
+                        key={animal}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full"
+                      >
+                        <span>{info.emoji}</span>
+                        {info.label}
+                      </span>
+                    );
+                  })}
+                  {/* Restrictions chiens si chien accepté */}
+                  {service.animalTypes.includes("chien") && (() => {
+                    const dogSizes = service.acceptedDogSizes || ["small", "medium", "large"];
+                    const dogCategory = service.dogCategoryAcceptance || "none";
+                    const allSizes = dogSizes.length === 3;
+
+                    return (
+                      <>
+                        <span className="text-amber-400 mx-1">|</span>
+                        {allSizes ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">
+                            Toutes tailles
+                          </span>
+                        ) : (
+                          dogSizes.map((size) => {
+                            const info = dogSizeLabels[size] || { emoji: "🐕", label: size };
+                            return (
+                              <span
+                                key={size}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-200 text-amber-800 text-xs rounded-full"
+                              >
+                                {info.label}
+                              </span>
+                            );
+                          })
+                        )}
+                        <span className={cn(
+                          "inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full",
+                          dogCategory === "none" && "bg-gray-100 text-gray-600",
+                          dogCategory === "cat1" && "bg-orange-100 text-orange-700",
+                          dogCategory === "cat2" && "bg-orange-100 text-orange-700",
+                          dogCategory === "both" && "bg-green-100 text-green-700"
+                        )}>
+                          {dogCategory === "none" && "Cat. ✗"}
+                          {dogCategory === "cat1" && "Cat. 1 ✓"}
+                          {dogCategory === "cat2" && "Cat. 2 ✓"}
+                          {dogCategory === "both" && "Cat. 1&2 ✓"}
+                        </span>
+                      </>
+                    );
+                  })()}
+                </div>
               )}
-              <span className="font-semibold text-foreground">
-                {service.categoryName}
-              </span>
             </div>
 
             {/* Variants */}

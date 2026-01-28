@@ -232,22 +232,52 @@ export default function SelectableFormuleCard({
                animal}
             </span>
           ))}
-          {/* Chiens catégorisés */}
-          {isGarde && formule.animalTypes?.includes("chien") && dogCategoryAcceptance && (
-            <span className={cn(
-              "px-2 py-0.5 text-xs rounded-full",
-              dogCategoryAcceptance === "none"
-                ? "bg-gray-100 text-gray-500"
-                : "bg-amber-100 text-amber-700"
-            )}>
-              {dogCategoryAcceptance === "none" && "Non catégorisés uniquement"}
-              {dogCategoryAcceptance === "cat1" && "🔶 Cat. 1 acceptée"}
-              {dogCategoryAcceptance === "cat2" && "🔶 Cat. 2 acceptée"}
-              {dogCategoryAcceptance === "both" && "🔶 Cat. 1 & 2 acceptées"}
-            </span>
-          )}
         </div>
       )}
+
+      {/* Restrictions chiens */}
+      {formule.animalTypes?.includes("chien") && (() => {
+        const dogSizes = formule.acceptedDogSizes || ["small", "medium", "large"];
+        const dogCategory = formule.dogCategoryAcceptance || dogCategoryAcceptance || "none";
+        const allSizes = dogSizes.length === 3;
+
+        return (
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            <span className="text-xs text-gray-500">🐕</span>
+            {/* Tailles */}
+            {allSizes ? (
+              <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">
+                Toutes tailles
+              </span>
+            ) : (
+              <>
+                {dogSizes.includes("small") && (
+                  <span className="px-2 py-0.5 bg-green-100 text-green-600 text-xs rounded-full">Petit</span>
+                )}
+                {dogSizes.includes("medium") && (
+                  <span className="px-2 py-0.5 bg-yellow-100 text-yellow-600 text-xs rounded-full">Moyen</span>
+                )}
+                {dogSizes.includes("large") && (
+                  <span className="px-2 py-0.5 bg-orange-100 text-orange-600 text-xs rounded-full">Grand</span>
+                )}
+              </>
+            )}
+            {/* Catégories */}
+            <span className={cn(
+              "px-2 py-0.5 text-xs rounded-full",
+              dogCategory === "none" && "bg-gray-100 text-gray-600",
+              dogCategory === "cat1" && "bg-amber-100 text-amber-700",
+              dogCategory === "cat2" && "bg-orange-100 text-orange-700",
+              dogCategory === "both" && "bg-green-100 text-green-700"
+            )}>
+              {dogCategory === "none" && "Cat. non acceptées"}
+              {dogCategory === "cat1" && "✓ Cat. 1"}
+              {dogCategory === "cat2" && "✓ Cat. 2"}
+              {dogCategory === "both" && "✓ Cat. 1 & 2"}
+            </span>
+          </div>
+        );
+      })()}
 
       {/* Objectifs / Activités proposées */}
       {formule.objectives && formule.objectives.length > 0 && (

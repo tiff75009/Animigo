@@ -1,12 +1,40 @@
 "use client";
 
-import { useState } from "react";
-import { Package, Sparkles, Plus, MousePointerClick, Filter, PawPrint, Check, MapPin, Home, Users, Target, Clock, Info, CalendarDays, Mail, Lock, Loader2, X, LogIn } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Package, Sparkles, Plus, MousePointerClick, Filter, PawPrint, Check, MapPin, Home, Users, Target, Clock, Info, CalendarDays, Mail, Lock, Loader2, X, LogIn, Dog, AlertTriangle, ArrowLeft, ArrowRight, ChevronLeft } from "lucide-react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/app/lib/utils";
+
+// Types pour les étapes desktop
+type DesktopStep = "formule" | "dog" | "animals" | "dates" | "location" | "options";
+
+// Variants pour les animations de transition
+const slideVariants = {
+  enterFromRight: {
+    x: 300,
+    opacity: 0,
+  },
+  enterFromLeft: {
+    x: -300,
+    opacity: 0,
+  },
+  center: {
+    x: 0,
+    opacity: 1,
+  },
+  exitToLeft: {
+    x: -300,
+    opacity: 0,
+  },
+  exitToRight: {
+    x: 300,
+    opacity: 0,
+  },
+};
+import GuestDogVerification from "@/app/reserver/[announcerId]/components/GuestDogVerification";
 import { ServiceData, FormuleData } from "./types";
 import {
   SelectableFormuleCard,
@@ -88,6 +116,19 @@ interface AnnouncerFormulesProps {
   announcerFirstName?: string;
   // Callback quand l'utilisateur se connecte (pour mettre à jour l'état parent)
   onLoginSuccess?: (token: string) => void;
+  // Vérification du chien pour les invités
+  requiresDogVerification?: boolean;
+  guestDogValid?: boolean;
+  guestDogError?: string;
+  dogRestrictions?: {
+    acceptedDogSizes: ("small" | "medium" | "large")[];
+    dogCategoryAcceptance: "none" | "cat1" | "cat2" | "both";
+  };
+  guestDogData?: any;
+  onGuestDogDataChange?: (data: any) => void;
+  onGuestDogValidationChange?: (isValid: boolean, error?: string) => void;
+  // Erreurs de restriction pour les chiens des utilisateurs connectés
+  connectedDogErrors?: Record<string, string>;
   className?: string;
 }
 
@@ -139,8 +180,21 @@ export default function AnnouncerFormules({
   announcerCity,
   announcerFirstName,
   onLoginSuccess,
+  // Vérification du chien pour les invités
+  requiresDogVerification = false,
+  guestDogValid = false,
+  guestDogError,
+  dogRestrictions,
+  guestDogData,
+  onGuestDogDataChange,
+  onGuestDogValidationChange,
+  connectedDogErrors = {},
   className,
 }: AnnouncerFormulesProps) {
+  // État pour l'étape actuelle (desktop)
+  const [desktopStep, setDesktopStep] = useState<DesktopStep>("formule");
+  const [slideDirection, setSlideDirection] = useState<"left" | "right">("right");
+
   // États pour le formulaire de connexion inline
   const [showLoginForm, setShowLoginForm] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
@@ -346,19 +400,708 @@ export default function AnnouncerFormules({
     serviceLocation: formuleServiceLocation,
   });
 
+  // Calculer les étapes disponibles pour la version desktop
+  const availableDesktopSteps = useMemo((): DesktopStep[] => {
+    const steps: DesktopStep[] = ["formule"];
+
+    // Vérification du chien (invités uniquement)
+    if (requiresDogVerification) {
+      steps.push("dog");
+    }
+
+    // Sélection des animaux (utilisateurs connectés uniquement)
+    if (isLoggedIn && userAnimals.length > 0) {
+      steps.push("animals");
+    }
+
+    // Dates/Planning
+    steps.push("dates");
+
+    // Lieu (si choix nécessaire)
+    if (service && (service.serviceLocation === "both" || isRangeMode) && !isCollectiveFormule) {
+      steps.push("location");
+    }
+
+    // Options (si disponibles)
+    if (hasOptions) {
+      steps.push("options");
+    }
+
+    return steps;
+  }, [requiresDogVerification, isLoggedIn, userAnimals.length, service, isRangeMode, isCollectiveFormule, hasOptions]);
+
+  // Index de l'étape actuelle
+  const currentStepIndex = availableDesktopSteps.indexOf(desktopStep);
+
+  // Obtenir le titre de l'étape
+  const getStepTitle = (step: DesktopStep): string => {
+    switch (step) {
+      case "formule": return "Choisissez votre formule";
+      case "dog": return "Vérifiez votre chien";
+      case "animals": return "Sélectionnez vos animaux";
+      case "dates": return "Choisissez vos dates";
+      case "location": return "Lieu de prestation";
+      case "options": return "Options supplémentaires";
+      default: return "";
+    }
+  };
+
+  // Vérifier si on peut passer à l'étape suivante
+  const canProceedToNextStep = (): boolean => {
+    switch (desktopStep) {
+      case "formule":
+        return hasVariantSelected;
+      case "dog":
+        return guestDogValid;
+      case "animals":
+        return hasAnimalsSelected;
+      case "dates":
+        if (isCollectiveFormule) return hasSlotsSelected && selectedSlotsCount >= collectiveNumberOfSessions;
+        if (isMultiSessionIndividual) return hasSessionsSelected && selectedSessionsCount >= individualNumberOfSessions;
+        return hasDateSelected && hasTimeSelected;
+      case "location":
+        return hasLocationSelected;
+      case "options":
+        return true; // Options sont optionnelles
+      default:
+        return false;
+    }
+  };
+
+  // Navigation vers l'étape suivante
+  const goToNextStep = () => {
+    const nextIndex = currentStepIndex + 1;
+    if (nextIndex < availableDesktopSteps.length) {
+      setSlideDirection("right");
+      setDesktopStep(availableDesktopSteps[nextIndex]);
+    }
+  };
+
+  // Navigation vers l'étape précédente
+  const goToPrevStep = () => {
+    const prevIndex = currentStepIndex - 1;
+    if (prevIndex >= 0) {
+      setSlideDirection("left");
+      setDesktopStep(availableDesktopSteps[prevIndex]);
+    }
+  };
+
+  // Automatiquement passer à l'étape suivante quand une formule est sélectionnée
+  useEffect(() => {
+    if (hasVariantSelected && desktopStep === "formule") {
+      // Petit délai pour l'animation
+      const timer = setTimeout(() => {
+        const nextStep = availableDesktopSteps[1]; // L'étape après "formule"
+        if (nextStep) {
+          setSlideDirection("right");
+          setDesktopStep(nextStep);
+        }
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [hasVariantSelected, desktopStep, availableDesktopSteps]);
+
+  // Revenir à l'étape formule si on désélectionne la formule
+  useEffect(() => {
+    if (!hasVariantSelected && desktopStep !== "formule") {
+      setSlideDirection("left");
+      setDesktopStep("formule");
+    }
+  }, [hasVariantSelected, desktopStep]);
+
   return (
     <section className={cn("relative", className)}>
-      <div className="flex gap-4 lg:gap-6">
-        {/* Barre d'étapes verticale - visible uniquement sur desktop */}
-        {/* La largeur s'adapte automatiquement selon l'état replié/déplié */}
-        <div className="hidden lg:block flex-shrink-0 transition-all duration-300">
-          <div className="sticky top-36">
-            <BookingStepBar steps={steps} defaultCollapsed={true} />
+      {/* VERSION DESKTOP - Affichage par étapes avec animations */}
+      <div className="hidden md:block">
+        <div className="flex gap-4 lg:gap-6">
+          {/* Barre d'étapes verticale */}
+          <div className="hidden lg:block flex-shrink-0 transition-all duration-300">
+            <div className="sticky top-36">
+              <BookingStepBar steps={steps} defaultCollapsed={true} />
+            </div>
+          </div>
+
+          {/* Contenu principal - une seule étape à la fois */}
+          <div className="flex-1 min-w-0">
+            {/* En-tête du service - toujours visible */}
+            <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 mb-6">
+              <div className="flex items-start gap-4">
+                <span className="text-3xl">{service.categoryIcon}</span>
+                <div className="flex-1">
+                  <h2 className="text-xl font-bold text-gray-900">{service.categoryName}</h2>
+                  {service.description && (
+                    <p className="text-gray-600 mt-1">{service.description}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Indicateur d'étapes horizontal */}
+            {hasVariantSelected && (
+              <div className="flex items-center gap-2 mb-6 px-2">
+                {availableDesktopSteps.map((step, index) => {
+                  const isActive = desktopStep === step;
+                  const isPast = index < currentStepIndex;
+                  const stepNumber = index + 1;
+
+                  return (
+                    <div key={step} className="flex items-center gap-2 flex-1">
+                      <button
+                        onClick={() => {
+                          if (isPast) {
+                            setSlideDirection("left");
+                            setDesktopStep(step);
+                          }
+                        }}
+                        disabled={!isPast && !isActive}
+                        className={cn(
+                          "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all",
+                          isActive && "bg-primary text-white scale-110",
+                          isPast && "bg-secondary/20 text-secondary cursor-pointer hover:bg-secondary/30",
+                          !isPast && !isActive && "bg-gray-100 text-gray-400"
+                        )}
+                      >
+                        {isPast ? <Check className="w-4 h-4" /> : stepNumber}
+                      </button>
+                      {index < availableDesktopSteps.length - 1 && (
+                        <div className={cn(
+                          "flex-1 h-0.5 transition-colors",
+                          isPast ? "bg-secondary/30" : "bg-gray-200"
+                        )} />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Contenu de l'étape avec animation */}
+            <div className="relative overflow-hidden">
+              <AnimatePresence mode="wait" initial={false}>
+                {/* ÉTAPE: Formules */}
+                {desktopStep === "formule" && (
+                  <motion.div
+                    key="formule"
+                    initial={slideDirection === "right" ? "enterFromRight" : "enterFromLeft"}
+                    animate="center"
+                    exit={slideDirection === "right" ? "exitToLeft" : "exitToRight"}
+                    variants={slideVariants}
+                    transition={{ duration: 0.3, ease: "easeInOut" }}
+                  >
+                    <div className={cn(
+                      "bg-white rounded-2xl p-5 sm:p-6 border-2 transition-colors duration-300 relative overflow-hidden",
+                      hasVariantSelected ? "border-gray-100" : "border-primary/50"
+                    )}>
+                      {!hasVariantSelected && (
+                        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-secondary/5 pointer-events-none" />
+                      )}
+                      <div className="relative">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                            <span className="p-2 rounded-lg bg-primary/10">
+                              <Package className="w-5 h-5 text-primary" />
+                            </span>
+                            Choisissez votre formule
+                          </h3>
+                          {!hasVariantSelected && (
+                            <div className="flex items-center gap-1.5 text-sm text-primary font-medium">
+                              <MousePointerClick className="w-4 h-4" />
+                              <span>Sélectionnez une formule</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Filtres */}
+                        {service.formules.length > 1 && (
+                          <div className="mb-4 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Filter className="w-4 h-4 text-gray-400" />
+                              <span className="text-sm font-medium text-gray-600">Filtrer</span>
+                              {hasActiveFilters && (
+                                <button onClick={resetFilters} className="ml-auto text-xs text-primary hover:underline">
+                                  Réinitialiser
+                                </button>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <select
+                                value={filterSessionType}
+                                onChange={(e) => setFilterSessionType(e.target.value as "all" | "individual" | "collective")}
+                                className={cn(
+                                  "px-3 py-1.5 text-xs rounded-lg border transition-colors",
+                                  filterSessionType !== "all" ? "border-primary bg-primary/5 text-primary" : "border-gray-200 bg-white text-gray-700"
+                                )}
+                              >
+                                <option value="all">Toutes les séances</option>
+                                <option value="individual">👤 Individuel</option>
+                                <option value="collective">👥 Collectif</option>
+                              </select>
+                              <select
+                                value={filterLocation}
+                                onChange={(e) => setFilterLocation(e.target.value as "all" | "announcer_home" | "client_home" | "both")}
+                                className={cn(
+                                  "px-3 py-1.5 text-xs rounded-lg border transition-colors",
+                                  filterLocation !== "all" ? "border-primary bg-primary/5 text-primary" : "border-gray-200 bg-white text-gray-700"
+                                )}
+                              >
+                                <option value="all">Tous les lieux</option>
+                                <option value="announcer_home">🏠 Chez le pro</option>
+                                <option value="client_home">📍 À domicile</option>
+                                <option value="both">🔄 Flexible</option>
+                              </select>
+                              {allAnimalsInFormules.length > 0 && (
+                                <select
+                                  value={filterAnimal}
+                                  onChange={(e) => setFilterAnimal(e.target.value)}
+                                  className={cn(
+                                    "px-3 py-1.5 text-xs rounded-lg border transition-colors",
+                                    filterAnimal !== "all" ? "border-primary bg-primary/5 text-primary" : "border-gray-200 bg-white text-gray-700"
+                                  )}
+                                >
+                                  <option value="all">Tous les animaux</option>
+                                  {allAnimalsInFormules.map(animal => (
+                                    <option key={animal} value={animal}>{animalLabels[animal] || animal}</option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Liste des formules */}
+                        {filteredFormules.length === 0 ? (
+                          <div className="bg-gray-50 rounded-xl p-6 text-center">
+                            <p className="text-gray-500">Aucune formule ne correspond aux filtres</p>
+                            <button onClick={resetFilters} className="mt-2 text-sm text-primary hover:underline">
+                              Réinitialiser les filtres
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {filteredFormules.map((formule, index) => (
+                              <SelectableFormuleCard
+                                key={formule.id.toString()}
+                                formule={formule}
+                                isSelected={selectedVariantId === formule.id.toString()}
+                                isGarde={isGarde}
+                                commissionRate={commissionRate}
+                                onSelect={() => onVariantSelect?.(service.id.toString(), formule.id.toString())}
+                                showAttentionPulse={!hasVariantSelected}
+                                animationDelay={index * 0.1}
+                                allowOvernightStay={service.allowOvernightStay}
+                                overnightPrice={service.overnightPrice}
+                                announcerFirstName={announcerFirstName}
+                                dogCategoryAcceptance={service.dogCategoryAcceptance}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* ÉTAPE: Vérification du chien */}
+                {desktopStep === "dog" && requiresDogVerification && dogRestrictions && onGuestDogDataChange && onGuestDogValidationChange && (
+                  <motion.div
+                    key="dog"
+                    initial={slideDirection === "right" ? "enterFromRight" : "enterFromLeft"}
+                    animate="center"
+                    exit={slideDirection === "right" ? "exitToLeft" : "exitToRight"}
+                    variants={slideVariants}
+                    transition={{ duration: 0.3, ease: "easeInOut" }}
+                  >
+                    <div className={cn(
+                      "bg-white rounded-2xl p-5 sm:p-6 border-2 transition-colors duration-300",
+                      guestDogValid ? "border-green-200" : guestDogError ? "border-red-200" : "border-amber-200"
+                    )}>
+                      <GuestDogVerification
+                        acceptedDogSizes={dogRestrictions.acceptedDogSizes}
+                        dogCategoryAcceptance={dogRestrictions.dogCategoryAcceptance}
+                        onDogDataChange={onGuestDogDataChange}
+                        onValidationChange={onGuestDogValidationChange}
+                        initialData={guestDogData}
+                      />
+                    </div>
+
+                    {/* Boutons de navigation */}
+                    <div className="flex items-center justify-between mt-6">
+                      <button
+                        onClick={goToPrevStep}
+                        className="flex items-center gap-2 px-4 py-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors"
+                      >
+                        <ChevronLeft className="w-5 h-5" />
+                        Précédent
+                      </button>
+                      <button
+                        onClick={goToNextStep}
+                        disabled={!canProceedToNextStep()}
+                        className={cn(
+                          "flex items-center gap-2 px-6 py-2.5 rounded-xl font-medium transition-colors",
+                          canProceedToNextStep()
+                            ? "bg-primary text-white hover:bg-primary/90"
+                            : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        )}
+                      >
+                        Continuer
+                        <ArrowRight className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* ÉTAPE: Sélection des animaux (utilisateurs connectés) */}
+                {desktopStep === "animals" && isLoggedIn && userAnimals.length > 0 && onAnimalToggle && (
+                  <motion.div
+                    key="animals"
+                    initial={slideDirection === "right" ? "enterFromRight" : "enterFromLeft"}
+                    animate="center"
+                    exit={slideDirection === "right" ? "exitToLeft" : "exitToRight"}
+                    variants={slideVariants}
+                    transition={{ duration: 0.3, ease: "easeInOut" }}
+                  >
+                    <div className={cn(
+                      "bg-white rounded-2xl p-5 sm:p-6 border-2 transition-colors duration-300",
+                      hasAnimalsSelected ? "border-gray-100" : "border-primary/30"
+                    )}>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                          <span className="p-2 rounded-lg bg-primary/10">
+                            <PawPrint className="w-5 h-5 text-primary" />
+                          </span>
+                          Vos animaux
+                        </h3>
+                        <span className="text-sm text-gray-500">
+                          {selectedAnimalIds.length} sélectionné{selectedAnimalIds.length > 1 ? "s" : ""}
+                        </span>
+                      </div>
+
+                      <p className="text-sm text-gray-500 mb-4">
+                        Sélectionnez le ou les animaux pour cette prestation.
+                      </p>
+
+                      {compatibleUserAnimals.length > 0 ? (
+                        <div className="grid gap-2">
+                          {compatibleUserAnimals.map((animal) => {
+                            const isSelected = selectedAnimalIds.includes(animal.id);
+                            const hasError = connectedDogErrors[animal.id];
+                            return (
+                              <div key={animal.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => onAnimalToggle(animal.id, animal.type)}
+                                  className={cn(
+                                    "w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left",
+                                    isSelected ? "border-primary bg-primary/5" :
+                                    hasError ? "border-red-300 bg-red-50" :
+                                    "border-gray-200 hover:border-gray-300"
+                                  )}
+                                >
+                                  {animal.profilePhoto ? (
+                                    <img src={animal.profilePhoto} alt={animal.name} className="w-12 h-12 rounded-full object-cover" />
+                                  ) : (
+                                    <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+                                      <PawPrint className="w-6 h-6 text-gray-400" />
+                                    </div>
+                                  )}
+                                  <div className="flex-1">
+                                    <p className={cn("font-semibold", isSelected ? "text-primary" : hasError ? "text-red-700" : "text-gray-900")}>{animal.name}</p>
+                                    <p className="text-sm text-gray-500 capitalize">{animal.type}{animal.breed && ` • ${animal.breed}`}</p>
+                                  </div>
+                                  <div className={cn(
+                                    "w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all",
+                                    isSelected ? "bg-primary border-primary" :
+                                    hasError ? "border-red-300 bg-red-100" :
+                                    "border-gray-300 bg-white"
+                                  )}>
+                                    {isSelected && <Check className="w-4 h-4 text-white" />}
+                                    {hasError && !isSelected && <AlertTriangle className="w-3 h-3 text-red-500" />}
+                                  </div>
+                                </button>
+                                {/* Afficher l'erreur de restriction */}
+                                {hasError && (
+                                  <p className="text-xs text-red-600 mt-1 ml-2">{hasError}</p>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="p-4 bg-amber-50 rounded-xl text-amber-700 text-sm">
+                          Aucun de vos animaux n'est compatible avec cette formule.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Boutons de navigation */}
+                    <div className="flex items-center justify-between mt-6">
+                      <button
+                        onClick={goToPrevStep}
+                        className="flex items-center gap-2 px-4 py-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors"
+                      >
+                        <ChevronLeft className="w-5 h-5" />
+                        Précédent
+                      </button>
+                      <button
+                        onClick={goToNextStep}
+                        disabled={!canProceedToNextStep()}
+                        className={cn(
+                          "flex items-center gap-2 px-6 py-2.5 rounded-xl font-medium transition-colors",
+                          canProceedToNextStep()
+                            ? "bg-primary text-white hover:bg-primary/90"
+                            : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        )}
+                      >
+                        Continuer
+                        <ArrowRight className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* ÉTAPE: Dates/Planning */}
+                {desktopStep === "dates" && (
+                  <motion.div
+                    key="dates"
+                    initial={slideDirection === "right" ? "enterFromRight" : "enterFromLeft"}
+                    animate="center"
+                    exit={slideDirection === "right" ? "exitToLeft" : "exitToRight"}
+                    variants={slideVariants}
+                    transition={{ duration: 0.3, ease: "easeInOut" }}
+                  >
+                    {/* Créneaux collectifs */}
+                    {isCollectiveFormule && selectedFormule && onSlotsSelected && (
+                      <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100">
+                        <CollectiveSlotPicker
+                          variantId={selectedFormule.id as string}
+                          numberOfSessions={collectiveNumberOfSessions}
+                          sessionInterval={collectiveSessionInterval}
+                          animalCount={animalCount}
+                          animalType={selectedAnimalType}
+                          onSlotsSelected={onSlotsSelected}
+                          selectedSlotIds={selectedSlotIds}
+                        />
+                      </div>
+                    )}
+
+                    {/* Calendrier multi-séances */}
+                    {isMultiSessionIndividual && onSessionsChange && calendarMonth && onMonthChange && (
+                      <MultiSessionCalendar
+                        numberOfSessions={individualNumberOfSessions}
+                        sessionInterval={individualSessionInterval}
+                        selectedSessions={selectedSessions}
+                        onSessionsChange={onSessionsChange}
+                        calendarMonth={calendarMonth}
+                        availabilityCalendar={availabilityCalendar}
+                        variantDuration={variantDuration}
+                        bufferBefore={bufferBefore}
+                        bufferAfter={bufferAfter}
+                        acceptReservationsFrom={acceptReservationsFrom}
+                        acceptReservationsTo={acceptReservationsTo}
+                        onMonthChange={onMonthChange}
+                      />
+                    )}
+
+                    {/* Calendrier normal */}
+                    {!isCollectiveFormule && !isMultiSessionIndividual && calendarMonth && onDateSelect && onEndDateSelect && onTimeSelect && onEndTimeSelect && onOvernightChange && onMonthChange && (
+                      <BookingCalendar
+                        selectedDate={bookingSelection?.startDate ?? null}
+                        selectedEndDate={bookingSelection?.endDate ?? null}
+                        selectedTime={bookingSelection?.startTime ?? null}
+                        selectedEndTime={bookingSelection?.endTime ?? null}
+                        includeOvernightStay={bookingSelection?.includeOvernightStay ?? false}
+                        calendarMonth={calendarMonth}
+                        availabilityCalendar={availabilityCalendar}
+                        isRangeMode={isRangeMode}
+                        days={days}
+                        nights={nights}
+                        isCapacityBased={isCapacityBased}
+                        maxAnimalsPerSlot={maxAnimalsPerSlot}
+                        enableDurationBasedBlocking={enableDurationBasedBlocking}
+                        variantDuration={variantDuration}
+                        bufferBefore={bufferBefore}
+                        bufferAfter={bufferAfter}
+                        acceptReservationsFrom={acceptReservationsFrom}
+                        acceptReservationsTo={acceptReservationsTo}
+                        allowOvernightStay={service.allowOvernightStay}
+                        overnightPrice={service.overnightPrice}
+                        dayStartTime={service.dayStartTime}
+                        dayEndTime={service.dayEndTime}
+                        onDateSelect={onDateSelect}
+                        onEndDateSelect={onEndDateSelect}
+                        onTimeSelect={onTimeSelect}
+                        onEndTimeSelect={onEndTimeSelect}
+                        onOvernightChange={onOvernightChange}
+                        onMonthChange={onMonthChange}
+                      />
+                    )}
+
+                    {/* Boutons de navigation */}
+                    <div className="flex items-center justify-between mt-6">
+                      <button
+                        onClick={goToPrevStep}
+                        className="flex items-center gap-2 px-4 py-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors"
+                      >
+                        <ChevronLeft className="w-5 h-5" />
+                        Précédent
+                      </button>
+                      {currentStepIndex < availableDesktopSteps.length - 1 && (
+                        <button
+                          onClick={goToNextStep}
+                          disabled={!canProceedToNextStep()}
+                          className={cn(
+                            "flex items-center gap-2 px-6 py-2.5 rounded-xl font-medium transition-colors",
+                            canProceedToNextStep()
+                              ? "bg-primary text-white hover:bg-primary/90"
+                              : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          )}
+                        >
+                          Continuer
+                          <ArrowRight className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* ÉTAPE: Lieu de prestation */}
+                {desktopStep === "location" && (
+                  <motion.div
+                    key="location"
+                    initial={slideDirection === "right" ? "enterFromRight" : "enterFromLeft"}
+                    animate="center"
+                    exit={slideDirection === "right" ? "exitToLeft" : "exitToRight"}
+                    variants={slideVariants}
+                    transition={{ duration: 0.3, ease: "easeInOut" }}
+                  >
+                    <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100">
+                      <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
+                        <span className="p-2 bg-blue-100 rounded-lg">
+                          <MapPin className="w-5 h-5 text-blue-600" />
+                        </span>
+                        Lieu de prestation
+                      </h3>
+
+                      {onLocationSelect && (
+                        <ServiceLocationSelector
+                          serviceLocation={formuleServiceLocation || "both"}
+                          selectedLocation={bookingSelection?.serviceLocation ?? null}
+                          onSelect={onLocationSelect}
+                          isRangeMode={isRangeMode}
+                          announcerFirstName={announcerFirstName}
+                        />
+                      )}
+
+                      {/* Sélecteur d'adresse si "à domicile" */}
+                      {bookingSelection?.serviceLocation === "client_home" && (
+                        <div className="mt-4 pt-4 border-t border-gray-100">
+                          {isLoggedIn ? (
+                            onAddressSelect && onAddNewAddress && (
+                              <AddressSelector
+                                addresses={clientAddresses}
+                                selectedAddressId={bookingSelection?.selectedAddressId ?? null}
+                                isLoading={isLoadingAddresses}
+                                onSelect={onAddressSelect}
+                                onAddNew={onAddNewAddress}
+                              />
+                            )
+                          ) : (
+                            onGuestAddressChange && (
+                              <GuestAddressSelector
+                                guestAddress={guestAddress ?? null}
+                                announcerCoordinates={announcerCoordinates}
+                                onAddressChange={onGuestAddressChange}
+                              />
+                            )
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Boutons de navigation */}
+                    <div className="flex items-center justify-between mt-6">
+                      <button
+                        onClick={goToPrevStep}
+                        className="flex items-center gap-2 px-4 py-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors"
+                      >
+                        <ChevronLeft className="w-5 h-5" />
+                        Précédent
+                      </button>
+                      {currentStepIndex < availableDesktopSteps.length - 1 && (
+                        <button
+                          onClick={goToNextStep}
+                          disabled={!canProceedToNextStep()}
+                          className={cn(
+                            "flex items-center gap-2 px-6 py-2.5 rounded-xl font-medium transition-colors",
+                            canProceedToNextStep()
+                              ? "bg-primary text-white hover:bg-primary/90"
+                              : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          )}
+                        >
+                          Continuer
+                          <ArrowRight className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* ÉTAPE: Options */}
+                {desktopStep === "options" && (
+                  <motion.div
+                    key="options"
+                    initial={slideDirection === "right" ? "enterFromRight" : "enterFromLeft"}
+                    animate="center"
+                    exit={slideDirection === "right" ? "exitToLeft" : "exitToRight"}
+                    variants={slideVariants}
+                    transition={{ duration: 0.3, ease: "easeInOut" }}
+                  >
+                    <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100">
+                      <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
+                        <span className="p-2 bg-purple-100 rounded-lg">
+                          <Plus className="w-5 h-5 text-purple-600" />
+                        </span>
+                        Options supplémentaires
+                      </h3>
+
+                      {service.options.length > 0 ? (
+                        <div className="space-y-3">
+                          {service.options.map((option) => (
+                            <SelectableOptionCard
+                              key={option.id.toString()}
+                              option={option}
+                              isSelected={selectedOptionIds.includes(option.id.toString())}
+                              onToggle={() => onOptionToggle?.(option.id.toString())}
+                              commissionRate={commissionRate}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-gray-500 text-center py-4">Aucune option disponible pour cette prestation.</p>
+                      )}
+                    </div>
+
+                    {/* Boutons de navigation */}
+                    <div className="flex items-center justify-between mt-6">
+                      <button
+                        onClick={goToPrevStep}
+                        className="flex items-center gap-2 px-4 py-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors"
+                      >
+                        <ChevronLeft className="w-5 h-5" />
+                        Précédent
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
+      </div>
 
-        {/* Contenu principal */}
-        <div className="flex-1 min-w-0 space-y-6">
+      {/* VERSION MOBILE - Affichage classique (tout visible) */}
+      <div className="md:hidden">
+        <div className="space-y-6">
           {/* En-tête du service */}
           <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100">
             <div className="flex items-start gap-4">
@@ -797,8 +1540,48 @@ export default function AnnouncerFormules({
         </motion.div>
       )}
 
-      {/* Section Créneaux collectifs - visible pour formules collectives */}
-      {hasVariantSelected && isCollectiveFormule && selectedFormule && onSlotsSelected && (
+      {/* Section Vérification du chien pour les invités */}
+      {hasVariantSelected && requiresDogVerification && dogRestrictions && onGuestDogDataChange && onGuestDogValidationChange && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={cn(
+            "bg-white rounded-2xl p-5 sm:p-6 border-2 transition-colors duration-300",
+            guestDogValid
+              ? "border-green-200"
+              : guestDogError
+                ? "border-red-200"
+                : "border-amber-200"
+          )}
+        >
+          <GuestDogVerification
+            acceptedDogSizes={dogRestrictions.acceptedDogSizes}
+            dogCategoryAcceptance={dogRestrictions.dogCategoryAcceptance}
+            onDogDataChange={onGuestDogDataChange}
+            onValidationChange={onGuestDogValidationChange}
+            initialData={guestDogData}
+          />
+        </motion.div>
+      )}
+
+      {/* Message si vérification du chien requise mais pas faite */}
+      {hasVariantSelected && requiresDogVerification && !guestDogValid && !guestDogError && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-4 bg-amber-50 border border-amber-200 rounded-xl"
+        >
+          <div className="flex items-center gap-3">
+            <Dog className="w-5 h-5 text-amber-600" />
+            <p className="text-sm text-amber-800">
+              Veuillez renseigner les informations de votre chien pour accéder au calendrier.
+            </p>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Section Créneaux collectifs - visible pour formules collectives (bloqué si vérification du chien requise et pas faite) */}
+      {hasVariantSelected && isCollectiveFormule && selectedFormule && onSlotsSelected && (!requiresDogVerification || guestDogValid) && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -816,8 +1599,8 @@ export default function AnnouncerFormules({
         </motion.div>
       )}
 
-      {/* Calendrier multi-séances - visible quand une formule individuelle avec plusieurs séances est sélectionnée */}
-      {hasVariantSelected && isMultiSessionIndividual && onSessionsChange && calendarMonth && onMonthChange && (
+      {/* Calendrier multi-séances - visible quand une formule individuelle avec plusieurs séances est sélectionnée (bloqué si vérification du chien requise et pas faite) */}
+      {hasVariantSelected && isMultiSessionIndividual && onSessionsChange && calendarMonth && onMonthChange && (!requiresDogVerification || guestDogValid) && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -839,8 +1622,8 @@ export default function AnnouncerFormules({
         </motion.div>
       )}
 
-      {/* Calendrier normal - visible quand une formule non-collective à 1 séance est sélectionnée (desktop seulement) */}
-      {hasVariantSelected && !isCollectiveFormule && !isMultiSessionIndividual && (
+      {/* Calendrier normal - visible quand une formule non-collective à 1 séance est sélectionnée (desktop seulement, bloqué si vérification du chien requise et pas faite) */}
+      {hasVariantSelected && !isCollectiveFormule && !isMultiSessionIndividual && (!requiresDogVerification || guestDogValid) && (
         <div className="hidden md:block">
           {calendarMonth && onDateSelect && onEndDateSelect && onTimeSelect && onEndTimeSelect && onOvernightChange && onMonthChange && (
               <BookingCalendar

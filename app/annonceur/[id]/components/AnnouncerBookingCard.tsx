@@ -51,6 +51,10 @@ interface AnnouncerBookingCardProps {
   // Props pour formules individuelles multi-séances
   selectedSessions?: SelectedSession[];
   announcerFirstName?: string; // Prénom de l'annonceur pour "Chez [prénom]"
+  // Vérification du chien pour les invités
+  requiresDogVerification?: boolean;
+  guestDogValid?: boolean;
+  guestDogError?: string;
   onServiceChange?: (serviceId: string | null) => void;
   onBook?: () => void;
   onFinalize?: () => void;
@@ -94,6 +98,9 @@ export default function AnnouncerBookingCard({
   animalCount = 1,
   selectedSessions = [],
   announcerFirstName,
+  requiresDogVerification = false,
+  guestDogValid = false,
+  guestDogError,
   onServiceChange,
   onBook,
   onFinalize,
@@ -133,6 +140,9 @@ export default function AnnouncerBookingCard({
           animalCount={animalCount}
           selectedSessions={selectedSessions}
           announcerFirstName={announcerFirstName}
+          requiresDogVerification={requiresDogVerification}
+          guestDogValid={guestDogValid}
+          guestDogError={guestDogError}
           onBook={onBook}
           onFinalize={onFinalize}
         />

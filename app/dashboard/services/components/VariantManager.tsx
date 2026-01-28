@@ -67,6 +67,9 @@ export interface LocalVariant {
   maxAnimalsPerSession?: number;
   serviceLocation?: ServiceLocation; // Lieu de prestation
   animalTypes?: string[]; // Animaux acceptés pour cette formule
+  // Restrictions chiens (au niveau de la formule)
+  dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
+  acceptedDogSizes?: ("small" | "medium" | "large")[];
   price: number;
   priceUnit: PriceUnit;
   pricing?: Pricing;
@@ -134,9 +137,8 @@ interface VariantManagerProps {
   // Activités prédéfinies depuis l'admin
   availableActivities?: AdminActivity[];
 
-  // Catégories de chiens acceptées
-  dogCategoryAcceptance?: DogCategoryAcceptance;
-  acceptsDogs?: boolean;
+  // Note: Les restrictions chiens (dogCategoryAcceptance, acceptedDogSizes) sont
+  // maintenant au niveau de chaque LocalVariant, pas au niveau du VariantManager
 
   // Configuration tarification avancée depuis l'admin
   announcerPriceMode?: AnnouncerPriceMode;
@@ -785,12 +787,107 @@ function SimpleVariantCard({
         )}
 
         {/* ═══════════════════════════════════════════════════════════════════ */}
+        {/* SECTION CHIENS: Restrictions par formule */}
+        {/* Affichée uniquement si le service accepte les chiens ET que cette formule accepte les chiens */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {serviceAnimalTypes.includes("chien") &&
+          (variant.animalTypes?.includes("chien") || !variant.animalTypes?.length) && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center text-xs">🐕</div>
+              Restrictions chiens <span className="text-xs font-normal text-gray-400">(optionnel)</span>
+            </div>
+
+            <div className="p-4 bg-amber-50/50 rounded-xl border border-amber-200 space-y-4">
+              {/* Tailles de chiens acceptées */}
+              <div>
+                <label className="block text-xs font-medium text-amber-800 mb-2">
+                  Tailles de chiens acceptées
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { id: "small", label: "Petit", desc: "< 10 kg" },
+                    { id: "medium", label: "Moyen", desc: "10-25 kg" },
+                    { id: "large", label: "Grand", desc: "> 25 kg" },
+                  ].map((size) => {
+                    const isSelected = variant.acceptedDogSizes?.includes(size.id as "small" | "medium" | "large") ?? true;
+                    return (
+                      <button
+                        key={size.id}
+                        type="button"
+                        onClick={() => {
+                          const currentSizes = variant.acceptedDogSizes || ["small", "medium", "large"];
+                          const newSizes = isSelected
+                            ? currentSizes.filter((s) => s !== size.id)
+                            : [...currentSizes, size.id as "small" | "medium" | "large"];
+                          // Au moins une taille doit être sélectionnée
+                          if (newSizes.length > 0) {
+                            onUpdate({ acceptedDogSizes: newSizes });
+                          }
+                        }}
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all",
+                          isSelected
+                            ? "bg-amber-200 border-2 border-amber-400 text-amber-900 font-medium"
+                            : "bg-white border border-gray-200 text-gray-500 hover:border-gray-300"
+                        )}
+                      >
+                        <span>{size.label}</span>
+                        <span className="text-xs opacity-70">({size.desc})</span>
+                        {isSelected && <Check className="w-3.5 h-3.5" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Chiens catégorisés */}
+              <div>
+                <label className="block text-xs font-medium text-amber-800 mb-2">
+                  Chiens catégorisés (législation française)
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: "none", label: "Non catégorisés uniquement", desc: "Pas de chien dangereux" },
+                    { id: "cat2", label: "Catégorie 2 acceptée", desc: "Chiens de garde" },
+                    { id: "cat1", label: "Catégorie 1 acceptée", desc: "Chiens d'attaque" },
+                    { id: "both", label: "Toutes catégories", desc: "Cat. 1 et 2 acceptées" },
+                  ].map((cat) => {
+                    const isSelected = (variant.dogCategoryAcceptance || "none") === cat.id;
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => onUpdate({ dogCategoryAcceptance: cat.id as "none" | "cat1" | "cat2" | "both" })}
+                        className={cn(
+                          "flex flex-col items-start gap-0.5 px-3 py-2 rounded-lg text-sm transition-all text-left",
+                          isSelected
+                            ? "bg-amber-200 border-2 border-amber-400"
+                            : "bg-white border border-gray-200 hover:border-gray-300"
+                        )}
+                      >
+                        <span className={cn("font-medium", isSelected ? "text-amber-900" : "text-gray-700")}>
+                          {cat.label}
+                        </span>
+                        <span className={cn("text-xs", isSelected ? "text-amber-700" : "text-gray-400")}>
+                          {cat.desc}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════════ */}
         {/* SECTION 3: PERSONNALISATION */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <div className="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center text-xs text-purple-600">
-              {isGardeService ? "2" : "3"}
+              {isGardeService ? (serviceAnimalTypes.includes("chien") ? "3" : "2") : (serviceAnimalTypes.includes("chien") ? "4" : "3")}
             </div>
             Personnalisation <span className="text-xs font-normal text-gray-400">(optionnel)</span>
           </div>
@@ -926,7 +1023,7 @@ function SimpleVariantCard({
         <div className="pt-4 border-t border-gray-100">
           <div className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
             <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center text-xs text-amber-600">
-              {isGardeService ? "3" : "4"}
+              {isGardeService ? (serviceAnimalTypes.includes("chien") ? "4" : "3") : (serviceAnimalTypes.includes("chien") ? "5" : "4")}
             </div>
             Tarification
             {announcerPriceMode === "automatic" && (
@@ -1351,8 +1448,6 @@ export default function VariantManager({
   categoryAllowsOvernightStay = false,
   serviceAnimalTypes = [],
   availableActivities = [],
-  dogCategoryAcceptance = "none",
-  acceptsDogs = false,
   announcerPriceMode = "manual",
   workdayHours = 14,
   clientBillingMode = "exact_hourly",
@@ -1556,45 +1651,7 @@ export default function VariantManager({
           </div>
         )}
 
-        {/* Récapitulatif chiens catégorisés - affiché si l'annonceur accepte les chiens */}
-        {acceptsDogs && (
-          <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-lg">🐕</span>
-              <span className="font-medium text-amber-900">Chiens catégorisés acceptés</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {dogCategoryAcceptance === "none" && (
-                <span className="px-3 py-1.5 bg-white border border-amber-300 rounded-full text-sm text-amber-700">
-                  Uniquement non catégorisés
-                </span>
-              )}
-              {dogCategoryAcceptance === "cat1" && (
-                <span className="px-3 py-1.5 bg-amber-100 border border-amber-400 rounded-full text-sm font-medium text-amber-800">
-                  Catégorie 1 acceptée
-                </span>
-              )}
-              {dogCategoryAcceptance === "cat2" && (
-                <span className="px-3 py-1.5 bg-amber-100 border border-amber-400 rounded-full text-sm font-medium text-amber-800">
-                  Catégorie 2 acceptée
-                </span>
-              )}
-              {dogCategoryAcceptance === "both" && (
-                <>
-                  <span className="px-3 py-1.5 bg-amber-100 border border-amber-400 rounded-full text-sm font-medium text-amber-800">
-                    Catégorie 1 acceptée
-                  </span>
-                  <span className="px-3 py-1.5 bg-amber-100 border border-amber-400 rounded-full text-sm font-medium text-amber-800">
-                    Catégorie 2 acceptée
-                  </span>
-                </>
-              )}
-            </div>
-            <p className="text-xs text-amber-600 mt-2">
-              Cette information sera affichée sur votre profil pour les clients propriétaires de chiens catégorisés.
-            </p>
-          </div>
-        )}
+        {/* Note: Les restrictions chiens sont maintenant configurées par formule dans SimpleVariantCard */}
 
         {/* Liste des formules */}
         <AnimatePresence mode="popLayout">

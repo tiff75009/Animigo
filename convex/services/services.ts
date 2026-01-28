@@ -132,6 +132,7 @@ export const getMyServices = query({
           dayStartTime: s.dayStartTime,
           dayEndTime: s.dayEndTime,
           overnightPrice: s.overnightPrice,
+          acceptedDogSizes: s.acceptedDogSizes,
           isActive: s.isActive,
           hasVariants: s.hasVariants || false,
           basePrice: s.basePrice,
@@ -156,6 +157,8 @@ export const getMyServices = query({
               maxAnimalsPerSession: v.maxAnimalsPerSession,
               serviceLocation: v.serviceLocation,
               animalTypes: v.animalTypes,
+              dogCategoryAcceptance: v.dogCategoryAcceptance,
+              acceptedDogSizes: v.acceptedDogSizes,
               price: v.price,
               priceUnit: v.priceUnit,
               pricing: v.pricing, // Multi-tarification
@@ -212,6 +215,12 @@ export const addService = mutation({
       v.literal("cat2"),
       v.literal("both")
     )),
+    // Tailles de chiens acceptées
+    acceptedDogSizes: v.optional(v.array(v.union(
+      v.literal("small"),
+      v.literal("medium"),
+      v.literal("large")
+    ))),
     // Formule initiale obligatoire
     initialVariants: v.array(v.object({
       name: v.string(),
@@ -230,6 +239,18 @@ export const addService = mutation({
         v.literal("both")
       )),
       animalTypes: v.optional(v.array(v.string())),
+      // Restrictions chiens (au niveau de la formule)
+      dogCategoryAcceptance: v.optional(v.union(
+        v.literal("none"),
+        v.literal("cat1"),
+        v.literal("cat2"),
+        v.literal("both")
+      )),
+      acceptedDogSizes: v.optional(v.array(v.union(
+        v.literal("small"),
+        v.literal("medium"),
+        v.literal("large")
+      ))),
       price: v.number(), // En centimes (prix principal)
       priceUnit: v.union(
         v.literal("hour"),
@@ -329,6 +350,7 @@ export const addService = mutation({
       dayEndTime: args.dayEndTime,
       overnightPrice: args.overnightPrice,
       dogCategoryAcceptance: args.dogCategoryAcceptance,
+      acceptedDogSizes: args.acceptedDogSizes,
       isActive: true,
       basePrice: basePrice,
       moderationStatus: "approved", // Catégories gérées par admin = pas de modération
@@ -352,6 +374,8 @@ export const addService = mutation({
         maxAnimalsPerSession: variant.maxAnimalsPerSession,
         serviceLocation: effectiveLocation,
         animalTypes: variant.animalTypes,
+        dogCategoryAcceptance: variant.dogCategoryAcceptance,
+        acceptedDogSizes: variant.acceptedDogSizes,
         price: variant.price,
         priceUnit: variant.priceUnit,
         pricing: variant.pricing,
@@ -415,6 +439,12 @@ export const updateService = mutation({
       v.literal("cat2"),
       v.literal("both")
     )),
+    // Tailles de chiens acceptées
+    acceptedDogSizes: v.optional(v.array(v.union(
+      v.literal("small"),
+      v.literal("medium"),
+      v.literal("large")
+    ))),
     isActive: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
@@ -470,6 +500,7 @@ export const updateService = mutation({
     if (args.dayEndTime !== undefined) updates.dayEndTime = args.dayEndTime;
     if (args.overnightPrice !== undefined) updates.overnightPrice = args.overnightPrice;
     if (args.dogCategoryAcceptance !== undefined) updates.dogCategoryAcceptance = args.dogCategoryAcceptance;
+    if (args.acceptedDogSizes !== undefined) updates.acceptedDogSizes = args.acceptedDogSizes;
     if (args.isActive !== undefined) updates.isActive = args.isActive;
 
     await ctx.db.patch(args.serviceId, updates);

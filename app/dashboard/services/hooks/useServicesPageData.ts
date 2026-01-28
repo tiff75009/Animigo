@@ -251,6 +251,8 @@ export function useServicesPageData(token: string | undefined) {
     overnightPrice?: number;
     // Chiens catégorisés
     dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
+    // Tailles de chiens acceptées
+    acceptedDogSizes?: ("small" | "medium" | "large")[];
     initialVariants: Array<{
       name: string;
       description?: string;
@@ -298,6 +300,7 @@ export function useServicesPageData(token: string | undefined) {
         dayEndTime: data.dayEndTime,
         overnightPrice: data.overnightPrice,
         dogCategoryAcceptance: data.dogCategoryAcceptance,
+        acceptedDogSizes: data.acceptedDogSizes,
         initialVariants: data.initialVariants,
         initialOptions: data.initialOptions?.length ? data.initialOptions : undefined,
       });

@@ -261,6 +261,12 @@ export default defineSchema({
       v.literal("cat2"),   // Catégorie 2 acceptée
       v.literal("both")    // Catégories 1 et 2 acceptées
     )),
+    // Tailles de chiens acceptées
+    acceptedDogSizes: v.optional(v.array(v.union(
+      v.literal("small"),   // Petit (< 10kg)
+      v.literal("medium"),  // Moyen (10-25kg)
+      v.literal("large")    // Grand (> 25kg)
+    ))),
     // Modération (simplifiée - catégories gérées par admin)
     moderationStatus: v.optional(v.union(
       v.literal("approved"),
@@ -297,6 +303,19 @@ export default defineSchema({
       v.literal("both")
     )), // Où la prestation est effectuée (si collective, forcé à announcer_home)
     animalTypes: v.optional(v.array(v.string())), // Types d'animaux acceptés pour cette formule
+    // Chiens catégorisés (législation française) - au niveau de la formule
+    dogCategoryAcceptance: v.optional(v.union(
+      v.literal("none"),   // Non catégorisés uniquement
+      v.literal("cat1"),   // Catégorie 1 acceptée
+      v.literal("cat2"),   // Catégorie 2 acceptée
+      v.literal("both")    // Catégories 1 et 2 acceptées
+    )),
+    // Tailles de chiens acceptées - au niveau de la formule
+    acceptedDogSizes: v.optional(v.array(v.union(
+      v.literal("small"),   // Petit (< 10kg)
+      v.literal("medium"),  // Moyen (10-25kg)
+      v.literal("large")    // Grand (> 25kg)
+    ))),
     // Ancien système (rétrocompatibilité) - prix unique
     price: v.number(), // Prix principal en centimes
     priceUnit: v.union(

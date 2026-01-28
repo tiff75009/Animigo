@@ -34,6 +34,15 @@ interface BookingCalendarProps {
   overnightPrice?: number;
   dayStartTime?: string;
   dayEndTime?: string;
+  // Billing info pour affichage jours/demi-journées
+  billingInfo?: {
+    billingUnit?: string;
+    fullDays: number;
+    halfDays: number;
+    firstDayIsHalfDay?: boolean;
+    lastDayIsHalfDay?: boolean;
+  };
+  clientBillingMode?: "exact_hourly" | "round_half_day" | "round_full_day";
   onDateSelect: (date: string) => void;
   onEndDateSelect: (date: string | null) => void;
   onTimeSelect: (time: string) => void;
@@ -141,6 +150,8 @@ export default function BookingCalendar({
   overnightPrice,
   dayStartTime,
   dayEndTime,
+  billingInfo,
+  clientBillingMode,
   onDateSelect,
   onEndDateSelect,
   onTimeSelect,
@@ -910,12 +921,35 @@ export default function BookingCalendar({
                 </p>
               </div>
             </div>
-            {days > 1 && (
+            {days >= 1 && (
               <div className="flex items-center gap-2">
                 <span className="px-2 py-1 text-xs bg-primary/10 text-primary rounded-full font-medium">
-                  {days} jours
+                  {(() => {
+                    // Si on a des infos de facturation avec demi-journées
+                    const isHalfDayBilling = billingInfo?.billingUnit === "half_day" || billingInfo?.billingUnit === "day" ||
+                      billingInfo?.firstDayIsHalfDay || billingInfo?.lastDayIsHalfDay ||
+                      clientBillingMode === "round_half_day";
+
+                    if (isHalfDayBilling && billingInfo) {
+                      const fullDays = billingInfo.fullDays ?? 0;
+                      const halfDays = billingInfo.halfDays ?? 0;
+
+                      const parts: string[] = [];
+                      if (fullDays > 0) {
+                        parts.push(`${fullDays} journée${fullDays > 1 ? "s" : ""}`);
+                      }
+                      if (halfDays > 0) {
+                        parts.push(`${halfDays} demi-journée${halfDays > 1 ? "s" : ""}`);
+                      }
+
+                      return parts.length > 0 ? parts.join(" + ") : `${days} jour${days > 1 ? "s" : ""}`;
+                    }
+
+                    // Affichage par défaut en jours
+                    return `${days} jour${days > 1 ? "s" : ""}`;
+                  })()}
                 </span>
-                {nights > 0 && (
+                {nights > 0 && includeOvernightStay && (
                   <span className="px-2 py-1 text-xs bg-indigo-100 text-indigo-700 rounded-full font-medium">
                     {nights} nuit{nights > 1 ? "s" : ""}
                   </span>

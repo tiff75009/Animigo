@@ -23,9 +23,11 @@ import {
   DateTimeStep,
   OptionsStep,
   SummaryStep,
+  GuestDogVerification,
   type ServiceDetail,
   type ServiceVariant,
   type ServiceOption,
+  type GuestDogData,
 } from "./components";
 
 // Types
@@ -117,11 +119,13 @@ export interface PriceCalculationResult {
   firstDayAmount: number;
   firstDayHours: number;
   firstDayIsFullDay: boolean;
+  firstDayIsHalfDay?: boolean;
   fullDays: number;
   fullDaysAmount: number;
   lastDayAmount: number;
   lastDayHours: number;
   lastDayIsFullDay: boolean;
+  lastDayIsHalfDay?: boolean;
   nightsAmount: number;
   nights: number;
   optionsAmount: number;
@@ -130,6 +134,8 @@ export interface PriceCalculationResult {
   hourlyRate: number;
   dailyRate: number;
   nightlyRate: number;
+  halfDailyRate?: number;
+  billingUnit?: "hour" | "half_day" | "day" | "fixed";
 }
 
 // Calculate smart pricing with partial day support
@@ -142,8 +148,10 @@ function calculateSmartPrice(params: {
   dayStartTime: string;
   dayEndTime: string;
   workdayHours: number;
+  halfDayHours?: number;
   pricing: {
     hourly?: number;
+    halfDaily?: number;
     daily?: number;
     nightly?: number;
   };
@@ -151,6 +159,8 @@ function calculateSmartPrice(params: {
   // For duration-based blocking: use fixed price instead of hourly calculation
   fixedServicePrice?: number;
   serviceDurationMinutes?: number;
+  // Client billing mode from category settings
+  clientBillingMode?: "exact_hourly" | "round_half_day" | "round_full_day";
 }): PriceCalculationResult {
   const {
     startDate,
@@ -161,16 +171,52 @@ function calculateSmartPrice(params: {
     dayStartTime,
     dayEndTime,
     workdayHours,
+    halfDayHours: customHalfDayHours,
     pricing,
     optionsTotal,
     fixedServicePrice,
     serviceDurationMinutes,
+    clientBillingMode,
   } = params;
+
+  // Calculate half-day hours (default to workdayHours / 2)
+  const halfDayHours = customHalfDayHours || workdayHours / 2;
 
   // Determine rates (derive missing rates from available ones)
   const hourlyRate = pricing.hourly || (pricing.daily ? Math.round(pricing.daily / workdayHours) : 0);
+  const halfDailyRate = pricing.halfDaily || (pricing.daily ? Math.round(pricing.daily / 2) : (hourlyRate ? hourlyRate * halfDayHours : 0));
   const dailyRate = pricing.daily || (hourlyRate ? hourlyRate * workdayHours : 0);
   const nightlyRate = pricing.nightly || 0;
+
+  // Helper: Calculate amount for a partial day based on billing mode
+  const calculatePartialDayAmount = (hours: number): { amount: number; isFullDay: boolean; isHalfDay: boolean } => {
+    // Si le nombre d'heures dépasse la journée de travail, c'est une journée complète
+    if (hours >= workdayHours) {
+      return { amount: dailyRate, isFullDay: true, isHalfDay: false };
+    }
+
+    // Mode arrondi à la demi-journée
+    if (clientBillingMode === "round_half_day") {
+      if (hours <= halfDayHours) {
+        return { amount: halfDailyRate, isFullDay: false, isHalfDay: true };
+      }
+      return { amount: dailyRate, isFullDay: true, isHalfDay: false };
+    }
+
+    // Mode arrondi à la journée
+    if (clientBillingMode === "round_full_day") {
+      return { amount: dailyRate, isFullDay: true, isHalfDay: false };
+    }
+
+    // Mode horaire exact (par défaut)
+    if (hourlyRate > 0) {
+      const hourlyAmount = Math.round(hourlyRate * hours);
+      const cappedAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
+      return { amount: cappedAmount, isFullDay: cappedAmount >= dailyRate, isHalfDay: false };
+    }
+
+    return { amount: dailyRate, isFullDay: true, isHalfDay: false };
+  };
 
   // Calculate total days
   const effectiveEndDate = endDate || startDate;
@@ -181,44 +227,43 @@ function calculateSmartPrice(params: {
     let firstDayHours: number;
     let firstDayAmount: number;
     let firstDayIsFullDay = false;
+    let firstDayIsHalfDay = false;
 
     // Duration-based blocking: use fixed price
     if (fixedServicePrice !== undefined && serviceDurationMinutes !== undefined) {
       firstDayHours = serviceDurationMinutes / 60;
       firstDayAmount = fixedServicePrice;
-      // Not a "full day" in the traditional sense, it's a fixed duration service
-      firstDayIsFullDay = false;
 
       return {
         firstDayAmount,
         firstDayHours,
-        firstDayIsFullDay,
+        firstDayIsFullDay: false,
+        firstDayIsHalfDay: false,
         fullDays: 0,
         fullDaysAmount: 0,
         lastDayAmount: 0,
         lastDayHours: 0,
         lastDayIsFullDay: false,
+        lastDayIsHalfDay: false,
         nightsAmount: 0,
         nights: 0,
         optionsAmount: optionsTotal,
         totalAmount: firstDayAmount + optionsTotal,
-        hourlyRate: 0, // Not applicable for fixed price
+        hourlyRate: 0,
         dailyRate: 0,
         nightlyRate,
+        halfDailyRate: 0,
+        billingUnit: "fixed",
       };
     }
 
     if (startTime && endTime) {
       // Specific time range
       firstDayHours = calculateHoursBetween(startTime, endTime);
-      if (firstDayHours >= workdayHours && dailyRate > 0) {
-        firstDayAmount = dailyRate;
-        firstDayIsFullDay = true;
-      } else {
-        // Cap hourly amount at daily rate to avoid paying more for fewer hours
-        const hourlyAmount = Math.round(hourlyRate * firstDayHours);
-        firstDayAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
-      }
+      const result = calculatePartialDayAmount(firstDayHours);
+      firstDayAmount = result.amount;
+      firstDayIsFullDay = result.isFullDay;
+      firstDayIsHalfDay = result.isHalfDay;
     } else {
       // Full day
       firstDayHours = workdayHours;
@@ -226,15 +271,22 @@ function calculateSmartPrice(params: {
       firstDayIsFullDay = true;
     }
 
+    // Determine billing unit
+    let billingUnit: "hour" | "half_day" | "day" | "fixed" = "hour";
+    if (firstDayIsFullDay) billingUnit = "day";
+    else if (firstDayIsHalfDay) billingUnit = "half_day";
+
     return {
       firstDayAmount,
       firstDayHours,
       firstDayIsFullDay,
+      firstDayIsHalfDay,
       fullDays: 0,
       fullDaysAmount: 0,
       lastDayAmount: 0,
       lastDayHours: 0,
       lastDayIsFullDay: false,
+      lastDayIsHalfDay: false,
       nightsAmount: 0,
       nights: 0,
       optionsAmount: optionsTotal,
@@ -242,6 +294,8 @@ function calculateSmartPrice(params: {
       hourlyRate,
       dailyRate,
       nightlyRate,
+      halfDailyRate,
+      billingUnit,
     };
   }
 
@@ -249,40 +303,22 @@ function calculateSmartPrice(params: {
   // First day calculation
   const effectiveStartTime = startTime || dayStartTime;
   const firstDayEndTime = dayEndTime;
-  let firstDayHours = calculateHoursBetween(effectiveStartTime, firstDayEndTime);
-  let firstDayAmount: number;
-  let firstDayIsFullDay = false;
+  const firstDayHours = calculateHoursBetween(effectiveStartTime, firstDayEndTime);
 
-  if (firstDayHours >= workdayHours && dailyRate > 0) {
-    firstDayAmount = dailyRate;
-    firstDayIsFullDay = true;
-  } else if (hourlyRate > 0) {
-    // Cap hourly amount at daily rate to avoid paying more for fewer hours
-    const hourlyAmount = Math.round(hourlyRate * firstDayHours);
-    firstDayAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
-  } else {
-    firstDayAmount = dailyRate;
-    firstDayIsFullDay = true;
-  }
+  const firstDayResult = calculatePartialDayAmount(firstDayHours);
+  const firstDayAmount = firstDayResult.amount;
+  const firstDayIsFullDay = firstDayResult.isFullDay;
+  const firstDayIsHalfDay = firstDayResult.isHalfDay;
 
   // Last day calculation
   const lastDayStartTime = dayStartTime;
   const effectiveEndTime = endTime || dayEndTime;
-  let lastDayHours = calculateHoursBetween(lastDayStartTime, effectiveEndTime);
-  let lastDayAmount: number;
-  let lastDayIsFullDay = false;
+  const lastDayHours = calculateHoursBetween(lastDayStartTime, effectiveEndTime);
 
-  if (lastDayHours >= workdayHours && dailyRate > 0) {
-    lastDayAmount = dailyRate;
-    lastDayIsFullDay = true;
-  } else if (hourlyRate > 0) {
-    // Cap hourly amount at daily rate to avoid paying more for fewer hours
-    const hourlyAmount = Math.round(hourlyRate * lastDayHours);
-    lastDayAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
-  } else {
-    lastDayAmount = dailyRate;
-    lastDayIsFullDay = true;
-  }
+  const lastDayResult = calculatePartialDayAmount(lastDayHours);
+  const lastDayAmount = lastDayResult.amount;
+  const lastDayIsFullDay = lastDayResult.isFullDay;
+  const lastDayIsHalfDay = lastDayResult.isHalfDay;
 
   // Full days in between (excluding first and last)
   const fullDays = Math.max(0, totalDays - 2);
@@ -294,15 +330,25 @@ function calculateSmartPrice(params: {
 
   const totalAmount = firstDayAmount + fullDaysAmount + lastDayAmount + nightsAmount + optionsTotal;
 
+  // Determine primary billing unit for display
+  let billingUnit: "hour" | "half_day" | "day" | "fixed" = "day";
+  if (!firstDayIsFullDay && !firstDayIsHalfDay && !lastDayIsFullDay && !lastDayIsHalfDay) {
+    billingUnit = "hour";
+  } else if ((firstDayIsHalfDay || lastDayIsHalfDay) && fullDays === 0) {
+    billingUnit = "half_day";
+  }
+
   return {
     firstDayAmount,
     firstDayHours,
     firstDayIsFullDay,
+    firstDayIsHalfDay,
     fullDays,
     fullDaysAmount,
     lastDayAmount,
     lastDayHours,
     lastDayIsFullDay,
+    lastDayIsHalfDay,
     nightsAmount,
     nights,
     optionsAmount: optionsTotal,
@@ -310,6 +356,8 @@ function calculateSmartPrice(params: {
     hourlyRate,
     dailyRate,
     nightlyRate,
+    halfDailyRate,
+    billingUnit,
   };
 }
 
@@ -427,6 +475,11 @@ export default function ReserverPage({
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // État pour la vérification du chien (invités)
+  const [guestDogData, setGuestDogData] = useState<GuestDogData | null>(null);
+  const [guestDogValid, setGuestDogValid] = useState(false);
+  const [guestDogError, setGuestDogError] = useState<string | undefined>(undefined);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     return preSelectedDate ? new Date(preSelectedDate) : new Date();
   });
@@ -463,14 +516,16 @@ export default function ReserverPage({
   const workdayConfig = useQuery(api.admin.config.getWorkdayConfig);
   const workdayHours = workdayConfig?.workdayHours ?? 8;
 
-  // Commission rate based on announcer type
-  const commissionData = useQuery(
-    api.admin.commissions.getCommissionRate,
+  // Pricing config (commission, TVA, Stripe fees) based on announcer type
+  const pricingConfig = useQuery(
+    api.admin.commissions.getPricingConfig,
     announcerData?.statusType
       ? { announcerType: announcerData.statusType }
       : "skip"
   );
-  const commissionRate = commissionData?.rate ?? 15; // Default 15% for particuliers
+  const commissionRate = pricingConfig?.commissionRate ?? 15; // Default 15% for particuliers
+  const stripeFeeRate = pricingConfig?.stripeFeeRate ?? 3; // Default 3% Stripe fees
+  const vatRate = pricingConfig?.vatRate ?? 20; // Default 20% VAT on commissions
 
   // Auth token pour les queries utilisateur
   const [authToken, setAuthToken] = useState<string | null>(null);
@@ -599,6 +654,50 @@ export default function ReserverPage({
     return false;
   })();
 
+  // Déterminer si la vérification du chien est requise pour les invités
+  const requiresDogVerification = useMemo(() => {
+    // Seulement pour les invités (non connectés)
+    if (authToken) return false;
+    // Doit avoir un service et un variant sélectionnés
+    if (!selectedService || !selectedVariant) return false;
+    // Le service doit accepter les chiens
+    const serviceAcceptsDogs = selectedService.animalTypes?.includes("chien");
+    if (!serviceAcceptsDogs) return false;
+    // Pour les formules collectives, vérifier le type d'animal sélectionné
+    if (isCollectiveFormula && bookingData.selectedAnimalType !== "chien") return false;
+    // Le variant doit accepter les chiens
+    const variantAcceptsDogs = !selectedVariant.animalTypes?.length || selectedVariant.animalTypes.includes("chien");
+    return variantAcceptsDogs;
+  }, [authToken, selectedService, selectedVariant, isCollectiveFormula, bookingData.selectedAnimalType]);
+
+  // Restrictions du chien depuis le variant (avec fallback vers le service)
+  const dogRestrictions = useMemo(() => {
+    if (!selectedVariant || !selectedService) {
+      return {
+        acceptedDogSizes: ["small", "medium", "large"] as ("small" | "medium" | "large")[],
+        dogCategoryAcceptance: "none" as "none" | "cat1" | "cat2" | "both",
+      };
+    }
+    // Priorité au variant, sinon au service
+    const acceptedDogSizes = (selectedVariant as { acceptedDogSizes?: ("small" | "medium" | "large")[] }).acceptedDogSizes
+      || (selectedService as { acceptedDogSizes?: ("small" | "medium" | "large")[] }).acceptedDogSizes
+      || ["small", "medium", "large"];
+    const dogCategoryAcceptance = (selectedVariant as { dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both" }).dogCategoryAcceptance
+      || (selectedService as { dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both" }).dogCategoryAcceptance
+      || "none";
+    return { acceptedDogSizes, dogCategoryAcceptance };
+  }, [selectedVariant, selectedService]);
+
+  // Handlers pour la vérification du chien
+  const handleGuestDogDataChange = (data: GuestDogData | null) => {
+    setGuestDogData(data);
+  };
+
+  const handleGuestDogValidationChange = (isValid: boolean, error?: string) => {
+    setGuestDogValid(isValid);
+    setGuestDogError(error);
+  };
+
   // Calculate days (for display purposes)
   // Pour les formules collectives ou multi-séances, retourner le nombre de séances
   const calculateDays = () => {
@@ -679,6 +778,7 @@ export default function ReserverPage({
       workdayHours,
       pricing: {
         hourly: pricing?.hourly || selectedVariant.price,
+        halfDaily: (pricing as { halfDaily?: number })?.halfDaily,
         daily: pricing?.daily,
         nightly: pricing?.nightly || selectedService.overnightPrice,
       },
@@ -686,6 +786,8 @@ export default function ReserverPage({
       // Pass fixed price and duration for duration-based blocking
       fixedServicePrice: useDurationBasedPricing ? selectedVariant.price : undefined,
       serviceDurationMinutes: useDurationBasedPricing ? selectedVariant.duration : undefined,
+      // Pass client billing mode from category settings
+      clientBillingMode: (selectedService as { clientBillingMode?: "exact_hourly" | "round_half_day" | "round_full_day" }).clientBillingMode,
     });
   }, [selectedVariant, selectedService, bookingData, workdayHours, announcerPreferences, optionsTotal, isCollectiveFormula, isMultiSessionIndividual]);
 
@@ -721,6 +823,45 @@ export default function ReserverPage({
     // Formule uni-séance: utiliser le calcul standard
     return priceCalculation?.totalAmount ?? 0;
   }, [selectedVariant, isCollectiveFormula, isMultiSessionIndividual, bookingData.animalCount, optionsTotal, commissionRate, priceCalculation?.totalAmount]);
+
+  // Compute billing info for display in FormulaStep
+  const billingInfo = useMemo(() => {
+    if (!priceCalculation) return undefined;
+
+    // Calculate full days and half days count
+    let fullDays = priceCalculation.fullDays || 0;
+    let halfDays = 0;
+
+    const daysCount = calculateDays();
+
+    if (daysCount === 1) {
+      // Single day
+      if (priceCalculation.firstDayIsFullDay) {
+        fullDays = 1;
+      } else if (priceCalculation.firstDayIsHalfDay) {
+        halfDays = 1;
+      } else {
+        fullDays = 1; // Default
+      }
+    } else {
+      // Multi-day
+      if (priceCalculation.firstDayIsFullDay) fullDays++;
+      else if (priceCalculation.firstDayIsHalfDay) halfDays++;
+      else fullDays++;
+
+      if (priceCalculation.lastDayIsFullDay) fullDays++;
+      else if (priceCalculation.lastDayIsHalfDay) halfDays++;
+      else fullDays++;
+    }
+
+    return {
+      billingUnit: priceCalculation.billingUnit,
+      fullDays,
+      halfDays,
+      firstDayIsHalfDay: priceCalculation.firstDayIsHalfDay,
+      lastDayIsHalfDay: priceCalculation.lastDayIsHalfDay,
+    };
+  }, [priceCalculation, calculateDays]);
 
   // Handle form submission
   const handleSubmit = async () => {
@@ -915,6 +1056,8 @@ export default function ReserverPage({
         // Si le lieu est à domicile et utilisateur non connecté, vérifier l'adresse guest
         const effectiveLocation = bookingData.serviceLocation || selectedService?.serviceLocation;
         if (effectiveLocation === "client_home" && !authToken && !bookingData.guestAddress?.address) return false;
+        // Vérification du chien pour les invités
+        if (requiresDogVerification && !guestDogValid) return false;
         return true;
       case 2:
         // Formule collective: vérifier que le nombre de créneaux requis est sélectionné
@@ -957,6 +1100,10 @@ export default function ReserverPage({
       // Auto-set service location if service only offers one option
       serviceLocation: autoServiceLocation !== undefined ? autoServiceLocation : prev.serviceLocation,
     }));
+    // Réinitialiser la vérification du chien quand on change de formule
+    setGuestDogData(null);
+    setGuestDogValid(false);
+    setGuestDogError(undefined);
   };
 
   const handleServiceLocationSelect = (location: "announcer_home" | "client_home") => {
@@ -1224,24 +1371,39 @@ export default function ReserverPage({
           >
             {/* Step 1: Formula Selection */}
             {step === 1 && (
-              <FormulaStep
-                services={serviceDetails as ServiceDetail[]}
-                selectedServiceId={bookingData.serviceId}
-                selectedVariantId={bookingData.variantId}
-                selectedServiceLocation={bookingData.serviceLocation}
-                selectedOptionIds={bookingData.selectedOptionIds}
-                selectedDate={bookingData.selectedDate}
-                selectedEndDate={bookingData.selectedEndDate}
-                selectedTime={bookingData.selectedTime}
-                selectedEndTime={bookingData.selectedEndTime}
-                days={calculateDays()}
-                nights={calculateNights()}
-                includeOvernightStay={bookingData.includeOvernightStay}
-                commissionRate={commissionRate}
-                preSelectedFromSidebar={!!(preSelectedServiceId && preSelectedVariantId)}
-                onSelect={handleFormulaSelect}
-                onServiceLocationSelect={handleServiceLocationSelect}
-              />
+              <>
+                <FormulaStep
+                  services={serviceDetails as ServiceDetail[]}
+                  selectedServiceId={bookingData.serviceId}
+                  selectedVariantId={bookingData.variantId}
+                  selectedServiceLocation={bookingData.serviceLocation}
+                  selectedOptionIds={bookingData.selectedOptionIds}
+                  selectedDate={bookingData.selectedDate}
+                  selectedEndDate={bookingData.selectedEndDate}
+                  selectedTime={bookingData.selectedTime}
+                  selectedEndTime={bookingData.selectedEndTime}
+                  days={calculateDays()}
+                  nights={calculateNights()}
+                  includeOvernightStay={bookingData.includeOvernightStay}
+                  commissionRate={commissionRate}
+                  preSelectedFromSidebar={!!(preSelectedServiceId && preSelectedVariantId)}
+                  billingInfo={billingInfo}
+                  onSelect={handleFormulaSelect}
+                  onServiceLocationSelect={handleServiceLocationSelect}
+                />
+
+                {/* Vérification du chien pour les invités */}
+                {requiresDogVerification && (
+                  <GuestDogVerification
+                    acceptedDogSizes={dogRestrictions.acceptedDogSizes}
+                    dogCategoryAcceptance={dogRestrictions.dogCategoryAcceptance}
+                    onDogDataChange={handleGuestDogDataChange}
+                    onValidationChange={handleGuestDogValidationChange}
+                    initialData={guestDogData}
+                    className="mt-6"
+                  />
+                )}
+              </>
             )}
 
             {/* Step 2: Date & Time Selection */}
@@ -1278,6 +1440,9 @@ export default function ReserverPage({
                 // Props pour CollectiveSlotPicker
                 animalCount={bookingData.animalCount}
                 animalType={bookingData.selectedAnimalType}
+                // Billing info pour affichage jours/demi-journées
+                billingInfo={billingInfo}
+                clientBillingMode={selectedService.clientBillingMode}
                 onDateSelect={handleDateSelect}
                 onEndDateSelect={handleEndDateSelect}
                 onTimeSelect={handleTimeSelect}
@@ -1328,6 +1493,13 @@ export default function ReserverPage({
                 userAnimals={userAnimals}
                 selectedAnimalIds={bookingData.selectedAnimalIds}
                 error={error}
+                // Billing info pour affichage jours/demi-journées
+                billingInfo={billingInfo}
+                clientBillingMode={selectedService.clientBillingMode}
+                // Pricing details
+                stripeFeeRate={stripeFeeRate}
+                vatRate={vatRate}
+                announcerStatusType={announcerData?.statusType}
                 // Gestion des adresses
                 sessionToken={authToken}
                 selectedAddressId={bookingData.selectedAddressId}

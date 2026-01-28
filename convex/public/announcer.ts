@@ -112,6 +112,9 @@ export const getAnnouncerProfile = query({
             maxAnimalsPerSession: f.maxAnimalsPerSession, // Si collective
             serviceLocation: f.serviceLocation, // Lieu de prestation
             animalTypes: f.animalTypes, // Animaux acceptés pour cette formule
+            // Restrictions chiens (au niveau de la formule)
+            dogCategoryAcceptance: f.dogCategoryAcceptance,
+            acceptedDogSizes: f.acceptedDogSizes,
             includedFeatures: f.includedFeatures || [],
             price: f.price, // en centimes
             duration: f.duration || 0,
@@ -406,6 +409,9 @@ export const getAnnouncerBySlug = query({
             maxAnimalsPerSession: f.maxAnimalsPerSession, // Si collective
             serviceLocation: f.serviceLocation, // Lieu de prestation
             animalTypes: f.animalTypes, // Animaux acceptés pour cette formule
+            // Restrictions chiens (au niveau de la formule)
+            dogCategoryAcceptance: f.dogCategoryAcceptance,
+            acceptedDogSizes: f.acceptedDogSizes,
             includedFeatures: f.includedFeatures || [],
             price: f.price, // en centimes
             duration: f.duration || 0,
