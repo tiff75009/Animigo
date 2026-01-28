@@ -430,16 +430,20 @@ export default function ReserverPage({
   const [calendarMonth, setCalendarMonth] = useState(() => {
     return preSelectedDate ? new Date(preSelectedDate) : new Date();
   });
+  // Flag pour éviter que l'useEffect ne réinitialise le step après navigation manuelle
+  const [hasManuallyNavigated, setHasManuallyNavigated] = useState(false);
 
-  // Effect pour aller directement à l'étape 4 si finalize=true
+  // Effect pour aller directement à l'étape 4 si finalize=true (seulement si pas de navigation manuelle)
   useEffect(() => {
+    if (hasManuallyNavigated) return; // Ne pas réinitialiser si l'utilisateur a navigué manuellement
+
     if (shouldFinalize && preSelectedServiceId && preSelectedVariantId) {
       // Pour les formules collectives, les slotIds suffisent
       if (preSelectedSlotIds.length > 0 || preSelectedSessions.length > 0 || (preSelectedDate && preSelectedStartTime)) {
         setStep(4);
       }
     }
-  }, [shouldFinalize, preSelectedServiceId, preSelectedVariantId, preSelectedDate, preSelectedStartTime, preSelectedSlotIds, preSelectedSessions]);
+  }, [shouldFinalize, preSelectedServiceId, preSelectedVariantId, preSelectedDate, preSelectedStartTime, preSelectedSlotIds, preSelectedSessions, hasManuallyNavigated]);
 
   // Queries
   const announcerData = useQuery(api.public.search.getAnnouncerById, {
@@ -887,7 +891,10 @@ export default function ReserverPage({
   };
 
   const prevStep = () => {
-    if (step > 1) setStep(step - 1);
+    if (step > 1) {
+      setHasManuallyNavigated(true); // Marquer qu'on a navigué manuellement
+      setStep(step - 1);
+    }
   };
 
   // Validation for each step
