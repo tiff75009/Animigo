@@ -1,0 +1,3584 @@
+[
+  {
+    "slug": "akita-americain",
+    "name": "Akita Américain",
+    "otherNames": [
+      "American Akita",
+      "Grand chien japonais",
+      "Akita"
+    ],
+    "size": "large",
+    "weight": 60,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "akita-inu",
+    "name": "Akita Inu",
+    "otherNames": [],
+    "size": "large",
+    "weight": 52,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "alaskan-klee-kai",
+    "name": "Alaskan Klee Kai",
+    "otherNames": [
+      "Klee Kai",
+      "Klee Kai d'Alaska"
+    ],
+    "size": "small",
+    "weight": 11,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "american-staffordshire-terrier",
+    "name": "American Staffordshire Terrier",
+    "otherNames": [
+      "Staffordshire Terrier Américain",
+      "Amstaff",
+      "Pitbull Terrier"
+    ],
+    "size": "large",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "ancien-chien-d-arret-danois",
+    "name": "Ancien chien d'arrêt danois",
+    "otherNames": [
+      "Chien d'arrêt danois ancestral",
+      "Gammel Dansk Hønsehund",
+      "Old Danish Pointer"
+    ],
+    "size": "medium",
+    "weight": 35,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "anglo-francais-petite-venerie",
+    "name": "Anglo-Français de Petite Vènerie",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "ariegeois",
+    "name": "Ariégeois",
+    "otherNames": [],
+    "size": "large",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "barbu-tcheque",
+    "name": "Barbu Tchèque",
+    "otherNames": [
+      "Chien d'arrêt à poil dur slovaque",
+      "Griffon d'arrêt tchèque",
+      "Cesky Fousek"
+    ],
+    "size": "medium",
+    "weight": 34,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "barzoi",
+    "name": "Barzoï",
+    "otherNames": [
+      "Lévrier Russe",
+      "Russkaya Psovaya Borzaya",
+      "Borzoi"
+    ],
+    "size": "large",
+    "weight": 47,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "basenji",
+    "name": "Basenji",
+    "otherNames": [
+      "Terrier du Congo",
+      "Terrier Nyam-Nyam"
+    ],
+    "size": "small",
+    "weight": 11,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "basset-artesien-normand",
+    "name": "Basset Artésien-Normand",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 20,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "basset-bleu-de-gascogne",
+    "name": "Basset Bleu de Gascogne",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 17,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "basset-de-westphalie",
+    "name": "Basset de Westphalie",
+    "otherNames": [
+      "Westphalian Dachsbracke",
+      "Westfälische Dachsbracke"
+    ],
+    "size": "medium",
+    "weight": 15,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "basset-des-alpes",
+    "name": "Basset des Alpes",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 18,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "basset-fauve-de-bretagne",
+    "name": "Basset Fauve de Bretagne",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 15,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "basset-hound",
+    "name": "Basset Hound",
+    "otherNames": [],
+    "size": "large",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "beagle",
+    "name": "Beagle",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 18,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "beagle-harrier",
+    "name": "Beagle-Harrier",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 20,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "bearded-collie",
+    "name": "Bearded Collie",
+    "otherNames": [
+      "Collie barbu",
+      "Colley barbu",
+      "Collie des Highlands",
+      "Beardie"
+    ],
+    "size": "medium",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "beauceron",
+    "name": "Beauceron",
+    "otherNames": [
+      "Berger de Beauce",
+      "Bas-Rouge",
+      "Beauce Shepherd"
+    ],
+    "size": "large",
+    "weight": 48,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-allemand",
+    "name": "Berger Allemand",
+    "otherNames": [
+      "Berger Alsacien",
+      "Deutscher Schäferhund",
+      "German Shepherd Dog"
+    ],
+    "size": "medium",
+    "weight": 40,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-americain-miniature",
+    "name": "Berger Américain Miniature",
+    "otherNames": [
+      "Berger Australien Miniature",
+      "Miniature American Shepherd",
+      "Mini Aussie"
+    ],
+    "size": "medium",
+    "weight": 14,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-australien",
+    "name": "Berger Australien",
+    "otherNames": [
+      "Aussie",
+      "Australian Shepherd"
+    ],
+    "size": "medium",
+    "weight": 34,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-belge-groenendael",
+    "name": "Berger Belge Groenendael",
+    "otherNames": [],
+    "size": "large",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-belge-laekenois",
+    "name": "Berger Belge Laekenois",
+    "otherNames": [],
+    "size": "large",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-belge-malinois",
+    "name": "Berger Belge Malinois",
+    "otherNames": [
+      "Malinois",
+      "Malinois Belgian Shepherd"
+    ],
+    "size": "medium",
+    "weight": 34,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-belge-tervueren",
+    "name": "Berger Belge Tervueren",
+    "otherNames": [
+      "Belgian Shepherd Tervueren",
+      "Tervurense"
+    ],
+    "size": "large",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-blanc-suisse",
+    "name": "Berger Blanc Suisse",
+    "otherNames": [
+      "Berger Blanc Américain",
+      "Berger Blanc Canadien",
+      "Weisser Schweizer Schaferhund",
+      "White Swiss Shepherd Dog"
+    ],
+    "size": "large",
+    "weight": 40,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-catalan",
+    "name": "Berger Catalan",
+    "otherNames": [
+      "Gos d'Atura Català",
+      "Berger de Catalogne",
+      "Perro de Pastor Catalan",
+      "Catalan Sheepdog"
+    ],
+    "size": "medium",
+    "weight": 18,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-anatolie",
+    "name": "Berger d'Anatolie",
+    "otherNames": [
+      "Kangal",
+      "Karabash",
+      "Coban Köpegi",
+      "Anatolian Shepherd Dog"
+    ],
+    "size": "large",
+    "weight": 65,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-asie-centrale",
+    "name": "Berger d'Asie Centrale",
+    "otherNames": [
+      "Ovtcharka d'Asie Centrale",
+      "Central Asian Shepherd",
+      "Sredneasiatskaïa Ovtcharka"
+    ],
+    "size": "large",
+    "weight": 79,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-de-boheme",
+    "name": "Berger de Bohême",
+    "otherNames": [
+      "Bohemian Shepherd",
+      "Chodsky Pes"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-de-brie",
+    "name": "Berger de Brie",
+    "otherNames": [],
+    "size": "large",
+    "weight": 40,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-atlas",
+    "name": "Berger de l'Atlas",
+    "otherNames": [
+      "Aïdi",
+      "Chien de l'Atlas",
+      "Chien de montagne de l'Atlas",
+      "Atlas Mountain Dog"
+    ],
+    "size": "medium",
+    "weight": 32,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-de-maremme-et-des-abruzzes",
+    "name": "Berger de Maremme et des Abruzzes",
+    "otherNames": [
+      "Cane da pastore Maremmano-Abruzzese",
+      "Maremma Sheepdog"
+    ],
+    "size": "large",
+    "weight": 45,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-de-picardie",
+    "name": "Berger de Picardie",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-de-russie",
+    "name": "Berger de Russie",
+    "otherNames": [
+      "Berger de Russie méridionale",
+      "Youjak",
+      "Caucasian"
+    ],
+    "size": "large",
+    "weight": 55,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-de-savoie",
+    "name": "Berger de Savoie",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-des-pyrenees",
+    "name": "Berger des Pyrénées",
+    "otherNames": [
+      "Berger des Pyrénées à poil long",
+      "Berger des Pyrénées à face rase",
+      "Labrit",
+      "Pyrenean Shepherd"
+    ],
+    "size": "small",
+    "weight": 10,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-des-shetland",
+    "name": "Berger des Shetland",
+    "otherNames": [
+      "Shetland Sheepdog",
+      "Sheltie",
+      "Colley Shetland"
+    ],
+    "size": "small",
+    "weight": 10,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-du-caucase",
+    "name": "Berger du Caucase",
+    "otherNames": [
+      "Central Asia Shepherd Dog",
+      "Chien de berger du Caucase",
+      "Kavkazkaïa Ovtcharka"
+    ],
+    "size": "large",
+    "weight": 100,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-du-massif-du-karst",
+    "name": "Berger du massif du Karst",
+    "otherNames": [
+      "Berger du Karst",
+      "Kraski Ovcar",
+      "Karst Shepherd"
+    ],
+    "size": "large",
+    "weight": 42,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-finnois-de-laponie",
+    "name": "Berger finnois de Laponie",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 27,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-hollandais",
+    "name": "Berger Hollandais",
+    "otherNames": [
+      "Hollandse Herdershond",
+      "Dutch Shepherd"
+    ],
+    "size": "large",
+    "weight": 32,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-islandais",
+    "name": "Berger Islandais",
+    "otherNames": [
+      "Berger d'Islande",
+      "Chien de Berger d'Islande",
+      "Islenskur Fjárhundur"
+    ],
+    "size": "medium",
+    "weight": 14,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-polonais-de-podhale",
+    "name": "Berger Polonais de Podhale",
+    "otherNames": [
+      "Chien de Berger des Tatras",
+      "Polski Owczarek Podhalanski",
+      "Tatra Shepherd Dog"
+    ],
+    "size": "large",
+    "weight": 55,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-portugais",
+    "name": "Berger Portugais",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 27,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "berger-yougoslave",
+    "name": "Berger Yougoslave",
+    "otherNames": [
+      "Chien de Berger Yougoslave de Charplanina",
+      "Charplanina",
+      "Yugoslavian Shepherd Dog",
+      "Sarplaninac"
+    ],
+    "size": "large",
+    "weight": 50,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "billy",
+    "name": "Billy",
+    "otherNames": [],
+    "size": "large",
+    "weight": 35,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "black-and-tan-coonhound",
+    "name": "Black and Tan Coonhound",
+    "otherNames": [
+      "Chien noir et feu pour la chasse au raton laveur",
+      "Coonhound Noir et Feu"
+    ],
+    "size": "large",
+    "weight": 50,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "bobtail",
+    "name": "Bobtail",
+    "otherNames": [
+      "Chien de Berger Anglais Ancestral",
+      "Chien de Berger Anglais",
+      "Old English Sheepdog"
+    ],
+    "size": "large",
+    "weight": 40,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "boerbull",
+    "name": "Boerbull",
+    "otherNames": [],
+    "size": "large",
+    "weight": 90,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "border-collie",
+    "name": "Border Collie",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 28,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "boston-terrier",
+    "name": "Boston Terrier",
+    "otherNames": [],
+    "size": "small",
+    "weight": 11,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "bouledogue-americain",
+    "name": "Bouledogue Américain",
+    "otherNames": [],
+    "size": "large",
+    "weight": 55,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "bouledogue-francais",
+    "name": "Bouledogue Français",
+    "otherNames": [],
+    "size": "small",
+    "weight": 14,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "bouvier-australien",
+    "name": "Bouvier Australien",
+    "otherNames": [
+      "Bouvier d'Australie",
+      "Australian Cattle Dog"
+    ],
+    "size": "medium",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "bouvier-bernois",
+    "name": "Bouvier Bernois",
+    "otherNames": [
+      "Bouvier de Berne",
+      "Dürrbächler",
+      "Bernese Mountain Dog",
+      "Berner Sennenhund"
+    ],
+    "size": "large",
+    "weight": 60,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "bouvier-appenzell",
+    "name": "Bouvier d'Appenzell",
+    "otherNames": [
+      "Bouvier de l'Appenzell",
+      "Bouvier Appenzellois",
+      "Appenzeller Sennenhund"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "bouvier-entlebuch",
+    "name": "Bouvier de l'Entlebuch",
+    "otherNames": [
+      "Entlebucher Sennenhund",
+      "Entlebucher Mountain Dog"
+    ],
+    "size": "medium",
+    "weight": 28,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "bouvier-des-ardennes",
+    "name": "Bouvier des Ardennes",
+    "otherNames": [],
+    "size": "large",
+    "weight": 35,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "boxer",
+    "name": "Boxer",
+    "otherNames": [],
+    "size": "large",
+    "weight": 35,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "brachet-allemand",
+    "name": "Brachet Allemand",
+    "otherNames": [
+      "Deutsche Bracke",
+      "German Hound"
+    ],
+    "size": "medium",
+    "weight": 20,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "brachet-autrichien-noir-et-feu",
+    "name": "Brachet autrichien noir et feu",
+    "otherNames": [
+      "Brachet noir et feu",
+      "Chien Courant Autrichien",
+      "Austrian Hound",
+      "Brandlbracke"
+    ],
+    "size": "medium",
+    "weight": 21,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "brachet-de-styrie-a-poil-dur",
+    "name": "Brachet de Styrie à poil dur",
+    "otherNames": [
+      "Steirische Rauhhaarbracke",
+      "Styrian Coarse-haired Hound"
+    ],
+    "size": "medium",
+    "weight": 20,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "brachet-polonais",
+    "name": "Brachet Polonais",
+    "otherNames": [
+      "Chien courant polonais",
+      "Ogar Polski",
+      "Polish Hound"
+    ],
+    "size": "large",
+    "weight": 32,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "brachet-tyrolien",
+    "name": "Brachet Tyrolien",
+    "otherNames": [
+      "Brachet autrichien",
+      "Chien courant du Tyrol",
+      "Tiroler Bracke"
+    ],
+    "size": "medium",
+    "weight": 20,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "braque-allemand-a-poil-court",
+    "name": "Braque allemand à poil court",
+    "otherNames": [
+      "Braque allemand",
+      "Deutsch Kurzhaar",
+      "German Shorthaired Pointer"
+    ],
+    "size": "large",
+    "weight": 32,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "braque-allemand-a-poil-dur",
+    "name": "Braque allemand à poil dur",
+    "otherNames": [
+      "Chien d'arrêt allemand à poil dur",
+      "Deutsch Drahthaar"
+    ],
+    "size": "large",
+    "weight": 31,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "braque-auvergne",
+    "name": "Braque d'Auvergne",
+    "otherNames": [],
+    "size": "large",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "braque-de-burgos",
+    "name": "Braque de Burgos",
+    "otherNames": [],
+    "size": "large",
+    "weight": 32,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "braque-ariege",
+    "name": "Braque de l'Ariège",
+    "otherNames": [
+      "Braque du Midi",
+      "Braque de Toulouse"
+    ],
+    "size": "large",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "braque-de-weimar",
+    "name": "Braque de Weimar",
+    "otherNames": [],
+    "size": "large",
+    "weight": 38,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "braque-du-bourbonnais",
+    "name": "Braque du Bourbonnais",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "braque-francais",
+    "name": "Braque Français",
+    "otherNames": [
+      "Braque français de type Pyrénées",
+      "Braque français de type Gascogne",
+      "French Pointing Dog"
+    ],
+    "size": "large",
+    "weight": 32,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "braque-hongrois-a-poil-court",
+    "name": "Braque Hongrois à poil court",
+    "otherNames": [
+      "Braque Hongrois",
+      "Rövidszörü Magyar Vizsla"
+    ],
+    "size": "medium",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "braque-hongrois-a-poil-dur",
+    "name": "Braque hongrois à poil dur",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "braque-italien",
+    "name": "Braque Italien",
+    "otherNames": [],
+    "size": "large",
+    "weight": 40,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "braque-saint-germain",
+    "name": "Braque Saint-Germain",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 26,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "briquet-griffon-vendeen",
+    "name": "Briquet Griffon Vendéen",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 29,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "broholmer",
+    "name": "Broholmer",
+    "otherNames": [],
+    "size": "large",
+    "weight": 70,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "buhund-norvegien",
+    "name": "Buhund Norvégien",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 18,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "bull-terrier",
+    "name": "Bull Terrier",
+    "otherNames": [
+      "English Bull Terrier",
+      "Bull Terrier Standard"
+    ],
+    "size": "large",
+    "weight": 40,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "bulldog-anglais",
+    "name": "Bulldog Anglais",
+    "otherNames": [
+      "Bouledogue anglais",
+      "English Bulldog"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "bulldog-continental",
+    "name": "Bulldog Continental",
+    "otherNames": [
+      "Conti",
+      "Pickwick Bulldogs Old Type"
+    ],
+    "size": "medium",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "bullmastiff",
+    "name": "Bullmastiff",
+    "otherNames": [],
+    "size": "large",
+    "weight": 59,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "cane-corso",
+    "name": "Cane Corso",
+    "otherNames": [
+      "Branchiero Siciliano",
+      "Chien de cour Italien",
+      "Italian Corso Dog"
+    ],
+    "size": "large",
+    "weight": 50,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "cao-de-castro-laboreiro",
+    "name": "Cao de Castro Laboreiro",
+    "otherNames": [
+      "Chien de Castro Laboreiro",
+      "Bouvier portugais",
+      "Castro Laboreiro Dog"
+    ],
+    "size": "large",
+    "weight": 40,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "carlin",
+    "name": "Carlin",
+    "otherNames": [],
+    "size": "small",
+    "weight": 8,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "cavalier-king-charles-spaniel",
+    "name": "Cavalier King Charles Spaniel",
+    "otherNames": [
+      "Cavalier King Charles",
+      "Epagneul Cavalier King Charles",
+      "English Toy Spaniel"
+    ],
+    "size": "small",
+    "weight": 8,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chesapeake-bay-retriever",
+    "name": "Chesapeake Bay Retriever",
+    "otherNames": [
+      "Retriever de la Baie de Chesapeake",
+      "Chessie"
+    ],
+    "size": "large",
+    "weight": 36,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-courant-istrie-poil-dur",
+    "name": "Chien courant d'Istrie à poil dur",
+    "otherNames": [
+      "Istarski Ostrodlaki Gonic",
+      "Istrian Coarse Haired Hound"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-courant-istrie-poil-ras",
+    "name": "Chien courant d'Istrie à poil ras",
+    "otherNames": [
+      "Istarski Kratkodlaki Gonic",
+      "Istrian Short Haired Hound"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-courant-de-bosnie",
+    "name": "Chien courant de Bosnie",
+    "otherNames": [
+      "Chien courant de Bosnie à poil raide",
+      "Chien courant d'Illyrie",
+      "Barak",
+      "Bosanski Ostrodlaki Goni-Barak"
+    ],
+    "size": "medium",
+    "weight": 24,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-courant-halden",
+    "name": "Chien courant de Halden",
+    "otherNames": [
+      "Chien courant de Halden",
+      "Halden Hound",
+      "Haldenstover"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-courant-hamilton",
+    "name": "Chien courant de Hamilton",
+    "otherNames": [
+      "Chien courant suédois",
+      "Hamiltonstövare"
+    ],
+    "size": "medium",
+    "weight": 27,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-courant-hygen",
+    "name": "Chien courant de Hygen",
+    "otherNames": [
+      "Chien Courant de Hygen",
+      "Hygenhund"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-courant-de-posavatz",
+    "name": "Chien courant de Posavatz",
+    "otherNames": [
+      "Chien courant de la vallée de Save",
+      "Chien courant du bassin de Kras",
+      "Posavaski Gonic",
+      "Posavatz Hound"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-courant-schiller",
+    "name": "Chien courant de Schiller",
+    "otherNames": [
+      "Chien Courant de Schiller",
+      "Schillerstövare",
+      "Schiller Hound"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-courant-de-transylvanie",
+    "name": "Chien courant de Transylvanie",
+    "otherNames": [
+      "Brachet Hongrois",
+      "Chien courant hongrois",
+      "Erdélyi Kopo"
+    ],
+    "size": "large",
+    "weight": 35,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-courant-du-smaland",
+    "name": "Chien courant du Småland",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 18,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-courant-espagnol",
+    "name": "Chien courant espagnol",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-courant-finnois",
+    "name": "Chien courant Finnois",
+    "otherNames": [
+      "Chien courant Finlandais",
+      "Finnish Hound",
+      "Suomenajokoira"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-courant-grec",
+    "name": "Chien courant grec",
+    "otherNames": [
+      "Chien courant hellénique",
+      "Hellinikos Ichnilatis",
+      "Greek Hound",
+      "Greek Harehound"
+    ],
+    "size": "medium",
+    "weight": 20,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-courant-italien",
+    "name": "Chien courant italien",
+    "otherNames": [
+      "Chien de cour italien",
+      "Chien courant Italien à poil ras",
+      "Chien courant Italien à poil dur",
+      "Segugio Italiano a pelo raso",
+      "Segugio Italiano a pelo forte"
+    ],
+    "size": "medium",
+    "weight": 28,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-courant-norvegien",
+    "name": "Chien courant norvégien",
+    "otherNames": [
+      "Dunker",
+      "Norwegian Hound"
+    ],
+    "size": "medium",
+    "weight": 22,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-courant-serbe",
+    "name": "Chien courant serbe",
+    "otherNames": [
+      "Chien courant des Balkans",
+      "Srpski Gonic",
+      "Balkanski Gonic",
+      "Serbian Hound"
+    ],
+    "size": "medium",
+    "weight": 20,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-courant-slovaque",
+    "name": "Chien courant slovaque",
+    "otherNames": [
+      "Slovenský kopov",
+      "Slovakian Hound"
+    ],
+    "size": "medium",
+    "weight": 20,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-courant-suisse",
+    "name": "Chien courant suisse",
+    "otherNames": [
+      "Bernois",
+      "Courant Bernois",
+      "Bruno du Jura",
+      "Lucernois",
+      "Courant schwytzois",
+      "Schweizer Laufhund"
+    ],
+    "size": "medium",
+    "weight": 20,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-courant-yougoslave-de-montagne",
+    "name": "Chien courant yougoslave de montagne",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-courant-yougoslave-tricolore",
+    "name": "Chien courant yougoslave tricolore",
+    "otherNames": [
+      "Chien courant tricolore serbe",
+      "Srpski Trobojni Gonic"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-arret-allemand-poil-long",
+    "name": "Chien d’arrêt allemand à poil long",
+    "otherNames": [
+      "Langhaar",
+      "Deutsche Langhaar",
+      "German Longhaired Pointer"
+    ],
+    "size": "large",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-d-arret-frison",
+    "name": "Chien d'arrêt frison",
+    "otherNames": [
+      "stabyhoun",
+      "stabyhound",
+      "Stabijhoun"
+    ],
+    "size": "medium",
+    "weight": 27,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-arret-portugais",
+    "name": "Chien d'arrêt portugais",
+    "otherNames": [
+      "Braque Portugais",
+      "Perdigueiro Português",
+      "Portuguese Pointer",
+      "Portuguese Pointing Dog"
+    ],
+    "size": "medium",
+    "weight": 27,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-artois",
+    "name": "Chien d’Artois",
+    "otherNames": [
+      "Grand Chien d'Artois",
+      "Picard",
+      "Briquet d'Artois"
+    ],
+    "size": "large",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-eau-americain",
+    "name": "Chien d'eau américain",
+    "otherNames": [
+      "American Water Spaniel",
+      "Epagneul d'eau américain"
+    ],
+    "size": "medium",
+    "weight": 20,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-eau-espagnol",
+    "name": "Chien d'eau espagnol",
+    "otherNames": [
+      "Chien turc",
+      "Perro de Agua Español",
+      "Spanish Water Dog",
+      "Spanish Water Spaniel"
+    ],
+    "size": "medium",
+    "weight": 23,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-eau-frison",
+    "name": "Chien d'eau frison",
+    "otherNames": [
+      "Wetterhoun",
+      "Frisian Water Dog"
+    ],
+    "size": "medium",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-eau-romagnol",
+    "name": "Chien d'eau romagnol",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 16,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-elan-norvegien-gris",
+    "name": "Chien d’élan norvégien gris",
+    "otherNames": [
+      "Elkhound Gris",
+      "Norwegian Elkhound",
+      "Norsk Elghund Gra"
+    ],
+    "size": "medium",
+    "weight": 27,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-elan-norvegien-noir",
+    "name": "Chien d’Élan Norvégien Noir",
+    "otherNames": [
+      "Black Norwegian Elkhound",
+      "Norsk Elghund Sort"
+    ],
+    "size": "medium",
+    "weight": 27,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-elan-suedois",
+    "name": "Chien d’élan suédois",
+    "otherNames": [
+      "Jämthund",
+      "Chien d'élan gris majeur",
+      "Swedish Elkhound"
+    ],
+    "size": "large",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-d-ours-de-carelie",
+    "name": "Chien d'ours de Carélie",
+    "otherNames": [
+      "Karjalankarhukoira",
+      "Karelian Bear Dog"
+    ],
+    "size": "medium",
+    "weight": 28,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-oysel",
+    "name": "Chien d'Oysel",
+    "otherNames": [
+      "Chien d'Oysel Allemand",
+      "Chien de caille allemand",
+      "Deutscher Wachtelhund"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-de-berger-de-croatie",
+    "name": "Chien de berger de Croatie",
+    "otherNames": [
+      "Hrvatski Ovcar",
+      "Croatian Shepherd Dog"
+    ],
+    "size": "medium",
+    "weight": 20,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-de-berger-de-majorque",
+    "name": "Chien de berger de Majorque",
+    "otherNames": [
+      "Ca de Bestiar",
+      "Perro de pastor Mallorquin",
+      "Majorca Shepherd Dog"
+    ],
+    "size": "large",
+    "weight": 40,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-de-berger-roumain-de-mioritza",
+    "name": "Chien de Berger Roumain de Mioritza",
+    "otherNames": [
+      "Ciobanesc Romanesc Mioritic",
+      "Romanian Mioritic Shepherd Dog"
+    ],
+    "size": "large",
+    "weight": 60,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-de-berger-roumain-des-carpathes",
+    "name": "Chien de Berger Roumain des Carpathes",
+    "otherNames": [
+      "Carpatin",
+      "Ciobanesc Romanesc Carpatin",
+      "Romanian Carpathian Shepherd Dog"
+    ],
+    "size": "large",
+    "weight": 45,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-de-canaan",
+    "name": "Chien de Canaan",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-de-montagne-des-pyrenees",
+    "name": "Chien de montagne des Pyrénées",
+    "otherNames": [
+      "Patou",
+      "Grand Pyrénéen",
+      "Pyrenean Mountain Dog"
+    ],
+    "size": "large",
+    "weight": 64,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-de-montagne-portugais",
+    "name": "Chien de montagne portugais",
+    "otherNames": [
+      "Chien de la Serra da Estrela",
+      "Cão da Serra da Estrela"
+    ],
+    "size": "large",
+    "weight": 60,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-de-saint-hubert",
+    "name": "Chien de Saint Hubert",
+    "otherNames": [
+      "Bloodhound",
+      "Chien des Flandres",
+      "Chien des Ardennes"
+    ],
+    "size": "large",
+    "weight": 54,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-du-groenland",
+    "name": "Chien du Groenland",
+    "otherNames": [
+      "Groënlandais",
+      "Chien esquimau du Groenland",
+      "Inuit Dog",
+      "Greenland Dog"
+    ],
+    "size": "large",
+    "weight": 38,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-du-pharaon",
+    "name": "Chien du pharaon",
+    "otherNames": [
+      "Lévrier du Pharaon",
+      "Pharaoh Hound"
+    ],
+    "size": "medium",
+    "weight": 20,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-finnois-de-laponie",
+    "name": "Chien Finnois de Laponie",
+    "otherNames": [
+      "Suomenlapinkoira",
+      "Finnish Lapponian Dog",
+      "Finnish Lapphund"
+    ],
+    "size": "medium",
+    "weight": 21,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-jindo-coreen",
+    "name": "Chien Jindo Coréen",
+    "otherNames": [
+      "Jindo Coréen",
+      "Spitz Coréen de Jindo",
+      "Korean Jindo Dog"
+    ],
+    "size": "medium",
+    "weight": 20,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-loup-de-saarloos",
+    "name": "Chien Loup de Saarloos",
+    "otherNames": [],
+    "size": "large",
+    "weight": 45,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-loup-tchecoslovaque",
+    "name": "Chien Loup Tchécoslovaque",
+    "otherNames": [
+      "Chien Loup Tchèque",
+      "Ceskoslovenský Vlciak",
+      "Chien Loup Slovaque"
+    ],
+    "size": "medium",
+    "weight": 29,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-norvegien-de-macareux",
+    "name": "Chien norvégien de Macareux",
+    "otherNames": [],
+    "size": "small",
+    "weight": 8,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-rouge-de-baviere",
+    "name": "Chien rouge de Bavière",
+    "otherNames": [
+      "Bayerischer Gebirgsschweisshund"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-rouge-de-hanovre",
+    "name": "Chien rouge de Hanovre",
+    "otherNames": [
+      "Chien de recherche au sang de Hanovre",
+      "Hannoverscher Schweisshund"
+    ],
+    "size": "large",
+    "weight": 35,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-suedois-de-laponie",
+    "name": "Chien suédois de Laponie",
+    "otherNames": [
+      "Lapphund suédois",
+      "Svensk Lapphund"
+    ],
+    "size": "medium",
+    "weight": 20,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-thailandais-1",
+    "name": "Chien thaïlandais",
+    "otherNames": [
+      "Chien thaïlandais à crête dorsale",
+      "Thai Ridgeback Dog"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chihuahua",
+    "name": "Chihuahua",
+    "otherNames": [],
+    "size": "small",
+    "weight": 3,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chow-chow",
+    "name": "Chow Chow",
+    "otherNames": [
+      "Chow chow panda",
+      "Choo"
+    ],
+    "size": "medium",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "cirneco-etna",
+    "name": "Cirneco de l’Etna",
+    "otherNames": [
+      "Lévrier sicilien",
+      "Cirneco dell'Etna"
+    ],
+    "size": "medium",
+    "weight": 12,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "clumber-spaniel",
+    "name": "Clumber-Spaniel",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 34,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "cocker-americain",
+    "name": "Cocker Américain",
+    "otherNames": [
+      "Cocker Spaniel Américain",
+      "American Cocker Spaniel"
+    ],
+    "size": "medium",
+    "weight": 13,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "cocker-anglais",
+    "name": "Cocker Anglais",
+    "otherNames": [
+      "Cocker Spaniel Anglais",
+      "Epagneul cocker anglais",
+      "English Cocker Spaniel"
+    ],
+    "size": "medium",
+    "weight": 14,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "colley-a-poil-court",
+    "name": "Colley à poil court",
+    "otherNames": [
+      "Berger d'Ecosse à poil court",
+      "Collie Smooth"
+    ],
+    "size": "medium",
+    "weight": 29,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "colley-a-poil-long",
+    "name": "Colley à poil long",
+    "otherNames": [
+      "Berger d'Ecosse à poil long",
+      "Collie Rough"
+    ],
+    "size": "medium",
+    "weight": 29,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "curly-coated-retriever",
+    "name": "Curly Coated Retriever",
+    "otherNames": [],
+    "size": "large",
+    "weight": 36,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "cursinu",
+    "name": "Cursinu",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 28,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "dalmatien",
+    "name": "Dalmatien",
+    "otherNames": [
+      "Dalmatian",
+      "Dalmatinski Pas"
+    ],
+    "size": "medium",
+    "weight": 32,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "dobermann",
+    "name": "Dobermann",
+    "otherNames": [],
+    "size": "large",
+    "weight": 45,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "dogo-canario",
+    "name": "Dogo Canario",
+    "otherNames": [
+      "Dogue des Canaries",
+      "Perro de Presa Canario",
+      "Canary Mastiff"
+    ],
+    "size": "large",
+    "weight": 57,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "dogue-allemand",
+    "name": "Dogue Allemand",
+    "otherNames": [
+      "Danois",
+      "Deutsche Dogge",
+      "Grand Danois",
+      "Great Dane"
+    ],
+    "size": "large",
+    "weight": 70,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "dogue-argentin",
+    "name": "Dogue Argentin",
+    "otherNames": [
+      "Dogo Argentino",
+      "Argentine Dogo"
+    ],
+    "size": "large",
+    "weight": 45,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "dogue-de-bordeaux",
+    "name": "Dogue de Bordeaux",
+    "otherNames": [
+      "Dogue d'Aquitaine",
+      "French Mastiff",
+      "Mastiff Français"
+    ],
+    "size": "large",
+    "weight": 52,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "dogue-de-majorque",
+    "name": "Dogue de Majorque",
+    "otherNames": [
+      "Ca de Bou",
+      "Perro Dogo Mallorquin",
+      "Majorca Mastiff"
+    ],
+    "size": "large",
+    "weight": 38,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "dogue-du-tibet",
+    "name": "Dogue du Tibet",
+    "otherNames": [
+      "Mastiff tibétain",
+      "Do-Khyi",
+      "Tibetan Mastiff"
+    ],
+    "size": "large",
+    "weight": 82,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "drever",
+    "name": "Drever",
+    "otherNames": [
+      "Basset Suédois",
+      "Swedish Dachsbracke"
+    ],
+    "size": "medium",
+    "weight": 15,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "toy-terrier-noir-et-feu",
+    "name": "English Toy Terrier",
+    "otherNames": [
+      "Toy Terrier Noir et Feu",
+      "Toy Terrier Anglais Noir et Feu",
+      "Black And Tan English Toy Terrier"
+    ],
+    "size": "small",
+    "weight": 4,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "epagneul-a-perdrix-de-drente",
+    "name": "Epagneul à perdrix de Drente",
+    "otherNames": [
+      "Drentsche Patrijshond",
+      "Drentsche Partridge Dog",
+      "Epagneul à perdrix de Drente",
+      "Epagneul hollandais de Drente"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "epagneul-bleu-de-picardie",
+    "name": "Epagneul Bleu de Picardie",
+    "otherNames": [
+      "Bleu de Picardie",
+      "Epagneul Bleu Picard"
+    ],
+    "size": "medium",
+    "weight": 18,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "epagneul-breton",
+    "name": "Epagneul Breton",
+    "otherNames": [
+      "Brittany",
+      "Brittany Spaniel",
+      "Brittany Wiegref"
+    ],
+    "size": "medium",
+    "weight": 18,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "epagneul-de-pont-audemer",
+    "name": "Epagneul de Pont-Audemer",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 20,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "epagneul-francais",
+    "name": "Epagneul Français",
+    "otherNames": [
+      "Epagneul de France",
+      "French Spaniel"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "epagneul-japonais",
+    "name": "Epagneul Japonais",
+    "otherNames": [
+      "Chin",
+      "Japanese Chin"
+    ],
+    "size": "small",
+    "weight": 6,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "epagneul-nain-continental",
+    "name": "Epagneul Nain Continental",
+    "otherNames": [
+      "Epagneul Papillon",
+      "Epagneul Phalène",
+      "Continental Toy Spaniel"
+    ],
+    "size": "small",
+    "weight": 4,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "epagneul-picard",
+    "name": "Epagneul Picard",
+    "otherNames": [],
+    "size": "small",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "epagneul-tibetain",
+    "name": "Epagneul Tibétain",
+    "otherNames": [
+      "Epagneul du Tibet",
+      "Tibetan Spaniel"
+    ],
+    "size": "small",
+    "weight": 7,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "eurasier",
+    "name": "Eurasier",
+    "otherNames": [
+      "Eurasien",
+      "Loup-Chow"
+    ],
+    "size": "medium",
+    "weight": 32,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "eurohound",
+    "name": "Eurohound",
+    "otherNames": [
+      "European Sled Dog",
+      "Scandinavian Hound"
+    ],
+    "size": "medium",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "field-spaniel",
+    "name": "Field-Spaniel",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "fila-brasileiro",
+    "name": "Fila Brasileiro",
+    "otherNames": [],
+    "size": "large",
+    "weight": 60,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "fila-de-sao-miguel",
+    "name": "Fila de Sao Miguel",
+    "otherNames": [
+      "Fila de Saint Miguel",
+      "Cão Fila de São Miguel"
+    ],
+    "size": "large",
+    "weight": 35,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "flat-coated-retriever",
+    "name": "Flat-Coated Retriever",
+    "otherNames": [],
+    "size": "large",
+    "weight": 36,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "foxhound-americain",
+    "name": "Foxhound américain",
+    "otherNames": [],
+    "size": "large",
+    "weight": 34,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "foxhound-anglais",
+    "name": "Foxhound anglais",
+    "otherNames": [],
+    "size": "large",
+    "weight": 34,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "golden-retriever",
+    "name": "Golden Retriever",
+    "otherNames": [
+      "Retriever doré",
+      "Retriever à poil plat"
+    ],
+    "size": "large",
+    "weight": 34,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "grand-anglo-francais-blanc-et-noir",
+    "name": "Grand Anglo-Français blanc et noir",
+    "otherNames": [],
+    "size": "large",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "grand-anglo-francais-blanc-et-orange",
+    "name": "Grand Anglo-Français blanc et orange",
+    "otherNames": [],
+    "size": "large",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "grand-anglo-francais-tricolore",
+    "name": "Grand Anglo-Français tricolore",
+    "otherNames": [],
+    "size": "large",
+    "weight": 32,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "grand-basset-griffon-vendeen",
+    "name": "Grand Basset Griffon vendéen",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 20,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "grand-bouvier-suisse",
+    "name": "Grand Bouvier Suisse",
+    "otherNames": [
+      "Grosser Schweizer Sennenhund",
+      "Greater Swiss Mountain Dog"
+    ],
+    "size": "large",
+    "weight": 50,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "grand-munsterlander",
+    "name": "Grand Épagneul de Münster",
+    "otherNames": [
+      "Grand Münsterländer",
+      "Münsterländer Vorstehhund",
+      "Large Munsterlander"
+    ],
+    "size": "large",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "grand-gascon-saintongeois",
+    "name": "Grand Gascon saintongeois",
+    "otherNames": [],
+    "size": "large",
+    "weight": 36,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "grand-griffon-vendeen",
+    "name": "Grand Griffon Vendéen",
+    "otherNames": [],
+    "size": "large",
+    "weight": 35,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "greyhound",
+    "name": "Greyhound",
+    "otherNames": [],
+    "size": "large",
+    "weight": 38,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "greyster",
+    "name": "Greyster",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 38,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "griffon-belge",
+    "name": "Griffon Belge",
+    "otherNames": [],
+    "size": "small",
+    "weight": 6,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "griffon-bleu-de-gascogne",
+    "name": "Griffon Bleu de Gascogne",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "griffon-fauve-de-bretagne",
+    "name": "Griffon fauve de Bretagne",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 23,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "griffon-nivernais",
+    "name": "Griffon Nivernais",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "harrier",
+    "name": "Harrier",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "hokkaido-ken",
+    "name": "Hokkaïdo Ken",
+    "otherNames": [
+      "Aïnou Ken",
+      "Ainu Ken",
+      "Chien de Hokkaïdo"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "hovawart",
+    "name": "Hovawart",
+    "otherNames": [],
+    "size": "large",
+    "weight": 40,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "husky-siberien",
+    "name": "Husky Sibérien",
+    "otherNames": [
+      "Husky de Sibérie",
+      "Siberian Husky",
+      "Husky d'arctique"
+    ],
+    "size": "medium",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "affenpinscher",
+    "name": "Affenpinscher",
+    "otherNames": [
+      "Griffon singe",
+      "Zwergaffen"
+    ],
+    "size": "small",
+    "weight": 6,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "airedale-terrier",
+    "name": "Airedale Terrier",
+    "otherNames": [
+      "Bingley-Terrier",
+      "Warfedale Terrier",
+      "Waterside-Terrier",
+      "Working-Terrier"
+    ],
+    "size": "medium",
+    "weight": 24,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "barbet",
+    "name": "Barbet",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "bedlington-terrier",
+    "name": "Bedlington Terrier",
+    "otherNames": [],
+    "size": "small",
+    "weight": 10,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "berger-de-bergame",
+    "name": "Berger de Bergame",
+    "otherNames": [
+      "Berger Bergamasque",
+      "Cane da Pastore Bergamasco",
+      "Bergamasco Shepherd Dog"
+    ],
+    "size": "large",
+    "weight": 38,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "berger-polonais-de-plaine",
+    "name": "Berger Polonais de Plaine",
+    "otherNames": [
+      "Polski Owczarek Nizinny",
+      "Polish Lowland Sheepdog"
+    ],
+    "size": "medium",
+    "weight": 24,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "bichon-a-poil-frise",
+    "name": "Bichon à poil frisé",
+    "otherNames": [],
+    "size": "small",
+    "weight": 4,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "bichon-bolonais",
+    "name": "Bichon Bolonais",
+    "otherNames": [],
+    "size": "small",
+    "weight": 4,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "bichon-havanais",
+    "name": "Bichon Havanais",
+    "otherNames": [
+      "Chien de soie de la Havane",
+      "Havanais",
+      "Havanese"
+    ],
+    "size": "small",
+    "weight": 6,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "bichon-maltais",
+    "name": "Bichon Maltais",
+    "otherNames": [
+      "Maltais",
+      "Maltese"
+    ],
+    "size": "small",
+    "weight": 4,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "biewer-yorkshire",
+    "name": "Biewer Yorkshire",
+    "otherNames": [
+      "Biewer Yorkshire Terrier",
+      "Biewer Terrier",
+      "Biewer Yorkshire à la Pom-pon"
+    ],
+    "size": "small",
+    "weight": 3,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "border-terrier",
+    "name": "Border Terrier",
+    "otherNames": [],
+    "size": "small",
+    "weight": 7,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "bouvier-des-flandres",
+    "name": "Bouvier des Flandres",
+    "otherNames": [
+      "Flanders Cattle Dog",
+      "Vlamse Koehond"
+    ],
+    "size": "large",
+    "weight": 40,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "braque-slovaque-a-poil-dur",
+    "name": "Braque Slovaque à poil dur",
+    "otherNames": [
+      "Slovensky hrubosrsty Stavac",
+      "Griffon d'Arrêt Slovaque à poil dur"
+    ],
+    "size": "large",
+    "weight": 35,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "cairn-terrier",
+    "name": "Cairn Terrier",
+    "otherNames": [],
+    "size": "small",
+    "weight": 7,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "caniche",
+    "name": "Caniche",
+    "otherNames": [
+      "Caniche toy",
+      "Caniche nain",
+      "Barbone",
+      "Poodle"
+    ],
+    "size": "medium",
+    "weight": 23,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "cavapoo",
+    "name": "Cavapoo",
+    "otherNames": [],
+    "size": "small",
+    "weight": 10,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "chien-chinois-a-crete",
+    "name": "Chien chinois à crête",
+    "otherNames": [
+      "Chien nu chinois",
+      "Chinese Crested Dog",
+      "Powder-Puff"
+    ],
+    "size": "small",
+    "weight": 4,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "chien-eau-irlandais",
+    "name": "Chien d'eau irlandais",
+    "otherNames": [
+      "Epagneul d'eau irlandais",
+      "Irish Water Spaniel"
+    ],
+    "size": "medium",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-eau-portugais",
+    "name": "Chien d'Eau Portugais",
+    "otherNames": [
+      "Cão de Agua portugues",
+      "Portuguese Water Dog"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "chien-nu-du-perou",
+    "name": "Chien nu du Pérou",
+    "otherNames": [
+      "Chien nu péruvien",
+      "Chien nu Inca",
+      "Perro sin pelo del Perú",
+      "Peruvian Hairless Dog"
+    ],
+    "size": "small",
+    "weight": 25,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "chien-nu-mexicain",
+    "name": "Chien nu mexicain",
+    "otherNames": [
+      "Xoloitzcuintle",
+      "Xolo",
+      "Perro sin Pelo Mexicano",
+      "Mexican Hairless Dog"
+    ],
+    "size": "small",
+    "weight": 18,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "coton-de-tulear",
+    "name": "Coton de Tuléar",
+    "otherNames": [
+      "Coton",
+      "Cotie"
+    ],
+    "size": "small",
+    "weight": 6,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "dandie-dinmont-terrier",
+    "name": "Dandie-Dinmont-Terrier",
+    "otherNames": [],
+    "size": "small",
+    "weight": 11,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "fox-terrier",
+    "name": "Fox Terrier",
+    "otherNames": [
+      "Fox Terrier à poil lisse",
+      "Fox Terrier à poil dur",
+      "Fox Terrier Smooth",
+      "Fox Terrier Wire"
+    ],
+    "size": "small",
+    "weight": 9,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "goldendoodle",
+    "name": "Goldendoodle",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "griffon-bruxellois",
+    "name": "Griffon Bruxellois",
+    "otherNames": [],
+    "size": "small",
+    "weight": 6,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "griffon-korthals",
+    "name": "Griffon Korthals",
+    "otherNames": [
+      "Griffon à poil dur Korthals",
+      "Griffon d'arrêt Korthals",
+      "Korthals Griffon"
+    ],
+    "size": "medium",
+    "weight": 30,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "irish-terrier",
+    "name": "Irish Terrier",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 12,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "labradoodle",
+    "name": "Labradoodle",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 30,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "lakeland-terrier",
+    "name": "Lakeland Terrier",
+    "otherNames": [
+      "Patterdale Terrier",
+      "Working Terrier",
+      "Westmorland Terrier"
+    ],
+    "size": "small",
+    "weight": 9,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "lhassa-apso",
+    "name": "Lhassa Apso",
+    "otherNames": [],
+    "size": "large",
+    "weight": 7,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "maltipoo",
+    "name": "Maltipoo",
+    "otherNames": [],
+    "size": "small",
+    "weight": 6,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "norfolk-terrier",
+    "name": "Norfolk Terrier",
+    "otherNames": [],
+    "size": "small",
+    "weight": 7,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "norwich-terrier",
+    "name": "Norwich Terrier",
+    "otherNames": [],
+    "size": "small",
+    "weight": 5,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "samoyede",
+    "name": "Samoyède",
+    "otherNames": [
+      "Samoyed",
+      "Samoiedskaïa Sabaka"
+    ],
+    "size": "medium",
+    "weight": 30,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "schnauzer",
+    "name": "Schnauzer",
+    "otherNames": [
+      "Schnauzer nain",
+      "Schnauzer moyen",
+      "Schnauzer géant"
+    ],
+    "size": "medium",
+    "weight": 20,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "sealyham-terrier",
+    "name": "Sealyham Terrier",
+    "otherNames": [],
+    "size": "small",
+    "weight": 31,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "shih-tzu",
+    "name": "Shih Tzu",
+    "otherNames": [
+      "Chien chrysanthème",
+      "chien lion"
+    ],
+    "size": "small",
+    "weight": 8,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "terrier-tcheque",
+    "name": "Terrier tchèque",
+    "otherNames": [
+      "Cesky Terrier",
+      "Terrier de Bohême"
+    ],
+    "size": "small",
+    "weight": 10,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "terrier-tibetain",
+    "name": "Terrier Tibétain",
+    "otherNames": [
+      "Terrier du Tibet",
+      "Terrier de Lhassa",
+      "Dhoki Apso",
+      "Tibetan Terrier"
+    ],
+    "size": "medium",
+    "weight": 13,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "west-highland-white-terrier",
+    "name": "West Highland White Terrier",
+    "otherNames": [
+      "Westie",
+      "Terrier blanc des Highlands de l'Ouest"
+    ],
+    "size": "small",
+    "weight": 10,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "yorkshire-terrier",
+    "name": "Yorkshire Terrier",
+    "otherNames": [
+      "Terrier du Yorkshire",
+      "Terrier nain du Yorkshire",
+      "Terrier nain à poil long",
+      "Toy Terrier du Yorkshire",
+      "York",
+      "Yorkie"
+    ],
+    "size": "small",
+    "weight": 3,
+    "hypoallergenic": true
+  },
+  {
+    "slug": "irish-glen-imaal-terrier",
+    "name": "Irish Glen of Imaal Terrier",
+    "otherNames": [],
+    "size": "small",
+    "weight": 16,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "irish-terrier-a-poil-doux",
+    "name": "Irish Terrier à poil doux",
+    "otherNames": [
+      "Irish Soft Coated Wheaten Terrier",
+      "Terrier irlandais à poil doux"
+    ],
+    "size": "medium",
+    "weight": 18,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "jack-russell-terrier",
+    "name": "Jack Russell Terrier",
+    "otherNames": [],
+    "size": "small",
+    "weight": 8,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "jagdterrier",
+    "name": "Jagdterrier",
+    "otherNames": [
+      "Jagd Terrier",
+      "Terrier de chasse allemand",
+      "Deutscher Jagdterrier"
+    ],
+    "size": "small",
+    "weight": 10,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "kai",
+    "name": "Kai",
+    "otherNames": [
+      "Kaï Tora-ken",
+      "Kai Toraken",
+      "Tora Inu",
+      "Kai Ken"
+    ],
+    "size": "medium",
+    "weight": 27,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "kelpie",
+    "name": "Kelpie",
+    "otherNames": [
+      "Kelpie Australien",
+      "Australian Kelpie"
+    ],
+    "size": "medium",
+    "weight": 22,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "kerry-blue-terrier",
+    "name": "Kerry Blue Terrier",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 18,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "king-charles-spaniel",
+    "name": "King Charles Spaniel",
+    "otherNames": [
+      "Epagneul King Charles",
+      "English toy Spaniel"
+    ],
+    "size": "small",
+    "weight": 6,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "kishu-inu",
+    "name": "Kishu",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "komondor",
+    "name": "Komondor",
+    "otherNames": [],
+    "size": "large",
+    "weight": 60,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "kromfohrlander",
+    "name": "Kromfohrländer",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 16,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "kuvasz-hongrois",
+    "name": "Kuvasz Hongrois",
+    "otherNames": [],
+    "size": "large",
+    "weight": 62,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "labrador-retriever",
+    "name": "Labrador Retriever",
+    "otherNames": [
+      "Labrador",
+      "Retriever du Labrador"
+    ],
+    "size": "large",
+    "weight": 35,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "laika-de-siberie-occidentale",
+    "name": "Laïka de Sibérie occidentale",
+    "otherNames": [
+      "Zapadno-Sibirskaïa Laïka",
+      "West Siberian Laika"
+    ],
+    "size": "medium",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "laika-de-siberie-orientale",
+    "name": "Laïka de Sibérie orientale",
+    "otherNames": [
+      "Vostotchno-Sibirskaïa Laïka",
+      "East Siberian Laika"
+    ],
+    "size": "medium",
+    "weight": 28,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "laika-russo-europeen-1",
+    "name": "Laïka Russo-Européen",
+    "otherNames": [
+      "Russko Evropeïskaïa Laïka",
+      "Russo-European Laika"
+    ],
+    "size": "medium",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "landseer",
+    "name": "Landseer",
+    "otherNames": [],
+    "size": "large",
+    "weight": 70,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "leonberger",
+    "name": "Leonberger",
+    "otherNames": [
+      "Leonberg",
+      "Chien de Leonberg"
+    ],
+    "size": "large",
+    "weight": 80,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "levrier-afghan",
+    "name": "Lévrier Afghan",
+    "otherNames": [
+      "Afghan Hound",
+      "Tazi",
+      "Lévrier de Balkh",
+      "Lévrier de Kaboul",
+      "Barutzy",
+      "Baluchi"
+    ],
+    "size": "large",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "levrier-azawakh",
+    "name": "Lévrier Azawakh",
+    "otherNames": [
+      "Lévrier du Sud saharien",
+      "Lévrier Touareg",
+      "Sloughi Touareg"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "levrier-ecossais",
+    "name": "Lévrier Écossais",
+    "otherNames": [
+      "Deerhound",
+      "Scottish Deerhound"
+    ],
+    "size": "large",
+    "weight": 45,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "levrier-espagnol",
+    "name": "Lévrier Espagnol",
+    "otherNames": [
+      "Lévrier Galgo",
+      "Galgo Espagnol",
+      "Spanish Greyhound"
+    ],
+    "size": "large",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "levrier-hongrois",
+    "name": "Lévrier Hongrois",
+    "otherNames": [],
+    "size": "large",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "levrier-irlandais",
+    "name": "Lévrier Irlandais",
+    "otherNames": [],
+    "size": "large",
+    "weight": 68,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "levrier-polonais",
+    "name": "Lévrier Polonais",
+    "otherNames": [],
+    "size": "large",
+    "weight": 50,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "malamute-alaska",
+    "name": "Malamute de l'Alaska",
+    "otherNames": [
+      "Malamute d'Alaska",
+      "Alaskan Malamute"
+    ],
+    "size": "large",
+    "weight": 38,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "mastiff",
+    "name": "Mastiff",
+    "otherNames": [
+      "Old English Mastiff",
+      "Dogue Anglais"
+    ],
+    "size": "large",
+    "weight": 110,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "matin-alentejo",
+    "name": "Mâtin de l'Alentejo",
+    "otherNames": [
+      "Rafeiro de l'Alentejo",
+      "Rafeiro do Alentejo",
+      "Alentejo Mastiff"
+    ],
+    "size": "large",
+    "weight": 50,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "matin-de-naples",
+    "name": "Mâtin de Naples",
+    "otherNames": [
+      "Mâtin napolitain",
+      "Neapolitan Mastiff"
+    ],
+    "size": "large",
+    "weight": 70,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "matin-des-pyrenees",
+    "name": "Mâtin des Pyrénées",
+    "otherNames": [
+      "Mastín del Pirineo",
+      "Mâtin de Navarre",
+      "Mâtin de León",
+      "Pyrenean Mastiff"
+    ],
+    "size": "large",
+    "weight": 100,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "matin-espagnol",
+    "name": "Mâtin Espagnol",
+    "otherNames": [
+      "Mastín Español",
+      "Mâtin d'Estremadure",
+      "Mâtin de la Manche",
+      "Spanish Mastiff"
+    ],
+    "size": "large",
+    "weight": 120,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "mudi",
+    "name": "Mudi",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 13,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "otterhound",
+    "name": "Otterhound",
+    "otherNames": [
+      "Chien à Loutre",
+      "Chien de Loutre"
+    ],
+    "size": "large",
+    "weight": 52,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "parson-russell-terrier",
+    "name": "Parson Russell Terrier",
+    "otherNames": [],
+    "size": "small",
+    "weight": 9,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "pekinois",
+    "name": "Pékinois",
+    "otherNames": [
+      "Epagneul pékinois",
+      "Epagneul de Pékin",
+      "Pekingese"
+    ],
+    "size": "small",
+    "weight": 5,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "petit-basset-griffon-vendeen",
+    "name": "Petit Basset Griffon vendéen",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 18,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "petit-brabancon",
+    "name": "Petit Brabançon",
+    "otherNames": [],
+    "size": "small",
+    "weight": 6,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "petit-chien-courant-suisse",
+    "name": "Petit Chien Courant Suisse",
+    "otherNames": [
+      "Petit chien courant du Bernois",
+      "Petit chien courant du Jura",
+      "Petit chien courant de Lucerne",
+      "Schweizer Niederlaufhund",
+      "Small Swiss Hound"
+    ],
+    "size": "medium",
+    "weight": 15,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "petit-chien-hollandais-chasse-gibier-eau",
+    "name": "Petit chien hollandais de chasse au gibier d'eau",
+    "otherNames": [
+      "Kooikerhondje",
+      "Chien hollandais de canardière"
+    ],
+    "size": "medium",
+    "weight": 15,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "petit-chien-lion",
+    "name": "Petit Chien Lion",
+    "otherNames": [],
+    "size": "small",
+    "weight": 8,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "petit-epagneul-de-munster",
+    "name": "Petit Epagneul de Münster",
+    "otherNames": [
+      "Petit Munsterlander",
+      "Kleiner Münsterländer",
+      "Kleiner Münsterländer Vorstehhund",
+      "Heidewachtel"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "petit-levrier-italien",
+    "name": "Petit Lévrier Italien",
+    "otherNames": [
+      "Levrette d'Italie",
+      "Piccolo Levriero Italiano",
+      "Italian Greyhound"
+    ],
+    "size": "small",
+    "weight": 5,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "pinscher",
+    "name": "Pinscher",
+    "otherNames": [
+      "Pinscher allemand",
+      "Pinscher toy",
+      "Pinscher allemand"
+    ],
+    "size": "medium",
+    "weight": 20,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "pinscher-autrichien-a-poil-court",
+    "name": "Pinscher autrichien à poil court",
+    "otherNames": [
+      "Österreichischer Pinscher",
+      "Austrian Pinscher"
+    ],
+    "size": "medium",
+    "weight": 18,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "pinscher-nain",
+    "name": "Pinscher Nain",
+    "otherNames": [
+      "Zwergpinscher",
+      "Miniature Pinscher"
+    ],
+    "size": "small",
+    "weight": 6,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "pitbull",
+    "name": "Pitbull",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "podenco-canario",
+    "name": "Podenco Canario",
+    "otherNames": [
+      "Chien de garenne des Canaries",
+      "Canarian Warren Hound"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "podenco-ibicenco",
+    "name": "Podenco Ibicenco",
+    "otherNames": [
+      "Podenco d'Ibiza",
+      "Chien de Garenne des Baléares",
+      "Lévrier d'Ibiza",
+      "Ibizan Hound"
+    ],
+    "size": "medium",
+    "weight": 24,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "podengo-portugais",
+    "name": "Podengo portugais",
+    "otherNames": [
+      "Chien de Garenne portugais",
+      "Podengo Português"
+    ],
+    "size": "medium",
+    "weight": 20,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "pointer-anglais",
+    "name": "Pointer Anglais",
+    "otherNames": [],
+    "size": "large",
+    "weight": 34,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "poitevin",
+    "name": "Poitevin",
+    "otherNames": [
+      "Chien courant poitevin",
+      "Chien du Haut Poitou"
+    ],
+    "size": "large",
+    "weight": 35,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "pomsky",
+    "name": "Pomsky",
+    "otherNames": [],
+    "size": "small",
+    "weight": 20,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "porcelaine",
+    "name": "Porcelaine",
+    "otherNames": [
+      "Chien de Franche-Comté",
+      "Briquet Franc-comtois",
+      "Chien de Lunéville"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "pudelpointer",
+    "name": "Pudelpointer",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "puli",
+    "name": "Puli",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 15,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "pumi",
+    "name": "Pumi",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 15,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "ratonero-bodeguero-andaluz",
+    "name": "Ratonero Bodeguero Andaluz",
+    "otherNames": [
+      "Jack Russell Espagnol",
+      "Andalusian Wine-cellar Rat-hunting Dog"
+    ],
+    "size": "small",
+    "weight": 8,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "retriever-de-nouvelle-ecosse",
+    "name": "Retriever de la Nouvelle-Écosse",
+    "otherNames": [
+      "Retriever de la Nouvelle-Écosse",
+      "Nova Scotia Duck Tolling Retriever"
+    ],
+    "size": "medium",
+    "weight": 23,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "rhodesian-ridgeback",
+    "name": "Rhodesian-Ridgeback",
+    "otherNames": [
+      "Rhodesian Ridgeback",
+      "Chien de Rhodésie à crête dorsale",
+      "African Lion Hound"
+    ],
+    "size": "large",
+    "weight": 40,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "rottweiler",
+    "name": "Rottweiler",
+    "otherNames": [
+      "Bouvier Allemand",
+      "Chien de Boucher de Rottweil",
+      "Rott"
+    ],
+    "size": "large",
+    "weight": 54,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "saint-bernard",
+    "name": "Saint-Bernard",
+    "otherNames": [
+      "Bernhardiner",
+      "Saint Bernardshund",
+      "St. Bernard Dog"
+    ],
+    "size": "large",
+    "weight": 90,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "saluki",
+    "name": "Saluki",
+    "otherNames": [
+      "Lévrier Persan",
+      "Salouki"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "schapendoes",
+    "name": "Schapendoes",
+    "otherNames": [
+      "Nederlandse Schapendoes",
+      "Dutch Sheepdog"
+    ],
+    "size": "medium",
+    "weight": 18,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "schipperke",
+    "name": "Schipperke",
+    "otherNames": [],
+    "size": "small",
+    "weight": 8,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "setter-anglais",
+    "name": "Setter Anglais",
+    "otherNames": [
+      "Setter Laverack",
+      "English Setter"
+    ],
+    "size": "medium",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "setter-gordon",
+    "name": "Setter Gordon",
+    "otherNames": [
+      "Gordon Setter",
+      "Setter écossais",
+      "Setter noir et feu"
+    ],
+    "size": "large",
+    "weight": 30,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "setter-irlandais",
+    "name": "Setter Irlandais Rouge",
+    "otherNames": [
+      "Setter Irlandais Rouge",
+      "Setter Irlandais Rouge et Blanc",
+      "Irish Red Setter",
+      "Irish Red and White Setter"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "shar-pei",
+    "name": "Shar-Pei",
+    "otherNames": [
+      "Sharpei",
+      "Shar-Pei chinois",
+      "Chien de combat chinois"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "shiba-inu",
+    "name": "Shiba Inu",
+    "otherNames": [],
+    "size": "small",
+    "weight": 10,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "shikoku",
+    "name": "Shikoku",
+    "otherNames": [
+      "Shikoku Ken",
+      "Kochi Ken"
+    ],
+    "size": "medium",
+    "weight": 26,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "silky-terrier",
+    "name": "Silky Terrier",
+    "otherNames": [
+      "Terrier australien à poil soyeux",
+      "Australian Silky Terrier",
+      "Sydney Silky",
+      "Sidney Terrier"
+    ],
+    "size": "small",
+    "weight": 5,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "skye-terrier",
+    "name": "Skye Terrier",
+    "otherNames": [
+      "Terrier de Skye",
+      "Terrier de l'Île de Skye"
+    ],
+    "size": "medium",
+    "weight": 15,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "sloughi",
+    "name": "Sloughi",
+    "otherNames": [
+      "Lévrier Arabe",
+      "Lévrier Berbère"
+    ],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "smous-des-pays-bas",
+    "name": "Smous des Pays-Bas",
+    "otherNames": [
+      "Griffon hollandais",
+      "Hollandse Smoushound"
+    ],
+    "size": "small",
+    "weight": 10,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "spinone",
+    "name": "Spinone",
+    "otherNames": [
+      "Spinone italien",
+      "Chien d'arrêt Italien à poil dur",
+      "Griffon italien",
+      "Spinone Italiano"
+    ],
+    "size": "large",
+    "weight": 37,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "spitz-allemand",
+    "name": "Spitz Allemand",
+    "otherNames": [
+      "Loulou de Pomeranie",
+      "Spitz Nain",
+      "Pomeranian",
+      "Deutscher Spitz",
+      "German Spitz",
+      "Spitz-Loup",
+      "Keeshond",
+      "Grand Spitz",
+      "Pomerania"
+    ],
+    "size": "medium",
+    "weight": 20,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "spitz-de-norrbotten",
+    "name": "Spitz de Norrbotten",
+    "otherNames": [
+      "Norrbottenspitz",
+      "Norrbottenspets"
+    ],
+    "size": "small",
+    "weight": 14,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "spitz-des-wisigoths",
+    "name": "Spitz des Wisigoths",
+    "otherNames": [
+      "Vallhund Suédois",
+      "Spitz des Visigoths",
+      "Västgötaspets",
+      "Swedish Vallhund"
+    ],
+    "size": "medium",
+    "weight": 14,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "spitz-finlandais",
+    "name": "Spitz Finlandais",
+    "otherNames": [
+      "Suomenpystykorva",
+      "Finsk Spets",
+      "Finkie",
+      "Loulou finnois",
+      "Finnish Spitz"
+    ],
+    "size": "medium",
+    "weight": 14,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "spitz-japonais",
+    "name": "Spitz Japonais",
+    "otherNames": [
+      "Nihon Suppitsu",
+      "Japanese Spitz"
+    ],
+    "size": "small",
+    "weight": 10,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "springer-anglais",
+    "name": "Springer Anglais",
+    "otherNames": [
+      "Springer Spaniel Anglais",
+      "English Springer Spaniel"
+    ],
+    "size": "medium",
+    "weight": 22,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "staffordshire-bull-terrier",
+    "name": "Staffordshire Bull Terrier",
+    "otherNames": [
+      "Bull Terrier du Staffordshire",
+      "Nanny Dog",
+      "Staffie"
+    ],
+    "size": "medium",
+    "weight": 17,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "sussex-spaniel",
+    "name": "Sussex-Spaniel",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 25,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "tchouvatch-slovaque",
+    "name": "Tchouvatch Slovaque",
+    "otherNames": [
+      "Berger Slovaque",
+      "Cuvac de Slovaquie",
+      "Slovensky Cuvac"
+    ],
+    "size": "large",
+    "weight": 45,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "teckel",
+    "name": "Teckel",
+    "otherNames": [
+      "Teckel à poil ras",
+      "Teckel à poil dur",
+      "Teckel à poil long",
+      "Dachshund",
+      "Langhaartecke"
+    ],
+    "size": "small",
+    "weight": 9,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "terre-neuve",
+    "name": "Terre-Neuve",
+    "otherNames": [
+      "Chien de Terre Neuve",
+      "Newfoundland",
+      "Newfie"
+    ],
+    "size": "large",
+    "weight": 70,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "terrier-australien",
+    "name": "Terrier australien",
+    "otherNames": [],
+    "size": "small",
+    "weight": 6,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "terrier-bresilien",
+    "name": "Terrier brésilien",
+    "otherNames": [
+      "Terrier Brasileiro",
+      "Fox Paulistinha"
+    ],
+    "size": "small",
+    "weight": 10,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "terrier-de-manchester",
+    "name": "Terrier de Manchester",
+    "otherNames": [],
+    "size": "small",
+    "weight": 8,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "terrier-ecossais",
+    "name": "Terrier Ecossais",
+    "otherNames": [
+      "Scottish Terrier",
+      "Terrie d'Ecosse",
+      "Scottie",
+      "Aberdeen-Terrier"
+    ],
+    "size": "small",
+    "weight": 10,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "terrier-japonais",
+    "name": "Terrier japonais",
+    "otherNames": [
+      "Nihon Teria",
+      "Japanese Terrier"
+    ],
+    "size": "small",
+    "weight": 6,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "terrier-noir-russe",
+    "name": "Terrier Noir Russe",
+    "otherNames": [
+      "Black Russian Terrier",
+      "Tchiorny Terrier"
+    ],
+    "size": "large",
+    "weight": 50,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "tosa",
+    "name": "Tosa",
+    "otherNames": [
+      "Tosa Inu",
+      "Dogue japonais",
+      "Sumo",
+      "Chien de combat japonais",
+      "Mastiff japonais"
+    ],
+    "size": "large",
+    "weight": 65,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "volpino-italiano",
+    "name": "Volpino Italien",
+    "otherNames": [
+      "Volpino Italiano",
+      "Spitz italien",
+      "Spitz de Florence",
+      "Cane de Guirinale",
+      "Chien du Quirinal"
+    ],
+    "size": "small",
+    "weight": 6,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "welsh-corgi-cardigan",
+    "name": "Welsh Corgi Cardigan",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 17,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "welsh-corgi-pembroke",
+    "name": "Welsh Corgi Pembroke",
+    "otherNames": [
+      "Corgi",
+      "Pembroke Welsh Corgi"
+    ],
+    "size": "small",
+    "weight": 13,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "welsh-springer-spaniel",
+    "name": "Welsh Springer Spaniel",
+    "otherNames": [],
+    "size": "medium",
+    "weight": 20,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "welsh-terrier",
+    "name": "Welsh Terrier",
+    "otherNames": [
+      "Terrier Gallois",
+      "Fox du Pays de Galles"
+    ],
+    "size": "small",
+    "weight": 10,
+    "hypoallergenic": false
+  },
+  {
+    "slug": "whippet",
+    "name": "Whippet",
+    "otherNames": [
+      "Lévrier nain",
+      "Lévrier whippet"
+    ],
+    "size": "medium",
+    "weight": 13,
+    "hypoallergenic": false
+  }
+]
