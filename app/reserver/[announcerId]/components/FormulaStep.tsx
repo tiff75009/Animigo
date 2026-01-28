@@ -64,6 +64,9 @@ interface FormulaStepProps {
   selectedEndDate?: string | null;
   selectedTime?: string | null;
   selectedEndTime?: string | null;
+  days?: number;
+  nights?: number;
+  includeOvernightStay?: boolean;
   commissionRate?: number;
   preSelectedFromSidebar?: boolean;
   onSelect: (serviceId: string, variantId: string, autoServiceLocation?: "announcer_home" | "client_home" | null) => void;
@@ -378,6 +381,9 @@ export default function FormulaStep({
   selectedEndDate,
   selectedTime,
   selectedEndTime,
+  days = 1,
+  nights = 0,
+  includeOvernightStay = false,
   commissionRate = 15,
   preSelectedFromSidebar = false,
   onSelect,
@@ -633,6 +639,16 @@ export default function FormulaStep({
                     <span className="text-purple-500">→</span>{" "}
                     <span className="capitalize">{formatDateDisplay(selectedEndDate)}</span>
                     {selectedEndTime && <span className="text-purple-600"> à {selectedEndTime}</span>}
+                  </p>
+                  {/* Durée : jours et nuits */}
+                  <p className="mt-2 text-xs text-purple-500 flex items-center gap-2">
+                    <Clock className="w-3 h-3" />
+                    <span>
+                      {days} jour{days > 1 ? "s" : ""}
+                      {includeOvernightStay && nights > 0 && (
+                        <span className="ml-1">• {nights} nuit{nights > 1 ? "s" : ""}</span>
+                      )}
+                    </span>
                   </p>
                 </div>
               ) : (

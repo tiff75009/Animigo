@@ -1227,6 +1227,9 @@ export default function ReserverPage({
                 selectedEndDate={bookingData.selectedEndDate}
                 selectedTime={bookingData.selectedTime}
                 selectedEndTime={bookingData.selectedEndTime}
+                days={calculateDays()}
+                nights={calculateNights()}
+                includeOvernightStay={bookingData.includeOvernightStay}
                 commissionRate={commissionRate}
                 preSelectedFromSidebar={!!(preSelectedServiceId && preSelectedVariantId)}
                 onSelect={handleFormulaSelect}
