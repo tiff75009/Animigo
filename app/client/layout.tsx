@@ -5,6 +5,7 @@ import FloatingSidebar from "./components/floating-sidebar";
 import { AuthGuard } from "@/app/components/auth-guard";
 import { Navbar } from "@/app/components/navbar";
 import { SidebarProvider, useSidebar } from "@/app/contexts/SidebarContext";
+import { MessagingProvider } from "@/app/contexts/MessagingContext";
 import { cn } from "@/app/lib/utils";
 
 function ClientContent({ children }: { children: ReactNode }) {
@@ -30,7 +31,9 @@ export default function ClientLayout({ children }: { children: ReactNode }) {
   return (
     <AuthGuard allowedTypes={["utilisateur"]}>
       <SidebarProvider storageKey="client-sidebar-collapsed">
-        <ClientContent>{children}</ClientContent>
+        <MessagingProvider>
+          <ClientContent>{children}</ClientContent>
+        </MessagingProvider>
       </SidebarProvider>
     </AuthGuard>
   );

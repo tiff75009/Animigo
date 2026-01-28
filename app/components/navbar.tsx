@@ -31,6 +31,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useActiveConversation } from "@/app/contexts/MessagingContext";
 
 // Services/Categories pour la navigation
 const serviceCategories = [
@@ -135,10 +136,24 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
   }, []);
 
   // Compteur de messages non lus
-  const unreadMessagesCount = useQuery(
+  const { activeConversationId } = useActiveConversation();
+
+  const unreadMessagesCountRaw = useQuery(
     api.messaging.queries.totalUnreadCount,
     authToken ? { token: authToken } : "skip"
   ) as number | undefined;
+
+  // Récupérer les conversations pour connaître le unreadCount de la conversation active
+  const conversationsForUnread = useQuery(
+    api.messaging.queries.listConversations,
+    authToken ? { token: authToken } : "skip"
+  );
+
+  // Exclure la conversation active du compteur
+  const activeConvUnread = activeConversationId
+    ? (conversationsForUnread?.find((c: { id: string; unreadCount: number }) => c.id === activeConversationId)?.unreadCount ?? 0)
+    : 0;
+  const unreadMessagesCount = Math.max(0, (unreadMessagesCountRaw ?? 0) - activeConvUnread);
 
   // Récupérer l'avatar du profil (annonceur ou client)
   const announcerProfile = useQuery(

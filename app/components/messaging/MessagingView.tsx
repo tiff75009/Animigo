@@ -18,6 +18,7 @@ import {
 import { cn } from "@/app/lib/utils";
 import { useAuth } from "@/app/hooks/useAuth";
 import { useConversations, useMessages, useConversation } from "@/app/hooks/useMessaging";
+import { useActiveConversation } from "@/app/contexts/MessagingContext";
 import { Id } from "@/convex/_generated/dataModel";
 
 // Status badge config
@@ -446,12 +447,20 @@ interface MessagingViewProps {
 export default function MessagingView({ userType }: MessagingViewProps) {
   const { token, isLoading: isAuthLoading } = useAuth();
   const searchParams = useSearchParams();
+  const { setActiveConversationId } = useActiveConversation();
   const [selectedConversationId, setSelectedConversationId] = useState<Id<"conversations"> | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [hasInitializedFromUrl, setHasInitializedFromUrl] = useState(false);
 
   const { conversations, totalUnread, isLoading } = useConversations(token);
+
+  // Signaler la conversation active au contexte
+  useEffect(() => {
+    setActiveConversationId(selectedConversationId);
+    // Nettoyer quand on quitte la page
+    return () => setActiveConversationId(null);
+  }, [selectedConversationId, setActiveConversationId]);
 
   // Sélectionner automatiquement la conversation depuis l'URL
   useEffect(() => {

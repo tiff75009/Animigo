@@ -20,6 +20,7 @@ import {
 import { cn } from "@/app/lib/utils";
 import { useAuth } from "@/app/hooks/useAuth";
 import { useSidebar } from "@/app/contexts/SidebarContext";
+import { useActiveConversation } from "@/app/contexts/MessagingContext";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
@@ -144,13 +145,25 @@ export default function FloatingSidebar() {
   const pathname = usePathname();
   const { logout, token } = useAuth();
   const { isCollapsed: isManuallyCollapsed, toggleCollapse } = useSidebar();
+  const { activeConversationId } = useActiveConversation();
 
   // Compteur de messages non lus
   const unreadMessagesCount = useQuery(
     api.messaging.queries.totalUnreadCount,
     token ? { token } : "skip"
   ) as number | undefined;
-  const unreadCount = unreadMessagesCount ?? 0;
+
+  // Récupérer les conversations pour connaître le unreadCount de la conversation active
+  const conversations = useQuery(
+    api.messaging.queries.listConversations,
+    token ? { token } : "skip"
+  );
+
+  // Exclure la conversation active du compteur
+  const activeConvUnread = activeConversationId
+    ? (conversations?.find((c: { id: string; unreadCount: number }) => c.id === activeConversationId)?.unreadCount ?? 0)
+    : 0;
+  const unreadCount = Math.max(0, (unreadMessagesCount ?? 0) - activeConvUnread);
 
   const [mounted, setMounted] = useState(false);
 

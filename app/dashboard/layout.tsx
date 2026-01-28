@@ -5,6 +5,7 @@ import FloatingSidebar from "./components/floating-sidebar";
 import { AuthGuard } from "@/app/components/auth-guard";
 import { Navbar } from "@/app/components/navbar";
 import { SidebarProvider, useSidebar } from "@/app/contexts/SidebarContext";
+import { MessagingProvider } from "@/app/contexts/MessagingContext";
 import { cn } from "@/app/lib/utils";
 
 function DashboardContent({ children }: { children: ReactNode }) {
@@ -30,7 +31,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <AuthGuard allowedTypes={["annonceur_pro", "annonceur_particulier"]}>
       <SidebarProvider storageKey="dashboard-sidebar-collapsed">
-        <DashboardContent>{children}</DashboardContent>
+        <MessagingProvider>
+          <DashboardContent>{children}</DashboardContent>
+        </MessagingProvider>
       </SidebarProvider>
     </AuthGuard>
   );
