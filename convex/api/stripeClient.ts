@@ -1,7 +1,8 @@
 // @ts-nocheck
 import { query, mutation } from "../_generated/server";
 import { v } from "convex/values";
-import { internal } from "../_generated/api";
+import { internal, api } from "../_generated/api";
+import { internal as internalApi } from "../_generated/api";
 
 /**
  * Récupérer la clé publique Stripe (accessible au client)
@@ -221,6 +222,30 @@ export const confirmPaymentSuccess = mutation({
         paymentStatus: "pending", // Fonds bloqués mais pas encore capturés
         autoCaptureScheduledAt: autoCaptureTime,
         updatedAt: now,
+      });
+
+      // Envoyer une notification à l'annonceur
+      const client = await ctx.db.get(mission.clientId);
+      const clientProfile = client ? await ctx.db
+        .query("clientProfiles")
+        .withIndex("by_user", (q) => q.eq("userId", client._id))
+        .first() : null;
+
+      const clientName = clientProfile
+        ? `${clientProfile.firstName || ""} ${clientProfile.lastName || ""}`.trim() || client?.email || "Client"
+        : client?.email || "Client";
+
+      await ctx.scheduler.runAfter(0, api.notifications.actions.sendMissionConfirmedNotification, {
+        announcerId: mission.announcerId,
+        clientName,
+        serviceName: mission.serviceName || "Service",
+        startDate: mission.startDate,
+        missionId: args.missionId,
+      });
+
+      // Créer la conversation de messagerie
+      await ctx.scheduler.runAfter(0, internalApi.messaging.mutations.createConversation, {
+        missionId: args.missionId,
       });
 
       console.log(`Paiement confirmé pour mission ${args.missionId} - status: ${args.paymentStatus}`);

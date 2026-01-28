@@ -134,6 +134,12 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
     setAuthToken(t);
   }, []);
 
+  // Compteur de messages non lus
+  const unreadMessagesCount = useQuery(
+    api.messaging.queries.totalUnreadCount,
+    authToken ? { token: authToken } : "skip"
+  ) as number | undefined;
+
   // Récupérer l'avatar du profil (annonceur ou client)
   const announcerProfile = useQuery(
     api.services.profile.getProfile,
@@ -289,11 +295,15 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                 <>
                   {/* Messages */}
                   <Link
-                    href="/dashboard/messagerie"
+                    href={isOnClientDashboard ? "/client/messagerie" : "/dashboard/messagerie"}
                     className="relative p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
                   >
                     <MessageCircle className="w-5 h-5" />
-                    <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
+                    {(unreadMessagesCount ?? 0) > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-primary text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                        {unreadMessagesCount! > 99 ? "99+" : unreadMessagesCount}
+                      </span>
+                    )}
                   </Link>
 
                   {/* Notifications */}
@@ -380,11 +390,15 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                 <>
                   {/* Messages */}
                   <Link
-                    href="/dashboard/messagerie"
+                    href={isOnClientDashboard ? "/client/messagerie" : "/dashboard/messagerie"}
                     className="relative p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
                   >
                     <MessageCircle className="w-5 h-5" />
-                    <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
+                    {(unreadMessagesCount ?? 0) > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-primary text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                        {unreadMessagesCount! > 99 ? "99+" : unreadMessagesCount}
+                      </span>
+                    )}
                   </Link>
                   {/* Notifications - dropdown */}
                   <NotificationDropdown />
@@ -685,12 +699,17 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                           <span className="font-medium text-gray-900">{isAdmin ? "Administration" : "Mon espace"}</span>
                         </Link>
                         <Link
-                          href="/dashboard/messagerie"
+                          href={isOnClientDashboard ? "/client/messagerie" : "/dashboard/messagerie"}
                           onClick={() => setIsMobileMenuOpen(false)}
-                          className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
+                          className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors relative"
                         >
                           <MessageCircle className="w-5 h-5 text-gray-500" />
                           <span className="font-medium text-gray-900">Messages</span>
+                          {(unreadMessagesCount ?? 0) > 0 && (
+                            <span className="ml-auto px-2 py-0.5 bg-primary text-white text-xs font-bold rounded-full">
+                              {unreadMessagesCount! > 99 ? "99+" : unreadMessagesCount}
+                            </span>
+                          )}
                         </Link>
                         <Link
                           href="/client/notifications"

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Link from "next/link";
@@ -21,10 +22,11 @@ import {
   MessageCircle,
   ExternalLink,
 } from "lucide-react";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/app/lib/utils";
+import { useToast } from "@/app/components/ui/toast";
 
 const statusConfig: Record<string, { label: string; color: string; bgColor: string; icon: React.ReactNode; description: string }> = {
   pending_acceptance: {
@@ -81,13 +83,42 @@ const statusConfig: Record<string, { label: string; color: string; bgColor: stri
 export default function ReservationDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { error: toastError } = useToast();
   const missionId = params.missionId as string;
   const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const [isContacting, setIsContacting] = useState(false);
 
   const mission = useQuery(
     api.planning.missions.getClientMissionById,
     token && missionId ? { token, missionId: missionId as Id<"missions"> } : "skip"
   );
+
+  // Mutation pour obtenir ou créer une conversation
+  const getOrCreateConversation = useMutation(api.messaging.mutations.getOrCreateConversation);
+
+  const handleContact = async () => {
+    if (!token || !missionId || isContacting) return;
+
+    setIsContacting(true);
+    try {
+      const result = await getOrCreateConversation({
+        token,
+        missionId: missionId as Id<"missions">,
+      });
+
+      if (result?.conversationId) {
+        router.push(`/client/messagerie?conversation=${result.conversationId}`);
+      }
+    } catch (error) {
+      console.error("Erreur lors de l'ouverture de la conversation:", error);
+      toastError("Impossible d'ouvrir la conversation");
+    } finally {
+      setIsContacting(false);
+    }
+  };
+
+  // Vérifier si le bouton contacter doit être affiché
+  const canContact = mission && ["upcoming", "in_progress", "completed"].includes(mission.status);
 
   if (!mission) {
     return (
@@ -280,12 +311,19 @@ export default function ReservationDetailPage() {
               </div>
             )}
           </div>
-          <Link
-            href="/client/messagerie"
-            className="p-3 bg-primary/10 text-primary rounded-xl hover:bg-primary/20 transition-colors"
-          >
-            <MessageCircle className="w-5 h-5" />
-          </Link>
+          {canContact && (
+            <button
+              onClick={handleContact}
+              disabled={isContacting}
+              className="p-3 bg-primary/10 text-primary rounded-xl hover:bg-primary/20 transition-colors disabled:opacity-50"
+            >
+              {isContacting ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <MessageCircle className="w-5 h-5" />
+              )}
+            </button>
+          )}
         </div>
       </motion.div>
 

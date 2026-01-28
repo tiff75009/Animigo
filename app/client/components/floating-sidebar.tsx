@@ -19,6 +19,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { useAuth } from "@/app/hooks/useAuth";
+import { useSidebar } from "@/app/contexts/SidebarContext";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 interface NavItem {
   href: string;
@@ -51,9 +54,9 @@ const NavLink = memo(function NavLink({ item, isActive, isCollapsed, onClick }: 
       >
         <span className="shrink-0 relative">
           {item.icon}
-          {item.badge && item.badge > 0 && (
+          {(item.badge ?? 0) > 0 && (
             <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-              {item.badge > 9 ? "9+" : item.badge}
+              {item.badge! > 9 ? "9+" : item.badge}
             </span>
           )}
         </span>
@@ -139,9 +142,16 @@ function useMediaQuery(query: string, defaultValue = false) {
 
 export default function FloatingSidebar() {
   const pathname = usePathname();
-  const { logout } = useAuth();
+  const { logout, token } = useAuth();
+  const { isCollapsed: isManuallyCollapsed, toggleCollapse } = useSidebar();
 
-  const [isManuallyCollapsed, setIsManuallyCollapsed] = useState(false);
+  // Compteur de messages non lus
+  const unreadMessagesCount = useQuery(
+    api.messaging.queries.totalUnreadCount,
+    token ? { token } : "skip"
+  ) as number | undefined;
+  const unreadCount = unreadMessagesCount ?? 0;
+
   const [mounted, setMounted] = useState(false);
 
   // Scroll detection
@@ -153,13 +163,6 @@ export default function FloatingSidebar() {
 
   useEffect(() => {
     setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("client-sidebar-collapsed");
-    if (saved !== null) {
-      setIsManuallyCollapsed(saved === "true");
-    }
   }, []);
 
   // Check scroll state
@@ -190,18 +193,10 @@ export default function FloatingSidebar() {
 
   const isCollapsed = isLgScreen ? isManuallyCollapsed : true;
 
-  const toggleCollapse = useCallback(() => {
-    setIsManuallyCollapsed(prev => {
-      const newValue = !prev;
-      localStorage.setItem("client-sidebar-collapsed", String(newValue));
-      return newValue;
-    });
-  }, []);
-
   const mainNavItems: NavItem[] = [
     { href: "/client", icon: <Home className="w-5 h-5" />, label: "Accueil" },
     { href: "/recherche", icon: <Search className="w-5 h-5" />, label: "Rechercher" },
-    { href: "/client/messagerie", icon: <MessageCircle className="w-5 h-5" />, label: "Messages" },
+    { href: "/client/messagerie", icon: <MessageCircle className="w-5 h-5" />, label: "Messages", badge: unreadCount },
     { href: "/client/notifications", icon: <Bell className="w-5 h-5" />, label: "Notifications" },
   ];
 
@@ -219,7 +214,7 @@ export default function FloatingSidebar() {
   const sidebarWidth = isCollapsed ? 72 : 260;
 
   return (
-    <div className="hidden md:block fixed left-4 top-24 bottom-6 z-40">
+    <div className="hidden md:block fixed left-4 top-32 lg:top-24 bottom-6 z-40">
       {/* Toggle Button - EN DEHORS de la sidebar pour éviter overflow hidden */}
       {isLgScreen && (
         <motion.button

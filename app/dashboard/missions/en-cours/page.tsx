@@ -1,12 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { CalendarClock, Euro, Calendar, MessageSquare, Loader2 } from "lucide-react";
 import { MissionCard } from "../../components/mission-card";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/app/hooks/useAuth";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/app/components/ui/toast";
+import { Id } from "@/convex/_generated/dataModel";
 import type { FunctionReturnType } from "convex/server";
 
 type MissionType = FunctionReturnType<typeof api.planning.missions.getMissionsByStatus>[number];
@@ -14,6 +17,8 @@ type MissionType = FunctionReturnType<typeof api.planning.missions.getMissionsBy
 export default function MissionsEnCoursPage() {
   const { token, isLoading: authLoading } = useAuth();
   const router = useRouter();
+  const { error: toastError } = useToast();
+  const [isContacting, setIsContacting] = useState(false);
 
   // Query Convex pour les missions "in_progress"
   const missions = useQuery(
@@ -27,6 +32,9 @@ export default function MissionsEnCoursPage() {
     token ? { token } : "skip"
   );
 
+  // Mutation pour obtenir ou créer une conversation
+  const getOrCreateConversation = useMutation(api.messaging.mutations.getOrCreateConversation);
+
   const isLoading = authLoading || missions === undefined;
 
   const formatCurrency = (amount: number) => {
@@ -37,8 +45,25 @@ export default function MissionsEnCoursPage() {
     }).format(amount / 100);
   };
 
-  const handleContact = (missionId: string) => {
-    router.push(`/dashboard/messagerie?mission=${missionId}`);
+  const handleContact = async (missionId: string) => {
+    if (!token || isContacting) return;
+
+    setIsContacting(true);
+    try {
+      const result = await getOrCreateConversation({
+        token,
+        missionId: missionId as Id<"missions">,
+      });
+
+      if (result?.conversationId) {
+        router.push(`/dashboard/messagerie?conversation=${result.conversationId}`);
+      }
+    } catch (error) {
+      console.error("Erreur lors de l'ouverture de la conversation:", error);
+      toastError("Impossible d'ouvrir la conversation");
+    } finally {
+      setIsContacting(false);
+    }
   };
 
   if (isLoading || !missions) {

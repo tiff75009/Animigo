@@ -1555,4 +1555,49 @@ export default defineSchema({
     .index("by_city", ["cityId"])
     .index("by_service", ["servicePageId"])
     .index("by_active", ["isActive"]),
+
+  // ============================================
+  // Messagerie
+  // ============================================
+
+  // Conversations entre clients et annonceurs
+  conversations: defineTable({
+    announcerId: v.id("users"),
+    clientId: v.id("users"),
+    missionId: v.id("missions"),
+    // Dénormalisé pour affichage rapide
+    announcerName: v.string(),
+    clientName: v.string(),
+    animalName: v.string(),
+    animalEmoji: v.string(),
+    serviceName: v.string(),
+    // Preview dernier message
+    lastMessageContent: v.optional(v.string()),
+    lastMessageAt: v.optional(v.number()),
+    lastMessageSenderId: v.optional(v.id("users")),
+    // Compteurs non-lus
+    announcerUnreadCount: v.number(),
+    clientUnreadCount: v.number(),
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_announcer", ["announcerId"])
+    .index("by_client", ["clientId"])
+    .index("by_mission", ["missionId"])
+    .index("by_announcer_active", ["announcerId", "isActive"])
+    .index("by_client_active", ["clientId", "isActive"]),
+
+  // Messages dans les conversations
+  messages: defineTable({
+    conversationId: v.id("conversations"),
+    senderId: v.id("users"),
+    content: v.string(),
+    type: v.union(v.literal("text"), v.literal("system")),
+    isRead: v.boolean(),
+    readAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_conversation", ["conversationId"])
+    .index("by_conversation_created", ["conversationId", "createdAt"]),
 });

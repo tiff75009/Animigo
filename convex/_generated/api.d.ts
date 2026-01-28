@@ -52,6 +52,8 @@ import type * as lib_notificationTemplates from "../lib/notificationTemplates.js
 import type * as lib_qstash from "../lib/qstash.js";
 import type * as lib_timeUtils from "../lib/timeUtils.js";
 import type * as maintenance_visitRequests from "../maintenance/visitRequests.js";
+import type * as messaging_mutations from "../messaging/mutations.js";
+import type * as messaging_queries from "../messaging/queries.js";
 import type * as notifications_actions from "../notifications/actions.js";
 import type * as notifications_index from "../notifications/index.js";
 import type * as notifications_mutations from "../notifications/mutations.js";
@@ -133,6 +135,8 @@ declare const fullApi: ApiFromModules<{
   "lib/qstash": typeof lib_qstash;
   "lib/timeUtils": typeof lib_timeUtils;
   "maintenance/visitRequests": typeof maintenance_visitRequests;
+  "messaging/mutations": typeof messaging_mutations;
+  "messaging/queries": typeof messaging_queries;
   "notifications/actions": typeof notifications_actions;
   "notifications/index": typeof notifications_index;
   "notifications/mutations": typeof notifications_mutations;

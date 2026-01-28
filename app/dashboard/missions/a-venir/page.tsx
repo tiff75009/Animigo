@@ -10,6 +10,7 @@ import { useAuth } from "@/app/hooks/useAuth";
 import { Id } from "@/convex/_generated/dataModel";
 import { useRouter } from "next/navigation";
 import type { FunctionReturnType } from "convex/server";
+import { useToast } from "@/app/components/ui/toast";
 
 type MissionType = FunctionReturnType<typeof api.planning.missions.getMissionsByStatus>[number];
 
@@ -108,9 +109,11 @@ function CancelModal({
 export default function MissionsAVenirPage() {
   const { token, isLoading: authLoading } = useAuth();
   const router = useRouter();
+  const { error: toastError } = useToast();
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [selectedMissionId, setSelectedMissionId] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isContacting, setIsContacting] = useState(false);
 
   // Query Convex pour les missions "upcoming"
   const missions = useQuery(
@@ -127,6 +130,9 @@ export default function MissionsAVenirPage() {
   // Mutation pour annuler une mission
   const cancelMission = useMutation(api.planning.missions.cancelMission);
 
+  // Mutation pour obtenir ou créer une conversation
+  const getOrCreateConversation = useMutation(api.messaging.mutations.getOrCreateConversation);
+
   const isLoading = authLoading || missions === undefined;
 
   const formatCurrency = (amount: number) => {
@@ -138,9 +144,25 @@ export default function MissionsAVenirPage() {
     }).format(amount / 100);
   };
 
-  const handleContact = (missionId: string) => {
-    // Rediriger vers la messagerie avec le client
-    router.push(`/dashboard/messagerie?mission=${missionId}`);
+  const handleContact = async (missionId: string) => {
+    if (!token || isContacting) return;
+
+    setIsContacting(true);
+    try {
+      const result = await getOrCreateConversation({
+        token,
+        missionId: missionId as Id<"missions">,
+      });
+
+      if (result?.conversationId) {
+        router.push(`/dashboard/messagerie?conversation=${result.conversationId}`);
+      }
+    } catch (error) {
+      console.error("Erreur lors de l'ouverture de la conversation:", error);
+      toastError("Impossible d'ouvrir la conversation");
+    } finally {
+      setIsContacting(false);
+    }
   };
 
   const handleCancelClick = (missionId: string) => {
