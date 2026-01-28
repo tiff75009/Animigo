@@ -23,6 +23,7 @@ import {
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
+import BreedAutocomplete from "@/app/components/ui/BreedAutocomplete";
 
 // Types d'animaux
 const ANIMAL_TYPES = [
@@ -560,13 +561,35 @@ export default function EditAnimalPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Race / Espèce</label>
-                  <input
-                    type="text"
-                    value={formData.breed}
-                    onChange={(e) => setFormData({ ...formData, breed: e.target.value })}
-                    placeholder="Ex: Labrador, Persan..."
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-                  />
+                  {formData.type === "chien" ? (
+                    <BreedAutocomplete
+                      value={formData.breed}
+                      onChange={(breed, breedData) => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          breed,
+                          size: breedData?.size
+                            ? breedData.size === "small"
+                              ? "petit"
+                              : breedData.size === "medium"
+                              ? "moyen"
+                              : breedData.size === "large"
+                              ? "grand"
+                              : prev.size
+                            : prev.size,
+                        }));
+                      }}
+                      placeholder="Rechercher une race de chien..."
+                    />
+                  ) : (
+                    <input
+                      type="text"
+                      value={formData.breed}
+                      onChange={(e) => setFormData({ ...formData, breed: e.target.value })}
+                      placeholder="Ex: Persan, Canari..."
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                    />
+                  )}
                 </div>
               </div>
             )}
