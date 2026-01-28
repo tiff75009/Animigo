@@ -23,10 +23,12 @@ import {
   PawPrint,
   Shield,
   Clock,
-  Palette,
   Scissors,
   ChevronLeft,
   ChevronRight,
+  Info,
+  Activity,
+  Stethoscope,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -48,7 +50,6 @@ const SIZE_LABELS: Record<string, string> = {
   tres_grand: "Très grand",
 };
 
-// Données des races pour les infos supplémentaires
 interface BreedInfo {
   origin?: string;
   lifeExpectancy?: { min: number; max: number };
@@ -113,22 +114,19 @@ export default function AnimalProfilePage() {
     return `${years} ans`;
   };
 
-  // Toutes les photos
-  const allPhotos = [
-    animal?.profilePhoto || animal?.primaryPhotoUrl,
-    ...(animal?.galleryPhotos || []),
-  ].filter(Boolean) as string[];
+  // Toutes les photos (galerie uniquement, sans la photo de profil)
+  const galleryPhotos = (animal?.galleryPhotos || []).filter(Boolean) as string[];
 
-  // Navigation photos
+  // Navigation photos galerie
   const nextPhoto = () => {
-    if (allPhotos.length > 1) {
-      setCurrentPhotoIndex((prev) => (prev + 1) % allPhotos.length);
+    if (galleryPhotos.length > 1) {
+      setCurrentPhotoIndex((prev) => (prev + 1) % galleryPhotos.length);
     }
   };
 
   const prevPhoto = () => {
-    if (allPhotos.length > 1) {
-      setCurrentPhotoIndex((prev) => (prev - 1 + allPhotos.length) % allPhotos.length);
+    if (galleryPhotos.length > 1) {
+      setCurrentPhotoIndex((prev) => (prev - 1 + galleryPhotos.length) % galleryPhotos.length);
     }
   };
 
@@ -158,6 +156,7 @@ export default function AnimalProfilePage() {
   }
 
   const animalType = ANIMAL_TYPES[animal.type] || { name: animal.type, emoji: "🐾" };
+  const profilePhoto = animal.profilePhoto || animal.primaryPhotoUrl;
 
   return (
     <div className="space-y-6 pb-8">
@@ -168,7 +167,7 @@ export default function AnimalProfilePage() {
           className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
-          <span>Retour</span>
+          <span>Mes animaux</span>
         </Link>
 
         <Link href={`/client/mes-animaux/${animalId}/modifier`}>
@@ -183,175 +182,131 @@ export default function AnimalProfilePage() {
         </Link>
       </div>
 
-      {/* Photo principale avec galerie */}
-      <div className="relative">
-        <div className="aspect-[4/3] sm:aspect-[16/9] rounded-2xl overflow-hidden bg-gradient-to-br from-secondary/20 to-secondary/5">
-          {allPhotos.length > 0 ? (
-            <>
-              <motion.img
-                key={currentPhotoIndex}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                src={allPhotos[currentPhotoIndex]}
-                alt={animal.name}
-                className="w-full h-full object-cover"
-              />
-              {allPhotos.length > 1 && (
-                <>
-                  <button
-                    onClick={prevPhoto}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center text-gray-700 hover:bg-white transition-colors"
-                  >
-                    <ChevronLeft className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={nextPhoto}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center text-gray-700 hover:bg-white transition-colors"
-                  >
-                    <ChevronRight className="w-5 h-5" />
-                  </button>
-                  <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-                    {allPhotos.map((_, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => setCurrentPhotoIndex(idx)}
-                        className={`w-2 h-2 rounded-full transition-colors ${
-                          idx === currentPhotoIndex ? "bg-white" : "bg-white/50"
-                        }`}
-                      />
-                    ))}
-                  </div>
-                </>
+      {/* Section principale : Photo + Infos */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="flex flex-col sm:flex-row">
+          {/* Photo de profil */}
+          <div className="sm:w-48 md:w-56 flex-shrink-0 p-4 sm:p-6">
+            <div className="relative mx-auto w-32 h-32 sm:w-full sm:h-auto sm:aspect-square">
+              {profilePhoto ? (
+                <img
+                  src={profilePhoto}
+                  alt={animal.name}
+                  className="w-full h-full object-cover rounded-2xl"
+                />
+              ) : (
+                <div className="w-full h-full rounded-2xl bg-gradient-to-br from-secondary/20 to-secondary/5 flex items-center justify-center">
+                  <span className="text-5xl sm:text-6xl">{animalType.emoji}</span>
+                </div>
               )}
-            </>
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <span className="text-8xl">{animalType.emoji}</span>
+              {breedInfo?.hypoallergenic && (
+                <div className="absolute -top-2 -right-2 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center shadow-lg" title="Hypoallergénique">
+                  <Sparkles className="w-4 h-4 text-white" />
+                </div>
+              )}
             </div>
-          )}
-        </div>
-
-        {/* Badge hypoallergénique */}
-        {breedInfo?.hypoallergenic && (
-          <div className="absolute top-3 right-3 px-3 py-1.5 bg-green-500 text-white rounded-full text-sm font-medium flex items-center gap-1.5 shadow-lg">
-            <Sparkles className="w-4 h-4" />
-            Hypoallergénique
           </div>
-        )}
-      </div>
 
-      {/* Nom et infos principales */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              {animal.name}
-              {animal.gender === "male" && <span className="text-blue-500">♂</span>}
-              {animal.gender === "female" && <span className="text-pink-500">♀</span>}
-            </h1>
-            <p className="text-gray-500">
-              {animalType.emoji} {animalType.name}
-              {animal.breed && ` • ${animal.breed}`}
-            </p>
-          </div>
-        </div>
+          {/* Informations principales */}
+          <div className="flex-1 p-4 sm:p-6 sm:pl-0">
+            {/* Nom et type */}
+            <div className="mb-4">
+              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                {animal.name}
+                {animal.gender === "male" && <span className="text-blue-500 text-xl">♂</span>}
+                {animal.gender === "female" && <span className="text-pink-500 text-xl">♀</span>}
+              </h1>
+              <p className="text-gray-500 mt-1">
+                {animalType.emoji} {animalType.name}
+                {animal.breed && <span className="font-medium text-gray-700"> • {animal.breed}</span>}
+              </p>
+            </div>
 
-        {/* Badges rapides */}
-        <div className="flex flex-wrap gap-2">
-          {animal.birthDate && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-sm font-medium">
-              <Calendar className="w-4 h-4" />
-              {getAnimalAge(animal.birthDate)}
-            </span>
-          )}
-          {animal.weight && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-sm font-medium">
-              <Scale className="w-4 h-4" />
-              {animal.weight} kg
-            </span>
-          )}
-          {animal.size && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-600 rounded-lg text-sm font-medium">
-              <Ruler className="w-4 h-4" />
-              {SIZE_LABELS[animal.size] || animal.size}
-            </span>
-          )}
-          {breedInfo?.origin && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-600 rounded-lg text-sm font-medium">
-              <MapPin className="w-4 h-4" />
-              {breedInfo.origin}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Description */}
-      {animal.description && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <h2 className="font-semibold text-gray-900 mb-3">Description</h2>
-          <p className="text-gray-600">{animal.description}</p>
-        </div>
-      )}
-
-      {/* Informations de la race (si chien) */}
-      {breedInfo && (
-        <div className="bg-gradient-to-br from-secondary/5 to-primary/5 rounded-2xl border border-gray-100 p-6">
-          <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <PawPrint className="w-5 h-5 text-primary" />
-            Informations sur la race
-          </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {breedInfo.lifeExpectancy && (
-              <div className="bg-white rounded-xl p-4">
-                <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
-                  <Clock className="w-4 h-4" />
-                  Espérance de vie
+            {/* Badges caractéristiques */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              {animal.birthDate && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-sm font-medium">
+                  <Calendar className="w-4 h-4" />
+                  {getAnimalAge(animal.birthDate)}
                 </div>
-                <p className="font-semibold text-gray-900">
-                  {breedInfo.lifeExpectancy.min}-{breedInfo.lifeExpectancy.max} ans
-                </p>
-              </div>
-            )}
-            {breedInfo.coatType && (
-              <div className="bg-white rounded-xl p-4">
-                <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
-                  <Scissors className="w-4 h-4" />
-                  Type de poil
-                </div>
-                <p className="font-semibold text-gray-900">{breedInfo.coatType}</p>
-              </div>
-            )}
-            {breedInfo.fciGroupName && (
-              <div className="bg-white rounded-xl p-4">
-                <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
-                  <Shield className="w-4 h-4" />
-                  Groupe FCI
-                </div>
-                <p className="font-semibold text-gray-900 text-sm">
-                  {breedInfo.fciGroup} - {breedInfo.fciGroupName.slice(0, 30)}...
-                </p>
-              </div>
-            )}
-            {breedInfo.weight?.male && (
-              <div className="bg-white rounded-xl p-4">
-                <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
+              )}
+              {animal.weight && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-sm font-medium">
                   <Scale className="w-4 h-4" />
-                  Poids typique
+                  {animal.weight} kg
                 </div>
-                <p className="font-semibold text-gray-900">
-                  {breedInfo.weight.male.min}-{breedInfo.weight.male.max} kg
-                </p>
-              </div>
+              )}
+              {animal.size && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-600 rounded-lg text-sm font-medium">
+                  <Ruler className="w-4 h-4" />
+                  {SIZE_LABELS[animal.size] || animal.size}
+                </div>
+              )}
+              {breedInfo?.origin && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-600 rounded-lg text-sm font-medium">
+                  <MapPin className="w-4 h-4" />
+                  {breedInfo.origin}
+                </div>
+              )}
+            </div>
+
+            {/* Description */}
+            {animal.description && (
+              <p className="text-gray-600 text-sm leading-relaxed">{animal.description}</p>
             )}
           </div>
-          {breedInfo.temperament && breedInfo.temperament.length > 0 && (
-            <div className="mt-4">
-              <p className="text-gray-500 text-sm mb-2">Tempérament typique de la race</p>
+        </div>
+      </div>
+
+      {/* Grid 2 colonnes pour le reste */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Colonne gauche */}
+        <div className="space-y-4">
+          {/* Compatibilité */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Heart className="w-5 h-5 text-primary" />
+              Compatibilité
+            </h2>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { key: "goodWithChildren", label: "Enfants", icon: Baby, value: animal.goodWithChildren },
+                { key: "goodWithDogs", label: "Chiens", icon: Dog, value: animal.goodWithDogs },
+                { key: "goodWithCats", label: "Chats", icon: Cat, value: animal.goodWithCats },
+                { key: "goodWithOtherAnimals", label: "Autres", icon: PawPrint, value: animal.goodWithOtherAnimals },
+              ].map(({ key, label, icon: Icon, value }) => (
+                <div
+                  key={key}
+                  className={`p-3 rounded-xl text-center ${
+                    value === true
+                      ? "bg-green-50 text-green-700"
+                      : value === false
+                      ? "bg-red-50 text-red-700"
+                      : "bg-gray-50 text-gray-400"
+                  }`}
+                >
+                  <Icon className="w-5 h-5 mx-auto mb-1" />
+                  <p className="text-xs font-medium">{label}</p>
+                  <p className="text-[10px] mt-0.5">
+                    {value === true ? "Oui" : value === false ? "Non" : "Inconnu"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Caractère */}
+          {animal.behaviorTraits && animal.behaviorTraits.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+              <h2 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-secondary" />
+                Caractère
+              </h2>
               <div className="flex flex-wrap gap-2">
-                {breedInfo.temperament.slice(0, 6).map((trait) => (
+                {animal.behaviorTraits.map((trait) => (
                   <span
                     key={trait}
-                    className="px-3 py-1 bg-white text-gray-700 rounded-full text-sm capitalize"
+                    className="px-3 py-1.5 bg-secondary/10 text-secondary rounded-full text-sm font-medium"
                   >
                     {trait}
                   </span>
@@ -359,140 +314,170 @@ export default function AnimalProfilePage() {
               </div>
             </div>
           )}
-        </div>
-      )}
 
-      {/* Compatibilité */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Heart className="w-5 h-5 text-primary" />
-          Compatibilité
-        </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className={`p-4 rounded-xl text-center ${
-            animal.goodWithChildren === true
-              ? "bg-green-50 text-green-700"
-              : animal.goodWithChildren === false
-              ? "bg-red-50 text-red-700"
-              : "bg-gray-50 text-gray-500"
-          }`}>
-            <Baby className="w-6 h-6 mx-auto mb-2" />
-            <p className="text-sm font-medium">Enfants</p>
-            <p className="text-xs mt-1">
-              {animal.goodWithChildren === true ? "Oui" : animal.goodWithChildren === false ? "Non" : "?"}
-            </p>
-          </div>
-          <div className={`p-4 rounded-xl text-center ${
-            animal.goodWithDogs === true
-              ? "bg-green-50 text-green-700"
-              : animal.goodWithDogs === false
-              ? "bg-red-50 text-red-700"
-              : "bg-gray-50 text-gray-500"
-          }`}>
-            <Dog className="w-6 h-6 mx-auto mb-2" />
-            <p className="text-sm font-medium">Chiens</p>
-            <p className="text-xs mt-1">
-              {animal.goodWithDogs === true ? "Oui" : animal.goodWithDogs === false ? "Non" : "?"}
-            </p>
-          </div>
-          <div className={`p-4 rounded-xl text-center ${
-            animal.goodWithCats === true
-              ? "bg-green-50 text-green-700"
-              : animal.goodWithCats === false
-              ? "bg-red-50 text-red-700"
-              : "bg-gray-50 text-gray-500"
-          }`}>
-            <Cat className="w-6 h-6 mx-auto mb-2" />
-            <p className="text-sm font-medium">Chats</p>
-            <p className="text-xs mt-1">
-              {animal.goodWithCats === true ? "Oui" : animal.goodWithCats === false ? "Non" : "?"}
-            </p>
-          </div>
-          <div className={`p-4 rounded-xl text-center ${
-            animal.goodWithOtherAnimals === true
-              ? "bg-green-50 text-green-700"
-              : animal.goodWithOtherAnimals === false
-              ? "bg-red-50 text-red-700"
-              : "bg-gray-50 text-gray-500"
-          }`}>
-            <PawPrint className="w-6 h-6 mx-auto mb-2" />
-            <p className="text-sm font-medium">Autres</p>
-            <p className="text-xs mt-1">
-              {animal.goodWithOtherAnimals === true ? "Oui" : animal.goodWithOtherAnimals === false ? "Non" : "?"}
-            </p>
-          </div>
+          {/* Santé */}
+          {(animal.hasAllergies || animal.medicalConditions || animal.specialNeeds) && (
+            <div className="bg-orange-50 rounded-2xl border border-orange-100 p-5">
+              <h2 className="font-semibold text-orange-800 mb-3 flex items-center gap-2">
+                <Stethoscope className="w-5 h-5" />
+                Santé
+              </h2>
+              <div className="space-y-3 text-sm">
+                {animal.hasAllergies && (
+                  <div>
+                    <p className="font-medium text-orange-700">Allergies</p>
+                    <p className="text-orange-600">{animal.allergiesDetails || "Oui"}</p>
+                  </div>
+                )}
+                {animal.medicalConditions && (
+                  <div>
+                    <p className="font-medium text-orange-700">Conditions médicales</p>
+                    <p className="text-orange-600">{animal.medicalConditions}</p>
+                  </div>
+                )}
+                {animal.specialNeeds && (
+                  <div>
+                    <p className="font-medium text-orange-700">Besoins particuliers</p>
+                    <p className="text-orange-600">{animal.specialNeeds}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Colonne droite */}
+        <div className="space-y-4">
+          {/* Informations de la race */}
+          {breedInfo && (
+            <div className="bg-gradient-to-br from-primary/5 to-secondary/5 rounded-2xl border border-gray-100 p-5">
+              <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <Info className="w-5 h-5 text-primary" />
+                Infos sur la race
+              </h2>
+              <div className="grid grid-cols-2 gap-3">
+                {breedInfo.lifeExpectancy && (
+                  <div className="bg-white/80 rounded-xl p-3">
+                    <div className="flex items-center gap-1.5 text-gray-500 text-xs mb-1">
+                      <Clock className="w-3.5 h-3.5" />
+                      Espérance de vie
+                    </div>
+                    <p className="font-semibold text-gray-900 text-sm">
+                      {breedInfo.lifeExpectancy.min}-{breedInfo.lifeExpectancy.max} ans
+                    </p>
+                  </div>
+                )}
+                {breedInfo.coatType && (
+                  <div className="bg-white/80 rounded-xl p-3">
+                    <div className="flex items-center gap-1.5 text-gray-500 text-xs mb-1">
+                      <Scissors className="w-3.5 h-3.5" />
+                      Type de poil
+                    </div>
+                    <p className="font-semibold text-gray-900 text-sm">{breedInfo.coatType}</p>
+                  </div>
+                )}
+                {breedInfo.weight?.male && (
+                  <div className="bg-white/80 rounded-xl p-3">
+                    <div className="flex items-center gap-1.5 text-gray-500 text-xs mb-1">
+                      <Scale className="w-3.5 h-3.5" />
+                      Poids typique
+                    </div>
+                    <p className="font-semibold text-gray-900 text-sm">
+                      {breedInfo.weight.male.min}-{breedInfo.weight.male.max} kg
+                    </p>
+                  </div>
+                )}
+                {breedInfo.fciGroup && (
+                  <div className="bg-white/80 rounded-xl p-3">
+                    <div className="flex items-center gap-1.5 text-gray-500 text-xs mb-1">
+                      <Shield className="w-3.5 h-3.5" />
+                      Groupe FCI
+                    </div>
+                    <p className="font-semibold text-gray-900 text-sm">
+                      Groupe {breedInfo.fciGroup}
+                    </p>
+                  </div>
+                )}
+              </div>
+              {breedInfo.temperament && breedInfo.temperament.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-gray-500 text-xs mb-2 flex items-center gap-1.5">
+                    <Activity className="w-3.5 h-3.5" />
+                    Tempérament typique
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {breedInfo.temperament.slice(0, 5).map((trait) => (
+                      <span
+                        key={trait}
+                        className="px-2 py-1 bg-white/80 text-gray-600 rounded-full text-xs capitalize"
+                      >
+                        {trait}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Galerie photos */}
+          {galleryPhotos.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+              <h2 className="font-semibold text-gray-900 mb-3">Photos</h2>
+
+              {/* Photo principale de la galerie */}
+              <div className="relative aspect-video rounded-xl overflow-hidden mb-3">
+                <motion.img
+                  key={currentPhotoIndex}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  src={galleryPhotos[currentPhotoIndex]}
+                  alt={`Photo ${currentPhotoIndex + 1}`}
+                  className="w-full h-full object-cover"
+                />
+                {galleryPhotos.length > 1 && (
+                  <>
+                    <button
+                      onClick={prevPhoto}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center text-gray-700 hover:bg-white transition-colors"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={nextPhoto}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center text-gray-700 hover:bg-white transition-colors"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                    <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/50 rounded-full text-white text-xs">
+                      {currentPhotoIndex + 1} / {galleryPhotos.length}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Miniatures */}
+              {galleryPhotos.length > 1 && (
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {galleryPhotos.map((photo, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setCurrentPhotoIndex(idx)}
+                      className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden transition-all ${
+                        idx === currentPhotoIndex
+                          ? "ring-2 ring-primary ring-offset-1"
+                          : "opacity-60 hover:opacity-100"
+                      }`}
+                    >
+                      <img src={photo} alt={`Miniature ${idx + 1}`} className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Traits de caractère */}
-      {animal.behaviorTraits && animal.behaviorTraits.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-secondary" />
-            Caractère
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {animal.behaviorTraits.map((trait) => (
-              <span
-                key={trait}
-                className="px-4 py-2 bg-secondary/10 text-secondary rounded-full font-medium"
-              >
-                {trait}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Santé */}
-      {(animal.hasAllergies || animal.medicalConditions || animal.specialNeeds) && (
-        <div className="bg-orange-50 rounded-2xl border border-orange-100 p-6">
-          <h2 className="font-semibold text-orange-800 mb-4 flex items-center gap-2">
-            <AlertCircle className="w-5 h-5" />
-            Informations de santé
-          </h2>
-          <div className="space-y-4">
-            {animal.hasAllergies && (
-              <div>
-                <p className="font-medium text-orange-700">Allergies</p>
-                <p className="text-orange-600">{animal.allergiesDetails || "Oui (détails non précisés)"}</p>
-              </div>
-            )}
-            {animal.medicalConditions && (
-              <div>
-                <p className="font-medium text-orange-700">Conditions médicales</p>
-                <p className="text-orange-600">{animal.medicalConditions}</p>
-              </div>
-            )}
-            {animal.specialNeeds && (
-              <div>
-                <p className="font-medium text-orange-700">Besoins particuliers</p>
-                <p className="text-orange-600">{animal.specialNeeds}</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Galerie miniatures */}
-      {allPhotos.length > 1 && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <h2 className="font-semibold text-gray-900 mb-4">Galerie photos</h2>
-          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-            {allPhotos.map((photo, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentPhotoIndex(idx)}
-                className={`aspect-square rounded-lg overflow-hidden ${
-                  idx === currentPhotoIndex ? "ring-2 ring-primary" : ""
-                }`}
-              >
-                <img src={photo} alt={`Photo ${idx + 1}`} className="w-full h-full object-cover" />
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
