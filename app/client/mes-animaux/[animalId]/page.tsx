@@ -304,7 +304,7 @@ export default function AnimalProfilePage() {
                 Caractère
               </h2>
               <div className="flex flex-wrap gap-2">
-                {animal.behaviorTraits.map((trait) => (
+                {animal.behaviorTraits.map((trait: string) => (
                   <span
                     key={trait}
                     className="px-3 py-1.5 bg-secondary/10 text-secondary rounded-full text-sm font-medium"

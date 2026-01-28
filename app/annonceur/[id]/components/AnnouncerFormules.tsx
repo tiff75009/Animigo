@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Package, Sparkles, Plus, MousePointerClick, Filter, PawPrint, Check, MapPin, Home, Users, Target, Clock, Info, CalendarDays, Mail, Lock, Loader2, X, LogIn, Dog, AlertTriangle, ArrowLeft, ArrowRight, ChevronLeft } from "lucide-react";
+import { Package, Sparkles, Plus, MousePointerClick, Filter, PawPrint, Check, MapPin, Home, Users, Target, Clock, Info, CalendarDays, Mail, Lock, Loader2, X, LogIn, Dog, AlertTriangle, ArrowLeft, ArrowRight, ChevronLeft, Eye, CreditCard } from "lucide-react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import Link from "next/link";
@@ -129,6 +129,9 @@ interface AnnouncerFormulesProps {
   onGuestDogValidationChange?: (isValid: boolean, error?: string) => void;
   // Erreurs de restriction pour les chiens des utilisateurs connectés
   connectedDogErrors?: Record<string, string>;
+  // Callback pour finaliser la réservation
+  onBook?: () => void;
+  onFinalize?: () => void;
   className?: string;
 }
 
@@ -189,6 +192,8 @@ export default function AnnouncerFormules({
   onGuestDogDataChange,
   onGuestDogValidationChange,
   connectedDogErrors = {},
+  onBook,
+  onFinalize,
   className,
 }: AnnouncerFormulesProps) {
   // État pour l'étape actuelle (desktop)
@@ -1081,8 +1086,8 @@ export default function AnnouncerFormules({
                       )}
                     </div>
 
-                    {/* Boutons de navigation */}
-                    <div className="flex items-center justify-between mt-6">
+                    {/* Bouton Précédent */}
+                    <div className="mt-6">
                       <button
                         onClick={goToPrevStep}
                         className="flex items-center gap-2 px-4 py-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors"
@@ -1091,6 +1096,34 @@ export default function AnnouncerFormules({
                         Précédent
                       </button>
                     </div>
+
+                    {/* Boutons de finalisation */}
+                    {(onBook || onFinalize) && (
+                      <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-2">
+                        {/* Bouton principal - Vérifier la réservation */}
+                        {onBook && (
+                          <button
+                            onClick={onBook}
+                            className="py-2 px-4 rounded-lg font-medium text-sm transition-colors flex items-center gap-2 bg-primary text-white hover:bg-primary/90"
+                          >
+                            <Eye className="w-4 h-4" />
+                            Vérifier la réservation
+                          </button>
+                        )}
+
+                        {/* Bouton secondaire - Finaliser directement */}
+                        {onFinalize && (
+                          <button
+                            onClick={onFinalize}
+                            className="py-2 px-4 rounded-lg font-medium text-sm transition-colors flex items-center gap-2 border border-secondary text-secondary hover:bg-secondary/10"
+                          >
+                            <CreditCard className="w-4 h-4" />
+                            Finaliser
+                            <ArrowRight className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>

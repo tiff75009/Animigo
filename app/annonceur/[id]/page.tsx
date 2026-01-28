@@ -931,6 +931,9 @@ export default function AnnouncerProfilePage() {
                 onGuestDogValidationChange={handleGuestDogValidationChange}
                 // Erreurs de restriction pour les chiens des utilisateurs connectés
                 connectedDogErrors={connectedDogErrors}
+                // Callback pour finaliser la réservation
+                onBook={handleBook}
+                onFinalize={handleFinalize}
               />
             )}
 

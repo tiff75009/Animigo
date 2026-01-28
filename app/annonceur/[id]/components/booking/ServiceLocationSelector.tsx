@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect } from "react";
-import { Home, MapPin, MousePointerClick } from "lucide-react";
+import { Home, MapPin, MousePointerClick, Check } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/app/lib/utils";
 
@@ -20,8 +20,7 @@ export default function ServiceLocationSelector({
   isRangeMode = false,
   announcerFirstName,
 }: ServiceLocationSelectorProps) {
-  // Si le service n'accepte qu'un seul lieu, auto-sélectionner et ne pas afficher le choix
-  // Cela s'applique aussi en mode garde (isRangeMode)
+  // Si le service n'accepte qu'un seul lieu, auto-sélectionner
   useEffect(() => {
     if (serviceLocation === "announcer_home" && selectedLocation !== "announcer_home") {
       onSelect("announcer_home");
@@ -30,9 +29,37 @@ export default function ServiceLocationSelector({
     }
   }, [serviceLocation, selectedLocation, onSelect]);
 
-  // Ne pas afficher le sélecteur si un seul lieu est possible
+  // Si un seul lieu est possible, afficher en lecture seule (auto-coché)
   if (serviceLocation !== "both") {
-    return null;
+    const isAnnouncerHome = serviceLocation === "announcer_home";
+    return (
+      <div className="bg-white rounded-2xl p-5 border border-gray-100">
+        <div className="flex items-center gap-4 p-4 rounded-xl border-2 border-primary bg-primary/5">
+          <div className="p-2.5 rounded-lg bg-primary/10">
+            {isAnnouncerHome ? (
+              <Home className="w-5 h-5 text-primary" />
+            ) : (
+              <MapPin className="w-5 h-5 text-primary" />
+            )}
+          </div>
+          <div className="flex-1">
+            <p className="font-medium text-primary">
+              {isAnnouncerHome
+                ? `Chez ${announcerFirstName || "le pet-sitter"}`
+                : "À mon domicile"}
+            </p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {isAnnouncerHome
+                ? "Vous déposez votre animal"
+                : "Le pet-sitter se déplace"}
+            </p>
+          </div>
+          <div className="p-1.5 rounded-full bg-primary">
+            <Check className="w-4 h-4 text-white" />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const hasSelection = selectedLocation !== null;
