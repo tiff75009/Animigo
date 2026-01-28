@@ -235,11 +235,11 @@ function ClientProfileHeader({
                     )}
                   />
                 </div>
-                <div className="flex-1 text-left">
+                <div className="flex-1 text-left min-w-0">
                   <p className="text-xs text-gray-500 mb-0.5">Localisation</p>
                   <p
                     className={cn(
-                      "text-sm font-medium truncate",
+                      "text-sm font-medium break-words",
                       hasLocation ? "text-gray-900" : "text-amber-700"
                     )}
                   >
@@ -259,12 +259,12 @@ function ClientProfileHeader({
               </button>
             ) : hasLocation ? (
               <div className="col-span-2 flex items-center gap-3 p-4 bg-gray-50 rounded-2xl">
-                <div className="p-2.5 bg-white rounded-xl shadow-sm">
+                <div className="p-2.5 bg-white rounded-xl shadow-sm flex-shrink-0">
                   <MapPin className="w-5 h-5 text-primary" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-xs text-gray-500 mb-0.5">Localisation</p>
-                  <p className="text-sm font-medium text-gray-900">
+                  <p className="text-sm font-medium text-gray-900 break-words">
                     {displayAddress}
                   </p>
                 </div>
