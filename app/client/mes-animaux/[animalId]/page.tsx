@@ -29,6 +29,7 @@ import {
   Info,
   Activity,
   Stethoscope,
+  HelpCircle,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -389,9 +390,15 @@ export default function AnimalProfilePage() {
                 )}
                 {breedInfo.fciGroup && (
                   <div className="bg-white/80 rounded-xl p-3">
-                    <div className="flex items-center gap-1.5 text-gray-500 text-xs mb-1">
+                    <div className="flex items-center gap-1.5 text-gray-500 text-xs mb-1 group relative">
                       <Shield className="w-3.5 h-3.5" />
                       Groupe FCI
+                      <HelpCircle className="w-3 h-3 text-gray-400 cursor-help" />
+                      <div className="absolute left-0 bottom-full mb-2 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                        <p className="font-medium mb-1">Fédération Cynologique Internationale</p>
+                        <p className="text-gray-300">Classification officielle des races de chiens en 10 groupes selon leurs caractéristiques et fonctions (bergers, terriers, chiens de compagnie, etc.)</p>
+                        <div className="absolute left-4 top-full -mt-1 border-4 border-transparent border-t-gray-900" />
+                      </div>
                     </div>
                     <p className="font-semibold text-gray-900 text-sm">
                       Groupe {breedInfo.fciGroup}
