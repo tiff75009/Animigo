@@ -620,6 +620,13 @@ export default function ReserverPage({
 
   const days = calculateDays();
 
+  // Calculate nights (for garde services with overnight stay)
+  const calculateNights = () => {
+    if (!bookingData.includeOvernightStay) return 0;
+    const d = calculateDays();
+    return d > 1 ? d - 1 : 0;
+  };
+
   // Options total (calculated separately for use in smart pricing)
   const optionsTotal = useMemo(() => {
     if (!selectedService) return 0;
