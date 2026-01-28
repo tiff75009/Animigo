@@ -210,17 +210,15 @@ function ChatView({ conversationId, onBack, userType }: ChatViewProps) {
     canLoadMore,
     isLoadingMore,
     isLoading: isLoadingMessages,
+    shouldScrollToBottom,
   } = useMessages(token, conversationId);
 
-  // Scroll to bottom on new messages (only for own messages)
+  // Auto-scroll quand un nouveau message arrive (ses propres ou reçus)
   useEffect(() => {
-    if (messages.length > 0) {
-      const lastMessage = messages[messages.length - 1];
-      if (lastMessage.isMe) {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }
+    if (shouldScrollToBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages]);
+  }, [shouldScrollToBottom, messages]);
 
   // Initial scroll to bottom
   useEffect(() => {

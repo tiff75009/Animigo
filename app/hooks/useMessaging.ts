@@ -60,7 +60,8 @@ export function useMessages(
   conversationId: Id<"conversations"> | null
 ) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const hasMarkedAsRead = useRef(false);
+  const prevMessagesCountRef = useRef(0);
+  const prevLastMessageIdRef = useRef<string | null>(null);
 
   // Query paginée pour les messages
   const {
@@ -85,21 +86,38 @@ export function useMessages(
     return [...results].reverse() as MessageData[];
   }, [results]);
 
-  // Marquer comme lu à l'ouverture de la conversation
+  // Marquer comme lu dès qu'il y a des messages non lus (même les nouveaux qui arrivent)
   useEffect(() => {
-    if (token && conversationId && !hasMarkedAsRead.current && results && results.length > 0) {
+    if (token && conversationId && results && results.length > 0) {
       // Vérifier s'il y a des messages non lus de l'autre partie
       const hasUnread = results.some((msg: MessageData) => !msg.isMe && !msg.isRead);
       if (hasUnread) {
         markAsReadMutation({ token, conversationId }).catch(console.error);
       }
-      hasMarkedAsRead.current = true;
     }
   }, [token, conversationId, results, markAsReadMutation]);
 
-  // Reset le flag quand on change de conversation
+  // Détecter si un nouveau message est arrivé (pour auto-scroll)
+  const shouldScrollToBottom = useMemo(() => {
+    if (!messages.length) return false;
+
+    const lastMessage = messages[messages.length - 1];
+    const lastMessageId = lastMessage?.id;
+
+    // Nouveau message arrivé (différent du précédent)
+    if (lastMessageId && lastMessageId !== prevLastMessageIdRef.current) {
+      const isNewMessage = prevLastMessageIdRef.current !== null;
+      prevLastMessageIdRef.current = lastMessageId;
+      return isNewMessage;
+    }
+
+    return false;
+  }, [messages]);
+
+  // Reset les refs quand on change de conversation
   useEffect(() => {
-    hasMarkedAsRead.current = false;
+    prevMessagesCountRef.current = 0;
+    prevLastMessageIdRef.current = null;
   }, [conversationId]);
 
   // Envoyer un message
@@ -128,6 +146,7 @@ export function useMessages(
     isLoadingMore: status === "LoadingMore",
     isLoading: status === "LoadingFirstPage",
     scrollRef,
+    shouldScrollToBottom,
   };
 }
 
