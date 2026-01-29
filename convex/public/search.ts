@@ -802,8 +802,32 @@ export const searchFormules = query({
           }
         }
 
-        // Calculer le prix
-        const price = variant.pricing?.hourly || variant.price || 0;
+        // Calculer le prix en fonction du priceUnit
+        const priceUnit = variant.priceUnit || "hour";
+        let price = variant.price || 0;
+
+        // Si pricing est défini, utiliser le bon champ selon le priceUnit
+        if (variant.pricing) {
+          switch (priceUnit) {
+            case "hour":
+              price = variant.pricing.hourly ?? variant.price ?? 0;
+              break;
+            case "half_day":
+              price = variant.pricing.halfDaily ?? variant.price ?? 0;
+              break;
+            case "day":
+              price = variant.pricing.daily ?? variant.price ?? 0;
+              break;
+            case "week":
+              price = variant.pricing.weekly ?? variant.price ?? 0;
+              break;
+            case "month":
+              price = variant.pricing.monthly ?? variant.price ?? 0;
+              break;
+            default:
+              price = variant.price ?? 0;
+          }
+        }
 
         // Filtrer par prix
         if (args.priceMin !== undefined && price < args.priceMin * 100) continue;

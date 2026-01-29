@@ -8,18 +8,16 @@ import {
   Star,
   Heart,
   Shield,
-  ArrowRight,
-  MapPin,
   Navigation,
   Calendar,
-  Clock,
   Users,
   User,
   Timer,
   Home,
   Car,
   Sparkles,
-  Eye,
+  ChevronRight,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { formatPrice, formatDistance } from "./helpers";
@@ -105,22 +103,25 @@ function formatTime(time: string): string {
 }
 
 function formatDuration(minutes: number): string {
-  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 60) return `${minutes}min`;
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
   return mins > 0 ? `${hours}h${mins}` : `${hours}h`;
 }
 
-const locationLabels = {
+const priceUnitLabels: Record<string, string> = {
+  hour: "heure",
+  half_day: "demi-journée",
+  day: "jour",
+  week: "semaine",
+  month: "mois",
+  flat: "",
+};
+
+const locationLabels: Record<string, string> = {
   announcer_home: "Chez le pro",
   client_home: "À domicile",
   both: "Au choix",
-};
-
-const locationIcons = {
-  announcer_home: Home,
-  client_home: Car,
-  both: MapPin,
 };
 
 // Taux de commission selon le type d'annonceur
@@ -136,226 +137,232 @@ function getPriceWithCommission(price: number, statusType: "particulier" | "micr
   return Math.round(price * (1 + rate));
 }
 
-// Grid View Card - Design moderne et épuré
+// Grid View Card - Design moderne et original
 export function FormuleCardGrid({ formule, index }: FormuleCardProps) {
   const [isFavorite, setIsFavorite] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
 
-  const distanceText = formatDistance(formule.announcerDistance);
   const isCollective = formule.sessionType === "collective";
-  const LocationIcon = formule.serviceLocation ? locationIcons[formule.serviceLocation] : MapPin;
 
   const announcerBaseUrl = `/annonceur/${formule.announcerSlug || formule.announcerId}`;
   const announcerProfileUrl = `${announcerBaseUrl}?service=${formule.categorySlug}`;
   const announcerBookingUrl = `${announcerBaseUrl}?formule=${formule.formuleId}`;
-  const formuleDetailUrl = `/formule/${formule.formuleId}`;
+
+  const finalPrice = getPriceWithCommission(formule.price, formule.announcerStatusType);
+  const priceLabel = priceUnitLabels[formule.priceUnit] || formule.priceUnit;
+
+  // Distance courte et élégante
+  const shortDistance = formule.announcerDistance !== undefined
+    ? formule.announcerDistance < 1
+      ? "< 1 km"
+      : `${Math.round(formule.announcerDistance)} km`
+    : null;
 
   return (
     <motion.article
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.04, duration: 0.3 }}
-      className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 hover:border-primary/20 flex flex-col h-full"
+      transition={{ delay: index * 0.05, duration: 0.4, ease: "easeOut" }}
+      onHoverStart={() => setIsHovered(true)}
+      onHoverEnd={() => setIsHovered(false)}
+      className="group relative bg-white rounded-3xl flex flex-col h-full"
     >
-      {/* Header avec annonceur */}
-      <div className="p-4 pb-3 border-b border-gray-50">
-        <div className="flex items-center gap-3">
-          {/* Avatar annonceur */}
-          <Link href={announcerProfileUrl}>
-            <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0 ring-2 ring-gray-100 group-hover:ring-primary/20 transition-all">
-              {formule.announcerProfileImage ? (
-                <Image
-                  src={formule.announcerProfileImage}
-                  alt={formule.announcerFirstName}
-                  width={48}
-                  height={48}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20">
-                  <span className="text-xl">👤</span>
-                </div>
-              )}
-              {formule.announcerVerified && (
-                <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-white rounded-full flex items-center justify-center shadow-sm">
-                  <Shield className="w-3 h-3 text-secondary" />
-                </div>
-              )}
-            </div>
-          </Link>
+      {/* Glow effect on hover */}
+      <motion.div
+        className="absolute -inset-0.5 bg-gradient-to-r from-primary/50 via-secondary/50 to-primary/50 rounded-3xl opacity-0 blur-lg transition-opacity duration-500 -z-10"
+        animate={{ opacity: isHovered ? 0.4 : 0 }}
+      />
 
-          {/* Infos annonceur */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <Link href={announcerProfileUrl} className="font-semibold text-gray-900 truncate hover:text-primary transition-colors">
-                {formule.announcerFirstName}
-              </Link>
-              <div className="flex items-center gap-0.5">
-                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                <span className="text-sm font-medium text-gray-700">{formule.announcerRating.toFixed(1)}</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              {distanceText && (
-                <span className="flex items-center gap-1 text-primary font-medium">
-                  <Navigation className="w-3 h-3" />
-                  {distanceText}
-                </span>
-              )}
-              {!distanceText && formule.announcerLocation && (
-                <span className="truncate">{formule.announcerLocation}</span>
-              )}
-            </div>
-          </div>
+      {/* Main card */}
+      <div className="relative bg-white rounded-3xl border border-gray-100 shadow-sm hover:shadow-2xl transition-all duration-500 flex flex-col h-full overflow-visible">
 
-          {/* Favoris */}
-          <motion.button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setIsFavorite(!isFavorite);
-            }}
-            whileTap={{ scale: 0.85 }}
-            className={cn(
-              "p-2 rounded-full transition-all",
-              isFavorite ? "bg-red-500 text-white" : "bg-gray-100 text-gray-400 hover:text-red-500 hover:bg-red-50"
-            )}
-          >
-            <Heart className={cn("w-4 h-4", isFavorite && "fill-current")} />
-          </motion.button>
-        </div>
-      </div>
-
-      {/* Contenu principal */}
-      <div className="p-4 flex-1 flex flex-col">
-        {/* Tags en haut */}
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {/* Catégorie */}
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">
-            {formule.categoryIcon && <span className="text-sm">{formule.categoryIcon}</span>}
-            {formule.categoryName}
-          </span>
-          {/* Type */}
-          <span className={cn(
-            "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium",
-            isCollective ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"
-          )}>
-            {isCollective ? <Users className="w-3 h-3" /> : <User className="w-3 h-3" />}
-            {isCollective ? "Collectif" : "Individuel"}
-          </span>
-        </div>
-
-        {/* Nom de la formule */}
-        <h3 className="text-base font-semibold text-gray-900 mb-2 line-clamp-2 group-hover:text-primary transition-colors">
-          {formule.formuleName}
-        </h3>
-
-        {/* Badges infos */}
-        <div className="flex flex-wrap gap-1.5 mb-3 text-xs text-gray-600">
-          {formule.duration && (
-            <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-50 rounded-lg">
-              <Timer className="w-3 h-3 text-gray-400" />
-              {formatDuration(formule.duration)}
-            </span>
-          )}
-          {formule.serviceLocation && (
-            <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-50 rounded-lg">
-              <LocationIcon className="w-3 h-3 text-gray-400" />
-              {locationLabels[formule.serviceLocation]}
-            </span>
-          )}
-          {formule.numberOfSessions && formule.numberOfSessions > 1 && (
-            <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-600 rounded-lg">
-              <Sparkles className="w-3 h-3" />
-              {formule.numberOfSessions} séances
-            </span>
-          )}
-        </div>
-
-        {/* Prochain créneau */}
+        {/* Badge prochain créneau - flottant qui sort de la card */}
         {formule.nextSlot && (
-          <div className="mb-3 px-3 py-2 bg-gradient-to-r from-emerald-50 to-emerald-50/50 rounded-xl border border-emerald-100">
-            <div className="flex items-center gap-2 text-sm">
-              <Calendar className="w-4 h-4 text-emerald-600" />
-              <span className="font-medium text-emerald-700">
-                {formatNextSlotDate(formule.nextSlot.date)}
+          <div className="absolute -top-3 left-4 right-4 z-20">
+            <motion.div
+              initial={{ y: -10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: index * 0.05 + 0.2 }}
+              className="inline-flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full shadow-lg shadow-emerald-500/30"
+            >
+              <Zap className="w-3.5 h-3.5 text-white" />
+              <span className="text-xs font-semibold text-white">
+                {formatNextSlotDate(formule.nextSlot.date)} · {formatTime(formule.nextSlot.startTime)}
               </span>
-              <span className="text-emerald-400">•</span>
-              <Clock className="w-3.5 h-3.5 text-emerald-600" />
-              <span className="text-emerald-600">{formatTime(formule.nextSlot.startTime)}</span>
-            </div>
+              {isCollective && formule.spotsLeft && (
+                <span className="px-1.5 py-0.5 bg-white/20 rounded-full text-[10px] font-bold text-white">
+                  {formule.spotsLeft} place{formule.spotsLeft > 1 ? "s" : ""}
+                </span>
+              )}
+            </motion.div>
           </div>
         )}
 
-        {/* Créneaux collectifs - Afficher uniquement le prochain créneau avec places disponibles */}
-        {isCollective && formule.collectiveSlots && formule.collectiveSlots.length > 0 && (
-          <div className="mb-3 px-3 py-2 bg-blue-50 rounded-xl border border-blue-100">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm">
-                <Users className="w-4 h-4 text-blue-600" />
-                <span className="font-medium text-blue-700">Séance collective</span>
-              </div>
-              <span className={cn(
-                "px-2 py-0.5 rounded-full text-xs font-semibold",
-                formule.collectiveSlots[0].spotsLeft <= 2 ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"
-              )}>
-                {formule.collectiveSlots[0].spotsLeft} place{formule.collectiveSlots[0].spotsLeft > 1 ? "s" : ""} dispo
-              </span>
-            </div>
-            {formule.collectiveSlots.length > 1 && (
-              <p className="text-xs text-blue-600 mt-1">
-                +{formule.collectiveSlots.length - 1} autre{formule.collectiveSlots.length > 2 ? "s" : ""} créneau{formule.collectiveSlots.length > 2 ? "x" : ""} disponible{formule.collectiveSlots.length > 2 ? "s" : ""}
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Spacer */}
-        <div className="flex-1" />
-
-        {/* Footer: Prix et CTA */}
-        <div className="flex items-center justify-between gap-3 pt-3 border-t border-gray-100 mt-auto">
-          <div>
-            {formule.numberOfSessions && formule.numberOfSessions > 1 ? (
-              <>
-                <span className="text-2xl font-bold text-gray-900">
-                  {formatPrice(getPriceWithCommission(formule.price, formule.announcerStatusType) * formule.numberOfSessions)}
-                </span>
-                <div className="text-xs text-gray-500">
-                  {formule.numberOfSessions} séances × {formatPrice(getPriceWithCommission(formule.price, formule.announcerStatusType))}
-                </div>
-              </>
-            ) : (
-              <>
-                <span className="text-2xl font-bold text-gray-900">
-                  {formatPrice(getPriceWithCommission(formule.price, formule.announcerStatusType))}
-                </span>
-                {formule.priceUnit && (
-                  <span className="text-sm text-gray-500 ml-0.5">
-                    /{formule.priceUnit === "hour" ? "h" : formule.priceUnit === "day" ? "jour" : formule.priceUnit}
-                  </span>
+        {/* Header section */}
+        <div className={cn("p-5", formule.nextSlot ? "pt-7" : "")}>
+          <div className="flex items-start gap-4">
+            {/* Avatar avec ring gradient */}
+            <Link href={announcerProfileUrl} className="relative flex-shrink-0 group/avatar">
+              <div className="absolute -inset-1 bg-gradient-to-tr from-primary via-secondary to-primary rounded-2xl opacity-75 blur-sm group-hover/avatar:opacity-100 transition-opacity" />
+              <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-white ring-2 ring-white">
+                {formule.announcerProfileImage ? (
+                  <Image
+                    src={formule.announcerProfileImage}
+                    alt={formule.announcerFirstName}
+                    width={56}
+                    height={56}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20">
+                    <span className="text-xl">👤</span>
+                  </div>
                 )}
-              </>
+              </div>
+              {formule.announcerVerified && (
+                <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-gradient-to-br from-secondary to-teal-500 rounded-lg flex items-center justify-center ring-2 ring-white shadow-md">
+                  <Shield className="w-3 h-3 text-white" />
+                </div>
+              )}
+            </Link>
+
+            {/* Infos annonceur */}
+            <div className="flex-1 min-w-0">
+              <Link href={announcerProfileUrl}>
+                <h4 className="font-bold text-gray-900 hover:text-primary transition-colors truncate">
+                  {formule.announcerFirstName}
+                </h4>
+              </Link>
+              <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 rounded-full">
+                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                  <span className="text-xs font-bold text-amber-600">{formule.announcerRating.toFixed(1)}</span>
+                </div>
+                {shortDistance && (
+                  <div className="flex items-center gap-1 px-2 py-0.5 bg-primary/10 rounded-full">
+                    <Navigation className="w-3 h-3 text-primary" />
+                    <span className="text-xs font-semibold text-primary">{shortDistance}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Favoris */}
+            <motion.button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsFavorite(!isFavorite);
+              }}
+              whileTap={{ scale: 0.85 }}
+              className={cn(
+                "p-2.5 rounded-xl transition-all duration-300",
+                isFavorite
+                  ? "bg-gradient-to-br from-red-500 to-pink-500 text-white shadow-lg shadow-red-500/30"
+                  : "bg-gray-50 text-gray-300 hover:bg-red-50 hover:text-red-400"
+              )}
+            >
+              <Heart className={cn("w-5 h-5 transition-transform", isFavorite && "fill-current scale-110")} />
+            </motion.button>
+          </div>
+        </div>
+
+        {/* Service info */}
+        <div className="px-5 pb-4 flex-1">
+          {/* Tags catégorie + type */}
+          <div className="flex items-center gap-2 mb-3">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gradient-to-r from-primary/10 to-primary/5 rounded-lg">
+              {formule.categoryIcon && <span className="text-sm">{formule.categoryIcon}</span>}
+              <span className="text-xs font-semibold text-primary">{formule.categoryName}</span>
+            </span>
+            <span className={cn(
+              "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium",
+              isCollective
+                ? "bg-blue-50 text-blue-600"
+                : "bg-gray-50 text-gray-500"
+            )}>
+              {isCollective ? <Users className="w-3 h-3" /> : <User className="w-3 h-3" />}
+              {isCollective ? "Collectif" : "Individuel"}
+            </span>
+          </div>
+
+          {/* Nom de la formule */}
+          <h3 className="text-lg font-bold text-gray-900 mb-3 line-clamp-2 leading-tight group-hover:text-primary transition-colors">
+            {formule.formuleName}
+          </h3>
+
+          {/* Détails */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-500">
+            {formule.duration && (
+              <span className="flex items-center gap-1.5">
+                <div className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center">
+                  <Timer className="w-3.5 h-3.5 text-gray-500" />
+                </div>
+                {formatDuration(formule.duration)}
+              </span>
+            )}
+            {formule.serviceLocation && (
+              <span className="flex items-center gap-1.5">
+                <div className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center">
+                  {formule.serviceLocation === "client_home" ? (
+                    <Car className="w-3.5 h-3.5 text-gray-500" />
+                  ) : (
+                    <Home className="w-3.5 h-3.5 text-gray-500" />
+                  )}
+                </div>
+                {locationLabels[formule.serviceLocation]}
+              </span>
+            )}
+            {formule.numberOfSessions && formule.numberOfSessions > 1 && (
+              <span className="flex items-center gap-1.5 text-purple-600">
+                <div className="w-6 h-6 rounded-lg bg-purple-100 flex items-center justify-center">
+                  <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                </div>
+                {formule.numberOfSessions} séances
+              </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <Link href={formuleDetailUrl}>
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className="px-3 py-2.5 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition-all flex items-center gap-1.5 text-sm"
-              >
-                <Eye className="w-4 h-4" />
-                Détail
-              </motion.button>
-            </Link>
+        </div>
+
+        {/* Footer - Prix & CTA */}
+        <div className="p-5 pt-0">
+          <div className="flex items-center justify-between gap-4 p-4 bg-gradient-to-r from-gray-50 to-gray-50/50 rounded-2xl">
+            {/* Prix avec design original */}
+            <div className="flex items-baseline gap-1">
+              {formule.numberOfSessions && formule.numberOfSessions > 1 ? (
+                <div>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl font-black bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+                      {formatPrice(finalPrice * formule.numberOfSessions)}
+                    </span>
+                  </div>
+                  <span className="text-xs text-gray-400">
+                    {formule.numberOfSessions}× {formatPrice(finalPrice)}
+                  </span>
+                </div>
+              ) : (
+                <div>
+                  <span className="text-2xl font-black bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+                    {formatPrice(finalPrice)}
+                  </span>
+                  {priceLabel && (
+                    <span className="block text-xs text-gray-400 mt-0.5">par {priceLabel}</span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* CTA Button */}
             <Link href={announcerBookingUrl}>
               <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className="px-4 py-2.5 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold rounded-xl shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 transition-all flex items-center gap-1.5 text-sm"
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                className="relative px-5 py-3 bg-gradient-to-r from-primary to-primary/90 text-white font-bold rounded-xl shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all duration-300 flex items-center gap-2 overflow-hidden group/btn"
               >
-                Réserver
-                <ArrowRight className="w-4 h-4" />
+                <span className="relative z-10">Réserver</span>
+                <ChevronRight className="w-4 h-4 relative z-10 group-hover/btn:translate-x-0.5 transition-transform" />
+                {/* Shine effect */}
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/btn:translate-x-full transition-transform duration-700" />
               </motion.button>
             </Link>
           </div>
@@ -368,200 +375,224 @@ export function FormuleCardGrid({ formule, index }: FormuleCardProps) {
 // List View Card
 export function FormuleCardList({ formule, index }: FormuleCardProps) {
   const [isFavorite, setIsFavorite] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
 
   const distanceText = formatDistance(formule.announcerDistance);
   const isCollective = formule.sessionType === "collective";
-  const LocationIcon = formule.serviceLocation ? locationIcons[formule.serviceLocation] : MapPin;
 
   const announcerBaseUrl = `/annonceur/${formule.announcerSlug || formule.announcerId}`;
   const announcerProfileUrl = `${announcerBaseUrl}?service=${formule.categorySlug}`;
   const announcerBookingUrl = `${announcerBaseUrl}?formule=${formule.formuleId}`;
-  const formuleDetailUrl = `/formule/${formule.formuleId}`;
+
+  const finalPrice = getPriceWithCommission(formule.price, formule.announcerStatusType);
+  const priceLabel = priceUnitLabels[formule.priceUnit] || formule.priceUnit;
 
   return (
     <motion.article
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: index * 0.03, duration: 0.3 }}
-      className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-primary/20"
+      transition={{ delay: index * 0.04, duration: 0.4, ease: "easeOut" }}
+      onHoverStart={() => setIsHovered(true)}
+      onHoverEnd={() => setIsHovered(false)}
+      className="group relative"
     >
-      <div className="flex flex-col sm:flex-row">
-        {/* Section gauche - Annonceur */}
-        <div className="relative w-full sm:w-36 p-4 bg-gradient-to-br from-gray-50/80 to-white flex flex-col items-center justify-center border-b sm:border-b-0 sm:border-r border-gray-100">
-          <Link href={announcerProfileUrl} className="relative">
-            <div className="w-16 h-16 rounded-xl overflow-hidden ring-2 ring-white shadow-lg bg-white">
-              {formule.announcerProfileImage ? (
-                <Image
-                  src={formule.announcerProfileImage}
-                  alt={formule.announcerFirstName}
-                  width={64}
-                  height={64}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20">
-                  <span className="text-2xl">👤</span>
-                </div>
-              )}
-            </div>
-            {formule.announcerVerified && (
-              <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-sm">
-                <Shield className="w-3.5 h-3.5 text-secondary" />
-              </div>
-            )}
-          </Link>
-          <div className="text-center mt-2">
-            <Link href={announcerProfileUrl} className="font-semibold text-gray-900 text-sm hover:text-primary transition-colors">
-              {formule.announcerFirstName}
-            </Link>
-            <div className="flex items-center justify-center gap-1 mt-0.5">
-              <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-              <span className="text-xs font-medium text-gray-600">{formule.announcerRating.toFixed(1)}</span>
-            </div>
-            {distanceText && (
-              <div className="flex items-center justify-center gap-1 mt-1 text-primary text-xs font-medium">
-                <Navigation className="w-3 h-3" />
-                {distanceText}
-              </div>
-            )}
-          </div>
-        </div>
+      {/* Glow effect on hover */}
+      <motion.div
+        className="absolute -inset-0.5 bg-gradient-to-r from-primary/40 via-secondary/40 to-primary/40 rounded-3xl opacity-0 blur-md transition-opacity duration-500 -z-10"
+        animate={{ opacity: isHovered ? 0.3 : 0 }}
+      />
 
-        {/* Section droite - Formule */}
-        <div className="flex-1 p-4 flex flex-col">
-          {/* Top row */}
-          <div className="flex items-start justify-between gap-3 mb-2">
-            <div className="flex-1 min-w-0">
-              {/* Tags */}
-              <div className="flex flex-wrap gap-1.5 mb-2">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">
-                  {formule.categoryIcon && <span className="text-sm">{formule.categoryIcon}</span>}
-                  {formule.categoryName}
-                </span>
-                <span className={cn(
-                  "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium",
-                  isCollective ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"
-                )}>
-                  {isCollective ? <Users className="w-3 h-3" /> : <User className="w-3 h-3" />}
-                  {isCollective ? "Collectif" : "Individuel"}
-                </span>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 group-hover:text-primary transition-colors">
-                {formule.formuleName}
-              </h3>
-            </div>
-
-            {/* Prix et favoris */}
-            <div className="text-right flex-shrink-0">
-              {formule.numberOfSessions && formule.numberOfSessions > 1 ? (
-                <div>
-                  <span className="text-xl font-bold text-gray-900">
-                    {formatPrice(getPriceWithCommission(formule.price, formule.announcerStatusType) * formule.numberOfSessions)}
-                  </span>
-                  <div className="text-[10px] text-gray-500">
-                    {formule.numberOfSessions} × {formatPrice(getPriceWithCommission(formule.price, formule.announcerStatusType))}
+      <div className="relative bg-white rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden">
+        <div className="flex flex-col md:flex-row">
+          {/* Section gauche - Annonceur */}
+          <div className="relative md:w-40 p-5 bg-gradient-to-br from-gray-50/80 to-white flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-gray-100">
+            {/* Avatar avec ring gradient */}
+            <Link href={announcerProfileUrl} className="relative group/avatar">
+              <div className="absolute -inset-1.5 bg-gradient-to-tr from-primary via-secondary to-primary rounded-2xl opacity-60 blur-sm group-hover/avatar:opacity-100 transition-opacity" />
+              <div className="relative w-16 h-16 rounded-xl overflow-hidden bg-white ring-2 ring-white shadow-md">
+                {formule.announcerProfileImage ? (
+                  <Image
+                    src={formule.announcerProfileImage}
+                    alt={formule.announcerFirstName}
+                    width={64}
+                    height={64}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20">
+                    <span className="text-2xl">👤</span>
                   </div>
-                </div>
-              ) : (
-                <div>
-                  <span className="text-xl font-bold text-gray-900">
-                    {formatPrice(getPriceWithCommission(formule.price, formule.announcerStatusType))}
-                  </span>
-                  <span className="text-sm text-gray-500">/{formule.priceUnit === "hour" ? "h" : formule.priceUnit}</span>
+                )}
+              </div>
+              {formule.announcerVerified && (
+                <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-gradient-to-br from-secondary to-teal-500 rounded-lg flex items-center justify-center ring-2 ring-white shadow-md">
+                  <Shield className="w-3 h-3 text-white" />
                 </div>
               )}
-              <motion.button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setIsFavorite(!isFavorite);
-                }}
-                whileTap={{ scale: 0.85 }}
-                className={cn(
-                  "mt-1 p-1.5 rounded-full transition-all",
-                  isFavorite ? "bg-red-500 text-white" : "bg-gray-100 text-gray-400 hover:text-red-500"
-                )}
-              >
-                <Heart className={cn("w-4 h-4", isFavorite && "fill-current")} />
-              </motion.button>
+            </Link>
+
+            <Link href={announcerProfileUrl}>
+              <span className="font-bold text-gray-900 text-sm mt-3 hover:text-primary transition-colors">
+                {formule.announcerFirstName}
+              </span>
+            </Link>
+
+            <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 rounded-full mt-1.5">
+              <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+              <span className="text-xs font-bold text-amber-600">{formule.announcerRating.toFixed(1)}</span>
             </div>
-          </div>
 
-          {/* Badges */}
-          <div className="flex flex-wrap items-center gap-2 mb-3">
-            {formule.duration && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-50 rounded-md text-xs text-gray-600">
-                <Timer className="w-3 h-3 text-gray-400" />
-                {formatDuration(formule.duration)}
-              </span>
-            )}
-            {formule.serviceLocation && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-50 rounded-md text-xs text-gray-600">
-                <LocationIcon className="w-3 h-3 text-gray-400" />
-                {locationLabels[formule.serviceLocation]}
-              </span>
-            )}
-            {formule.numberOfSessions && formule.numberOfSessions > 1 && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 rounded-md text-xs text-purple-600">
-                <Sparkles className="w-3 h-3" />
-                {formule.numberOfSessions} séances
+            {distanceText && (
+              <span className="text-xs text-gray-500 flex items-center gap-1 mt-2">
+                <Navigation className="w-3 h-3 text-primary" />
+                {distanceText}
               </span>
             )}
           </div>
 
-          {/* Prochain créneau et créneaux collectifs */}
-          <div className="flex flex-wrap gap-2 mb-3">
-            {formule.nextSlot && (
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 rounded-lg border border-emerald-100">
-                <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-                <span className="text-xs font-medium text-emerald-700">
-                  {formatNextSlotDate(formule.nextSlot.date)}
-                </span>
-                <span className="text-emerald-400">•</span>
-                <Clock className="w-3 h-3 text-emerald-600" />
-                <span className="text-xs text-emerald-600">
-                  {formatTime(formule.nextSlot.startTime)}
-                </span>
+          {/* Section droite - Formule */}
+          <div className="flex-1 p-5 flex flex-col">
+            {/* Top row */}
+            <div className="flex items-start justify-between gap-4 mb-3">
+              <div className="flex-1 min-w-0">
+                {/* Tags */}
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gradient-to-r from-primary/10 to-primary/5 rounded-lg">
+                    {formule.categoryIcon && <span className="text-sm">{formule.categoryIcon}</span>}
+                    <span className="text-xs font-semibold text-primary">{formule.categoryName}</span>
+                  </span>
+                  <span className={cn(
+                    "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium",
+                    isCollective
+                      ? "bg-blue-50 text-blue-600"
+                      : "bg-gray-50 text-gray-500"
+                  )}>
+                    {isCollective ? <Users className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                    {isCollective ? "Collectif" : "Individuel"}
+                  </span>
+                </div>
+
+                <h3 className="text-lg font-bold text-gray-900 group-hover:text-primary transition-colors">
+                  {formule.formuleName}
+                </h3>
               </div>
-            )}
 
-            {isCollective && formule.collectiveSlots && formule.collectiveSlots.length > 0 && (
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 rounded-lg border border-blue-100">
-                <Users className="w-3.5 h-3.5 text-blue-600" />
-                <span className="text-xs font-medium text-blue-700">Collectif</span>
-                <span className="text-blue-400">•</span>
-                <span className={cn(
-                  "text-xs font-medium",
-                  formule.collectiveSlots[0].spotsLeft <= 2 ? "text-orange-600" : "text-blue-600"
-                )}>
-                  {formule.collectiveSlots[0].spotsLeft} place{formule.collectiveSlots[0].spotsLeft > 1 ? "s" : ""} dispo
-                </span>
+              {/* Prix + Favoris */}
+              <div className="flex items-start gap-3 flex-shrink-0">
+                {/* Prix badge */}
+                <div className="px-4 py-2 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl">
+                  {formule.numberOfSessions && formule.numberOfSessions > 1 ? (
+                    <div className="text-right">
+                      <span className="text-lg font-black text-gray-900">
+                        {formatPrice(finalPrice * formule.numberOfSessions)}
+                      </span>
+                      <div className="text-[10px] text-gray-400">
+                        {formule.numberOfSessions}× {formatPrice(finalPrice)}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-right">
+                      <span className="text-lg font-black text-gray-900">
+                        {formatPrice(finalPrice)}
+                      </span>
+                      {priceLabel && (
+                        <span className="block text-[10px] text-gray-400">par {priceLabel}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <motion.button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsFavorite(!isFavorite);
+                  }}
+                  whileTap={{ scale: 0.85 }}
+                  className={cn(
+                    "p-2 rounded-xl transition-all duration-300",
+                    isFavorite
+                      ? "bg-gradient-to-br from-red-500 to-pink-500 text-white shadow-lg shadow-red-500/30"
+                      : "bg-gray-50 text-gray-300 hover:bg-red-50 hover:text-red-400"
+                  )}
+                >
+                  <Heart className={cn("w-5 h-5", isFavorite && "fill-current")} />
+                </motion.button>
               </div>
-            )}
-          </div>
+            </div>
 
-          {/* CTA */}
-          <div className="mt-auto pt-2 flex flex-wrap gap-2">
-            <Link href={formuleDetailUrl}>
-              <motion.button
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
-                className="px-4 py-2.5 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition-all flex items-center gap-2"
-              >
-                <Eye className="w-4 h-4" />
-                <span>Voir détail</span>
-              </motion.button>
-            </Link>
-            <Link href={announcerBookingUrl}>
-              <motion.button
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
-                className="px-5 py-2.5 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold rounded-xl shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 transition-all flex items-center gap-2"
-              >
-                <span>Réserver</span>
-                <ArrowRight className="w-4 h-4" />
-              </motion.button>
-            </Link>
+            {/* Détails */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-500 mb-4">
+              {formule.duration && (
+                <span className="flex items-center gap-1.5">
+                  <div className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center">
+                    <Timer className="w-3.5 h-3.5 text-gray-500" />
+                  </div>
+                  {formatDuration(formule.duration)}
+                </span>
+              )}
+              {formule.serviceLocation && (
+                <span className="flex items-center gap-1.5">
+                  <div className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center">
+                    {formule.serviceLocation === "client_home" ? (
+                      <Car className="w-3.5 h-3.5 text-gray-500" />
+                    ) : (
+                      <Home className="w-3.5 h-3.5 text-gray-500" />
+                    )}
+                  </div>
+                  {locationLabels[formule.serviceLocation]}
+                </span>
+              )}
+              {formule.numberOfSessions && formule.numberOfSessions > 1 && (
+                <span className="flex items-center gap-1.5 text-purple-600">
+                  <div className="w-6 h-6 rounded-lg bg-purple-100 flex items-center justify-center">
+                    <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                  </div>
+                  {formule.numberOfSessions} séances
+                </span>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex flex-wrap items-center justify-between gap-3 mt-auto">
+              {/* Prochain créneau */}
+              {formule.nextSlot && (
+                <div className="inline-flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-100">
+                  <Zap className="w-4 h-4 text-emerald-500" />
+                  <span className="text-sm font-semibold text-emerald-700">
+                    {formatNextSlotDate(formule.nextSlot.date)}
+                  </span>
+                  <span className="text-emerald-400">·</span>
+                  <span className="text-sm text-emerald-600">{formatTime(formule.nextSlot.startTime)}</span>
+                  {isCollective && formule.spotsLeft && (
+                    <>
+                      <span className="text-emerald-400">·</span>
+                      <span className={cn(
+                        "text-xs font-bold px-1.5 py-0.5 rounded-full",
+                        formule.spotsLeft <= 2
+                          ? "bg-orange-100 text-orange-600"
+                          : "bg-emerald-100 text-emerald-600"
+                      )}>
+                        {formule.spotsLeft} place{formule.spotsLeft > 1 ? "s" : ""}
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* CTA */}
+              <Link href={announcerBookingUrl} className="ml-auto">
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  className="relative px-6 py-3 bg-gradient-to-r from-primary to-primary/90 text-white font-bold rounded-xl shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all duration-300 flex items-center gap-2 overflow-hidden group/btn"
+                >
+                  <span className="relative z-10">Réserver</span>
+                  <ChevronRight className="w-4 h-4 relative z-10 group-hover/btn:translate-x-0.5 transition-transform" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/btn:translate-x-full transition-transform duration-700" />
+                </motion.button>
+              </Link>
+            </div>
           </div>
         </div>
       </div>

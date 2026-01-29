@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "convex/react";
 import { useQueryStates, parseAsString, parseAsInteger, parseAsStringLiteral } from "nuqs";
 import { api } from "@/convex/_generated/api";
+import { useAuth } from "@/app/hooks/useAuth";
 import {
   Search,
   MapPin,
@@ -80,6 +81,9 @@ const searchParamsParsers = {
 };
 
 export default function RecherchePage() {
+  // Auth pour récupérer l'adresse du profil
+  const { token, isAuthenticated } = useAuth();
+
   // URL state with nuqs
   const [urlParams, setUrlParams] = useQueryStates(searchParamsParsers, {
     history: "push",
@@ -102,6 +106,31 @@ export default function RecherchePage() {
     resetAdvancedFilters,
     resetAllFilters: resetHookFilters,
   } = useFormuleSearch();
+
+  // Récupérer les coordonnées du profil utilisateur (client ou annonceur)
+  const userLocation = useQuery(
+    api.client.profile.getClientCoordinates,
+    token ? { token } : "skip"
+  );
+
+  // State pour savoir si on a déjà initialisé la localisation depuis le profil
+  const [hasInitializedFromProfile, setHasInitializedFromProfile] = useState(false);
+
+  // Initialiser la localisation depuis le profil utilisateur
+  useEffect(() => {
+    if (
+      !hasInitializedFromProfile &&
+      userLocation?.coordinates &&
+      userLocation?.city &&
+      !filters.location.text // Ne pas écraser si l'utilisateur a déjà saisi une adresse
+    ) {
+      setLocation({
+        text: userLocation.location || userLocation.city,
+        coordinates: userLocation.coordinates,
+      });
+      setHasInitializedFromProfile(true);
+    }
+  }, [userLocation, hasInitializedFromProfile, filters.location.text, setLocation]);
 
   // Sync URL params with hook state
   useEffect(() => {
@@ -266,8 +295,10 @@ export default function RecherchePage() {
 
 
   // Déterminer si on doit afficher l'icône de localisation
-  // Toujours afficher si pas de localisation définie
-  const showLocationIcon = !filters.location.text;
+  // Cacher si : utilisateur connecté avec adresse dans son profil
+  // Afficher si : pas connecté OU pas d'adresse dans le profil
+  const hasProfileLocation = isAuthenticated && userLocation?.coordinates;
+  const showLocationIcon = !hasProfileLocation;
 
   return (
     <div className="min-h-screen bg-gray-50/50">
