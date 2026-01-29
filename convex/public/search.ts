@@ -673,6 +673,7 @@ interface FormuleResult {
   numberOfSessions?: number;
   // Infos service/catégorie
   serviceId: string;
+  categorySlug: string;
   categoryName: string;
   categoryIcon?: string;
   animalTypes: string[];
@@ -917,6 +918,7 @@ export const searchFormules = query({
           serviceLocation: variant.serviceLocation || service.serviceLocation,
           numberOfSessions: variant.numberOfSessions,
           serviceId: service._id,
+          categorySlug: service.category,
           categoryName: categoryDoc?.name || service.category,
           categoryIcon: categoryDoc?.icon,
           animalTypes: variant.animalTypes || service.animalTypes || [],

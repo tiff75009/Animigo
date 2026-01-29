@@ -19,6 +19,7 @@ import {
   Home,
   Car,
   Sparkles,
+  Eye,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { formatPrice, formatDistance } from "./helpers";
@@ -50,6 +51,7 @@ export interface FormuleResult {
   serviceLocation?: "announcer_home" | "client_home" | "both";
   numberOfSessions?: number;
   serviceId: string;
+  categorySlug: string;
   categoryName: string;
   categoryIcon?: string;
   animalTypes: string[];
@@ -142,9 +144,10 @@ export function FormuleCardGrid({ formule, index }: FormuleCardProps) {
   const isCollective = formule.sessionType === "collective";
   const LocationIcon = formule.serviceLocation ? locationIcons[formule.serviceLocation] : MapPin;
 
-  const announcerUrl = formule.announcerSlug
-    ? `/annonceur/${formule.announcerSlug}?formule=${formule.formuleId}`
-    : `/annonceur/${formule.announcerId}?formule=${formule.formuleId}`;
+  const announcerBaseUrl = `/annonceur/${formule.announcerSlug || formule.announcerId}`;
+  const announcerProfileUrl = `${announcerBaseUrl}?service=${formule.categorySlug}`;
+  const announcerBookingUrl = `${announcerBaseUrl}?formule=${formule.formuleId}`;
+  const formuleDetailUrl = `/formule/${formule.formuleId}`;
 
   return (
     <motion.article
@@ -157,7 +160,7 @@ export function FormuleCardGrid({ formule, index }: FormuleCardProps) {
       <div className="p-4 pb-3 border-b border-gray-50">
         <div className="flex items-center gap-3">
           {/* Avatar annonceur */}
-          <Link href={`/annonceur/${formule.announcerSlug || formule.announcerId}`}>
+          <Link href={announcerProfileUrl}>
             <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0 ring-2 ring-gray-100 group-hover:ring-primary/20 transition-all">
               {formule.announcerProfileImage ? (
                 <Image
@@ -183,9 +186,9 @@ export function FormuleCardGrid({ formule, index }: FormuleCardProps) {
           {/* Infos annonceur */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-gray-900 truncate">
+              <Link href={announcerProfileUrl} className="font-semibold text-gray-900 truncate hover:text-primary transition-colors">
                 {formule.announcerFirstName}
-              </span>
+              </Link>
               <div className="flex items-center gap-0.5">
                 <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                 <span className="text-sm font-medium text-gray-700">{formule.announcerRating.toFixed(1)}</span>
@@ -334,16 +337,28 @@ export function FormuleCardGrid({ formule, index }: FormuleCardProps) {
               </>
             )}
           </div>
-          <Link href={announcerUrl}>
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="px-4 py-2.5 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold rounded-xl shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 transition-all flex items-center gap-1.5 text-sm"
-            >
-              Réserver
-              <ArrowRight className="w-4 h-4" />
-            </motion.button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link href={formuleDetailUrl}>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="px-3 py-2.5 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition-all flex items-center gap-1.5 text-sm"
+              >
+                <Eye className="w-4 h-4" />
+                Détail
+              </motion.button>
+            </Link>
+            <Link href={announcerBookingUrl}>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="px-4 py-2.5 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold rounded-xl shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 transition-all flex items-center gap-1.5 text-sm"
+              >
+                Réserver
+                <ArrowRight className="w-4 h-4" />
+              </motion.button>
+            </Link>
+          </div>
         </div>
       </div>
     </motion.article>
@@ -358,9 +373,10 @@ export function FormuleCardList({ formule, index }: FormuleCardProps) {
   const isCollective = formule.sessionType === "collective";
   const LocationIcon = formule.serviceLocation ? locationIcons[formule.serviceLocation] : MapPin;
 
-  const announcerUrl = formule.announcerSlug
-    ? `/annonceur/${formule.announcerSlug}?formule=${formule.formuleId}`
-    : `/annonceur/${formule.announcerId}?formule=${formule.formuleId}`;
+  const announcerBaseUrl = `/annonceur/${formule.announcerSlug || formule.announcerId}`;
+  const announcerProfileUrl = `${announcerBaseUrl}?service=${formule.categorySlug}`;
+  const announcerBookingUrl = `${announcerBaseUrl}?formule=${formule.formuleId}`;
+  const formuleDetailUrl = `/formule/${formule.formuleId}`;
 
   return (
     <motion.article
@@ -372,7 +388,7 @@ export function FormuleCardList({ formule, index }: FormuleCardProps) {
       <div className="flex flex-col sm:flex-row">
         {/* Section gauche - Annonceur */}
         <div className="relative w-full sm:w-36 p-4 bg-gradient-to-br from-gray-50/80 to-white flex flex-col items-center justify-center border-b sm:border-b-0 sm:border-r border-gray-100">
-          <Link href={`/annonceur/${formule.announcerSlug || formule.announcerId}`} className="relative">
+          <Link href={announcerProfileUrl} className="relative">
             <div className="w-16 h-16 rounded-xl overflow-hidden ring-2 ring-white shadow-lg bg-white">
               {formule.announcerProfileImage ? (
                 <Image
@@ -395,7 +411,9 @@ export function FormuleCardList({ formule, index }: FormuleCardProps) {
             )}
           </Link>
           <div className="text-center mt-2">
-            <span className="font-semibold text-gray-900 text-sm">{formule.announcerFirstName}</span>
+            <Link href={announcerProfileUrl} className="font-semibold text-gray-900 text-sm hover:text-primary transition-colors">
+              {formule.announcerFirstName}
+            </Link>
             <div className="flex items-center justify-center gap-1 mt-0.5">
               <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
               <span className="text-xs font-medium text-gray-600">{formule.announcerRating.toFixed(1)}</span>
@@ -523,14 +541,24 @@ export function FormuleCardList({ formule, index }: FormuleCardProps) {
           </div>
 
           {/* CTA */}
-          <div className="mt-auto pt-2">
-            <Link href={announcerUrl}>
+          <div className="mt-auto pt-2 flex flex-wrap gap-2">
+            <Link href={formuleDetailUrl}>
               <motion.button
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.99 }}
-                className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold rounded-xl shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 transition-all flex items-center justify-center gap-2"
+                className="px-4 py-2.5 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition-all flex items-center gap-2"
               >
-                <span>Réserver cette formule</span>
+                <Eye className="w-4 h-4" />
+                <span>Voir détail</span>
+              </motion.button>
+            </Link>
+            <Link href={announcerBookingUrl}>
+              <motion.button
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                className="px-5 py-2.5 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold rounded-xl shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 transition-all flex items-center gap-2"
+              >
+                <span>Réserver</span>
                 <ArrowRight className="w-4 h-4" />
               </motion.button>
             </Link>

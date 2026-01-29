@@ -93,6 +93,9 @@ export default function AnnouncerProfilePage() {
   // Gérer le service sélectionné avec nuqs (categorySlug, synchronisé avec l'URL)
   const [selectedServiceSlug, setSelectedServiceSlug] = useQueryState("service");
 
+  // Gérer la formule pré-sélectionnée via l'URL (pour redirection depuis la recherche)
+  const [formuleQueryParam, setFormuleQueryParam] = useQueryState("formule");
+
   // État de la réservation (formule, options, dates, heures)
   const [bookingSelection, setBookingSelection] = useState<BookingSelection>(DEFAULT_BOOKING_SELECTION);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
@@ -481,6 +484,32 @@ export default function AnnouncerProfilePage() {
       }
     }
   }, [announcer, setSelectedServiceSlug]);
+
+  // Pré-sélectionner la formule si le paramètre ?formule= est présent dans l'URL
+  useEffect(() => {
+    if (!formuleQueryParam || !announcer) return;
+
+    // Chercher le service qui contient cette formule
+    for (const service of announcer.services) {
+      const formule = service.formules?.find((f: { id: string }) => f.id === formuleQueryParam);
+      if (formule) {
+        // Sélectionner le service et la formule
+        setBookingSelection((prev) => ({
+          ...prev,
+          selectedServiceId: service.id,
+          selectedVariantId: formule.id,
+          selectedOptionIds: [],
+          selectedAnimalIds: [],
+          animalCount: 1,
+        }));
+        // Mettre à jour le service slug dans l'URL
+        setSelectedServiceSlug(service.categorySlug ?? service.categoryId ?? null);
+        // Nettoyer le paramètre formule de l'URL (on garde juste service)
+        setFormuleQueryParam(null);
+        break;
+      }
+    }
+  }, [formuleQueryParam, announcer, setSelectedServiceSlug, setFormuleQueryParam]);
 
   const handleVariantDeselect = useCallback(() => {
     setBookingSelection((prev) => ({

@@ -153,6 +153,7 @@ export interface FormuleResult {
   serviceLocation?: "announcer_home" | "client_home" | "both";
   numberOfSessions?: number;
   serviceId: string;
+  categorySlug: string;
   categoryName: string;
   categoryIcon?: string;
   animalTypes: string[];
