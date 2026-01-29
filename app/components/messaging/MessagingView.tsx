@@ -292,9 +292,9 @@ function ChatView({ conversationId, onBack, userType }: ChatViewProps) {
     : `/client/reservations/${conversation.missionId}`;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full lg:h-full max-lg:fixed max-lg:inset-0 max-lg:z-50 max-lg:bg-white">
       {/* Chat Header */}
-      <div className="bg-white border-b border-foreground/10 p-4">
+      <div className="flex-shrink-0 bg-white border-b border-foreground/10 p-4 max-lg:pt-[calc(env(safe-area-inset-top)+1rem)]">
         <div className="flex items-center gap-4">
           <motion.button
             className="lg:hidden p-2 hover:bg-gray-100 rounded-lg"
@@ -305,7 +305,7 @@ function ChatView({ conversationId, onBack, userType }: ChatViewProps) {
           </motion.button>
 
           <Link href={missionLink} className="relative">
-            <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-200">
+            <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-full overflow-hidden bg-gray-200">
               <Image
                 src={conversation.participantImage}
                 alt={conversation.participantName}
@@ -316,18 +316,18 @@ function ChatView({ conversationId, onBack, userType }: ChatViewProps) {
             </div>
           </Link>
 
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <Link href={missionLink} className="hover:underline">
-              <h3 className="font-semibold text-foreground">
+              <h3 className="font-semibold text-foreground text-sm lg:text-base truncate">
                 {conversation.participantName}
               </h3>
             </Link>
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-text-light flex items-center gap-1">
+            <div className="flex items-center gap-2 text-xs lg:text-sm">
+              <span className="text-text-light flex items-center gap-1 truncate">
                 {conversation.animalEmoji} {conversation.animalName}
               </span>
               {status && (
-                <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium", status.color)}>
+                <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0", status.color)}>
                   {status.label}
                 </span>
               )}
@@ -337,7 +337,7 @@ function ChatView({ conversationId, onBack, userType }: ChatViewProps) {
       </div>
 
       {/* Messages */}
-      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 bg-gray-50">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 bg-gray-50 min-h-0">
         {/* Sentinel for infinite scroll (top) */}
         <div ref={sentinelRef} className="h-4">
           {isLoadingMore && (
@@ -367,8 +367,8 @@ function ChatView({ conversationId, onBack, userType }: ChatViewProps) {
       </div>
 
       {/* Message Input */}
-      <div className="bg-white border-t border-foreground/10 p-4">
-        <div className="flex items-end gap-3">
+      <div className="flex-shrink-0 bg-white border-t border-foreground/10 p-3 lg:p-4 max-lg:pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+        <div className="flex items-end gap-2 lg:gap-3">
           <div className="flex-1 relative">
             <textarea
               ref={textareaRef}
@@ -376,7 +376,7 @@ function ChatView({ conversationId, onBack, userType }: ChatViewProps) {
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyDown={handleKeyPress}
               placeholder="Écrivez votre message..."
-              className="w-full px-4 py-3 bg-gray-100 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
+              className="w-full px-4 py-2.5 lg:py-3 bg-gray-100 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground text-sm lg:text-base"
               rows={1}
               disabled={isSending}
             />
@@ -384,7 +384,7 @@ function ChatView({ conversationId, onBack, userType }: ChatViewProps) {
 
           <motion.button
             className={cn(
-              "p-3 rounded-xl transition-colors",
+              "p-2.5 lg:p-3 rounded-xl transition-colors flex-shrink-0",
               newMessage.trim() && !isSending
                 ? "bg-primary text-white"
                 : "bg-gray-100 text-text-light"
