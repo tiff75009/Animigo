@@ -115,6 +115,8 @@ interface AnnouncerFormulesProps {
   // Infos annonceur pour la section lieu
   announcerCity?: string;
   announcerFirstName?: string;
+  // Rayon d'action de l'annonceur
+  announcerRadius?: number | null;
   // Callback quand l'utilisateur se connecte (pour mettre à jour l'état parent)
   onLoginSuccess?: (token: string) => void;
   // Vérification du chien pour les invités
@@ -184,6 +186,7 @@ export default function AnnouncerFormules({
   maxSelectableAnimals = 1,
   announcerCity,
   announcerFirstName,
+  announcerRadius,
   onLoginSuccess,
   // Vérification du chien pour les invités
   requiresDogVerification = false,
@@ -201,6 +204,9 @@ export default function AnnouncerFormules({
   // État pour l'étape actuelle (desktop)
   const [desktopStep, setDesktopStep] = useState<DesktopStep>("formule");
   const [slideDirection, setSlideDirection] = useState<"left" | "right">("right");
+
+  // État pour l'erreur de distance (adresse hors rayon d'action)
+  const [isAddressOutOfRange, setIsAddressOutOfRange] = useState(false);
 
   // États pour le formulaire de connexion inline
   const [showLoginForm, setShowLoginForm] = useState(false);
@@ -408,6 +414,8 @@ export default function AnnouncerFormules({
   });
 
   // Calculer les étapes disponibles pour la version desktop
+  // Ordre: formule → dog → animals → location → dates → options
+  // (même ordre que sur mobile)
   const availableDesktopSteps = useMemo((): DesktopStep[] => {
     const steps: DesktopStep[] = ["formule"];
 
@@ -421,13 +429,24 @@ export default function AnnouncerFormules({
       steps.push("animals");
     }
 
-    // Dates/Planning
-    steps.push("dates");
-
-    // Lieu (si choix nécessaire)
-    if (service && (service.serviceLocation === "both" || isRangeMode) && !isCollectiveFormule) {
+    // Lieu (AVANT les dates - même ordre que mobile)
+    // Ajouter l'étape location si:
+    // - La formule offre un choix (both)
+    // - OU la formule est uniquement à domicile (client_home) - pour saisir l'adresse
+    // - OU service garde (isRangeMode)
+    // - OU formule collective (pour afficher le lieu et la distance)
+    const formuleLocation = selectedFormule?.serviceLocation || service?.serviceLocation;
+    if (service && (
+      formuleLocation === "both" ||
+      formuleLocation === "client_home" ||
+      isRangeMode ||
+      isCollectiveFormule // Toujours afficher le lieu pour les collectives
+    )) {
       steps.push("location");
     }
+
+    // Dates/Planning (APRÈS location)
+    steps.push("dates");
 
     // Options (si disponibles)
     if (hasOptions) {
@@ -435,7 +454,7 @@ export default function AnnouncerFormules({
     }
 
     return steps;
-  }, [requiresDogVerification, isLoggedIn, userAnimals.length, service, isRangeMode, isCollectiveFormule, hasOptions]);
+  }, [requiresDogVerification, isLoggedIn, userAnimals.length, service, isRangeMode, isCollectiveFormule, hasOptions, selectedFormule?.serviceLocation]);
 
   // Index de l'étape actuelle
   const currentStepIndex = availableDesktopSteps.indexOf(desktopStep);
@@ -446,8 +465,8 @@ export default function AnnouncerFormules({
       case "formule": return "Choisissez votre formule";
       case "dog": return "Vérifiez votre chien";
       case "animals": return "Sélectionnez vos animaux";
-      case "dates": return "Choisissez vos dates";
-      case "location": return "Lieu de prestation";
+      case "dates": return isCollectiveFormule ? "Choisissez vos créneaux" : isMultiSessionIndividual ? "Choisissez vos séances" : "Choisissez vos dates";
+      case "location": return isCollectiveFormule ? "Lieu des séances" : "Lieu de prestation";
       case "options": return "Options supplémentaires";
       default: return "";
     }
@@ -467,6 +486,24 @@ export default function AnnouncerFormules({
         if (isMultiSessionIndividual) return hasSessionsSelected && selectedSessionsCount >= individualNumberOfSessions;
         return hasDateSelected && hasTimeSelected;
       case "location":
+        // Pour les formules collectives, l'adresse est optionnelle (c'est juste pour afficher la distance)
+        if (isCollectiveFormule) {
+          return true; // On peut toujours passer à l'étape suivante
+        }
+        // Si à domicile, vérifier que l'adresse est dans le rayon
+        if (bookingSelection?.serviceLocation === "client_home") {
+          if (isAddressOutOfRange) return false;
+          // Vérifier qu'une adresse est sélectionnée
+          if (isLoggedIn) return Boolean(bookingSelection?.selectedAddressId);
+          return Boolean(guestAddress?.coordinates);
+        }
+        // Si formule uniquement à domicile (pas de choix), on est forcément dans le cas ci-dessus
+        const formuleServiceLoc = selectedFormule?.serviceLocation || service?.serviceLocation;
+        if (formuleServiceLoc === "client_home") {
+          if (isAddressOutOfRange) return false;
+          if (isLoggedIn) return Boolean(bookingSelection?.selectedAddressId);
+          return Boolean(guestAddress?.coordinates);
+        }
         return hasLocationSelected;
       case "options":
         return true; // Options sont optionnelles
@@ -1016,6 +1053,9 @@ export default function AnnouncerFormules({
                                 isLoading={isLoadingAddresses}
                                 onSelect={onAddressSelect}
                                 onAddNew={onAddNewAddress}
+                                announcerCoordinates={announcerCoordinates}
+                                announcerRadius={announcerRadius}
+                                onDistanceError={(outOfRange) => setIsAddressOutOfRange(outOfRange)}
                               />
                             )
                           ) : (
@@ -1023,7 +1063,9 @@ export default function AnnouncerFormules({
                               <GuestAddressSelector
                                 guestAddress={guestAddress ?? null}
                                 announcerCoordinates={announcerCoordinates}
+                                announcerRadius={announcerRadius}
                                 onAddressChange={onGuestAddressChange}
+                                onDistanceError={setIsAddressOutOfRange}
                               />
                             )
                           )}
@@ -1320,13 +1362,13 @@ export default function AnnouncerFormules({
         </div>
       </motion.div>
 
-      {/* Section Animaux - Étape 1: sélectionner les animaux AVANT le planning */}
+      {/* Section Animaux - Étape 1: sélectionner les animaux AVANT le planning - Desktop uniquement */}
       {hasVariantSelected && isLoggedIn && userAnimals.length > 0 && onAnimalToggle && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           className={cn(
-            "bg-white rounded-2xl p-5 sm:p-6 border-2 transition-colors duration-300",
+            "hidden md:block bg-white rounded-2xl p-5 sm:p-6 border-2 transition-colors duration-300",
             hasAnimalsSelected
               ? "border-gray-100"
               : "border-primary/30"
@@ -1414,12 +1456,12 @@ export default function AnnouncerFormules({
         </motion.div>
       )}
 
-      {/* Section Nombre d'animaux - pour les invités avec formule collective */}
+      {/* Section Nombre d'animaux - pour les invités avec formule collective - Desktop uniquement */}
       {hasVariantSelected && !isLoggedIn && isCollectiveFormule && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100"
+          className="hidden md:block bg-white rounded-2xl p-5 sm:p-6 border border-gray-100"
         >
           <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
             <span className="p-2 bg-primary/10 rounded-lg">
@@ -1581,13 +1623,13 @@ export default function AnnouncerFormules({
         </motion.div>
       )}
 
-      {/* Section Vérification du chien pour les invités */}
+      {/* Section Vérification du chien - Desktop uniquement (mobile géré par AnnouncerMobileCTA) */}
       {hasVariantSelected && requiresDogVerification && dogRestrictions && onGuestDogDataChange && onGuestDogValidationChange && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           className={cn(
-            "bg-white rounded-2xl p-5 sm:p-6 border-2 transition-colors duration-300",
+            "hidden md:block bg-white rounded-2xl p-5 sm:p-6 border-2 transition-colors duration-300",
             guestDogValid
               ? "border-green-200"
               : guestDogError
@@ -1605,12 +1647,12 @@ export default function AnnouncerFormules({
         </motion.div>
       )}
 
-      {/* Message si vérification du chien requise mais pas faite */}
+      {/* Message si vérification du chien requise mais pas faite - Desktop uniquement */}
       {hasVariantSelected && requiresDogVerification && !guestDogValid && !guestDogError && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="p-4 bg-amber-50 border border-amber-200 rounded-xl"
+          className="hidden md:block p-4 bg-amber-50 border border-amber-200 rounded-xl"
         >
           <div className="flex items-center gap-3">
             <Dog className="w-5 h-5 text-amber-600" />
@@ -1621,12 +1663,12 @@ export default function AnnouncerFormules({
         </motion.div>
       )}
 
-      {/* Section Créneaux collectifs - visible pour formules collectives (bloqué si vérification du chien requise et pas faite) */}
+      {/* Section Créneaux collectifs - Desktop uniquement (mobile géré par AnnouncerMobileCTA) */}
       {hasVariantSelected && isCollectiveFormule && selectedFormule && onSlotsSelected && (!requiresDogVerification || guestDogValid) && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100"
+          className="hidden md:block bg-white rounded-2xl p-5 sm:p-6 border border-gray-100"
         >
           <CollectiveSlotPicker
             variantId={selectedFormule.id as string}
@@ -1640,11 +1682,12 @@ export default function AnnouncerFormules({
         </motion.div>
       )}
 
-      {/* Calendrier multi-séances - visible quand une formule individuelle avec plusieurs séances est sélectionnée (bloqué si vérification du chien requise et pas faite) */}
+      {/* Calendrier multi-séances - Desktop uniquement (mobile géré par AnnouncerMobileCTA) */}
       {hasVariantSelected && isMultiSessionIndividual && onSessionsChange && calendarMonth && onMonthChange && (!requiresDogVerification || guestDogValid) && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
+          className="hidden md:block"
         >
           <MultiSessionCalendar
             numberOfSessions={individualNumberOfSessions}
@@ -1701,12 +1744,12 @@ export default function AnnouncerFormules({
         </div>
       )}
 
-      {/* Section Lieu de prestation */}
+      {/* Section Lieu de prestation - Desktop uniquement (mobile géré par AnnouncerMobileCTA) */}
       {hasVariantSelected && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100"
+          className="hidden md:block bg-white rounded-2xl p-5 sm:p-6 border border-gray-100"
         >
           <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
             <span className="p-2 bg-blue-100 rounded-lg">
@@ -1715,9 +1758,10 @@ export default function AnnouncerFormules({
             {isCollectiveFormule ? "Lieu des séances" : "Lieu de prestation"}
           </h3>
 
-          {/* Cas 1: Service collectif - toujours chez le prestataire */}
+          {/* Cas 1: Service collectif - toujours chez le prestataire + saisie adresse pour distance */}
           {isCollectiveFormule && (
-            <div className="space-y-3">
+            <div className="space-y-4">
+              {/* Affichage du lieu de la séance */}
               <div className="p-4 bg-gray-50 rounded-xl flex items-center gap-3">
                 <div className="p-2 bg-white rounded-lg">
                   <Home className="w-5 h-5 text-gray-500" />
@@ -1734,8 +1778,37 @@ export default function AnnouncerFormules({
                 </div>
               </div>
               <p className="text-xs text-gray-500 italic px-1">
-                L'adresse exacte vous sera communiquée une fois la réservation acceptée par {announcerFirstName || "le prestataire"}.
+                L'adresse exacte vous sera communiquée une fois la réservation acceptée.
               </p>
+
+              {/* Saisie de l'adresse pour calculer la distance (optionnel) */}
+              <div className="pt-4 border-t border-gray-100">
+                <p className="text-sm font-medium text-gray-700 mb-3">
+                  Votre adresse <span className="text-gray-400 font-normal">(pour calculer la distance)</span>
+                </p>
+                {isLoggedIn ? (
+                  onAddressSelect && onAddNewAddress && (
+                    <AddressSelector
+                      addresses={clientAddresses}
+                      selectedAddressId={bookingSelection?.selectedAddressId ?? null}
+                      isLoading={isLoadingAddresses}
+                      onSelect={onAddressSelect}
+                      onAddNew={onAddNewAddress}
+                      announcerCoordinates={announcerCoordinates}
+                      announcerRadius={null}
+                    />
+                  )
+                ) : (
+                  onGuestAddressChange && (
+                    <GuestAddressSelector
+                      guestAddress={guestAddress ?? null}
+                      announcerCoordinates={announcerCoordinates}
+                      announcerRadius={null}
+                      onAddressChange={onGuestAddressChange}
+                    />
+                  )
+                )}
+              </div>
             </div>
           )}
 
@@ -1785,6 +1858,9 @@ export default function AnnouncerFormules({
                     isLoading={isLoadingAddresses}
                     onSelect={onAddressSelect}
                     onAddNew={onAddNewAddress}
+                    announcerCoordinates={announcerCoordinates}
+                    announcerRadius={announcerRadius}
+                    onDistanceError={(outOfRange) => setIsAddressOutOfRange(outOfRange)}
                   />
                 )
               ) : (
@@ -1792,7 +1868,9 @@ export default function AnnouncerFormules({
                   <GuestAddressSelector
                     guestAddress={guestAddress ?? null}
                     announcerCoordinates={announcerCoordinates}
+                    announcerRadius={announcerRadius}
                     onAddressChange={onGuestAddressChange}
+                    onDistanceError={setIsAddressOutOfRange}
                   />
                 )
               )}
@@ -1810,6 +1888,9 @@ export default function AnnouncerFormules({
                     isLoading={isLoadingAddresses}
                     onSelect={onAddressSelect}
                     onAddNew={onAddNewAddress}
+                    announcerCoordinates={announcerCoordinates}
+                    announcerRadius={announcerRadius}
+                    onDistanceError={(outOfRange) => setIsAddressOutOfRange(outOfRange)}
                   />
                 )
               ) : (
@@ -1817,7 +1898,9 @@ export default function AnnouncerFormules({
                   <GuestAddressSelector
                     guestAddress={guestAddress ?? null}
                     announcerCoordinates={announcerCoordinates}
+                    announcerRadius={announcerRadius}
                     onAddressChange={onGuestAddressChange}
+                    onDistanceError={setIsAddressOutOfRange}
                   />
                 )
               )}
@@ -1826,14 +1909,14 @@ export default function AnnouncerFormules({
         </motion.div>
       )}
 
-      {/* Section Options additionnelles - visible quand une formule est sélectionnée */}
+      {/* Section Options additionnelles - Desktop uniquement (mobile géré par AnnouncerMobileCTA) */}
       {/* Pour les services garde (isRangeMode), toujours afficher cette section */}
       {hasVariantSelected && (service.options.length > 0 || isRangeMode) && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           className={cn(
-            "bg-white rounded-2xl p-5 sm:p-6 border-2 transition-colors duration-300 relative overflow-hidden",
+            "hidden md:block bg-white rounded-2xl p-5 sm:p-6 border-2 transition-colors duration-300 relative overflow-hidden",
             selectedOptionIds.length > 0
               ? "border-gray-100"
               : "border-secondary/30"

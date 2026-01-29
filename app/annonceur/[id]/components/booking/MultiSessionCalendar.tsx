@@ -42,8 +42,8 @@ interface MultiSessionCalendarProps {
   className?: string;
 }
 
-// Délai minimum de réservation (en heures)
-const MIN_BOOKING_LEAD_TIME_HOURS = 2;
+// Délai minimum de réservation (en heures) - 24h avant le début
+const MIN_BOOKING_LEAD_TIME_HOURS = 24;
 
 // Helper functions
 function parseTimeToMinutes(time: string): number {

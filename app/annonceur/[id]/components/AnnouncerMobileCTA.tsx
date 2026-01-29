@@ -3,7 +3,9 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, ArrowRight, Check, ShoppingCart, Calendar, Clock, CreditCard, Eye, PawPrint, MapPin, Home, Plus, ChevronLeft, AlertTriangle, Dog } from "lucide-react";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { X, ArrowRight, Check, ShoppingCart, Calendar, Clock, CreditCard, Eye, PawPrint, MapPin, Home, Plus, ChevronLeft, AlertTriangle, Dog, LogIn, Mail, Lock, Loader2 } from "lucide-react";
 import GuestDogVerification, { type GuestDogData } from "@/app/reserver/[announcerId]/components/GuestDogVerification";
 import { ServiceData, FormuleData } from "./types";
 import { cn } from "@/app/lib/utils";
@@ -14,6 +16,8 @@ import {
   MultiSessionCalendar,
   ServiceLocationSelector,
   SelectableOptionCard,
+  AddressSelector,
+  GuestAddressSelector,
   type BookingSelection,
   type PriceBreakdown,
   type CalendarEntry,
@@ -89,6 +93,15 @@ interface AnnouncerMobileCTAProps {
   onLocationSelect?: (location: "announcer_home" | "client_home") => void;
   announcerFirstName?: string;
   announcerCity?: string;
+  announcerCoordinates?: { lat: number; lng: number };
+  announcerRadius?: number | null;
+  // Props pour les adresses
+  clientAddresses?: ClientAddress[];
+  isLoadingAddresses?: boolean;
+  onAddressSelect?: (addressId: string) => void;
+  onAddNewAddress?: () => void;
+  guestAddress?: GuestAddress | null;
+  onGuestAddressChange?: (address: GuestAddress | null) => void;
   // Props pour les options
   onOptionToggle?: (optionId: string) => void;
   selectedOptionIds?: string[];
@@ -105,6 +118,8 @@ interface AnnouncerMobileCTAProps {
   onGuestDogValidationChange?: (isValid: boolean, error?: string) => void;
   // Erreurs de restriction pour les chiens des utilisateurs connectés
   connectedDogErrors?: Record<string, string>;
+  // Callback pour la connexion inline
+  onLoginSuccess?: (token: string) => void;
 }
 
 // Get minimum price for a service
@@ -192,6 +207,15 @@ export default function AnnouncerMobileCTA({
   onLocationSelect,
   announcerFirstName,
   announcerCity,
+  announcerCoordinates,
+  announcerRadius,
+  // Props pour les adresses
+  clientAddresses = [],
+  isLoadingAddresses = false,
+  onAddressSelect,
+  onAddNewAddress,
+  guestAddress,
+  onGuestAddressChange,
   // Props pour les options
   onOptionToggle,
   selectedOptionIds = [],
@@ -204,6 +228,7 @@ export default function AnnouncerMobileCTA({
   onGuestDogDataChange,
   onGuestDogValidationChange,
   connectedDogErrors = {},
+  onLoginSuccess,
 }: AnnouncerMobileCTAProps) {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isCalendarSheetOpen, setIsCalendarSheetOpen] = useState(false);
@@ -213,9 +238,62 @@ export default function AnnouncerMobileCTA({
   const [mobileStep, setMobileStep] = useState<MobileBookingStep>("formule");
   const [isStepSheetOpen, setIsStepSheetOpen] = useState(false);
 
+  // État pour l'erreur de distance (adresse hors rayon d'action)
+  const [isAddressOutOfRange, setIsAddressOutOfRange] = useState(false);
+
+  // État pour tracker si l'étape location a été confirmée (pour les collectives chez l'annonceur)
+  const [locationConfirmed, setLocationConfirmed] = useState(false);
+
+  // État pour le sheet de connexion
+  const [isLoginSheetOpen, setIsLoginSheetOpen] = useState(false);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  // Mutation pour la connexion
+  const loginMutation = useMutation(api.auth.login.login);
+
+  // Gérer la connexion
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginEmail || !loginPassword) {
+      setLoginError("Veuillez remplir tous les champs");
+      return;
+    }
+
+    setIsLoggingIn(true);
+    setLoginError("");
+
+    try {
+      const result = await loginMutation({
+        email: loginEmail.toLowerCase().trim(),
+        password: loginPassword,
+      });
+
+      if (result.success && result.token) {
+        // Stocker le token
+        localStorage.setItem("session_token", result.token);
+        // Notifier le parent
+        onLoginSuccess?.(result.token);
+        // Fermer le sheet
+        setIsLoginSheetOpen(false);
+        // Reset le formulaire
+        setLoginEmail("");
+        setLoginPassword("");
+      } else {
+        setLoginError(result.error || "Erreur de connexion");
+      }
+    } catch (error) {
+      setLoginError("Une erreur est survenue");
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
   // Bloquer le scroll du body quand une modale est ouverte (mobile uniquement)
   useEffect(() => {
-    const isAnySheetOpen = isSheetOpen || isCalendarSheetOpen || isStepSheetOpen;
+    const isAnySheetOpen = isSheetOpen || isCalendarSheetOpen || isStepSheetOpen || isLoginSheetOpen;
     // Vérifier si on est sur mobile (écran < 768px)
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
@@ -238,7 +316,7 @@ export default function AnnouncerMobileCTA({
         window.scrollTo(0, scrollY);
       };
     }
-  }, [isSheetOpen, isCalendarSheetOpen, isStepSheetOpen]);
+  }, [isSheetOpen, isCalendarSheetOpen, isStepSheetOpen, isLoginSheetOpen]);
 
   // Determine if duration-based blocking is enabled
   const enableDurationBasedBlocking = Boolean(bookingService?.enableDurationBasedBlocking && bookingVariant?.duration);
@@ -279,19 +357,33 @@ export default function AnnouncerMobileCTA({
 
   // Check if booking is in progress (variant selected)
   const hasVariantSelected = Boolean(bookingService && bookingVariant);
-  const hasDateSelected = Boolean(bookingSelection?.startDate);
+  // Pour les formules garde: vérifier startDate
+  // Pour les formules individuelles: vérifier selectedSessions
+  const hasDateSelected = isRangeMode
+    ? Boolean(bookingSelection?.startDate)
+    : selectedSessions.length > 0;
   const hasAnimalsSelected = isLoggedIn ? selectedAnimalIds.length > 0 : true; // Non connectés: pas de sélection requise
   const hasLocationSelected = Boolean(bookingSelection?.serviceLocation);
   const hasOptionsStep = (bookingService?.options?.length ?? 0) > 0;
 
-  // Vérifier si le choix de lieu est nécessaire (si les deux options sont disponibles)
-  const needsLocationChoice = bookingService?.serviceLocation === "both";
+  // Vérifier si le choix de lieu est nécessaire (si les deux options sont disponibles ou si uniquement à domicile)
+  const formuleServiceLocation = bookingVariant?.serviceLocation || bookingService?.serviceLocation;
+  const needsLocationChoice = formuleServiceLocation === "both";
+  const needsAddressOnly = formuleServiceLocation === "client_home";
+  const isAnnouncerHomeOnly = formuleServiceLocation === "announcer_home";
+  // Pour les collectives, on affiche toujours l'étape lieu (pour montrer le lieu et calculer la distance)
+  const needsLocationStep = needsLocationChoice || needsAddressOnly || isCollectiveFormule;
 
   // Vérifier si l'adresse est requise et saisie
-  const isAddressRequired = bookingSelection?.serviceLocation === "client_home";
+  const isAddressRequired = bookingSelection?.serviceLocation === "client_home" || needsAddressOnly;
   const hasAddress = isAddressRequired
-    ? Boolean(bookingSelection?.guestAddress?.address)
+    ? (isLoggedIn ? Boolean(bookingSelection?.selectedAddressId) : Boolean(guestAddress?.coordinates))
     : true;
+  // Vérifier que l'adresse est dans le rayon
+  // Pour les formules collectives, l'adresse est optionnelle (c'est juste pour afficher la distance)
+  const hasValidAddress = isCollectiveFormule
+    ? true // Toujours valide pour les collectives
+    : (hasAddress && !isAddressOutOfRange);
 
   // Animaux compatibles avec la formule sélectionnée
   const compatibleUserAnimals = userAnimals.filter((animal) => {
@@ -307,26 +399,57 @@ export default function AnnouncerMobileCTA({
     if (!hasVariantSelected) return "formule";
     // Étape vérification du chien pour les invités (après formule, avant dates)
     if (requiresDogVerification && !guestDogValid) return "dog";
-    if (isLoggedIn && userAnimals.length > 0 && !hasAnimalsSelected) return "animals";
-    // N'afficher l'étape location que si les deux options sont disponibles
-    if (needsLocationChoice && !hasLocationSelected) return "location";
+    if (isLoggedIn && compatibleUserAnimals.length > 0 && !hasAnimalsSelected) return "animals";
+    // Afficher l'étape location si besoin de choisir ou de saisir l'adresse
+    if (needsLocationStep) {
+      // Pour les formules collectives, l'étape location est affichée mais pas bloquante
+      // On passe à la première fois qu'on arrive sur cette étape, puis on continue
+      if (isCollectiveFormule && !locationConfirmed) return "location";
+      // Si formule uniquement à domicile (non collective), vérifier que l'adresse est saisie et valide
+      if (!isCollectiveFormule && needsAddressOnly && !hasValidAddress) return "location";
+      // Si choix de lieu, vérifier qu'un lieu est choisi
+      if (!isCollectiveFormule && needsLocationChoice && !hasLocationSelected) return "location";
+      // Si à domicile choisi, vérifier l'adresse
+      if (!isCollectiveFormule && bookingSelection?.serviceLocation === "client_home" && !hasValidAddress) return "location";
+    }
     if (!hasDateSelected) return "dates";
     if (hasOptionsStep) return "options";
     return "summary";
   };
 
-  // Auto-open step sheet when a variant is selected for the first time (garde mode)
+  // Auto-open step sheet when a variant is selected for the first time (garde mode ou formule à domicile)
   useEffect(() => {
     if (bookingVariant && bookingVariant.id.toString() !== prevVariantId) {
       setPrevVariantId(bookingVariant.id.toString());
+      // Réinitialiser l'état de confirmation du lieu quand on change de formule
+      setLocationConfirmed(false);
 
-      // Pour les services garde, ouvrir le sheet d'étapes
-      if (isRangeMode) {
+      // Vérifier le serviceLocation de la nouvelle formule
+      const newFormuleLocation = bookingVariant.serviceLocation || bookingService?.serviceLocation;
+      const isCollective = bookingVariant.sessionType === "collective";
+      const isMultiSession = !isCollective && (bookingVariant.numberOfSessions || 1) > 1;
+
+      // Flux par étapes si:
+      // - Service garde (isRangeMode)
+      // - Formule à domicile ou les deux (client_home ou both)
+      // - OU si vérification du chien requise (invité avec chien)
+      // - OU formule collective (pour afficher le lieu chez l'annonceur)
+      const needsStepFlow = isRangeMode ||
+        newFormuleLocation === "client_home" ||
+        newFormuleLocation === "both" ||
+        requiresDogVerification ||
+        isCollective; // Les collectives passent toujours par le flux (pour afficher le lieu)
+
+      // Pour les services garde ou formules nécessitant un flux par étapes
+      if (needsStepFlow) {
         const nextStep = getCurrentGardeStep();
         setMobileStep(nextStep);
         if (nextStep !== "formule") {
           setIsStepSheetOpen(true);
         }
+      } else if (isMultiSession) {
+        // Pour les formules multi-sessions sans étapes préalables, ouvrir directement le calendrier
+        setIsCalendarSheetOpen(true);
       } else {
         // Pour les autres services, ouvrir le calendrier
         if (!bookingSelection?.startDate) {
@@ -334,7 +457,7 @@ export default function AnnouncerMobileCTA({
         }
       }
     }
-  }, [bookingVariant, prevVariantId, bookingSelection?.startDate, isRangeMode]);
+  }, [bookingVariant, prevVariantId, bookingSelection?.startDate, isRangeMode, bookingService?.serviceLocation, requiresDogVerification]);
 
   // Pour les formules collectives, la réservation est complète quand tous les créneaux sont sélectionnés
   // Pour les formules multi-séances individuelles, quand toutes les séances sont sélectionnées
@@ -363,16 +486,33 @@ export default function AnnouncerMobileCTA({
       return;
     }
 
-    // Flux par étapes pour les services garde
-    if (isRangeMode && hasVariantSelected) {
+    // Flux par étapes pour les services garde ou formules à domicile
+    if ((isRangeMode || needsLocationStep) && hasVariantSelected) {
       const currentStep = getCurrentGardeStep();
       setMobileStep(currentStep);
       setIsStepSheetOpen(true);
       return;
     }
 
-    // Cas spécial pour les formules collectives
+    // Cas spécial pour les formules collectives - flux step-by-step
     if (isCollectiveFormule && hasVariantSelected) {
+      // Vérifier si on doit passer par le flux step-by-step (vérification chien, animaux, location)
+      if (requiresDogVerification && !guestDogValid) {
+        setMobileStep("dog");
+        setIsStepSheetOpen(true);
+        return;
+      }
+      if (isLoggedIn && compatibleUserAnimals.length > 0 && !hasAnimalsSelected) {
+        setMobileStep("animals");
+        setIsStepSheetOpen(true);
+        return;
+      }
+      if (needsLocationStep && !hasValidAddress) {
+        setMobileStep("location");
+        setIsStepSheetOpen(true);
+        return;
+      }
+      // Sinon, ouvrir le calendrier collectif ou le récap
       if (hasAllSlotsSelected) {
         // Tous les créneaux sont sélectionnés - afficher le récap
         setIsSheetOpen(true);
@@ -404,12 +544,15 @@ export default function AnnouncerMobileCTA({
     } else if (hasVariantSelected && hasDateSelected && !hasRequiredTimeSelection) {
       // Date selected but no time when required - open calendar sheet
       setIsCalendarSheetOpen(true);
+    } else if (!hasVariantSelected) {
+      // Aucune formule sélectionnée - ouvrir le sheet de connexion si non connecté
+      if (!isLoggedIn) {
+        setIsLoginSheetOpen(true);
+      }
+      // Si connecté, ne rien faire (l'utilisateur doit d'abord sélectionner une formule)
     } else if (services.length === 1 && services[0].formules.length === 1) {
       // Only one service with one formule, book directly
       onBook?.();
-    } else {
-      // Multiple options, show selection sheet
-      setIsSheetOpen(true);
     }
   };
 
@@ -418,30 +561,51 @@ export default function AnnouncerMobileCTA({
     switch (mobileStep) {
       case "dog":
         // Après vérification du chien
-        if (isRangeMode) {
-          // Mode garde : continuer le flux par étapes
-          if (isLoggedIn && userAnimals.length > 0) {
-            setMobileStep("animals");
-          } else if (needsLocationChoice) {
-            setMobileStep("location");
-          } else {
-            setMobileStep("dates");
-          }
+        if (isLoggedIn && compatibleUserAnimals.length > 0) {
+          setMobileStep("animals");
+        } else if (needsLocationStep) {
+          setMobileStep("location");
+        } else if (isCollectiveFormule || isMultiSessionIndividual) {
+          // Pour les formules collectives/multi-sessions, ouvrir le calendrier spécifique
+          setIsStepSheetOpen(false);
+          setIsCalendarSheetOpen(true);
+        } else if (isRangeMode) {
+          setMobileStep("dates");
         } else {
-          // Mode non-garde : fermer le sheet et ouvrir le calendrier
+          // Mode non-garde sans besoin de lieu : fermer le sheet et ouvrir le calendrier
           setIsStepSheetOpen(false);
           setIsCalendarSheetOpen(true);
         }
         break;
       case "animals":
-        if (needsLocationChoice) {
+        if (needsLocationStep) {
           setMobileStep("location");
-        } else {
+        } else if (isCollectiveFormule || isMultiSessionIndividual) {
+          // Pour les formules collectives/multi-sessions, ouvrir le calendrier spécifique
+          setIsStepSheetOpen(false);
+          setIsCalendarSheetOpen(true);
+        } else if (isRangeMode) {
           setMobileStep("dates");
+        } else {
+          setIsStepSheetOpen(false);
+          setIsCalendarSheetOpen(true);
         }
         break;
       case "location":
-        setMobileStep("dates");
+        // Marquer l'étape location comme confirmée (pour toutes les formules collectives)
+        if (isCollectiveFormule) {
+          setLocationConfirmed(true);
+        }
+        if (isCollectiveFormule || isMultiSessionIndividual) {
+          // Pour les formules collectives/multi-sessions, ouvrir le calendrier spécifique
+          setIsStepSheetOpen(false);
+          setIsCalendarSheetOpen(true);
+        } else if (isRangeMode) {
+          setMobileStep("dates");
+        } else {
+          setIsStepSheetOpen(false);
+          setIsCalendarSheetOpen(true);
+        }
         break;
       case "dates":
         if (hasOptionsStep) {
@@ -474,7 +638,7 @@ export default function AnnouncerMobileCTA({
         }
         break;
       case "location":
-        if (isLoggedIn && userAnimals.length > 0) {
+        if (isLoggedIn && compatibleUserAnimals.length > 0) {
           setMobileStep("animals");
         } else if (requiresDogVerification) {
           setMobileStep("dog");
@@ -483,9 +647,9 @@ export default function AnnouncerMobileCTA({
         }
         break;
       case "dates":
-        if (needsLocationChoice) {
+        if (needsLocationStep) {
           setMobileStep("location");
-        } else if (isLoggedIn && userAnimals.length > 0) {
+        } else if (isLoggedIn && compatibleUserAnimals.length > 0) {
           setMobileStep("animals");
         } else if (requiresDogVerification) {
           setMobileStep("dog");
@@ -514,9 +678,30 @@ export default function AnnouncerMobileCTA({
       case "animals":
         return hasAnimalsSelected;
       case "location":
+        // Pour les formules collectives, l'adresse est optionnelle (c'est juste pour la distance)
+        if (isCollectiveFormule) {
+          return true; // Toujours possible de passer à l'étape suivante
+        }
+        // Si formule uniquement à domicile, vérifier seulement l'adresse et le rayon
+        if (needsAddressOnly) {
+          return hasValidAddress;
+        }
+        // Si choix de lieu (both), vérifier le lieu sélectionné + adresse si à domicile
+        if (bookingSelection?.serviceLocation === "client_home") {
+          return hasValidAddress;
+        }
         return hasLocationSelected;
       case "dates":
-        return hasDateSelected;
+        // Pour les formules garde: vérifier startDate
+        if (isRangeMode) {
+          return Boolean(bookingSelection?.startDate);
+        }
+        // Pour les formules multi-session: vérifier qu'on a toutes les sessions
+        if (isMultiSessionIndividual) {
+          return selectedSessions.length >= individualNumberOfSessions;
+        }
+        // Pour les formules uni-session: vérifier qu'on a au moins une session
+        return selectedSessions.length > 0;
       case "options":
         return true; // Options sont optionnelles
       case "summary":
@@ -537,9 +722,32 @@ export default function AnnouncerMobileCTA({
       case "animals":
         return hasAnimalsSelected ? "Continuer" : "Sélectionnez vos animaux";
       case "location":
+        // Pour les formules collectives, l'adresse est optionnelle
+        if (isCollectiveFormule) {
+          return "Continuer";
+        }
+        if (isAddressOutOfRange) {
+          return "Adresse hors zone";
+        }
+        if (needsAddressOnly) {
+          return hasAddress ? "Continuer" : "Saisissez votre adresse";
+        }
+        if (bookingSelection?.serviceLocation === "client_home" && !hasAddress) {
+          return "Saisissez votre adresse";
+        }
         return hasLocationSelected ? "Continuer" : "Choisissez le lieu";
       case "dates":
-        return hasDateSelected ? "Continuer" : "Sélectionnez les dates";
+        if (isRangeMode) {
+          return hasDateSelected ? "Continuer" : "Sélectionnez les dates";
+        }
+        if (isMultiSessionIndividual) {
+          const remaining = individualNumberOfSessions - selectedSessions.length;
+          if (remaining > 0) {
+            return `Sélectionnez ${remaining} séance${remaining > 1 ? "s" : ""} de plus`;
+          }
+          return "Continuer";
+        }
+        return selectedSessions.length > 0 ? "Continuer" : "Sélectionnez un créneau";
       case "options":
         return selectedOptionIds.length > 0 ? "Continuer" : "Passer cette étape";
       case "summary":
@@ -555,6 +763,14 @@ export default function AnnouncerMobileCTA({
     if (isCollectiveFormule) {
       if (hasAllSlotsSelected) {
         setIsCalendarSheetOpen(false);
+        // Passer à l'étape location si nécessaire, sinon au récap
+        if (needsLocationStep && !hasValidAddress) {
+          setMobileStep("location");
+          setIsStepSheetOpen(true);
+        } else {
+          // Ouvrir le récap
+          setIsSheetOpen(true);
+        }
       }
       return;
     }
@@ -563,6 +779,14 @@ export default function AnnouncerMobileCTA({
     if (isMultiSessionIndividual) {
       if (hasAllSessionsSelected) {
         setIsCalendarSheetOpen(false);
+        // Passer à l'étape location si nécessaire, sinon au récap
+        if (needsLocationStep && !hasValidAddress) {
+          setMobileStep("location");
+          setIsStepSheetOpen(true);
+        } else {
+          // Ouvrir le récap
+          setIsSheetOpen(true);
+        }
       }
       return;
     }
@@ -894,10 +1118,11 @@ export default function AnnouncerMobileCTA({
           </>
         );
       }
+      // Réservation incomplète - afficher "Reprendre la réservation"
       return (
         <>
-          <Calendar className="w-4 h-4" />
-          Choisir les créneaux
+          <ArrowRight className="w-4 h-4" />
+          Reprendre la réservation
         </>
       );
     }
@@ -912,10 +1137,11 @@ export default function AnnouncerMobileCTA({
           </>
         );
       }
+      // Réservation incomplète - afficher "Reprendre la réservation"
       return (
         <>
-          <Calendar className="w-4 h-4" />
-          Choisir les séances
+          <ArrowRight className="w-4 h-4" />
+          Reprendre la réservation
         </>
       );
     }
@@ -941,6 +1167,28 @@ export default function AnnouncerMobileCTA({
         <>
           <Clock className="w-4 h-4" />
           Choisir l&apos;heure
+        </>
+      );
+    }
+    // Si aucune formule sélectionnée et non connecté, afficher "Se connecter"
+    if (!hasVariantSelected && !isLoggedIn) {
+      return (
+        <>
+          <LogIn className="w-4 h-4" />
+          Se connecter
+        </>
+      );
+    }
+    // Si aucune formule sélectionnée mais connecté, inviter à sélectionner
+    if (!hasVariantSelected) {
+      return "Choisir une formule";
+    }
+    // Si formule sélectionnée mais réservation incomplète, afficher "Reprendre la réservation"
+    if (hasVariantSelected && !hasFullBooking) {
+      return (
+        <>
+          <ArrowRight className="w-4 h-4" />
+          Reprendre la réservation
         </>
       );
     }
@@ -1395,7 +1643,7 @@ export default function AnnouncerMobileCTA({
       {typeof document !== "undefined" &&
         createPortal(
           <AnimatePresence>
-            {isStepSheetOpen && hasVariantSelected && (isRangeMode || mobileStep === "dog") && (
+            {isStepSheetOpen && hasVariantSelected && (isRangeMode || needsLocationStep || isCollectiveFormule || isMultiSessionIndividual || mobileStep === "dog") && (
               <>
                 {/* Backdrop - bloque les interactions en dessous */}
                 <motion.div
@@ -1432,8 +1680,8 @@ export default function AnnouncerMobileCTA({
                         <h3 className="text-lg font-semibold text-gray-900">
                           {mobileStep === "dog" && "Votre chien"}
                           {mobileStep === "animals" && "Vos animaux"}
-                          {mobileStep === "location" && "Lieu de garde"}
-                          {mobileStep === "dates" && "Dates de garde"}
+                          {mobileStep === "location" && (needsAddressOnly ? "Votre adresse" : "Lieu de prestation")}
+                          {mobileStep === "dates" && (isRangeMode ? "Dates de garde" : "Date et heure")}
                           {mobileStep === "options" && "Options supplémentaires"}
                           {mobileStep === "summary" && "Récapitulatif"}
                         </h3>
@@ -1590,10 +1838,70 @@ export default function AnnouncerMobileCTA({
                     {mobileStep === "location" && (
                       <div className="space-y-4">
                         <p className="text-sm text-gray-500">
-                          Où souhaitez-vous que la garde ait lieu ?
+                          {isCollectiveFormule && isAnnouncerHomeOnly
+                            ? "Les séances ont lieu chez le prestataire."
+                            : needsAddressOnly
+                              ? "Indiquez l'adresse où aura lieu la prestation."
+                              : "Où souhaitez-vous que la garde ait lieu ?"
+                          }
                         </p>
 
-                        {onLocationSelect && (
+                        {/* Cas formule collective chez l'annonceur uniquement */}
+                        {isCollectiveFormule && isAnnouncerHomeOnly && (
+                          <div className="space-y-4">
+                            {/* Affichage du lieu de la séance */}
+                            <div className="p-4 bg-gray-50 rounded-xl flex items-center gap-3">
+                              <div className="p-2 bg-white rounded-lg">
+                                <Home className="w-5 h-5 text-gray-500" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-gray-900">
+                                  Chez {announcerFirstName || "le prestataire"}
+                                </p>
+                                {announcerCity && (
+                                  <p className="text-sm text-gray-500">
+                                    {announcerCity}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <p className="text-xs text-gray-500 italic px-1">
+                              L'adresse exacte vous sera communiquée une fois la réservation acceptée.
+                            </p>
+
+                            {/* Saisie de l'adresse pour calculer la distance (optionnel) */}
+                            <div className="pt-4 border-t border-gray-100">
+                              <p className="text-sm font-medium text-gray-700 mb-3">
+                                Votre adresse <span className="text-gray-400 font-normal">(pour calculer la distance)</span>
+                              </p>
+                              {isLoggedIn ? (
+                                onAddressSelect && onAddNewAddress && (
+                                  <AddressSelector
+                                    addresses={clientAddresses}
+                                    selectedAddressId={bookingSelection?.selectedAddressId ?? null}
+                                    isLoading={isLoadingAddresses}
+                                    onSelect={onAddressSelect}
+                                    onAddNew={onAddNewAddress}
+                                    announcerCoordinates={announcerCoordinates}
+                                    announcerRadius={null}
+                                  />
+                                )
+                              ) : (
+                                onGuestAddressChange && (
+                                  <GuestAddressSelector
+                                    guestAddress={guestAddress ?? null}
+                                    announcerCoordinates={announcerCoordinates}
+                                    announcerRadius={null}
+                                    onAddressChange={onGuestAddressChange}
+                                  />
+                                )
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Choix du lieu si les deux options sont disponibles */}
+                        {!isAnnouncerHomeOnly && needsLocationChoice && onLocationSelect && (
                           <ServiceLocationSelector
                             serviceLocation={bookingService?.serviceLocation || "both"}
                             selectedLocation={bookingSelection?.serviceLocation ?? null}
@@ -1604,10 +1912,40 @@ export default function AnnouncerMobileCTA({
                         )}
 
                         {/* Afficher la ville si chez l'annonceur */}
-                        {bookingSelection?.serviceLocation === "announcer_home" && announcerCity && (
+                        {!isAnnouncerHomeOnly && bookingSelection?.serviceLocation === "announcer_home" && announcerCity && (
                           <p className="text-xs text-gray-500 italic px-1">
                             L'adresse exacte vous sera communiquée après acceptation.
                           </p>
+                        )}
+
+                        {/* Sélecteur d'adresse si à domicile ou formule uniquement à domicile */}
+                        {!isAnnouncerHomeOnly && (needsAddressOnly || bookingSelection?.serviceLocation === "client_home") && (
+                          <div className={needsLocationChoice ? "mt-4 pt-4 border-t border-gray-100" : ""}>
+                            {isLoggedIn ? (
+                              onAddressSelect && onAddNewAddress && (
+                                <AddressSelector
+                                  addresses={clientAddresses}
+                                  selectedAddressId={bookingSelection?.selectedAddressId ?? null}
+                                  isLoading={isLoadingAddresses}
+                                  onSelect={onAddressSelect}
+                                  onAddNew={onAddNewAddress}
+                                  announcerCoordinates={announcerCoordinates}
+                                  announcerRadius={announcerRadius}
+                                  onDistanceError={(outOfRange) => setIsAddressOutOfRange(outOfRange)}
+                                />
+                              )
+                            ) : (
+                              onGuestAddressChange && (
+                                <GuestAddressSelector
+                                  guestAddress={guestAddress ?? null}
+                                  announcerCoordinates={announcerCoordinates}
+                                  announcerRadius={announcerRadius}
+                                  onAddressChange={onGuestAddressChange}
+                                  onDistanceError={setIsAddressOutOfRange}
+                                />
+                              )
+                            )}
+                          </div>
                         )}
                       </div>
                     )}
@@ -1616,11 +1954,16 @@ export default function AnnouncerMobileCTA({
                     {mobileStep === "dates" && (
                       <div className="space-y-4">
                         <p className="text-sm text-gray-500">
-                          Sélectionnez les dates de la garde.
+                          {isRangeMode
+                            ? "Sélectionnez les dates de la garde."
+                            : isMultiSessionIndividual
+                              ? `Sélectionnez ${individualNumberOfSessions} séance${individualNumberOfSessions > 1 ? "s" : ""}.`
+                              : "Sélectionnez une date et un créneau."
+                          }
                         </p>
 
-                        {/* Calendrier */}
-                        {calendarMonth && onDateSelect && onEndDateSelect && onTimeSelect && onEndTimeSelect && onOvernightChange && onMonthChange && (
+                        {/* Calendrier pour services garde (mode plage de dates) */}
+                        {isRangeMode && calendarMonth && onDateSelect && onEndDateSelect && onTimeSelect && onEndTimeSelect && onOvernightChange && onMonthChange && (
                           <BookingCalendar
                             selectedDate={bookingSelection?.startDate ?? null}
                             selectedEndDate={bookingSelection?.endDate ?? null}
@@ -1649,6 +1992,24 @@ export default function AnnouncerMobileCTA({
                             onTimeSelect={onTimeSelect}
                             onEndTimeSelect={onEndTimeSelect}
                             onOvernightChange={onOvernightChange}
+                            onMonthChange={onMonthChange}
+                          />
+                        )}
+
+                        {/* Calendrier pour formules individuelles (multi-session ou uni-session) */}
+                        {!isRangeMode && calendarMonth && onMonthChange && onSessionsChange && (
+                          <MultiSessionCalendar
+                            numberOfSessions={individualNumberOfSessions}
+                            sessionInterval={individualSessionInterval}
+                            selectedSessions={selectedSessions}
+                            onSessionsChange={onSessionsChange}
+                            calendarMonth={calendarMonth}
+                            availabilityCalendar={availabilityCalendar}
+                            variantDuration={variantDuration}
+                            bufferBefore={bufferBefore}
+                            bufferAfter={bufferAfter}
+                            acceptReservationsFrom={acceptReservationsFrom}
+                            acceptReservationsTo={acceptReservationsTo}
                             onMonthChange={onMonthChange}
                           />
                         )}
@@ -1743,6 +2104,139 @@ export default function AnnouncerMobileCTA({
                         {canProceedToNextStep() && <ArrowRight className="w-4 h-4" />}
                       </motion.button>
                     )}
+                  </div>
+
+                  {/* Safe area spacer */}
+                  <div className="h-2 flex-shrink-0" />
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
+
+      {/* Login Sheet (Portal) */}
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {isLoginSheetOpen && (
+              <>
+                {/* Backdrop */}
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setIsLoginSheetOpen(false)}
+                  className="fixed inset-0 bg-black/50 z-[9998] md:hidden"
+                  style={{ touchAction: 'none' }}
+                />
+
+                {/* Login Sheet */}
+                <motion.div
+                  initial={{ y: "100%" }}
+                  animate={{ y: 0 }}
+                  exit={{ y: "100%" }}
+                  transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                  className="fixed inset-x-0 bottom-0 bg-white rounded-t-2xl z-[9999] md:hidden flex flex-col"
+                  style={{
+                    maxHeight: '85dvh',
+                    height: 'auto',
+                  }}
+                >
+                  {/* Header */}
+                  <div className="flex items-center justify-between p-4 border-b border-gray-100 flex-shrink-0">
+                    <h3 className="text-lg font-semibold text-gray-900">Connexion</h3>
+                    <button
+                      onClick={() => setIsLoginSheetOpen(false)}
+                      className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                    >
+                      <X className="w-5 h-5 text-gray-500" />
+                    </button>
+                  </div>
+
+                  {/* Form */}
+                  <form onSubmit={handleLogin} className="flex-1 overflow-y-auto p-4 space-y-4">
+                    <p className="text-sm text-gray-500">
+                      Connectez-vous pour accéder à toutes les fonctionnalités et réserver plus facilement.
+                    </p>
+
+                    {loginError && (
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+                        {loginError}
+                      </div>
+                    )}
+
+                    <div className="space-y-3">
+                      <div>
+                        <label htmlFor="mobile-login-email" className="block text-sm font-medium text-gray-700 mb-1">
+                          Email
+                        </label>
+                        <div className="relative">
+                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                          <input
+                            id="mobile-login-email"
+                            type="email"
+                            value={loginEmail}
+                            onChange={(e) => setLoginEmail(e.target.value)}
+                            placeholder="votre@email.com"
+                            className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                            autoComplete="email"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label htmlFor="mobile-login-password" className="block text-sm font-medium text-gray-700 mb-1">
+                          Mot de passe
+                        </label>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                          <input
+                            id="mobile-login-password"
+                            type="password"
+                            value={loginPassword}
+                            onChange={(e) => setLoginPassword(e.target.value)}
+                            placeholder="••••••••"
+                            className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                            autoComplete="current-password"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </form>
+
+                  {/* Footer */}
+                  <div className="p-4 border-t border-gray-100 flex-shrink-0 space-y-3">
+                    <button
+                      type="submit"
+                      onClick={handleLogin}
+                      disabled={isLoggingIn}
+                      className={cn(
+                        "w-full py-3.5 font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors",
+                        isLoggingIn
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          : "bg-gradient-to-r from-primary to-primary/90 text-white shadow-lg shadow-primary/25"
+                      )}
+                    >
+                      {isLoggingIn ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Connexion...
+                        </>
+                      ) : (
+                        <>
+                          <LogIn className="w-4 h-4" />
+                          Se connecter
+                        </>
+                      )}
+                    </button>
+
+                    <p className="text-center text-sm text-gray-500">
+                      Pas encore de compte ?{" "}
+                      <a href="/inscription" className="text-primary font-medium">
+                        Inscrivez-vous
+                      </a>
+                    </p>
                   </div>
 
                   {/* Safe area spacer */}

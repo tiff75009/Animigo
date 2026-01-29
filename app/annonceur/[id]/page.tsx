@@ -927,6 +927,8 @@ export default function AnnouncerProfilePage() {
                 // Infos annonceur pour la section lieu (ville + CP uniquement)
                 announcerCity={extractCityDisplay(announcer.location)}
                 announcerFirstName={announcer.firstName}
+                // Rayon d'action de l'annonceur
+                announcerRadius={announcer.radius}
                 // Callback connexion inline
                 onLoginSuccess={refreshToken}
                 // Vérification du chien pour les invités (intégré dans AnnouncerFormules)
@@ -1048,6 +1050,17 @@ export default function AnnouncerProfilePage() {
         onLocationSelect={handleLocationSelect}
         announcerFirstName={announcer.firstName}
         announcerCity={extractCityDisplay(announcer.location)}
+        announcerCoordinates={announcerData?.coordinates ?? undefined}
+        announcerRadius={announcer.radius}
+        // Props pour les adresses
+        clientAddresses={clientAddresses}
+        isLoadingAddresses={clientAddressesData === undefined}
+        onAddressSelect={handleAddressSelect}
+        onAddNewAddress={handleAddNewAddress}
+        guestAddress={bookingSelection.guestAddress}
+        onGuestAddressChange={handleGuestAddressChange}
+        // Callback connexion inline
+        onLoginSuccess={refreshToken}
         // Props pour les options
         onOptionToggle={handleOptionToggle}
         selectedOptionIds={bookingSelection.selectedOptionIds}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Dog,
@@ -101,8 +101,13 @@ export default function GuestDogVerification({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isAccepted, setIsAccepted] = useState<boolean | null>(null);
 
-  // Synchroniser avec initialData quand il change (ex: retour sur l'étape)
+  // Référence pour tracker le premier montage
+  const isFirstMount = useRef(true);
+
+  // Synchroniser avec initialData au montage et quand il change (ex: retour sur l'étape)
   useEffect(() => {
+    // Au premier montage, les useState ont déjà initialisé les valeurs
+    // Mais on force quand même la synchro pour être sûr
     if (initialData) {
       setIsMixedBreed(initialData.isMixedBreed);
       setBreedSearch(initialData.breed || "");
@@ -114,12 +119,17 @@ export default function GuestDogVerification({
       if (initialData.breedSlug) {
         const breed = breeds.find(b => b.slug === initialData.breedSlug);
         setSelectedBreed(breed || null);
+      } else {
+        setSelectedBreed(null);
       }
       if (initialData.dominantBreedSlug) {
         const breed = breeds.find(b => b.slug === initialData.dominantBreedSlug);
         setSelectedDominantBreed(breed || null);
+      } else if (!initialData.isMixedBreed) {
+        setSelectedDominantBreed(null);
       }
     }
+    isFirstMount.current = false;
   }, [initialData]);
 
   // Filtrer les races pour l'autocomplete

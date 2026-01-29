@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { MapPin, Navigation, Check } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { MapPin, Navigation, Check, AlertTriangle } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import AddressAutocomplete from "@/app/components/ui/AddressAutocomplete";
 import type { GuestAddress } from "./types";
@@ -9,7 +9,9 @@ import type { GuestAddress } from "./types";
 interface GuestAddressSelectorProps {
   guestAddress: GuestAddress | null;
   announcerCoordinates?: { lat: number; lng: number };
+  announcerRadius?: number | null; // Rayon d'action en km
   onAddressChange: (address: GuestAddress | null) => void;
+  onDistanceError?: (isOutOfRange: boolean) => void; // Callback erreur si hors zone
   className?: string;
 }
 
@@ -44,7 +46,9 @@ function formatDistance(km: number): string {
 export default function GuestAddressSelector({
   guestAddress,
   announcerCoordinates,
+  announcerRadius,
   onAddressChange,
+  onDistanceError,
   className,
 }: GuestAddressSelectorProps) {
   const [inputValue, setInputValue] = useState(guestAddress?.address || "");
@@ -61,6 +65,17 @@ export default function GuestAddressSelector({
       announcerCoordinates.lng
     );
   }, [guestAddress?.coordinates, announcerCoordinates]);
+
+  // Vérifier si l'adresse est hors du rayon d'action
+  const isOutOfRange = useMemo(() => {
+    if (!distance || !announcerRadius) return false;
+    return distance > announcerRadius;
+  }, [distance, announcerRadius]);
+
+  // Notifier le parent de l'état d'erreur
+  useEffect(() => {
+    onDistanceError?.(isOutOfRange);
+  }, [isOutOfRange, onDistanceError]);
 
   const handleAddressSelect = (data: {
     address: string;
@@ -117,8 +132,31 @@ export default function GuestAddressSelector({
           }}
         />
 
-        {/* Address confirmation card */}
-        {isAddressValid && (
+        {/* Message d'erreur si hors du rayon d'action */}
+        {isAddressValid && isOutOfRange && announcerRadius && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-red-100 rounded-lg">
+                <AlertTriangle className="w-4 h-4 text-red-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-red-800">
+                  Adresse hors zone d'intervention
+                </p>
+                <p className="text-sm text-red-600 mt-1">
+                  Le prestataire se déplace dans un rayon de <span className="font-semibold">{announcerRadius} km</span>.
+                  Votre adresse est à <span className="font-semibold">{formatDistance(distance!)}</span> de sa position.
+                </p>
+                <p className="text-sm text-red-600 mt-2">
+                  Vous pouvez saisir une autre adresse ou choisir "Chez le prestataire" si disponible.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Address confirmation card - affiché seulement si dans la zone */}
+        {isAddressValid && !isOutOfRange && (
           <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
             <div className="flex items-start gap-3">
               <div className="p-2 bg-green-100 rounded-lg">
