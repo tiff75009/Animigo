@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { X, ArrowRight, Check, ShoppingCart, Calendar, Clock, CreditCard, Eye, PawPrint, MapPin, Home, Plus, ChevronLeft, AlertTriangle, Dog, LogIn, Mail, Lock, Loader2 } from "lucide-react";
+import { X, ArrowRight, Check, ShoppingCart, Calendar, Clock, CreditCard, Eye, PawPrint, MapPin, Home, Plus, ChevronLeft, AlertTriangle, Dog, LogIn, Mail, Lock, Loader2, Users, Package } from "lucide-react";
 import GuestDogVerification, { type GuestDogData } from "@/app/reserver/[announcerId]/components/GuestDogVerification";
 import { ServiceData, FormuleData } from "./types";
 import { cn } from "@/app/lib/utils";
@@ -123,39 +123,81 @@ interface AnnouncerMobileCTAProps {
 }
 
 // Get minimum price for a service
-const getServiceMinPrice = (service: ServiceData): { price: number; unit: string } => {
+// Pour les services garde: prix demi-journée
+// Pour les autres services (packs): prix total du pack
+const getServiceMinPrice = (service: ServiceData): { price: number; unit: string; isTotal: boolean } => {
   const isGarde = isGardeService(service);
   let minPrice = Infinity;
   let minUnit = "";
+  let isTotal = false;
 
   for (const formule of service.formules) {
-    const { price, unit } = getFormuleBestPrice(formule, isGarde);
-    if (price > 0 && price < minPrice) {
-      minPrice = price;
-      minUnit = unit;
-    }
-  }
-
-  return { price: minPrice === Infinity ? 0 : minPrice, unit: minUnit };
-};
-
-// Get global minimum price
-const getGlobalMinPrice = (services: ServiceData[]): { price: number; unit: string } => {
-  let minPrice = Infinity;
-  let minUnit = "";
-
-  for (const service of services) {
-    const isGarde = isGardeService(service);
-    for (const formule of service.formules) {
-      const { price, unit } = getFormuleBestPrice(formule, isGarde);
-      if (price > 0 && price < minPrice) {
-        minPrice = price;
-        minUnit = unit;
+    if (isGarde) {
+      // Pour garde: afficher le prix demi-journée si disponible, sinon jour
+      const halfDailyPrice = formule.pricing?.halfDaily;
+      const dailyPrice = formule.pricing?.daily;
+      if (halfDailyPrice && halfDailyPrice > 0 && halfDailyPrice < minPrice) {
+        minPrice = halfDailyPrice;
+        minUnit = "demi-journée";
+        isTotal = false;
+      } else if (dailyPrice && dailyPrice > 0 && dailyPrice < minPrice) {
+        minPrice = dailyPrice;
+        minUnit = "jour";
+        isTotal = false;
+      }
+    } else {
+      // Pour les autres services: calculer le prix total du pack
+      const { price } = getFormuleBestPrice(formule, isGarde);
+      const numberOfSessions = formule.numberOfSessions || 1;
+      const totalPrice = price * numberOfSessions;
+      if (totalPrice > 0 && totalPrice < minPrice) {
+        minPrice = totalPrice;
+        minUnit = numberOfSessions > 1 ? `${numberOfSessions} séances` : "";
+        isTotal = true;
       }
     }
   }
 
-  return { price: minPrice === Infinity ? 0 : minPrice, unit: minUnit };
+  return { price: minPrice === Infinity ? 0 : minPrice, unit: minUnit, isTotal };
+};
+
+// Get global minimum price
+const getGlobalMinPrice = (services: ServiceData[]): { price: number; unit: string; isTotal: boolean } => {
+  let minPrice = Infinity;
+  let minUnit = "";
+  let isTotal = false;
+
+  for (const service of services) {
+    const isGarde = isGardeService(service);
+    for (const formule of service.formules) {
+      if (isGarde) {
+        // Pour garde: afficher le prix demi-journée si disponible, sinon jour
+        const halfDailyPrice = formule.pricing?.halfDaily;
+        const dailyPrice = formule.pricing?.daily;
+        if (halfDailyPrice && halfDailyPrice > 0 && halfDailyPrice < minPrice) {
+          minPrice = halfDailyPrice;
+          minUnit = "demi-journée";
+          isTotal = false;
+        } else if (dailyPrice && dailyPrice > 0 && dailyPrice < minPrice) {
+          minPrice = dailyPrice;
+          minUnit = "jour";
+          isTotal = false;
+        }
+      } else {
+        // Pour les autres services: calculer le prix total du pack
+        const { price } = getFormuleBestPrice(formule, isGarde);
+        const numberOfSessions = formule.numberOfSessions || 1;
+        const totalPrice = price * numberOfSessions;
+        if (totalPrice > 0 && totalPrice < minPrice) {
+          minPrice = totalPrice;
+          minUnit = numberOfSessions > 1 ? `${numberOfSessions} séances` : "";
+          isTotal = true;
+        }
+      }
+    }
+  }
+
+  return { price: minPrice === Infinity ? 0 : minPrice, unit: minUnit, isTotal };
 };
 
 export default function AnnouncerMobileCTA({
@@ -250,6 +292,73 @@ export default function AnnouncerMobileCTA({
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  // États pour les filtres de formules
+  const [filterSessionType, setFilterSessionType] = useState<"all" | "individual" | "collective">("all");
+  const [filterLocation, setFilterLocation] = useState<"all" | "announcer_home" | "client_home" | "both">("all");
+  const [filterAnimal, setFilterAnimal] = useState<string>("all");
+
+  // Labels pour les animaux
+  const animalLabels: Record<string, string> = {
+    chien: "Chien",
+    chat: "Chat",
+    oiseau: "Oiseau",
+    rongeur: "Rongeur",
+    reptile: "Reptile",
+    poisson: "Poisson",
+    nac: "NAC",
+  };
+
+  // Collecter tous les types d'animaux des formules
+  const allAnimalsInFormules = useMemo(() => {
+    const animals = new Set<string>();
+    services.forEach(service => {
+      service.formules.forEach((formule) => {
+        formule.animalTypes?.forEach((type: string) => animals.add(type));
+      });
+    });
+    return Array.from(animals);
+  }, [services]);
+
+  // Filtrer les formules selon les critères
+  const getFilteredFormules = (formules: FormuleData[]) => {
+    return formules.filter((formule) => {
+      // Filtre par type de séance
+      if (filterSessionType !== "all") {
+        const isCollective = formule.sessionType === "collective";
+        if (filterSessionType === "collective" && !isCollective) return false;
+        if (filterSessionType === "individual" && isCollective) return false;
+      }
+
+      // Filtre par lieu
+      if (filterLocation !== "all") {
+        const formuleLocation = formule.serviceLocation || "both";
+        if (filterLocation !== "both" && formuleLocation !== "both" && formuleLocation !== filterLocation) {
+          return false;
+        }
+      }
+
+      // Filtre par type d'animal
+      if (filterAnimal !== "all") {
+        const formuleAnimals = formule.animalTypes || [];
+        if (formuleAnimals.length > 0 && !formuleAnimals.includes(filterAnimal)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  };
+
+  // Vérifier si des filtres sont actifs
+  const hasActiveFilters = filterSessionType !== "all" || filterLocation !== "all" || filterAnimal !== "all";
+
+  // Réinitialiser les filtres
+  const resetFilters = () => {
+    setFilterSessionType("all");
+    setFilterLocation("all");
+    setFilterAnimal("all");
+  };
 
   // Mutation pour la connexion
   const loginMutation = useMutation(api.auth.login.login);
@@ -469,7 +578,7 @@ export default function AnnouncerMobileCTA({
       : hasVariantSelected && hasDateSelected && Boolean(priceBreakdown) && hasAddress && isDogVerificationOk;
 
   // Get price to display
-  const { price: minPrice, unit: minUnit } = selectedService
+  const { price: minPrice, unit: minUnit, isTotal: isPriceTotal } = selectedService
     ? getServiceMinPrice(selectedService)
     : getGlobalMinPrice(services);
   const hasPrice = minPrice > 0;
@@ -1044,9 +1153,15 @@ export default function AnnouncerMobileCTA({
         {hasPrice ? (
           <p className="text-xl font-bold text-gray-900">
             {formatPrice(calculatePriceWithCommission(minPrice, commissionRate))}€
-            <span className="text-sm font-normal text-gray-500">
-              {minUnit ? `/${minUnit}` : ""}
-            </span>
+            {isPriceTotal ? (
+              // Prix total d'un pack
+              minUnit && <span className="text-sm font-normal text-gray-500 ml-1">({minUnit})</span>
+            ) : (
+              // Prix par unité (demi-journée, jour, etc.)
+              <span className="text-sm font-normal text-gray-500">
+                {minUnit ? `/${minUnit}` : ""}
+              </span>
+            )}
           </p>
         ) : (
           <p className="text-base font-medium text-gray-500">
@@ -1315,81 +1430,242 @@ export default function AnnouncerMobileCTA({
                         </div>
                       </div>
                     ) : (
-                      // Show service/formule selection
-                      services.map((service, index) => (
-                        <div
-                          key={service.id.toString()}
-                          className={cn(
-                            "pb-4",
-                            index > 0 && "pt-4 border-t border-gray-100"
-                          )}
-                        >
-                          {/* Service Header */}
-                          <div className="flex items-center gap-2 mb-3">
-                            <span className="text-lg">{service.categoryIcon}</span>
-                            <span className="font-semibold text-gray-900">
-                              {service.categoryName}
-                            </span>
-                          </div>
-
-                          {/* Formules */}
-                          <div className="space-y-2">
-                            {service.formules.map((formule) => {
-                              const isGarde = isGardeService(service);
-                              const { price: formulePrice, unit: formuleUnit } = getFormuleBestPrice(
-                                formule,
-                                isGarde
-                              );
-                              return (
-                                <motion.button
-                                  key={formule.id.toString()}
-                                  whileTap={{ scale: 0.98 }}
-                                  onClick={() => {
-                                    setIsSheetOpen(false);
-                                    onBook?.();
-                                  }}
-                                  className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors text-left"
-                                >
-                                  <div className="flex-1 min-w-0 pr-3">
-                                    <p className="font-medium text-gray-900">
-                                      {formule.name}
-                                    </p>
-                                    {formule.description && (
-                                      <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">
-                                        {formule.description}
-                                      </p>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-2 flex-shrink-0">
-                                    <span className="text-lg font-bold text-primary">
-                                      {formatPrice(
-                                        calculatePriceWithCommission(formulePrice, commissionRate)
-                                      )}
-                                      €
-                                      <span className="text-sm font-normal text-gray-500">
-                                        {formuleUnit ? `/${formuleUnit}` : ""}
-                                      </span>
-                                    </span>
-                                    <div className="p-2 bg-primary text-white rounded-lg">
-                                      <ArrowRight className="w-4 h-4" />
-                                    </div>
-                                  </div>
-                                </motion.button>
-                              );
-                            })}
-                          </div>
-
-                          {/* Options preview */}
-                          {service.options.length > 0 && (
-                            <p className="text-xs text-gray-500 mt-3 flex items-center gap-1">
-                              <Check className="w-3 h-3 text-secondary" />
-                              {service.options.length} option
-                              {service.options.length > 1 ? "s" : ""} disponible
-                              {service.options.length > 1 ? "s" : ""}
-                            </p>
-                          )}
+                      // Show service/formule selection with filters
+                      <div className="space-y-4">
+                        {/* Titre */}
+                        <div className="flex items-center gap-3">
+                          <span className="p-2 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-xl">
+                            <Package className="w-5 h-5 text-primary" />
+                          </span>
+                          <h3 className="text-lg font-bold text-gray-900">Choisir une formule</h3>
                         </div>
-                      ))
+
+                        {/* Filtres */}
+                        {services.some(s => s.formules.length > 1) && (
+                          <div className="flex flex-wrap gap-2 pb-3 border-b border-gray-100">
+                            {/* Filtre type de séance */}
+                            <button
+                              onClick={() => setFilterSessionType(filterSessionType === "individual" ? "all" : "individual")}
+                              className={cn(
+                                "inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-all",
+                                filterSessionType === "individual"
+                                  ? "bg-primary text-white border-primary"
+                                  : "bg-white text-gray-600 border-gray-200"
+                              )}
+                            >
+                              <Users className="w-3 h-3" />
+                              Individuel
+                            </button>
+                            <button
+                              onClick={() => setFilterSessionType(filterSessionType === "collective" ? "all" : "collective")}
+                              className={cn(
+                                "inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-all",
+                                filterSessionType === "collective"
+                                  ? "bg-primary text-white border-primary"
+                                  : "bg-white text-gray-600 border-gray-200"
+                              )}
+                            >
+                              <Users className="w-3 h-3" />
+                              Collectif
+                            </button>
+
+                            <span className="w-px h-5 bg-gray-200" />
+
+                            {/* Filtre lieu */}
+                            <button
+                              onClick={() => setFilterLocation(filterLocation === "announcer_home" ? "all" : "announcer_home")}
+                              className={cn(
+                                "inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-all",
+                                filterLocation === "announcer_home"
+                                  ? "bg-secondary text-white border-secondary"
+                                  : "bg-white text-gray-600 border-gray-200"
+                              )}
+                            >
+                              <Home className="w-3 h-3" />
+                              Chez le pro
+                            </button>
+                            <button
+                              onClick={() => setFilterLocation(filterLocation === "client_home" ? "all" : "client_home")}
+                              className={cn(
+                                "inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-all",
+                                filterLocation === "client_home"
+                                  ? "bg-secondary text-white border-secondary"
+                                  : "bg-white text-gray-600 border-gray-200"
+                              )}
+                            >
+                              <MapPin className="w-3 h-3" />
+                              À domicile
+                            </button>
+
+                            {/* Filtre animaux si disponible */}
+                            {allAnimalsInFormules.length > 0 && (
+                              <>
+                                <span className="w-px h-5 bg-gray-200" />
+                                <select
+                                  value={filterAnimal}
+                                  onChange={(e) => setFilterAnimal(e.target.value)}
+                                  className={cn(
+                                    "px-2.5 py-1 text-xs rounded-full border transition-all appearance-none pr-6 cursor-pointer",
+                                    filterAnimal !== "all"
+                                      ? "bg-amber-500 text-white border-amber-500"
+                                      : "bg-white text-gray-600 border-gray-200"
+                                  )}
+                                  style={{ backgroundImage: "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")", backgroundPosition: "right 0.25rem center", backgroundRepeat: "no-repeat", backgroundSize: "1em 1em" }}
+                                >
+                                  <option value="all">Animal</option>
+                                  {allAnimalsInFormules.map(animal => (
+                                    <option key={animal} value={animal}>{animalLabels[animal] || animal}</option>
+                                  ))}
+                                </select>
+                              </>
+                            )}
+
+                            {/* Bouton reset */}
+                            {hasActiveFilters && (
+                              <button
+                                onClick={resetFilters}
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-primary transition-colors"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Liste des formules par service */}
+                        {services.map((service, index) => {
+                          const filteredFormules = getFilteredFormules(service.formules);
+                          if (filteredFormules.length === 0) return null;
+
+                          return (
+                            <div
+                              key={service.id.toString()}
+                              className={cn(
+                                index > 0 && "pt-3 border-t border-gray-100"
+                              )}
+                            >
+                              {/* Service Header */}
+                              <div className="flex items-center gap-2 mb-3">
+                                <span className="text-lg">{service.categoryIcon}</span>
+                                <span className="font-semibold text-gray-900">
+                                  {service.categoryName}
+                                </span>
+                              </div>
+
+                              {/* Formules */}
+                              <div className="space-y-3">
+                                {filteredFormules.map((formule) => {
+                                  const isGarde = isGardeService(service);
+                                  const { price: formulePrice, unit: formuleUnit } = getFormuleBestPrice(
+                                    formule,
+                                    isGarde
+                                  );
+                                  return (
+                                    <motion.button
+                                      key={formule.id.toString()}
+                                      whileTap={{ scale: 0.98 }}
+                                      onClick={() => {
+                                        setIsSheetOpen(false);
+                                        onBook?.();
+                                      }}
+                                      className="w-full p-4 bg-white border border-gray-200 rounded-xl hover:border-primary/50 hover:bg-primary/5 transition-all text-left"
+                                    >
+                                      {/* Titre + Prix */}
+                                      <div className="flex items-start justify-between gap-3 mb-2">
+                                        <p className="font-semibold text-gray-900">
+                                          {formule.name}
+                                        </p>
+                                        <span className="text-lg font-bold text-primary flex-shrink-0">
+                                          {formatPrice(
+                                            calculatePriceWithCommission(formulePrice, commissionRate)
+                                          )}
+                                          €
+                                          <span className="text-xs font-normal text-gray-500">
+                                            {formuleUnit ? `/${formuleUnit}` : ""}
+                                          </span>
+                                        </span>
+                                      </div>
+
+                                      {/* Description */}
+                                      {formule.description && (
+                                        <p className="text-sm text-gray-500 mb-3 line-clamp-2">
+                                          {formule.description}
+                                        </p>
+                                      )}
+
+                                      {/* Badges */}
+                                      <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                                        {formule.sessionType === "collective" ? (
+                                          <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full">
+                                            <Users className="w-3 h-3" />
+                                            Collectif
+                                          </span>
+                                        ) : (
+                                          <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-blue-100 text-blue-600 rounded-full">
+                                            <Users className="w-3 h-3" />
+                                            Individuel
+                                          </span>
+                                        )}
+                                        {formule.serviceLocation && (
+                                          <span className={cn(
+                                            "flex items-center gap-1 text-xs px-2 py-0.5 rounded-full",
+                                            formule.serviceLocation === "announcer_home" && "bg-primary/10 text-primary",
+                                            formule.serviceLocation === "client_home" && "bg-secondary/10 text-secondary",
+                                            formule.serviceLocation === "both" && "bg-purple-100 text-purple-600"
+                                          )}>
+                                            {formule.serviceLocation === "announcer_home" && <><Home className="w-3 h-3" /> Chez le pro</>}
+                                            {formule.serviceLocation === "client_home" && <><MapPin className="w-3 h-3" /> À domicile</>}
+                                            {formule.serviceLocation === "both" && <><Home className="w-2.5 h-2.5" /><MapPin className="w-2.5 h-2.5" /> Flexible</>}
+                                          </span>
+                                        )}
+                                        {formule.duration && (
+                                          <span className="flex items-center gap-1 text-xs text-gray-500">
+                                            <Clock className="w-3 h-3" />
+                                            {formule.duration} min
+                                          </span>
+                                        )}
+                                        {formule.numberOfSessions && formule.numberOfSessions > 1 && (
+                                          <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-purple-100 text-purple-600 rounded-full">
+                                            <Calendar className="w-3 h-3" />
+                                            {formule.numberOfSessions} séances
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      {/* Bouton Réserver */}
+                                      <div className="w-full py-2.5 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold text-sm rounded-xl flex items-center justify-center gap-2">
+                                        Réserver maintenant
+                                        <ArrowRight className="w-4 h-4" />
+                                      </div>
+                                    </motion.button>
+                                  );
+                                })}
+                              </div>
+
+                              {/* Options preview */}
+                              {service.options.length > 0 && (
+                                <p className="text-xs text-gray-500 mt-3 flex items-center gap-1">
+                                  <Check className="w-3 h-3 text-secondary" />
+                                  {service.options.length} option
+                                  {service.options.length > 1 ? "s" : ""} disponible
+                                  {service.options.length > 1 ? "s" : ""}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+
+                        {/* Message si aucune formule ne correspond aux filtres */}
+                        {services.every(s => getFilteredFormules(s.formules).length === 0) && (
+                          <div className="bg-gray-50 rounded-xl p-6 text-center">
+                            <Package className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                            <p className="text-gray-500 text-sm mb-2">Aucune formule ne correspond aux filtres</p>
+                            <button onClick={resetFilters} className="text-sm text-primary hover:underline font-medium">
+                              Réinitialiser les filtres
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
 
@@ -1956,9 +2232,11 @@ export default function AnnouncerMobileCTA({
                         <p className="text-sm text-gray-500">
                           {isRangeMode
                             ? "Sélectionnez les dates de la garde."
-                            : isMultiSessionIndividual
-                              ? `Sélectionnez ${individualNumberOfSessions} séance${individualNumberOfSessions > 1 ? "s" : ""}.`
-                              : "Sélectionnez une date et un créneau."
+                            : isCollectiveFormule
+                              ? `Sélectionnez ${collectiveNumberOfSessions} séance${collectiveNumberOfSessions > 1 ? "s" : ""} collective${collectiveNumberOfSessions > 1 ? "s" : ""}.`
+                              : isMultiSessionIndividual
+                                ? `Sélectionnez ${individualNumberOfSessions} séance${individualNumberOfSessions > 1 ? "s" : ""}.`
+                                : "Sélectionnez une date et un créneau."
                           }
                         </p>
 
@@ -1996,8 +2274,56 @@ export default function AnnouncerMobileCTA({
                           />
                         )}
 
+                        {/* CollectiveSlotPicker pour formules collectives */}
+                        {!isRangeMode && isCollectiveFormule && bookingVariant && onSlotsSelected && (
+                          <div className="space-y-4">
+                            {/* Sélecteur du nombre d'animaux */}
+                            {onAnimalCountChange && collectiveMaxAnimals > 1 && (
+                              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                                <div>
+                                  <p className="font-medium text-gray-900">Nombre d'animaux</p>
+                                  <p className="text-sm text-gray-500">
+                                    Maximum {collectiveMaxAnimals} par séance
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => onAnimalCountChange(Math.max(1, animalCount - 1))}
+                                    disabled={animalCount <= 1}
+                                    className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    -
+                                  </button>
+                                  <span className="w-8 text-center font-semibold text-gray-900">
+                                    {animalCount}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => onAnimalCountChange(Math.min(collectiveMaxAnimals, animalCount + 1))}
+                                    disabled={animalCount >= collectiveMaxAnimals}
+                                    className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            <CollectiveSlotPicker
+                              variantId={bookingVariant.id as string}
+                              numberOfSessions={collectiveNumberOfSessions}
+                              sessionInterval={collectiveSessionInterval}
+                              animalCount={animalCount}
+                              animalType={selectedAnimalType}
+                              onSlotsSelected={onSlotsSelected}
+                              selectedSlotIds={selectedSlotIds}
+                            />
+                          </div>
+                        )}
+
                         {/* Calendrier pour formules individuelles (multi-session ou uni-session) */}
-                        {!isRangeMode && calendarMonth && onMonthChange && onSessionsChange && (
+                        {!isRangeMode && !isCollectiveFormule && calendarMonth && onMonthChange && onSessionsChange && (
                           <MultiSessionCalendar
                             numberOfSessions={individualNumberOfSessions}
                             sessionInterval={individualSessionInterval}

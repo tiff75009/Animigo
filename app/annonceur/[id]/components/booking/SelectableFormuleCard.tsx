@@ -308,6 +308,29 @@ export default function SelectableFormuleCard({
           ))}
         </div>
       )}
+
+      {/* Bouton Réserver */}
+      <div className="mt-4 pt-3 border-t border-gray-200/50 relative z-10">
+        <div
+          className={cn(
+            "w-full py-2.5 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all",
+            isSelected
+              ? "bg-primary text-white"
+              : "bg-gradient-to-r from-primary to-primary/90 text-white hover:from-primary/90 hover:to-primary/80"
+          )}
+        >
+          {isSelected ? (
+            <>
+              <Check className="w-4 h-4" />
+              Formule sélectionnée
+            </>
+          ) : (
+            <>
+              Réserver maintenant
+            </>
+          )}
+        </div>
+      </div>
     </motion.button>
   );
 }
