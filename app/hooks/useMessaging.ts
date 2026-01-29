@@ -62,6 +62,8 @@ export function useMessages(
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevMessagesCountRef = useRef(0);
   const prevLastMessageIdRef = useRef<string | null>(null);
+  const prevFirstMessageIdRef = useRef<string | null>(null);
+  const loadingOlderRef = useRef(false);
 
   // Query paginée pour les messages
   const {
@@ -98,26 +100,44 @@ export function useMessages(
   }, [token, conversationId, results, markAsReadMutation]);
 
   // Détecter si un nouveau message est arrivé (pour auto-scroll)
-  const shouldScrollToBottom = useMemo(() => {
-    if (!messages.length) return false;
+  // et si des anciens messages ont été chargés (pour préserver le scroll)
+  const { shouldScrollToBottom, didLoadOlder } = useMemo(() => {
+    if (!messages.length) {
+      return { shouldScrollToBottom: false, didLoadOlder: false };
+    }
 
     const lastMessage = messages[messages.length - 1];
+    const firstMessage = messages[0];
     const lastMessageId = lastMessage?.id;
+    const firstMessageId = firstMessage?.id;
 
-    // Nouveau message arrivé (différent du précédent)
+    let scrollToBottom = false;
+    let loadedOlder = false;
+
+    // Nouveau message arrivé en bas (différent du précédent)
     if (lastMessageId && lastMessageId !== prevLastMessageIdRef.current) {
       const isNewMessage = prevLastMessageIdRef.current !== null;
       prevLastMessageIdRef.current = lastMessageId;
-      return isNewMessage;
+      scrollToBottom = isNewMessage && !loadingOlderRef.current;
     }
 
-    return false;
+    // Anciens messages chargés en haut (premier message différent)
+    if (firstMessageId && firstMessageId !== prevFirstMessageIdRef.current) {
+      const hadMessages = prevFirstMessageIdRef.current !== null;
+      prevFirstMessageIdRef.current = firstMessageId;
+      loadedOlder = hadMessages && loadingOlderRef.current;
+      loadingOlderRef.current = false;
+    }
+
+    return { shouldScrollToBottom: scrollToBottom, didLoadOlder: loadedOlder };
   }, [messages]);
 
   // Reset les refs quand on change de conversation
   useEffect(() => {
     prevMessagesCountRef.current = 0;
     prevLastMessageIdRef.current = null;
+    prevFirstMessageIdRef.current = null;
+    loadingOlderRef.current = false;
   }, [conversationId]);
 
   // Envoyer un message
@@ -134,6 +154,7 @@ export function useMessages(
   // Charger les anciens messages
   const loadOlderMessages = useCallback(() => {
     if (status === "CanLoadMore") {
+      loadingOlderRef.current = true;
       loadMore(20);
     }
   }, [status, loadMore]);
@@ -147,6 +168,7 @@ export function useMessages(
     isLoading: status === "LoadingFirstPage",
     scrollRef,
     shouldScrollToBottom,
+    didLoadOlder,
   };
 }
 

@@ -1034,3 +1034,75 @@ export const getClientMissionById = query({
     };
   },
 });
+
+/**
+ * Récupère les statistiques du dashboard annonceur
+ * - Revenus à venir (missions confirmées - upcoming)
+ * - Revenus encaissables (missions terminées - completed)
+ * - Compteurs par statut
+ */
+export const getAnnouncerDashboardStats = query({
+  args: {
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+
+    if (!session || session.expiresAt < Date.now()) {
+      return null;
+    }
+
+    // Récupérer toutes les missions de l'annonceur
+    const missions = await ctx.db
+      .query("missions")
+      .withIndex("by_announcer", (q) => q.eq("announcerId", session.userId))
+      .collect();
+
+    // Compteurs par statut
+    const pendingAcceptance = missions.filter((m) => m.status === "pending_acceptance");
+    const pendingConfirmation = missions.filter((m) => m.status === "pending_confirmation");
+    const upcoming = missions.filter((m) => m.status === "upcoming");
+    const inProgress = missions.filter((m) => m.status === "in_progress");
+    const completed = missions.filter((m) => m.status === "completed");
+
+    // Revenus à venir = missions confirmées (upcoming + in_progress) - utiliser announcerEarnings
+    const upcomingRevenue = [...upcoming, ...inProgress].reduce(
+      (sum, m) => sum + (m.announcerEarnings ?? Math.round(m.amount * 0.85)),
+      0
+    );
+
+    // Revenus encaissables = missions terminées (completed) - utiliser announcerEarnings
+    const completedRevenue = completed.reduce(
+      (sum, m) => sum + (m.announcerEarnings ?? Math.round(m.amount * 0.85)),
+      0
+    );
+
+    // Missions actives pour l'affichage (les 4 plus proches)
+    const activeMissions = [...pendingAcceptance, ...inProgress, ...upcoming]
+      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
+      .slice(0, 4)
+      .map((m) => ({
+        id: m._id,
+        animal: m.animal,
+        serviceName: m.serviceName,
+        startDate: m.startDate,
+        status: m.status,
+      }));
+
+    return {
+      counts: {
+        pendingAcceptance: pendingAcceptance.length,
+        pendingConfirmation: pendingConfirmation.length,
+        upcoming: upcoming.length,
+        inProgress: inProgress.length,
+        completed: completed.length,
+      },
+      upcomingRevenue,
+      completedRevenue,
+      activeMissions,
+    };
+  },
+});

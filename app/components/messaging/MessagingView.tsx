@@ -213,7 +213,11 @@ function ChatView({ conversationId, onBack, userType }: ChatViewProps) {
     isLoadingMore,
     isLoading: isLoadingMessages,
     shouldScrollToBottom,
+    didLoadOlder,
   } = useMessages(token, conversationId);
+
+  // Pour préserver la position de scroll lors du chargement des anciens messages
+  const scrollHeightBeforeLoad = useRef(0);
 
   // Auto-scroll quand un nouveau message arrive (ses propres ou reçus)
   useEffect(() => {
@@ -221,6 +225,16 @@ function ChatView({ conversationId, onBack, userType }: ChatViewProps) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [shouldScrollToBottom, messages]);
+
+  // Préserver la position de scroll quand on charge les anciens messages
+  useEffect(() => {
+    if (didLoadOlder && messagesContainerRef.current) {
+      const container = messagesContainerRef.current;
+      const newScrollHeight = container.scrollHeight;
+      const scrollDiff = newScrollHeight - scrollHeightBeforeLoad.current;
+      container.scrollTop = scrollDiff;
+    }
+  }, [didLoadOlder]);
 
   // Initial scroll to bottom
   useEffect(() => {
@@ -236,6 +250,10 @@ function ChatView({ conversationId, onBack, userType }: ChatViewProps) {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && canLoadMore && !isLoadingMore) {
+          // Sauvegarder la hauteur avant le chargement pour restaurer la position
+          if (messagesContainerRef.current) {
+            scrollHeightBeforeLoad.current = messagesContainerRef.current.scrollHeight;
+          }
           loadOlderMessages();
         }
       },
@@ -292,10 +310,10 @@ function ChatView({ conversationId, onBack, userType }: ChatViewProps) {
     : `/client/reservations/${conversation.missionId}`;
 
   return (
-    <div className="flex flex-col h-full lg:h-full max-lg:fixed max-lg:inset-0 max-lg:z-50 max-lg:bg-white">
+    <div className="flex flex-col h-full lg:h-full max-lg:fixed max-lg:inset-x-0 max-lg:top-[7rem] max-lg:h-[calc(100dvh-7rem)] max-lg:bg-white max-lg:z-40 max-lg:overflow-hidden">
       {/* Chat Header */}
-      <div className="flex-shrink-0 bg-white border-b border-foreground/10 p-4 max-lg:pt-[calc(env(safe-area-inset-top)+1rem)]">
-        <div className="flex items-center gap-4">
+      <div className="flex-shrink-0 bg-white border-b border-foreground/10 p-3 lg:p-4">
+        <div className="flex items-center gap-3">
           <motion.button
             className="lg:hidden p-2 hover:bg-gray-100 rounded-lg"
             onClick={onBack}
@@ -337,7 +355,7 @@ function ChatView({ conversationId, onBack, userType }: ChatViewProps) {
       </div>
 
       {/* Messages */}
-      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 bg-gray-50 min-h-0">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-3 lg:p-4 bg-gray-50 min-h-0 max-lg:flex-shrink max-lg:basis-0">
         {/* Sentinel for infinite scroll (top) */}
         <div ref={sentinelRef} className="h-4">
           {isLoadingMore && (
@@ -367,7 +385,7 @@ function ChatView({ conversationId, onBack, userType }: ChatViewProps) {
       </div>
 
       {/* Message Input */}
-      <div className="flex-shrink-0 bg-white border-t border-foreground/10 p-3 lg:p-4 max-lg:pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+      <div className="flex-shrink-0 bg-white border-t border-foreground/10 p-3 lg:p-4">
         <div className="flex items-end gap-2 lg:gap-3">
           <div className="flex-1 relative">
             <textarea
@@ -509,12 +527,12 @@ export default function MessagingView({ userType }: MessagingViewProps) {
   }
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex flex-col">
-      {/* Header */}
+    <div className="h-[calc(100dvh-10rem)] lg:h-[calc(100vh-8rem)] flex flex-col">
+      {/* Header - caché sur mobile quand chat ouvert */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mb-6"
+        className={cn("mb-4 lg:mb-6 flex-shrink-0", showMobileChat && "hidden lg:block")}
       >
         <div className="flex items-center gap-3">
           <div className="p-3 bg-primary/10 rounded-2xl">
@@ -538,7 +556,10 @@ export default function MessagingView({ userType }: MessagingViewProps) {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="flex-1 bg-white rounded-2xl shadow-lg overflow-hidden flex"
+        className={cn(
+          "flex-1 bg-white rounded-2xl shadow-lg overflow-hidden flex min-h-0",
+          showMobileChat && "max-lg:h-[calc(100dvh-8rem)] max-lg:rounded-none max-lg:-mx-4 max-lg:shadow-none"
+        )}
       >
         {conversations.length === 0 ? (
           <NoConversationsState userType={userType} />
@@ -548,7 +569,7 @@ export default function MessagingView({ userType }: MessagingViewProps) {
             <div
               className={cn(
                 "w-full lg:w-96 border-r border-foreground/10 flex flex-col",
-                showMobileChat ? "hidden lg:flex" : "flex"
+                showMobileChat ? "hidden lg:flex" : "flex max-lg:fixed max-lg:inset-x-0 max-lg:top-[7rem] max-lg:h-[calc(100dvh-7rem)] max-lg:bg-white max-lg:z-40"
               )}
             >
               {/* Search */}
@@ -589,7 +610,7 @@ export default function MessagingView({ userType }: MessagingViewProps) {
             {/* Chat View */}
             <div
               className={cn(
-                "flex-1 flex flex-col",
+                "flex-1 flex flex-col min-h-0",
                 showMobileChat ? "flex" : "hidden lg:flex"
               )}
             >

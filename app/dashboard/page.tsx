@@ -16,45 +16,56 @@ import {
   TrendingUp,
   MessageSquare,
   HelpCircle,
+  Loader2,
 } from "lucide-react";
-import {
-  calculateStats,
-  getMissionsByStatus,
-  mockUserProfile,
-  getUnreadMessagesCount,
-} from "@/app/lib/dashboard-data";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/app/hooks/useAuth";
+import { useConversations } from "@/app/hooks/useMessaging";
+
+interface ActiveMission {
+  id: Id<"missions">;
+  animal: { name: string; type: string; emoji: string } | null;
+  serviceName: string;
+  startDate: string;
+  status: string;
+}
 
 export default function DashboardPage() {
-  const { user } = useAuth();
-  const stats = calculateStats();
-  const pendingAcceptanceMissions = getMissionsByStatus("pending_acceptance");
-  const inProgressMissions = getMissionsByStatus("in_progress");
-  const upcomingMissions = getMissionsByStatus("upcoming");
-  const unreadMessages = getUnreadMessagesCount();
+  const { user, token } = useAuth();
+  const { totalUnread } = useConversations(token);
 
-  const displayName = user?.firstName || mockUserProfile.firstName;
+  // Stats du dashboard depuis Convex
+  const dashboardStats = useQuery(
+    api.planning.missions.getAnnouncerDashboardStats,
+    token ? { token } : "skip"
+  );
 
-  // Missions actives (à accepter + en cours + à venir)
-  const activeMissions = [
-    ...pendingAcceptanceMissions,
-    ...inProgressMissions,
-    ...upcomingMissions,
-  ].slice(0, 4);
-
-  const hasActiveMissions = activeMissions.length > 0;
+  const displayName = user?.firstName || "Annonceur";
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("fr-FR", {
       style: "currency",
       currency: "EUR",
       minimumFractionDigits: 0,
-    }).format(amount);
+    }).format(amount / 100); // Conversion centimes -> euros
   };
 
-  const totalRevenue = stats.completedMissions.totalAmount +
-    stats.inProgressMissions.totalAmount +
-    stats.upcomingMissions.totalAmount;
+  // Loading state
+  if (!dashboardStats) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-text-light">Chargement du tableau de bord...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const { counts, upcomingRevenue, completedRevenue, activeMissions } = dashboardStats;
+  const hasActiveMissions = activeMissions.length > 0;
 
   return (
     <div className="space-y-6">
@@ -73,18 +84,11 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {stats.totalReviews > 0 && (
-            <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 rounded-xl">
-              <Star className="w-5 h-5 fill-amber-500 text-amber-500" />
-              <span className="font-semibold">{stats.averageRating.toFixed(1)}</span>
-              <span className="text-amber-600 text-sm">({stats.totalReviews} avis)</span>
-            </div>
-          )}
-          {unreadMessages > 0 && (
+          {totalUnread > 0 && (
             <Link href="/dashboard/messagerie" className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-xl hover:bg-primary/20 transition-colors">
               <MessageSquare className="w-5 h-5" />
-              <span className="font-semibold">{unreadMessages}</span>
-              <span className="text-sm hidden sm:inline">message{unreadMessages > 1 ? 's' : ''}</span>
+              <span className="font-semibold">{totalUnread}</span>
+              <span className="text-sm hidden sm:inline">message{totalUnread > 1 ? 's' : ''}</span>
             </Link>
           )}
         </div>
@@ -147,18 +151,18 @@ export default function DashboardPage() {
               <TrendingUp className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-white/80 text-sm">Revenus totaux</p>
-              <p className="text-2xl font-bold">{formatCurrency(totalRevenue)}</p>
+              <p className="text-white/80 text-sm">Revenus</p>
+              <p className="text-2xl font-bold">{formatCurrency(upcomingRevenue + completedRevenue)}</p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-white/10 rounded-lg px-3 py-2">
-              <p className="text-white/70 text-xs">Encaissé</p>
-              <p className="font-semibold">{formatCurrency(stats.completedMissions.collectedAmount)}</p>
+              <p className="text-white/70 text-xs">À venir</p>
+              <p className="font-semibold">{formatCurrency(upcomingRevenue)}</p>
             </div>
             <div className="bg-white/10 rounded-lg px-3 py-2">
-              <p className="text-white/70 text-xs">En attente</p>
-              <p className="font-semibold">{formatCurrency(stats.completedMissions.pendingAmount)}</p>
+              <p className="text-white/70 text-xs">Encaissable</p>
+              <p className="font-semibold">{formatCurrency(completedRevenue)}</p>
             </div>
           </div>
         </motion.div>
@@ -178,7 +182,7 @@ export default function DashboardPage() {
             </div>
             <span className="text-sm font-medium text-text-light">À accepter</span>
           </div>
-          <p className="text-3xl font-bold text-foreground">{pendingAcceptanceMissions.length}</p>
+          <p className="text-3xl font-bold text-foreground">{counts.pendingAcceptance}</p>
         </Link>
 
         <Link href="/dashboard/missions/en-cours" className="bg-white rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
@@ -188,7 +192,7 @@ export default function DashboardPage() {
             </div>
             <span className="text-sm font-medium text-text-light">En cours</span>
           </div>
-          <p className="text-3xl font-bold text-foreground">{inProgressMissions.length}</p>
+          <p className="text-3xl font-bold text-foreground">{counts.inProgress}</p>
         </Link>
 
         <Link href="/dashboard/missions/a-venir" className="bg-white rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
@@ -198,7 +202,7 @@ export default function DashboardPage() {
             </div>
             <span className="text-sm font-medium text-text-light">À venir</span>
           </div>
-          <p className="text-3xl font-bold text-foreground">{upcomingMissions.length}</p>
+          <p className="text-3xl font-bold text-foreground">{counts.upcoming}</p>
         </Link>
 
         <Link href="/dashboard/missions/terminees" className="bg-white rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
@@ -208,7 +212,7 @@ export default function DashboardPage() {
             </div>
             <span className="text-sm font-medium text-text-light">Terminées</span>
           </div>
-          <p className="text-3xl font-bold text-foreground">{stats.completedMissions.count}</p>
+          <p className="text-3xl font-bold text-foreground">{counts.completed}</p>
         </Link>
       </motion.div>
 
@@ -236,18 +240,18 @@ export default function DashboardPage() {
               </div>
 
               <div className="space-y-3">
-                {activeMissions.map((mission) => (
+                {activeMissions.map((mission: ActiveMission) => (
                   <Link
                     key={mission.id}
                     href={`/dashboard/missions/${mission.status === 'pending_acceptance' ? 'accepter' : mission.status === 'in_progress' ? 'en-cours' : 'a-venir'}`}
                   >
                     <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer">
                       <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-2xl shadow-sm flex-shrink-0">
-                        {mission.animal.emoji}
+                        {mission.animal?.emoji || "🐾"}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-foreground truncate">{mission.animal.name}</p>
-                        <p className="text-sm text-text-light truncate">{mission.service}</p>
+                        <p className="font-semibold text-foreground truncate">{mission.animal?.name || "Animal"}</p>
+                        <p className="text-sm text-text-light truncate">{mission.serviceName}</p>
                       </div>
                       <div className="text-right flex-shrink-0">
                         <p className="text-sm font-medium text-foreground">
