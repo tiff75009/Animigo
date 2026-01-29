@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { useQueryStates, parseAsString, parseAsInteger, parseAsStringLiteral } from "nuqs";
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/app/hooks/useAuth";
@@ -203,6 +203,34 @@ export default function RecherchePage() {
   const viewMode = urlParams.view;
 
   const categoriesData = useQuery(api.admin.serviceCategories.getActiveCategories) as CategoriesData | undefined;
+
+  // Favoris
+  const favoriteIds = useQuery(
+    api.client.favorites.getFavoriteIds,
+    token ? { token } : "skip"
+  ) as string[] | undefined;
+  const toggleFavorite = useMutation(api.client.favorites.toggle);
+  const [togglingFavoriteId, setTogglingFavoriteId] = useState<string | null>(null);
+
+  const handleToggleFavorite = async (formuleId: string) => {
+    if (!token) {
+      // Rediriger vers connexion si pas connecté
+      router.push("/connexion?redirect=/recherche");
+      return;
+    }
+
+    setTogglingFavoriteId(formuleId);
+    try {
+      await toggleFavorite({
+        token,
+        formuleId: formuleId as Id<"serviceVariants">,
+      });
+    } catch (error) {
+      console.error("Erreur lors du toggle favori:", error);
+    } finally {
+      setTogglingFavoriteId(null);
+    }
+  };
 
   const router = useRouter();
   const [showFilters, setShowFilters] = useState(false);
@@ -700,6 +728,9 @@ export default function RecherchePage() {
                   key={`${formule.announcerId}-${formule.formuleId}`}
                   formule={formule}
                   index={index}
+                  isFavorite={favoriteIds?.includes(formule.formuleId) ?? false}
+                  onToggleFavorite={handleToggleFavorite}
+                  isTogglingFavorite={togglingFavoriteId === formule.formuleId}
                 />
               ))}
             </motion.div>
@@ -715,6 +746,9 @@ export default function RecherchePage() {
                   key={`${formule.announcerId}-${formule.formuleId}`}
                   formule={formule}
                   index={index}
+                  isFavorite={favoriteIds?.includes(formule.formuleId) ?? false}
+                  onToggleFavorite={handleToggleFavorite}
+                  isTogglingFavorite={togglingFavoriteId === formule.formuleId}
                 />
               ))}
             </motion.div>

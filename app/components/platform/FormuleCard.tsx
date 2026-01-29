@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -21,6 +21,97 @@ import {
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { formatPrice, formatDistance } from "./helpers";
+
+// Composant coeur animé avec particules
+function AnimatedHeart({
+  isFavorite,
+  onToggle,
+  isLoading,
+}: {
+  isFavorite: boolean;
+  onToggle: () => void;
+  isLoading?: boolean;
+}) {
+  const [particles, setParticles] = useState<number[]>([]);
+  const [wasJustAdded, setWasJustAdded] = useState(false);
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (isLoading) return;
+
+    if (!isFavorite) {
+      // Créer des particules quand on ajoute en favori
+      setParticles([...Array(6)].map((_, i) => i));
+      setWasJustAdded(true);
+      setTimeout(() => {
+        setParticles([]);
+        setWasJustAdded(false);
+      }, 700);
+    }
+
+    onToggle();
+  };
+
+  return (
+    <motion.button
+      onClick={handleClick}
+      disabled={isLoading}
+      className={cn(
+        "relative p-2.5 rounded-xl transition-colors duration-300",
+        isFavorite
+          ? "bg-gradient-to-br from-red-500 to-pink-500 text-white shadow-lg shadow-red-500/30"
+          : "bg-gray-50 text-gray-300 hover:bg-red-50 hover:text-red-400",
+        isLoading && "opacity-50 cursor-not-allowed"
+      )}
+    >
+      {/* Particules */}
+      <AnimatePresence>
+        {particles.map((i) => (
+          <motion.span
+            key={i}
+            initial={{ scale: 0, x: 0, y: 0, opacity: 1 }}
+            animate={{
+              scale: [0, 1, 0.5],
+              x: Math.cos((i * 60 * Math.PI) / 180) * 30,
+              y: Math.sin((i * 60 * Math.PI) / 180) * 30,
+              opacity: [1, 1, 0],
+            }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+          >
+            <Heart className="w-3 h-3 fill-red-500 text-red-500" />
+          </motion.span>
+        ))}
+      </AnimatePresence>
+
+      {/* Ring pulse effect */}
+      <AnimatePresence>
+        {wasJustAdded && (
+          <motion.span
+            initial={{ scale: 0.8, opacity: 0.8 }}
+            animate={{ scale: 2, opacity: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5 }}
+            className="absolute inset-0 rounded-xl bg-red-400 pointer-events-none"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Coeur principal */}
+      <motion.div
+        animate={wasJustAdded ? {
+          scale: [1, 1.3, 0.9, 1.1, 1],
+        } : { scale: 1 }}
+        transition={{ duration: 0.4, ease: "easeInOut" }}
+      >
+        <Heart className={cn("w-5 h-5 relative z-10", isFavorite && "fill-current")} />
+      </motion.div>
+    </motion.button>
+  );
+}
 
 // Types
 interface NextSlot {
@@ -72,6 +163,9 @@ export interface FormuleResult {
 interface FormuleCardProps {
   formule: FormuleResult;
   index: number;
+  isFavorite?: boolean;
+  onToggleFavorite?: (formuleId: string) => void;
+  isTogglingFavorite?: boolean;
 }
 
 // Helper pour formater la date du prochain créneau
@@ -138,8 +232,13 @@ function getPriceWithCommission(price: number, statusType: "particulier" | "micr
 }
 
 // Grid View Card - Design moderne et original
-export function FormuleCardGrid({ formule, index }: FormuleCardProps) {
-  const [isFavorite, setIsFavorite] = useState(false);
+export function FormuleCardGrid({
+  formule,
+  index,
+  isFavorite = false,
+  onToggleFavorite,
+  isTogglingFavorite = false,
+}: FormuleCardProps) {
   const [isHovered, setIsHovered] = useState(false);
 
   const isCollective = formule.sessionType === "collective";
@@ -248,22 +347,11 @@ export function FormuleCardGrid({ formule, index }: FormuleCardProps) {
             </div>
 
             {/* Favoris */}
-            <motion.button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setIsFavorite(!isFavorite);
-              }}
-              whileTap={{ scale: 0.85 }}
-              className={cn(
-                "p-2.5 rounded-xl transition-all duration-300",
-                isFavorite
-                  ? "bg-gradient-to-br from-red-500 to-pink-500 text-white shadow-lg shadow-red-500/30"
-                  : "bg-gray-50 text-gray-300 hover:bg-red-50 hover:text-red-400"
-              )}
-            >
-              <Heart className={cn("w-5 h-5 transition-transform", isFavorite && "fill-current scale-110")} />
-            </motion.button>
+            <AnimatedHeart
+              isFavorite={isFavorite}
+              onToggle={() => onToggleFavorite?.(formule.formuleId)}
+              isLoading={isTogglingFavorite}
+            />
           </div>
         </div>
 
@@ -373,8 +461,13 @@ export function FormuleCardGrid({ formule, index }: FormuleCardProps) {
 }
 
 // List View Card
-export function FormuleCardList({ formule, index }: FormuleCardProps) {
-  const [isFavorite, setIsFavorite] = useState(false);
+export function FormuleCardList({
+  formule,
+  index,
+  isFavorite = false,
+  onToggleFavorite,
+  isTogglingFavorite = false,
+}: FormuleCardProps) {
   const [isHovered, setIsHovered] = useState(false);
 
   const distanceText = formatDistance(formule.announcerDistance);
@@ -502,22 +595,11 @@ export function FormuleCardList({ formule, index }: FormuleCardProps) {
                   )}
                 </div>
 
-                <motion.button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setIsFavorite(!isFavorite);
-                  }}
-                  whileTap={{ scale: 0.85 }}
-                  className={cn(
-                    "p-2 rounded-xl transition-all duration-300",
-                    isFavorite
-                      ? "bg-gradient-to-br from-red-500 to-pink-500 text-white shadow-lg shadow-red-500/30"
-                      : "bg-gray-50 text-gray-300 hover:bg-red-50 hover:text-red-400"
-                  )}
-                >
-                  <Heart className={cn("w-5 h-5", isFavorite && "fill-current")} />
-                </motion.button>
+                <AnimatedHeart
+                  isFavorite={isFavorite}
+                  onToggle={() => onToggleFavorite?.(formule.formuleId)}
+                  isLoading={isTogglingFavorite}
+                />
               </div>
             </div>
 

@@ -1600,4 +1600,22 @@ export default defineSchema({
   })
     .index("by_conversation", ["conversationId"])
     .index("by_conversation_created", ["conversationId", "createdAt"]),
+
+  // Favoris (formules sauvegardées par les clients)
+  favorites: defineTable({
+    userId: v.id("users"),
+    formuleId: v.id("serviceVariants"),
+    // Données dénormalisées pour affichage rapide
+    formuleName: v.string(),
+    announcerId: v.id("users"),
+    announcerName: v.string(),
+    announcerSlug: v.optional(v.string()),
+    categorySlug: v.string(),
+    categoryName: v.string(),
+    price: v.number(),
+    priceUnit: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_formule", ["userId", "formuleId"]),
 });
