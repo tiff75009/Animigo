@@ -10,11 +10,45 @@ import {
   ArrowRight,
   MapPin,
   Navigation,
+  Calendar,
+  Clock,
+  Users,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
-import { type AnnouncerResult } from "@/app/hooks/useSearch";
+import { type AnnouncerResult, type NextSlot, type CollectiveSlotInfo } from "@/app/hooks/useSearch";
 import { formatPrice, extractCity, formatDistance } from "./helpers";
 import { ANIMAL_TYPES } from "./constants";
+
+// Helper pour formater la date du prochain créneau
+function formatNextSlotDate(date: string): string {
+  const slotDate = new Date(date);
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  // Reset time for comparison
+  today.setHours(0, 0, 0, 0);
+  tomorrow.setHours(0, 0, 0, 0);
+  slotDate.setHours(0, 0, 0, 0);
+
+  if (slotDate.getTime() === today.getTime()) {
+    return "Aujourd'hui";
+  }
+  if (slotDate.getTime() === tomorrow.getTime()) {
+    return "Demain";
+  }
+
+  // Format: "Lun 15 jan"
+  const days = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
+  const months = ["jan", "fév", "mar", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc"];
+  const originalDate = new Date(date);
+  return `${days[originalDate.getDay()]} ${originalDate.getDate()} ${months[originalDate.getMonth()]}`;
+}
+
+// Helper pour formater l'heure
+function formatTime(time: string): string {
+  return time.substring(0, 5); // "14:00:00" -> "14:00"
+}
 
 interface AnnouncerCardProps {
   announcer: AnnouncerResult;
@@ -211,6 +245,56 @@ export function AnnouncerCardGrid({ announcer, onShowFormulas, index }: Announce
           </div>
         )}
 
+        {/* Prochain créneau disponible */}
+        {announcer.availability.nextSlot && (
+          <div className="mb-4 p-3 bg-emerald-50 rounded-xl border border-emerald-100">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-emerald-600" />
+              <span className="text-sm font-medium text-emerald-700">
+                {formatNextSlotDate(announcer.availability.nextSlot.date)}
+              </span>
+              <span className="text-emerald-600">•</span>
+              <Clock className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="text-sm text-emerald-600">
+                {formatTime(announcer.availability.nextSlot.startTime)}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Créneaux collectifs */}
+        {announcer.availability.collectiveSlots && announcer.availability.collectiveSlots.length > 0 && (
+          <div className="mb-4 p-3 bg-blue-50 rounded-xl border border-blue-100">
+            <div className="flex items-center gap-2 mb-2">
+              <Users className="w-4 h-4 text-blue-600" />
+              <span className="text-sm font-medium text-blue-700">Séances collectives</span>
+            </div>
+            <div className="space-y-1.5">
+              {announcer.availability.collectiveSlots.slice(0, 2).map((slot, i) => (
+                <div key={i} className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1.5 text-blue-600">
+                    <Calendar className="w-3 h-3" />
+                    <span>{formatNextSlotDate(slot.date)}</span>
+                    <span>•</span>
+                    <span>{formatTime(slot.startTime)}</span>
+                  </div>
+                  <span className={cn(
+                    "px-1.5 py-0.5 rounded-full text-[10px] font-medium",
+                    slot.spotsLeft <= 2 ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"
+                  )}>
+                    {slot.spotsLeft} place{slot.spotsLeft > 1 ? "s" : ""}
+                  </span>
+                </div>
+              ))}
+              {announcer.availability.collectiveSlots.length > 2 && (
+                <span className="text-xs text-blue-500">
+                  +{announcer.availability.collectiveSlots.length - 2} autre{announcer.availability.collectiveSlots.length - 2 > 1 ? "s" : ""} créneau{announcer.availability.collectiveSlots.length - 2 > 1 ? "x" : ""}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* CTA */}
         <motion.button
           onClick={onShowFormulas}
@@ -399,6 +483,38 @@ export function AnnouncerCardList({ announcer, onShowFormulas, index }: Announce
                   )}
                 </div>
               </>
+            )}
+          </div>
+
+          {/* Prochain créneau et créneaux collectifs - compact pour liste */}
+          <div className="flex flex-wrap gap-2 mb-3">
+            {/* Prochain créneau disponible */}
+            {announcer.availability.nextSlot && (
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 rounded-lg border border-emerald-100">
+                <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="text-xs font-medium text-emerald-700">
+                  {formatNextSlotDate(announcer.availability.nextSlot.date)}
+                </span>
+                <span className="text-emerald-400">•</span>
+                <Clock className="w-3 h-3 text-emerald-600" />
+                <span className="text-xs text-emerald-600">
+                  {formatTime(announcer.availability.nextSlot.startTime)}
+                </span>
+              </div>
+            )}
+
+            {/* Créneaux collectifs - compact */}
+            {announcer.availability.collectiveSlots && announcer.availability.collectiveSlots.length > 0 && (
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 rounded-lg border border-blue-100">
+                <Users className="w-3.5 h-3.5 text-blue-600" />
+                <span className="text-xs font-medium text-blue-700">
+                  {announcer.availability.collectiveSlots.length} séance{announcer.availability.collectiveSlots.length > 1 ? "s" : ""} collective{announcer.availability.collectiveSlots.length > 1 ? "s" : ""}
+                </span>
+                <span className="text-blue-400">•</span>
+                <span className="text-xs text-blue-600">
+                  {formatNextSlotDate(announcer.availability.collectiveSlots[0].date)}
+                </span>
+              </div>
             )}
           </div>
 

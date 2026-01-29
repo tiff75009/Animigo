@@ -20,8 +20,7 @@ import {
   Scissors,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
-import { useServiceSearchWithParams, type ServiceResult } from "@/app/hooks/useSearch";
-import { useAuth } from "@/app/hooks/useAuth";
+import { useFormuleSearch, type FormuleResult } from "@/app/hooks/useSearch";
 import { Id } from "@/convex/_generated/dataModel";
 
 // Type for main search mode
@@ -63,11 +62,10 @@ import { Navbar } from "@/app/components/navbar";
 import { LocationSearchBar } from "@/app/components/search";
 import FilterSidebar from "@/app/components/search/FilterSidebar";
 import {
-  ServiceCardGrid,
-  ServiceCardList,
   ANIMAL_TYPES,
   radiusOptions,
 } from "@/app/components/platform";
+import { FormuleCardGrid, FormuleCardList } from "@/app/components/platform/FormuleCard";
 
 // Nuqs parsers for URL state
 const searchParamsParsers = {
@@ -82,34 +80,45 @@ const searchParamsParsers = {
 };
 
 export default function RecherchePage() {
-  // Get auth token for client location
-  const { token } = useAuth();
-
   // URL state with nuqs
   const [urlParams, setUrlParams] = useQueryStates(searchParamsParsers, {
     history: "push",
     shallow: false,
   });
 
-  // Convert nuqs state to hook params
+  // Hook de recherche par formule
   const {
     filters,
     advancedFilters,
     results,
     isLoading,
-    clientLocation,
     setLocation,
+    setSearchMode: setHookSearchMode,
+    setAnimalType: setHookAnimalType,
+    setCategory: setHookCategory,
+    setRadius: setHookRadius,
+    setDate: setHookDate,
     updateAdvancedFilters,
     resetAdvancedFilters,
-  } = useServiceSearchWithParams(token, {
-    searchMode: urlParams.mode,
-    animalType: urlParams.animal,
-    categorySlug: urlParams.category,
-    radius: urlParams.radius,
-    date: urlParams.date,
-    startDate: urlParams.startDate,
-    endDate: urlParams.endDate,
-  });
+    resetAllFilters: resetHookFilters,
+  } = useFormuleSearch();
+
+  // Sync URL params with hook state
+  useEffect(() => {
+    setHookSearchMode(urlParams.mode);
+  }, [urlParams.mode, setHookSearchMode]);
+
+  useEffect(() => {
+    setHookAnimalType(urlParams.animal);
+  }, [urlParams.animal, setHookAnimalType]);
+
+  useEffect(() => {
+    setHookRadius(urlParams.radius);
+  }, [urlParams.radius, setHookRadius]);
+
+  useEffect(() => {
+    setHookDate(urlParams.date);
+  }, [urlParams.date, setHookDate]);
 
   // URL setters
   const setSearchMode = useCallback((mode: "garde" | "services") => {
@@ -155,8 +164,8 @@ export default function RecherchePage() {
       startDate: null,
       endDate: null,
     });
-    resetAdvancedFilters();
-  }, [setUrlParams, resetAdvancedFilters]);
+    resetHookFilters();
+  }, [setUrlParams, resetHookFilters]);
 
   const setViewMode = useCallback((view: "grid" | "list") => {
     setUrlParams({ view });
@@ -257,8 +266,8 @@ export default function RecherchePage() {
 
 
   // Déterminer si on doit afficher l'icône de localisation
-  // Seulement si : pas connecté OU pas d'adresse enregistrée
-  const showLocationIcon = !token || !clientLocation?.city;
+  // Toujours afficher si pas de localisation définie
+  const showLocationIcon = !filters.location.text;
 
   return (
     <div className="min-h-screen bg-gray-50/50">
@@ -390,7 +399,7 @@ export default function RecherchePage() {
               <LocationSearchBar
                 value={filters.location}
                 onChange={setLocation}
-                placeholder={clientLocation?.city || "Rechercher une ville..."}
+                placeholder="Rechercher une ville..."
                 showGeolocationButton={showLocationIcon}
               />
             </motion.div>
@@ -655,16 +664,11 @@ export default function RecherchePage() {
               transition={{ duration: 0.3 }}
               className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
             >
-              {results.map((service: ServiceResult, index: number) => (
-                <ServiceCardGrid
-                  key={`${service.announcerSlug}-${service.categorySlug}`}
-                  service={service}
+              {results.map((formule: FormuleResult, index: number) => (
+                <FormuleCardGrid
+                  key={`${formule.announcerId}-${formule.formuleId}`}
+                  formule={formule}
                   index={index}
-                  hasDateFilter={!!(filters.date || filters.startDate)}
-                  onViewService={(announcerSlug, categorySlug) =>
-                    router.push(`/annonceur/${announcerSlug}?service=${categorySlug}`)
-                  }
-                  onCalendarOpen={() => setShowDatePicker(false)}
                 />
               ))}
             </motion.div>
@@ -675,16 +679,11 @@ export default function RecherchePage() {
               transition={{ duration: 0.3 }}
               className="space-y-4"
             >
-              {results.map((service: ServiceResult, index: number) => (
-                <ServiceCardList
-                  key={`${service.announcerSlug}-${service.categorySlug}`}
-                  service={service}
+              {results.map((formule: FormuleResult, index: number) => (
+                <FormuleCardList
+                  key={`${formule.announcerId}-${formule.formuleId}`}
+                  formule={formule}
                   index={index}
-                  hasDateFilter={!!(filters.date || filters.startDate)}
-                  onViewService={(announcerSlug, categorySlug) =>
-                    router.push(`/annonceur/${announcerSlug}?service=${categorySlug}`)
-                  }
-                  onCalendarOpen={() => setShowDatePicker(false)}
                 />
               ))}
             </motion.div>

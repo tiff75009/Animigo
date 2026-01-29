@@ -99,6 +99,21 @@ export interface SearchFilters {
   searchMode: "garde" | "services" | null;
 }
 
+export interface NextSlot {
+  date: string;
+  startTime: string;
+  endTime?: string;
+}
+
+export interface CollectiveSlotInfo {
+  id: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  spotsLeft: number;
+  formule: string;
+}
+
 export interface AnnouncerResult {
   id: Id<"users">;
   firstName: string;
@@ -117,11 +132,44 @@ export interface AnnouncerResult {
   availability: {
     status: "available" | "partial" | "unavailable";
     nextAvailable?: string;
+    nextSlot?: NextSlot;
+    collectiveSlots?: CollectiveSlotInfo[];
     availableSlots?: Array<{ startTime: string; endTime: string }>;
   };
   accountType: string;
   companyType?: string;
   statusType: "particulier" | "micro_entrepreneur" | "professionnel";
+}
+
+// Type pour les résultats de recherche par formule
+export interface FormuleResult {
+  formuleId: string;
+  formuleName: string;
+  formuleDescription?: string;
+  price: number;
+  priceUnit: string;
+  duration?: number;
+  sessionType: "individual" | "collective";
+  serviceLocation?: "announcer_home" | "client_home" | "both";
+  numberOfSessions?: number;
+  serviceId: string;
+  categoryName: string;
+  categoryIcon?: string;
+  animalTypes: string[];
+  announcerId: string;
+  announcerSlug?: string;
+  announcerFirstName: string;
+  announcerLastName: string;
+  announcerProfileImage?: string | null;
+  announcerRating: number;
+  announcerReviewCount: number;
+  announcerLocation: string;
+  announcerDistance?: number;
+  announcerVerified: boolean;
+  announcerStatusType: "particulier" | "micro_entrepreneur" | "professionnel";
+  nextSlot?: NextSlot;
+  collectiveSlots?: CollectiveSlotInfo[];
+  spotsLeft?: number;
 }
 
 const initialFilters: SearchFilters = {
@@ -781,6 +829,154 @@ export function useServiceSearchWithParams(token: string | null | undefined, url
     setLocation,
     updateAdvancedFilters,
     resetAdvancedFilters,
+  };
+}
+
+// Hook pour la recherche par formule (affiche les formules au lieu des annonceurs)
+export function useFormuleSearch() {
+  const [filters, setFilters] = useState<SearchFilters>(initialFilters);
+  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>(defaultAdvancedFilters);
+
+  // Préparer les arguments pour la query
+  const queryArgs = useMemo(() => {
+    const args: {
+      categorySlug?: string;
+      excludeCategory?: string;
+      animalType?: string;
+      coordinates?: Coordinates;
+      radiusKm?: number;
+      date?: string;
+      time?: string;
+      sessionType?: "individual" | "collective";
+      serviceLocation?: ("announcer_home" | "client_home")[];
+      priceMin?: number;
+      priceMax?: number;
+      sortBy?: string;
+    } = {};
+
+    // Appliquer le mode de recherche
+    if (filters.searchMode === "garde") {
+      args.categorySlug = "garde";
+    } else if (filters.searchMode === "services") {
+      if (filters.category) {
+        args.categorySlug = filters.category.slug;
+      } else {
+        args.excludeCategory = "garde";
+      }
+    } else if (filters.category) {
+      args.categorySlug = filters.category.slug;
+    }
+
+    if (filters.animalType) {
+      args.animalType = filters.animalType;
+    }
+
+    if (filters.location.coordinates) {
+      args.coordinates = filters.location.coordinates;
+      args.radiusKm = filters.radius;
+    }
+
+    if (filters.date) {
+      args.date = filters.date;
+      if (filters.time) {
+        args.time = filters.time;
+      }
+    }
+
+    // Filtres avancés
+    if (advancedFilters.priceRange.min !== null) {
+      args.priceMin = advancedFilters.priceRange.min;
+    }
+    if (advancedFilters.priceRange.max !== null) {
+      args.priceMax = advancedFilters.priceRange.max;
+    }
+    if (advancedFilters.sortBy !== "relevance") {
+      args.sortBy = advancedFilters.sortBy;
+    }
+    if (advancedFilters.serviceLocation && advancedFilters.serviceLocation.length > 0) {
+      args.serviceLocation = advancedFilters.serviceLocation;
+    }
+
+    return args;
+  }, [filters, advancedFilters]);
+
+  // Query Convex - utiliser searchFormules
+  const results = useQuery(api.public.search.searchFormules, queryArgs);
+
+  // Actions
+  const setCategory = useCallback((category: ServiceCategory | null) => {
+    setFilters((prev) => ({
+      ...prev,
+      category,
+      date: null,
+      time: null,
+      startDate: null,
+      endDate: null,
+      endTime: null,
+    }));
+  }, []);
+
+  const setAnimalType = useCallback((animalType: string | null) => {
+    setFilters((prev) => ({ ...prev, animalType }));
+  }, []);
+
+  const setLocation = useCallback((location: LocationData) => {
+    setFilters((prev) => ({ ...prev, location }));
+  }, []);
+
+  const setRadius = useCallback((radius: number) => {
+    setFilters((prev) => ({ ...prev, radius }));
+  }, []);
+
+  const setDate = useCallback((date: string | null) => {
+    setFilters((prev) => ({ ...prev, date }));
+  }, []);
+
+  const setTime = useCallback((time: string | null) => {
+    setFilters((prev) => ({ ...prev, time }));
+  }, []);
+
+  const setSearchMode = useCallback((mode: "garde" | "services" | null) => {
+    setFilters((prev) => ({
+      ...prev,
+      searchMode: mode,
+      category: null,
+    }));
+  }, []);
+
+  const resetFilters = useCallback(() => {
+    setFilters(initialFilters);
+  }, []);
+
+  const updateAdvancedFilters = useCallback((newFilters: AdvancedFilters) => {
+    setAdvancedFilters(newFilters);
+  }, []);
+
+  const resetAdvancedFilters = useCallback(() => {
+    setAdvancedFilters(defaultAdvancedFilters);
+  }, []);
+
+  const resetAllFilters = useCallback(() => {
+    setFilters(initialFilters);
+    setAdvancedFilters(defaultAdvancedFilters);
+  }, []);
+
+  return {
+    filters,
+    advancedFilters,
+    results: (results ?? []) as FormuleResult[],
+    isLoading: results === undefined,
+    setCategory,
+    setAnimalType,
+    setLocation,
+    setRadius,
+    setDate,
+    setTime,
+    setSearchMode,
+    resetFilters,
+    updateAdvancedFilters,
+    resetAdvancedFilters,
+    resetAllFilters,
   };
 }
 

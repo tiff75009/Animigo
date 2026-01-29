@@ -22,7 +22,7 @@ import {
 
 // Types pour les filtres avancés
 export interface AdvancedFilters {
-  sortBy: "relevance" | "price_asc" | "price_desc" | "rating" | "distance";
+  sortBy: "relevance" | "price_asc" | "price_desc" | "rating" | "distance" | "next_slot";
   accountTypes: ("particulier" | "micro_entrepreneur" | "pro")[];
   verifiedOnly: boolean;
   withPhotoOnly: boolean;
@@ -327,6 +327,11 @@ export default function FilterSidebar({
                 label="Plus proches"
                 checked={filters.sortBy === "distance"}
                 onChange={() => updateFilter("sortBy", "distance")}
+              />
+              <FilterRadio
+                label="Prochain créneau"
+                checked={filters.sortBy === "next_slot"}
+                onChange={() => updateFilter("sortBy", "next_slot")}
               />
             </div>
           </FilterSection>

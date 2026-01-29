@@ -63,9 +63,26 @@ function getDatesBetween(startDate: string, endDate: string): string[] {
 }
 
 // Types pour les résultats
+interface NextSlot {
+  date: string;
+  startTime: string;
+  endTime?: string;
+}
+
+interface CollectiveSlotInfo {
+  id: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  spotsLeft: number;
+  formule: string;
+}
+
 interface AnnouncerAvailability {
   status: "available" | "partial" | "unavailable";
   nextAvailable?: string;
+  nextSlot?: NextSlot;
+  collectiveSlots?: CollectiveSlotInfo[];
   availableSlots?: Array<{ startTime: string; endTime: string }>;
 }
 
@@ -432,6 +449,99 @@ export const searchAnnouncers = query({
         }
       }
 
+      // 10.1 Récupérer les créneaux collectifs disponibles (7 prochains jours)
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      const in7Days = new Date(today);
+      in7Days.setDate(in7Days.getDate() + 7);
+      const in7DaysStr = `${in7Days.getFullYear()}-${String(in7Days.getMonth() + 1).padStart(2, "0")}-${String(in7Days.getDate()).padStart(2, "0")}`;
+
+      // Récupérer les créneaux collectifs actifs de cet annonceur
+      const collectiveSlots = await ctx.db
+        .query("collectiveSlots")
+        .withIndex("by_user", (q) => q.eq("userId", announcer._id))
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("isActive"), true),
+            q.eq(q.field("isCancelled"), false),
+            q.gte(q.field("date"), todayStr),
+            q.lte(q.field("date"), in7DaysStr)
+          )
+        )
+        .collect();
+
+      // Filtrer les créneaux avec places disponibles et récupérer les infos des formules
+      const collectiveSlotsInfo: CollectiveSlotInfo[] = [];
+      for (const slot of collectiveSlots) {
+        const spotsLeft = slot.maxAnimals - slot.bookedAnimals;
+        if (spotsLeft > 0) {
+          // Récupérer le nom de la formule
+          const variant = await ctx.db.get(slot.variantId);
+          collectiveSlotsInfo.push({
+            id: slot._id,
+            date: slot.date,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            spotsLeft,
+            formule: variant?.name ?? "Séance collective",
+          });
+        }
+      }
+
+      // Trier par date et heure
+      collectiveSlotsInfo.sort((a, b) => {
+        const dateCompare = a.date.localeCompare(b.date);
+        if (dateCompare !== 0) return dateCompare;
+        return a.startTime.localeCompare(b.startTime);
+      });
+
+      // Calculer le prochain créneau (collectif ou individuel)
+      let nextSlot: NextSlot | undefined;
+
+      // Si des créneaux collectifs disponibles, prendre le premier
+      if (collectiveSlotsInfo.length > 0) {
+        nextSlot = {
+          date: collectiveSlotsInfo[0].date,
+          startTime: collectiveSlotsInfo[0].startTime,
+          endTime: collectiveSlotsInfo[0].endTime,
+        };
+      }
+
+      // Sinon, chercher le prochain créneau de disponibilité partielle
+      if (!nextSlot && availability.nextAvailable) {
+        const nextAvailDate = availability.nextAvailable;
+        const partialAvail = await ctx.db
+          .query("availability")
+          .withIndex("by_user_date", (q) =>
+            q.eq("userId", announcer._id).eq("date", nextAvailDate)
+          )
+          .first();
+
+        if (partialAvail?.status === "partial" && partialAvail.timeSlots && partialAvail.timeSlots.length > 0) {
+          // Prendre le premier créneau du jour
+          const sortedSlots = [...partialAvail.timeSlots].sort((a, b) => a.startTime.localeCompare(b.startTime));
+          nextSlot = {
+            date: nextAvailDate,
+            startTime: sortedSlots[0].startTime,
+            endTime: sortedSlots[0].endTime,
+          };
+        } else {
+          // Jour complet disponible, mettre 09:00 par défaut
+          nextSlot = {
+            date: nextAvailDate,
+            startTime: "09:00",
+          };
+        }
+      }
+
+      // Ajouter les créneaux collectifs et nextSlot à la disponibilité
+      if (collectiveSlotsInfo.length > 0) {
+        availability.collectiveSlots = collectiveSlotsInfo.slice(0, 5); // Limiter à 5 créneaux
+      }
+      if (nextSlot) {
+        availability.nextSlot = nextSlot;
+      }
+
       // 11. Construire le résultat
       results.push({
         id: announcer._id,
@@ -460,7 +570,7 @@ export const searchAnnouncers = query({
     const sortBy = args.sortBy ?? "relevance";
 
     results.sort((a, b) => {
-      // Disponibles en premier (toujours, sauf si tri explicite)
+      // Disponibles en premier (toujours, sauf si tri explicite par créneau)
       if (sortBy === "relevance" || sortBy === "distance") {
         if (a.availability.status === "available" && b.availability.status !== "available") return -1;
         if (a.availability.status !== "available" && b.availability.status === "available") return 1;
@@ -468,6 +578,29 @@ export const searchAnnouncers = query({
 
       // Appliquer le tri demandé
       switch (sortBy) {
+        case "next_slot":
+          // Tri par prochain créneau disponible (le plus proche en premier)
+          const aSlot = a.availability.nextSlot;
+          const bSlot = b.availability.nextSlot;
+
+          // Ceux avec un créneau en premier
+          if (aSlot && !bSlot) return -1;
+          if (!aSlot && bSlot) return 1;
+          if (!aSlot && !bSlot) {
+            // Fallback: par date nextAvailable
+            const aNext = a.availability.nextAvailable;
+            const bNext = b.availability.nextAvailable;
+            if (aNext && !bNext) return -1;
+            if (!aNext && bNext) return 1;
+            if (aNext && bNext) return aNext.localeCompare(bNext);
+            return 0;
+          }
+
+          // Comparer date + heure
+          const aDateTime = `${aSlot!.date}T${aSlot!.startTime}`;
+          const bDateTime = `${bSlot!.date}T${bSlot!.startTime}`;
+          return aDateTime.localeCompare(bDateTime);
+
         case "price_asc":
           // Prix croissant (les moins chers en premier)
           if (a.basePrice !== undefined && b.basePrice !== undefined) {
@@ -501,9 +634,349 @@ export const searchAnnouncers = query({
 
         case "relevance":
         default:
-          // Pertinence: disponibles puis par distance
+          // Pertinence: disponibles puis par prochain créneau puis par distance
+          // Comparer par prochain créneau si disponible
+          const aSlotRel = a.availability.nextSlot;
+          const bSlotRel = b.availability.nextSlot;
+          if (aSlotRel && bSlotRel) {
+            const aDateTimeRel = `${aSlotRel.date}T${aSlotRel.startTime}`;
+            const bDateTimeRel = `${bSlotRel.date}T${bSlotRel.startTime}`;
+            const slotCompare = aDateTimeRel.localeCompare(bDateTimeRel);
+            if (slotCompare !== 0) return slotCompare;
+          }
+          // Fallback par distance
           if (a.distance !== undefined && b.distance !== undefined) {
             return a.distance - b.distance;
+          }
+          return 0;
+      }
+    });
+
+    return results.slice(0, limit);
+  },
+});
+
+// ============================================================
+// NOUVELLE QUERY: Recherche par formule (mode services)
+// ============================================================
+
+interface FormuleResult {
+  // Infos formule
+  formuleId: string;
+  formuleName: string;
+  formuleDescription?: string;
+  price: number;
+  priceUnit: string;
+  duration?: number;
+  sessionType: "individual" | "collective";
+  serviceLocation?: "announcer_home" | "client_home" | "both";
+  numberOfSessions?: number;
+  // Infos service/catégorie
+  serviceId: string;
+  categoryName: string;
+  categoryIcon?: string;
+  animalTypes: string[];
+  // Infos annonceur
+  announcerId: Id<"users">;
+  announcerSlug?: string;
+  announcerFirstName: string;
+  announcerLastName: string;
+  announcerProfileImage?: string | null;
+  announcerRating: number;
+  announcerReviewCount: number;
+  announcerLocation: string;
+  announcerDistance?: number;
+  announcerVerified: boolean;
+  announcerStatusType: "particulier" | "micro_entrepreneur" | "professionnel";
+  // Disponibilité
+  nextSlot?: NextSlot;
+  collectiveSlots?: CollectiveSlotInfo[];
+  spotsLeft?: number; // Pour créneaux collectifs
+}
+
+export const searchFormules = query({
+  args: {
+    categorySlug: v.optional(v.string()),
+    excludeCategory: v.optional(v.string()),
+    animalType: v.optional(v.string()),
+    coordinates: v.optional(v.object({ lat: v.number(), lng: v.number() })),
+    radiusKm: v.optional(v.number()),
+    date: v.optional(v.string()),
+    time: v.optional(v.string()),
+    sessionType: v.optional(v.union(v.literal("individual"), v.literal("collective"))),
+    serviceLocation: v.optional(v.array(v.union(v.literal("announcer_home"), v.literal("client_home")))),
+    priceMin: v.optional(v.number()),
+    priceMax: v.optional(v.number()),
+    sortBy: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<FormuleResult[]> => {
+    const radius = args.radiusKm ?? 20;
+    const limit = args.limit ?? 100;
+    const results: FormuleResult[] = [];
+
+    // Récupérer tous les services actifs
+    const allServices = await ctx.db.query("services").collect();
+    const services = allServices.filter((s) => {
+      if (!s.isActive) return false;
+      // Filtrer par slug de catégorie
+      if (args.excludeCategory && s.category === args.excludeCategory) return false;
+      if (args.categorySlug && s.category !== args.categorySlug) return false;
+      if (args.animalType && !s.animalTypes?.includes(args.animalType)) return false;
+      return true;
+    });
+
+    // Dates pour les créneaux
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const in7Days = new Date(today);
+    in7Days.setDate(in7Days.getDate() + 7);
+    const in7DaysStr = `${in7Days.getFullYear()}-${String(in7Days.getMonth() + 1).padStart(2, "0")}-${String(in7Days.getDate()).padStart(2, "0")}`;
+
+    for (const service of services) {
+      // Récupérer l'annonceur
+      const announcer = await ctx.db.get(service.userId);
+      if (!announcer || !announcer.isActive) continue;
+
+      // Récupérer le profil
+      const profile = await ctx.db
+        .query("profiles")
+        .withIndex("by_user", (q) => q.eq("userId", announcer._id))
+        .first();
+      if (!profile) continue;
+
+      // Filtrer par localisation
+      let distance: number | undefined;
+      if (args.coordinates && profile.coordinates) {
+        distance = calculateDistance(
+          args.coordinates.lat,
+          args.coordinates.lng,
+          profile.coordinates.lat,
+          profile.coordinates.lng
+        );
+        if (distance > radius) continue;
+      }
+
+      // Récupérer la catégorie par son slug
+      const categoryDoc = service.category ? await ctx.db
+        .query("serviceCategories")
+        .withIndex("by_slug", (q) => q.eq("slug", service.category))
+        .first() : null;
+
+      // Récupérer les variantes (formules) actives
+      const variants = await ctx.db
+        .query("serviceVariants")
+        .withIndex("by_service", (q) => q.eq("serviceId", service._id))
+        .filter((q) => q.eq(q.field("isActive"), true))
+        .collect();
+
+      // Déterminer le type de statut
+      let statusType: "particulier" | "micro_entrepreneur" | "professionnel" = "particulier";
+      if (announcer.accountType === "annonceur_pro") {
+        statusType = announcer.companyType === "micro_enterprise" ? "micro_entrepreneur" : "professionnel";
+      }
+
+      // Photo de profil
+      const profilePhoto = await ctx.db
+        .query("photos")
+        .withIndex("by_user", (q) => q.eq("userId", announcer._id))
+        .filter((q) => q.eq(q.field("isProfilePhoto"), true))
+        .first();
+      let profileImageUrl: string | null = null;
+      if (profilePhoto?.storageId) {
+        profileImageUrl = await ctx.storage.getUrl(profilePhoto.storageId);
+      }
+
+      for (const variant of variants) {
+        // Filtrer par type de séance si spécifié
+        const isCollective = variant.sessionType === "collective";
+        if (args.sessionType === "individual" && isCollective) continue;
+        if (args.sessionType === "collective" && !isCollective) continue;
+
+        // Filtrer par lieu si spécifié
+        if (args.serviceLocation && args.serviceLocation.length > 0) {
+          const variantLocation = variant.serviceLocation || service.serviceLocation || "both";
+          if (variantLocation !== "both" && !args.serviceLocation.includes(variantLocation as "announcer_home" | "client_home")) {
+            continue;
+          }
+        }
+
+        // Calculer le prix
+        const price = variant.pricing?.hourly || variant.price || 0;
+
+        // Filtrer par prix
+        if (args.priceMin !== undefined && price < args.priceMin * 100) continue;
+        if (args.priceMax !== undefined && price > args.priceMax * 100) continue;
+
+        let nextSlot: NextSlot | undefined;
+        let collectiveSlots: CollectiveSlotInfo[] = [];
+        let spotsLeft: number | undefined;
+
+        if (isCollective) {
+          // Récupérer les créneaux collectifs disponibles
+          const slots = await ctx.db
+            .query("collectiveSlots")
+            .withIndex("by_variant", (q) => q.eq("variantId", variant._id))
+            .filter((q) =>
+              q.and(
+                q.eq(q.field("isActive"), true),
+                q.eq(q.field("isCancelled"), false),
+                q.gte(q.field("date"), todayStr),
+                q.lte(q.field("date"), in7DaysStr)
+              )
+            )
+            .collect();
+
+          for (const slot of slots) {
+            const remaining = slot.maxAnimals - slot.bookedAnimals;
+            if (remaining > 0) {
+              collectiveSlots.push({
+                id: slot._id,
+                date: slot.date,
+                startTime: slot.startTime,
+                endTime: slot.endTime,
+                spotsLeft: remaining,
+                formule: variant.name,
+              });
+            }
+          }
+
+          // Trier par date/heure
+          collectiveSlots.sort((a, b) => {
+            const dateCompare = a.date.localeCompare(b.date);
+            if (dateCompare !== 0) return dateCompare;
+            return a.startTime.localeCompare(b.startTime);
+          });
+
+          if (collectiveSlots.length > 0) {
+            nextSlot = {
+              date: collectiveSlots[0].date,
+              startTime: collectiveSlots[0].startTime,
+              endTime: collectiveSlots[0].endTime,
+            };
+            spotsLeft = collectiveSlots[0].spotsLeft;
+          }
+
+          // Limiter à 5 créneaux
+          collectiveSlots = collectiveSlots.slice(0, 5);
+
+          // Pas de créneaux disponibles = ne pas afficher la formule collective
+          if (collectiveSlots.length === 0) continue;
+        } else {
+          // Formule individuelle: chercher le prochain créneau disponible
+          // Vérifier la disponibilité des 7 prochains jours
+          const nextDays: string[] = [];
+          for (let i = 0; i <= 7; i++) {
+            const d = new Date(today);
+            d.setDate(d.getDate() + i);
+            nextDays.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+          }
+
+          // Récupérer les indisponibilités
+          const unavailableDates = await ctx.db
+            .query("availability")
+            .withIndex("by_user", (q) => q.eq("userId", announcer._id))
+            .filter((q) => q.eq(q.field("status"), "unavailable"))
+            .collect();
+          const unavailableSet = new Set(unavailableDates.map((a) => a.date));
+
+          for (const day of nextDays) {
+            if (!unavailableSet.has(day)) {
+              // Vérifier la dispo partielle
+              const partial = await ctx.db
+                .query("availability")
+                .withIndex("by_user_date", (q) => q.eq("userId", announcer._id).eq("date", day))
+                .first();
+
+              if (partial?.status === "partial" && partial.timeSlots && partial.timeSlots.length > 0) {
+                const sortedSlots = [...partial.timeSlots].sort((a, b) => a.startTime.localeCompare(b.startTime));
+                nextSlot = {
+                  date: day,
+                  startTime: sortedSlots[0].startTime,
+                  endTime: sortedSlots[0].endTime,
+                };
+              } else {
+                nextSlot = {
+                  date: day,
+                  startTime: "09:00",
+                };
+              }
+              break;
+            }
+          }
+        }
+
+        results.push({
+          formuleId: variant._id,
+          formuleName: variant.name,
+          formuleDescription: variant.description,
+          price,
+          priceUnit: variant.priceUnit || "hour",
+          duration: variant.duration,
+          sessionType: isCollective ? "collective" : "individual",
+          serviceLocation: variant.serviceLocation || service.serviceLocation,
+          numberOfSessions: variant.numberOfSessions,
+          serviceId: service._id,
+          categoryName: categoryDoc?.name || service.category,
+          categoryIcon: categoryDoc?.icon,
+          animalTypes: variant.animalTypes || service.animalTypes || [],
+          announcerId: announcer._id,
+          announcerSlug: announcer.slug || undefined,
+          announcerFirstName: announcer.firstName,
+          announcerLastName: announcer.lastName,
+          announcerProfileImage: profile.profileImageUrl ?? profileImageUrl,
+          announcerRating: 4.5, // TODO: calculer
+          announcerReviewCount: 0,
+          announcerLocation: profile.city ?? profile.location ?? "",
+          announcerDistance: distance,
+          announcerVerified: announcer.accountType === "annonceur_pro",
+          announcerStatusType: statusType,
+          nextSlot,
+          collectiveSlots: collectiveSlots.length > 0 ? collectiveSlots : undefined,
+          spotsLeft,
+        });
+      }
+    }
+
+    // Trier les résultats
+    const sortBy = args.sortBy ?? "next_slot";
+    results.sort((a, b) => {
+      switch (sortBy) {
+        case "next_slot":
+          // Tri par prochain créneau
+          if (a.nextSlot && !b.nextSlot) return -1;
+          if (!a.nextSlot && b.nextSlot) return 1;
+          if (a.nextSlot && b.nextSlot) {
+            const aDateTime = `${a.nextSlot.date}T${a.nextSlot.startTime}`;
+            const bDateTime = `${b.nextSlot.date}T${b.nextSlot.startTime}`;
+            return aDateTime.localeCompare(bDateTime);
+          }
+          return 0;
+
+        case "price_asc":
+          return a.price - b.price;
+
+        case "price_desc":
+          return b.price - a.price;
+
+        case "distance":
+          if (a.announcerDistance !== undefined && b.announcerDistance !== undefined) {
+            return a.announcerDistance - b.announcerDistance;
+          }
+          if (a.announcerDistance === undefined) return 1;
+          if (b.announcerDistance === undefined) return -1;
+          return 0;
+
+        default:
+          // Par défaut: prochain créneau puis distance
+          if (a.nextSlot && b.nextSlot) {
+            const aDateTime = `${a.nextSlot.date}T${a.nextSlot.startTime}`;
+            const bDateTime = `${b.nextSlot.date}T${b.nextSlot.startTime}`;
+            const slotCompare = aDateTime.localeCompare(bDateTime);
+            if (slotCompare !== 0) return slotCompare;
+          }
+          if (a.announcerDistance !== undefined && b.announcerDistance !== undefined) {
+            return a.announcerDistance - b.announcerDistance;
           }
           return 0;
       }
