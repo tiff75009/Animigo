@@ -87,6 +87,14 @@ export const createPendingBooking = mutation({
         lng: v.number(),
       })),
     })),
+    // Données pré-remplies de l'animal invité
+    guestAnimalPreFill: v.optional(v.object({
+      type: v.string(),
+      breed: v.optional(v.string()),
+      isMixedBreed: v.optional(v.boolean()),
+      primaryBreed: v.optional(v.string()),
+      secondaryBreed: v.optional(v.string()),
+    })),
     // Token optionnel (si utilisateur connecté)
     token: v.optional(v.string()),
   },
@@ -254,6 +262,8 @@ export const createPendingBooking = mutation({
         postalCode: args.guestAddress.postalCode,
         coordinates: args.guestAddress.coordinates,
       } : undefined,
+      // Données pré-remplies de l'animal invité
+      guestAnimalPreFill: args.guestAnimalPreFill,
       userId,
       expiresAt,
       createdAt: now,
@@ -472,6 +482,8 @@ export const getPendingBooking = query({
       selectedAnimalIds: pendingBooking.selectedAnimalIds,
       // Support formules multi-séances
       sessions: pendingBooking.sessions,
+      // Données pré-remplies de l'animal invité
+      guestAnimalPreFill: pendingBooking.guestAnimalPreFill,
       userId: pendingBooking.userId,
       expiresAt: pendingBooking.expiresAt,
     };

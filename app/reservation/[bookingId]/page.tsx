@@ -528,6 +528,7 @@ export default function ReservationPage({
   const [loginPassword, setLoginPassword] = useState("");
   const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>([]);
   const [addressPreFilled, setAddressPreFilled] = useState(false);
+  const [animalPreFilled, setAnimalPreFilled] = useState(false);
 
   // Récupérer le token au chargement
   useEffect(() => {
@@ -635,6 +636,26 @@ export default function ReservationPage({
       setAddressPreFilled(true);
     }
   }, [bookingData?.guestAddress, bookingData?.serviceLocation, addressPreFilled, isLoggedIn]);
+
+  // Pré-remplir les données de l'animal invité si disponibles
+  useEffect(() => {
+    if (
+      bookingData?.guestAnimalPreFill &&
+      !animalPreFilled &&
+      !isLoggedIn
+    ) {
+      const preFill = bookingData.guestAnimalPreFill;
+      setGuestAnimalData(prev => ({
+        ...prev,
+        type: preFill.type || prev.type,
+        breed: preFill.isMixedBreed ? undefined : preFill.breed,
+        isMixedBreed: preFill.isMixedBreed || false,
+        primaryBreed: preFill.isMixedBreed ? preFill.primaryBreed : undefined,
+        secondaryBreed: preFill.isMixedBreed ? preFill.secondaryBreed : undefined,
+      }));
+      setAnimalPreFilled(true);
+    }
+  }, [bookingData?.guestAnimalPreFill, animalPreFilled, isLoggedIn]);
 
   // Détecter le type de formule
   const isCollectiveFormula = bookingData?.variant?.sessionType === "collective" ||

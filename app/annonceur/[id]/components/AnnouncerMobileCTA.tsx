@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { X, ArrowRight, Check, ShoppingCart, Calendar, Clock, CreditCard, Eye, PawPrint, MapPin, Home, Plus, ChevronLeft, AlertTriangle, Dog, LogIn, Mail, Lock, Loader2, Users, Package } from "lucide-react";
-import GuestDogVerification, { type GuestDogData } from "@/app/reserver/[announcerId]/components/GuestDogVerification";
+import GuestAnimalVerification, { type GuestAnimalData } from "@/app/reserver/[announcerId]/components/GuestAnimalVerification";
 import { ServiceData, FormuleData } from "./types";
 import { cn } from "@/app/lib/utils";
 import {
@@ -105,17 +105,18 @@ interface AnnouncerMobileCTAProps {
   // Props pour les options
   onOptionToggle?: (optionId: string) => void;
   selectedOptionIds?: string[];
-  // Vérification du chien pour les invités
-  requiresDogVerification?: boolean;
-  guestDogValid?: boolean;
-  guestDogError?: string;
+  // Vérification de l'animal pour les invités (chien ou chat)
+  requiresAnimalVerification?: boolean;
+  acceptedAnimalTypes?: string[];
+  guestAnimalValid?: boolean;
+  guestAnimalError?: string;
   dogRestrictions?: {
     acceptedDogSizes: ("small" | "medium" | "large")[];
     dogCategoryAcceptance: "none" | "cat1" | "cat2" | "both";
   };
-  guestDogData?: GuestDogData | null;
-  onGuestDogDataChange?: (data: GuestDogData | null) => void;
-  onGuestDogValidationChange?: (isValid: boolean, error?: string) => void;
+  guestAnimalData?: GuestAnimalData | null;
+  onGuestAnimalDataChange?: (data: GuestAnimalData | null) => void;
+  onGuestAnimalValidationChange?: (isValid: boolean, error?: string) => void;
   // Erreurs de restriction pour les chiens des utilisateurs connectés
   connectedDogErrors?: Record<string, string>;
   // Callback pour la connexion inline
@@ -261,14 +262,15 @@ export default function AnnouncerMobileCTA({
   // Props pour les options
   onOptionToggle,
   selectedOptionIds = [],
-  // Vérification du chien pour les invités
-  requiresDogVerification = false,
-  guestDogValid = false,
-  guestDogError,
+  // Vérification de l'animal pour les invités (chien ou chat)
+  requiresAnimalVerification = false,
+  acceptedAnimalTypes = [],
+  guestAnimalValid = false,
+  guestAnimalError,
   dogRestrictions,
-  guestDogData,
-  onGuestDogDataChange,
-  onGuestDogValidationChange,
+  guestAnimalData,
+  onGuestAnimalDataChange,
+  onGuestAnimalValidationChange,
   connectedDogErrors = {},
   onLoginSuccess,
 }: AnnouncerMobileCTAProps) {
@@ -501,13 +503,13 @@ export default function AnnouncerMobileCTA({
   });
 
   // Vérification du chien pour les invités (bloque les étapes si non vérifié)
-  const isDogVerificationOk = !requiresDogVerification || guestDogValid;
+  const isAnimalVerificationOk = !requiresAnimalVerification || guestAnimalValid;
 
   // Déterminer l'étape actuelle pour le flux garde mobile
   const getCurrentGardeStep = (): MobileBookingStep => {
     if (!hasVariantSelected) return "formule";
-    // Étape vérification du chien pour les invités (après formule, avant dates)
-    if (requiresDogVerification && !guestDogValid) return "dog";
+    // Étape vérification de l'animal pour les invités (après formule, avant dates)
+    if (requiresAnimalVerification && !guestAnimalValid) return "dog";
     if (isLoggedIn && compatibleUserAnimals.length > 0 && !hasAnimalsSelected) return "animals";
     // Afficher l'étape location si besoin de choisir ou de saisir l'adresse
     if (needsLocationStep) {
@@ -541,12 +543,12 @@ export default function AnnouncerMobileCTA({
       // Flux par étapes si:
       // - Service garde (isRangeMode)
       // - Formule à domicile ou les deux (client_home ou both)
-      // - OU si vérification du chien requise (invité avec chien)
+      // - OU si vérification de l'animal requise (invité avec chien)
       // - OU formule collective (pour afficher le lieu chez l'annonceur)
       const needsStepFlow = isRangeMode ||
         newFormuleLocation === "client_home" ||
         newFormuleLocation === "both" ||
-        requiresDogVerification ||
+        requiresAnimalVerification ||
         isCollective; // Les collectives passent toujours par le flux (pour afficher le lieu)
 
       // Pour les services garde ou formules nécessitant un flux par étapes
@@ -566,16 +568,16 @@ export default function AnnouncerMobileCTA({
         }
       }
     }
-  }, [bookingVariant, prevVariantId, bookingSelection?.startDate, isRangeMode, bookingService?.serviceLocation, requiresDogVerification]);
+  }, [bookingVariant, prevVariantId, bookingSelection?.startDate, isRangeMode, bookingService?.serviceLocation, requiresAnimalVerification]);
 
   // Pour les formules collectives, la réservation est complète quand tous les créneaux sont sélectionnés
   // Pour les formules multi-séances individuelles, quand toutes les séances sont sélectionnées
-  // La vérification du chien doit être OK pour les invités
+  // La vérification de l'animal doit être OK pour les invités
   const hasFullBooking = isCollectiveFormule
-    ? hasVariantSelected && hasAllSlotsSelected && hasAddress && isDogVerificationOk
+    ? hasVariantSelected && hasAllSlotsSelected && hasAddress && isAnimalVerificationOk
     : isMultiSessionIndividual
-      ? hasVariantSelected && hasAllSessionsSelected && hasAddress && isDogVerificationOk
-      : hasVariantSelected && hasDateSelected && Boolean(priceBreakdown) && hasAddress && isDogVerificationOk;
+      ? hasVariantSelected && hasAllSessionsSelected && hasAddress && isAnimalVerificationOk
+      : hasVariantSelected && hasDateSelected && Boolean(priceBreakdown) && hasAddress && isAnimalVerificationOk;
 
   // Get price to display
   const { price: minPrice, unit: minUnit, isTotal: isPriceTotal } = selectedService
@@ -587,9 +589,9 @@ export default function AnnouncerMobileCTA({
   const handleBookClick = () => {
     // Vérification du chien requise pour les invités (tous types de services)
     // Si le chien n'est pas encore vérifié, ouvrir le sheet de vérification
-    if (requiresDogVerification && hasVariantSelected) {
+    if (requiresAnimalVerification && hasVariantSelected) {
       // Déterminer l'étape : si chien déjà vérifié, passer aux dates, sinon vérification
-      const stepToShow = guestDogValid ? "dates" : "dog";
+      const stepToShow = guestAnimalValid ? "dates" : "dog";
       setMobileStep(stepToShow);
       setIsStepSheetOpen(true);
       return;
@@ -606,7 +608,7 @@ export default function AnnouncerMobileCTA({
     // Cas spécial pour les formules collectives - flux step-by-step
     if (isCollectiveFormule && hasVariantSelected) {
       // Vérifier si on doit passer par le flux step-by-step (vérification chien, animaux, location)
-      if (requiresDogVerification && !guestDogValid) {
+      if (requiresAnimalVerification && !guestAnimalValid) {
         setMobileStep("dog");
         setIsStepSheetOpen(true);
         return;
@@ -669,7 +671,7 @@ export default function AnnouncerMobileCTA({
   const handleNextStep = () => {
     switch (mobileStep) {
       case "dog":
-        // Après vérification du chien
+        // Après vérification de l'animal
         if (isLoggedIn && compatibleUserAnimals.length > 0) {
           setMobileStep("animals");
         } else if (needsLocationStep) {
@@ -740,7 +742,7 @@ export default function AnnouncerMobileCTA({
         break;
       case "animals":
         // Retour à dog si requis, sinon fermer
-        if (requiresDogVerification) {
+        if (requiresAnimalVerification) {
           setMobileStep("dog");
         } else {
           setIsStepSheetOpen(false);
@@ -749,7 +751,7 @@ export default function AnnouncerMobileCTA({
       case "location":
         if (isLoggedIn && compatibleUserAnimals.length > 0) {
           setMobileStep("animals");
-        } else if (requiresDogVerification) {
+        } else if (requiresAnimalVerification) {
           setMobileStep("dog");
         } else {
           setIsStepSheetOpen(false);
@@ -760,7 +762,7 @@ export default function AnnouncerMobileCTA({
           setMobileStep("location");
         } else if (isLoggedIn && compatibleUserAnimals.length > 0) {
           setMobileStep("animals");
-        } else if (requiresDogVerification) {
+        } else if (requiresAnimalVerification) {
           setMobileStep("dog");
         } else {
           setIsStepSheetOpen(false);
@@ -783,7 +785,7 @@ export default function AnnouncerMobileCTA({
   const canProceedToNextStep = (): boolean => {
     switch (mobileStep) {
       case "dog":
-        return guestDogValid;
+        return guestAnimalValid;
       case "animals":
         return hasAnimalsSelected;
       case "location":
@@ -824,10 +826,10 @@ export default function AnnouncerMobileCTA({
   const getStepButtonText = (): string => {
     switch (mobileStep) {
       case "dog":
-        if (guestDogError) {
-          return "Chien non accepté";
+        if (guestAnimalError) {
+          return "Animal non accepté";
         }
-        return guestDogValid ? "Continuer" : "Vérifiez votre chien";
+        return guestAnimalValid ? "Continuer" : "Vérifiez votre animal";
       case "animals":
         return hasAnimalsSelected ? "Continuer" : "Sélectionnez vos animaux";
       case "location":
@@ -1181,8 +1183,8 @@ export default function AnnouncerMobileCTA({
         case "dog":
           return (
             <>
-              <Dog className="w-4 h-4" />
-              Vérifier votre chien
+              <PawPrint className="w-4 h-4" />
+              Informations animal
             </>
           );
         case "animals":
@@ -1396,9 +1398,9 @@ export default function AnnouncerMobileCTA({
                           isRangeMode={isRangeMode}
                           animalCount={selectedAnimalIds.length > 0 ? selectedAnimalIds.length : animalCount}
                           announcerFirstName={announcerFirstName}
-                          requiresDogVerification={requiresDogVerification}
-                          guestDogValid={guestDogValid}
-                          guestDogError={guestDogError}
+                          requiresAnimalVerification={requiresAnimalVerification}
+                          guestAnimalValid={guestAnimalValid}
+                          guestAnimalError={guestAnimalError}
                           compact
                         />
 
@@ -1954,7 +1956,7 @@ export default function AnnouncerMobileCTA({
                       </button>
                       <div>
                         <h3 className="text-lg font-semibold text-gray-900">
-                          {mobileStep === "dog" && "Votre chien"}
+                          {mobileStep === "dog" && "Votre animal"}
                           {mobileStep === "animals" && "Vos animaux"}
                           {mobileStep === "location" && (needsAddressOnly ? "Votre adresse" : "Lieu de prestation")}
                           {mobileStep === "dates" && (isRangeMode ? "Dates de garde" : "Date et heure")}
@@ -1982,7 +1984,7 @@ export default function AnnouncerMobileCTA({
                     {(() => {
                       // Construire la liste des étapes : Formule (1) est toujours complétée
                       const steps: MobileBookingStep[] = ["formule"];
-                      if (requiresDogVerification) steps.push("dog");
+                      if (requiresAnimalVerification) steps.push("dog");
                       steps.push("dates");
                       if (hasOptionsStep) steps.push("options");
                       steps.push("summary");
@@ -2023,19 +2025,19 @@ export default function AnnouncerMobileCTA({
                       minHeight: 0, // Important pour flex avec overflow
                     }}
                   >
-                    {/* Étape Vérification du chien */}
-                    {mobileStep === "dog" && dogRestrictions && onGuestDogDataChange && onGuestDogValidationChange && (
+                    {/* Étape Vérification de l'animal (chien ou chat) */}
+                    {mobileStep === "dog" && onGuestAnimalDataChange && onGuestAnimalValidationChange && (
                       <div className="space-y-4">
                         <p className="text-sm text-gray-500">
-                          Renseignez les informations de votre chien pour vérifier qu'il correspond aux critères de cette formule.
+                          Renseignez les informations de votre animal pour vérifier qu'il correspond aux critères de cette formule.
                         </p>
 
-                        <GuestDogVerification
-                          acceptedDogSizes={dogRestrictions.acceptedDogSizes}
-                          dogCategoryAcceptance={dogRestrictions.dogCategoryAcceptance}
-                          onDogDataChange={onGuestDogDataChange}
-                          onValidationChange={onGuestDogValidationChange}
-                          initialData={guestDogData}
+                        <GuestAnimalVerification
+                          acceptedAnimalTypes={acceptedAnimalTypes}
+                          dogRestrictions={dogRestrictions}
+                          onAnimalDataChange={onGuestAnimalDataChange}
+                          onValidationChange={onGuestAnimalValidationChange}
+                          initialData={guestAnimalData}
                         />
                       </div>
                     )}
@@ -2387,9 +2389,9 @@ export default function AnnouncerMobileCTA({
                           isRangeMode={isRangeMode}
                           animalCount={selectedAnimalIds.length > 0 ? selectedAnimalIds.length : animalCount}
                           announcerFirstName={announcerFirstName}
-                          requiresDogVerification={requiresDogVerification}
-                          guestDogValid={guestDogValid}
-                          guestDogError={guestDogError}
+                          requiresAnimalVerification={requiresAnimalVerification}
+                          guestAnimalValid={guestAnimalValid}
+                          guestAnimalError={guestAnimalError}
                           compact
                         />
                       </div>
@@ -2418,14 +2420,14 @@ export default function AnnouncerMobileCTA({
                         disabled={!canProceedToNextStep()}
                         className={cn(
                           "w-full py-3.5 font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors",
-                          mobileStep === "dog" && guestDogError
+                          mobileStep === "dog" && guestAnimalError
                             ? "bg-red-500 text-white cursor-not-allowed"
                             : canProceedToNextStep()
                               ? "bg-gradient-to-r from-primary to-primary/90 text-white shadow-lg shadow-primary/25"
                               : "bg-gray-100 text-gray-400 cursor-not-allowed"
                         )}
                       >
-                        {mobileStep === "dog" && guestDogError && <AlertTriangle className="w-4 h-4" />}
+                        {mobileStep === "dog" && guestAnimalError && <AlertTriangle className="w-4 h-4" />}
                         {getStepButtonText()}
                         {canProceedToNextStep() && <ArrowRight className="w-4 h-4" />}
                       </motion.button>

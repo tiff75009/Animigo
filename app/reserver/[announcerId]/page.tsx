@@ -417,6 +417,13 @@ export default function ReserverPage({
   // Animaux sélectionnés (IDs)
   const preSelectedAnimalIds = searchParams.get("animalIds")?.split(",").filter(Boolean) || [];
 
+  // Données pré-remplies de l'animal invité (depuis l'étape 2 de la page annonceur)
+  const preGuestAnimalType = searchParams.get("guestAnimalType");
+  const preGuestAnimalBreed = searchParams.get("guestAnimalBreed");
+  const preGuestAnimalMixed = searchParams.get("guestAnimalMixed") === "true";
+  const preGuestAnimalPrimaryBreed = searchParams.get("guestAnimalPrimaryBreed");
+  const preGuestAnimalSecondaryBreed = searchParams.get("guestAnimalSecondaryBreed");
+
   // Build guest address object if present
   const preSelectedGuestAddress = guestAddressParam ? {
     address: guestAddressParam,
@@ -1013,6 +1020,14 @@ export default function ReserverPage({
           city: bookingData.guestAddress.city || undefined,
           postalCode: bookingData.guestAddress.postalCode || undefined,
           coordinates: bookingData.guestAddress.coordinates || undefined,
+        } : undefined,
+        // Données pré-remplies de l'animal invité
+        guestAnimalPreFill: preGuestAnimalType ? {
+          type: preGuestAnimalType,
+          breed: preGuestAnimalBreed || undefined,
+          isMixedBreed: preGuestAnimalMixed || undefined,
+          primaryBreed: preGuestAnimalPrimaryBreed || undefined,
+          secondaryBreed: preGuestAnimalSecondaryBreed || undefined,
         } : undefined,
         token: token || undefined,
       });

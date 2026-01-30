@@ -32,7 +32,7 @@ import {
   calculatePriceBreakdown,
   isGardeService,
 } from "./components/booking";
-import GuestDogVerification, { type GuestDogData } from "@/app/reserver/[announcerId]/components/GuestDogVerification";
+import GuestAnimalVerification, { type GuestAnimalData, type GuestDogData } from "@/app/reserver/[announcerId]/components/GuestAnimalVerification";
 import {
   checkBreedCategory,
   getSizeFromWeight,
@@ -294,10 +294,10 @@ export default function AnnouncerProfilePage() {
   // State for selected animals in collective sessions (supports multiple selection)
   const [selectedAnimalIds, setSelectedAnimalIds] = useState<string[]>([]);
 
-  // État pour la vérification du chien (invités)
-  const [guestDogData, setGuestDogData] = useState<GuestDogData | null>(null);
-  const [guestDogValid, setGuestDogValid] = useState(false);
-  const [guestDogError, setGuestDogError] = useState<string | undefined>(undefined);
+  // État pour la vérification de l'animal (invités - chien ou chat)
+  const [guestAnimalData, setGuestAnimalData] = useState<GuestAnimalData | null>(null);
+  const [guestAnimalValid, setGuestAnimalValid] = useState(false);
+  const [guestAnimalError, setGuestAnimalError] = useState<string | undefined>(undefined);
 
   // État pour les erreurs de restriction des chiens (utilisateurs connectés)
   const [connectedDogErrors, setConnectedDogErrors] = useState<Record<string, string>>({});
@@ -476,19 +476,33 @@ export default function AnnouncerProfilePage() {
     return clientAddresses.find(a => a._id === bookingSelection.selectedAddressId) ?? null;
   }, [bookingSelection.selectedAddressId, clientAddresses]);
 
-  // Déterminer si la vérification du chien est requise pour les invités
-  const requiresDogVerification = useMemo(() => {
+  // Déterminer si la vérification de l'animal est requise pour les invités (chien ou chat)
+  const requiresAnimalVerification = useMemo(() => {
     // Seulement pour les invités (non connectés)
     if (token) return false;
     // Doit avoir un service et un variant sélectionnés
     if (!bookingService || !bookingVariant) return false;
-    // Le service doit accepter les chiens
+    // Le service doit accepter les chiens ou les chats
     const serviceAcceptsDogs = bookingService.animalTypes?.includes("chien");
-    if (!serviceAcceptsDogs) return false;
-    // Le variant doit accepter les chiens
-    const variantAcceptsDogs = !bookingVariant.animalTypes?.length || bookingVariant.animalTypes.includes("chien");
-    return variantAcceptsDogs;
+    const serviceAcceptsCats = bookingService.animalTypes?.includes("chat");
+    if (!serviceAcceptsDogs && !serviceAcceptsCats) return false;
+    // Le variant doit accepter les chiens ou les chats
+    const variantAnimalTypes = bookingVariant.animalTypes || [];
+    const variantAcceptsDogs = variantAnimalTypes.length === 0 || variantAnimalTypes.includes("chien");
+    const variantAcceptsCats = variantAnimalTypes.length === 0 || variantAnimalTypes.includes("chat");
+    return (serviceAcceptsDogs && variantAcceptsDogs) || (serviceAcceptsCats && variantAcceptsCats);
   }, [token, bookingService, bookingVariant]);
+
+  // Types d'animaux acceptés par le service/variant pour les invités
+  const acceptedAnimalTypes = useMemo(() => {
+    if (!bookingService || !bookingVariant) return [];
+    const serviceTypes = bookingService.animalTypes || [];
+    const variantTypes = bookingVariant.animalTypes || [];
+    // Si le variant ne spécifie pas de types, utiliser ceux du service
+    const effectiveTypes = variantTypes.length > 0 ? variantTypes : serviceTypes;
+    // Filtrer pour ne garder que chien et chat
+    return effectiveTypes.filter((t: string) => t === "chien" || t === "chat");
+  }, [bookingService, bookingVariant]);
 
   // Restrictions du chien depuis le variant (avec fallback vers le service)
   const dogRestrictions = useMemo(() => {
@@ -508,14 +522,14 @@ export default function AnnouncerProfilePage() {
     return { acceptedDogSizes, dogCategoryAcceptance };
   }, [bookingVariant, bookingService]);
 
-  // Handlers pour la vérification du chien
-  const handleGuestDogDataChange = useCallback((data: GuestDogData | null) => {
-    setGuestDogData(data);
+  // Handlers pour la vérification de l'animal (invités)
+  const handleGuestAnimalDataChange = useCallback((data: GuestAnimalData | null) => {
+    setGuestAnimalData(data);
   }, []);
 
-  const handleGuestDogValidationChange = useCallback((isValid: boolean, error?: string) => {
-    setGuestDogValid(isValid);
-    setGuestDogError(error);
+  const handleGuestAnimalValidationChange = useCallback((isValid: boolean, error?: string) => {
+    setGuestAnimalValid(isValid);
+    setGuestAnimalError(error);
   }, []);
 
   // Booking handlers (doivent être avant les early returns)
@@ -529,10 +543,10 @@ export default function AnnouncerProfilePage() {
       animalCount: 1,
     }));
     setSelectedAnimalIds([]); // Reset selected animals state
-    // Réinitialiser la vérification du chien quand on change de formule
-    setGuestDogData(null);
-    setGuestDogValid(false);
-    setGuestDogError(undefined);
+    // Réinitialiser la vérification de l'animal quand on change de formule
+    setGuestAnimalData(null);
+    setGuestAnimalValid(false);
+    setGuestAnimalError(undefined);
     if (announcer) {
       const service = announcer.services.find((s) => s.id === serviceId);
       if (service) {
@@ -890,12 +904,31 @@ export default function AnnouncerProfilePage() {
       params.set("animalIds", selectedAnimalIds.join(","));
     }
 
+    // Données de l'animal invité (pré-remplissage)
+    if (guestAnimalData) {
+      params.set("guestAnimalType", guestAnimalData.animalType);
+      if (guestAnimalData.breed) {
+        params.set("guestAnimalBreed", guestAnimalData.breed);
+      }
+      if (guestAnimalData.isMixedBreed) {
+        params.set("guestAnimalMixed", "true");
+      }
+      if (guestAnimalData.dogData?.dominantBreed) {
+        params.set("guestAnimalPrimaryBreed", guestAnimalData.dogData.dominantBreed);
+      } else if (guestAnimalData.catData?.primaryBreed) {
+        params.set("guestAnimalPrimaryBreed", guestAnimalData.catData.primaryBreed);
+      }
+      if (guestAnimalData.catData?.secondaryBreed) {
+        params.set("guestAnimalSecondaryBreed", guestAnimalData.catData.secondaryBreed);
+      }
+    }
+
     // Paramètre pour aller directement à la finalisation
     params.set("finalize", "true");
 
     const queryString = params.toString();
     router.push(`/reserver/${announcerData.id}${queryString ? `?${queryString}` : ""}`);
-  }, [announcerData, announcer, bookingSelection, selectedAnimalIds, router]);
+  }, [announcerData, announcer, bookingSelection, selectedAnimalIds, guestAnimalData, router]);
 
   // Early returns APRÈS tous les hooks
   if (announcerData === undefined) {
@@ -1016,14 +1049,15 @@ export default function AnnouncerProfilePage() {
                 announcerRadius={announcer.radius}
                 // Callback connexion inline
                 onLoginSuccess={refreshToken}
-                // Vérification du chien pour les invités (intégré dans AnnouncerFormules)
-                requiresDogVerification={requiresDogVerification}
-                guestDogValid={guestDogValid}
-                guestDogError={guestDogError}
+                // Vérification de l'animal pour les invités (intégré dans AnnouncerFormules)
+                requiresAnimalVerification={requiresAnimalVerification}
+                acceptedAnimalTypes={acceptedAnimalTypes}
+                guestAnimalValid={guestAnimalValid}
+                guestAnimalError={guestAnimalError}
                 dogRestrictions={dogRestrictions}
-                guestDogData={guestDogData}
-                onGuestDogDataChange={handleGuestDogDataChange}
-                onGuestDogValidationChange={handleGuestDogValidationChange}
+                guestAnimalData={guestAnimalData}
+                onGuestAnimalDataChange={handleGuestAnimalDataChange}
+                onGuestAnimalValidationChange={handleGuestAnimalValidationChange}
                 // Erreurs de restriction pour les chiens des utilisateurs connectés
                 connectedDogErrors={connectedDogErrors}
                 // Callback pour finaliser la réservation
@@ -1069,10 +1103,10 @@ export default function AnnouncerProfilePage() {
               animalCount={bookingSelection.animalCount}
               selectedSessions={bookingSelection.selectedSessions}
               announcerFirstName={announcer.firstName}
-              // Vérification du chien pour les invités
-              requiresDogVerification={requiresDogVerification}
-              guestDogValid={guestDogValid}
-              guestDogError={guestDogError}
+              // Vérification de l'animal pour les invités
+              requiresAnimalVerification={requiresAnimalVerification}
+              guestAnimalValid={guestAnimalValid}
+              guestAnimalError={guestAnimalError}
               onServiceChange={(serviceId) => {
                 // Trouver le categorySlug du service sélectionné et mettre à jour l'URL
                 const service = announcer.services.find((s) => s.id === serviceId);
@@ -1149,14 +1183,15 @@ export default function AnnouncerProfilePage() {
         // Props pour les options
         onOptionToggle={handleOptionToggle}
         selectedOptionIds={bookingSelection.selectedOptionIds}
-        // Vérification du chien pour les invités
-        requiresDogVerification={requiresDogVerification}
-        guestDogValid={guestDogValid}
-        guestDogError={guestDogError}
+        // Vérification de l'animal pour les invités
+        requiresAnimalVerification={requiresAnimalVerification}
+        acceptedAnimalTypes={acceptedAnimalTypes}
+        guestAnimalValid={guestAnimalValid}
+        guestAnimalError={guestAnimalError}
         dogRestrictions={dogRestrictions}
-        guestDogData={guestDogData}
-        onGuestDogDataChange={handleGuestDogDataChange}
-        onGuestDogValidationChange={handleGuestDogValidationChange}
+        guestAnimalData={guestAnimalData}
+        onGuestAnimalDataChange={handleGuestAnimalDataChange}
+        onGuestAnimalValidationChange={handleGuestAnimalValidationChange}
         // Erreurs de restriction pour les chiens des utilisateurs connectés
         connectedDogErrors={connectedDogErrors}
       />

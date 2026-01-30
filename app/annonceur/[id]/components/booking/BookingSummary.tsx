@@ -59,10 +59,10 @@ interface BookingSummaryProps {
   // Props pour formules individuelles multi-séances
   selectedSessions?: SelectedSession[];
   announcerFirstName?: string; // Prénom de l'annonceur pour "Chez [prénom]"
-  // Vérification du chien pour les invités
-  requiresDogVerification?: boolean;
-  guestDogValid?: boolean;
-  guestDogError?: string;
+  // Vérification de l'animal pour les invités
+  requiresAnimalVerification?: boolean;
+  guestAnimalValid?: boolean;
+  guestAnimalError?: string;
   onBook?: () => void;
   onFinalize?: () => void; // Aller directement à la page de finalisation
   className?: string;
@@ -86,9 +86,9 @@ export default function BookingSummary({
   animalCount = 1,
   selectedSessions = [],
   announcerFirstName,
-  requiresDogVerification = false,
-  guestDogValid = false,
-  guestDogError,
+  requiresAnimalVerification = false,
+  guestAnimalValid = false,
+  guestAnimalError,
   onBook,
   onFinalize,
   className,
@@ -131,15 +131,15 @@ export default function BookingSummary({
     ? Boolean(clientAddress || selection.guestAddress?.address)
     : true;
 
-  // Vérification du chien pour les invités
-  const isDogVerificationOk = !requiresDogVerification || guestDogValid;
+  // Vérification de l'animal pour les invités
+  const isAnimalVerificationOk = !requiresAnimalVerification || guestAnimalValid;
 
   const isReadyToBook = Boolean(
     selection.selectedServiceId &&
     selection.selectedVariantId &&
     isDateTimeComplete &&
     hasAddress &&
-    isDogVerificationOk &&
+    isAnimalVerificationOk &&
     (isCollectiveFormule || isMultiSessionIndividual || priceBreakdown)
   );
 
@@ -166,9 +166,9 @@ export default function BookingSummary({
     if (isAddressRequired && !hasAddress) {
       missing.push("adresse de prestation");
     }
-    // Vérifier la race du chien pour les invités
-    if (requiresDogVerification && !guestDogValid) {
-      missing.push("vérification du chien");
+    // Vérifier la race de l'animal pour les invités
+    if (requiresAnimalVerification && !guestAnimalValid) {
+      missing.push("informations de l'animal");
     }
     return missing;
   };
@@ -983,17 +983,17 @@ export default function BookingSummary({
           </div>
         </div>
 
-        {/* Message d'erreur si le chien n'est pas accepté */}
-        {requiresDogVerification && guestDogError && (
+        {/* Message d'erreur si l'animal n'est pas accepté */}
+        {requiresAnimalVerification && guestAnimalError && (
           <div className="p-3 bg-red-50 rounded-xl border border-red-200">
             <div className="flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
               <div>
                 <p className="text-sm text-red-700 font-medium">
-                  Chien non accepté
+                  Animal non accepté
                 </p>
                 <p className="text-xs text-red-600 mt-1">
-                  {guestDogError}
+                  {guestAnimalError}
                 </p>
               </div>
             </div>
@@ -1001,7 +1001,7 @@ export default function BookingSummary({
         )}
 
         {/* Validation message for missing fields */}
-        {hasMissingFields && !guestDogError && (
+        {hasMissingFields && !guestAnimalError && (
           <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
             <div className="flex items-start gap-2">
               <Clock className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />

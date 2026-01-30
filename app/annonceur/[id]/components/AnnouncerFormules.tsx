@@ -34,7 +34,7 @@ const slideVariants = {
     opacity: 0,
   },
 };
-import GuestDogVerification from "@/app/reserver/[announcerId]/components/GuestDogVerification";
+import GuestAnimalVerification, { type GuestAnimalData } from "@/app/reserver/[announcerId]/components/GuestAnimalVerification";
 import { ServiceData, FormuleData } from "./types";
 import {
   SelectableFormuleCard,
@@ -119,17 +119,18 @@ interface AnnouncerFormulesProps {
   announcerRadius?: number | null;
   // Callback quand l'utilisateur se connecte (pour mettre à jour l'état parent)
   onLoginSuccess?: (token: string) => void;
-  // Vérification du chien pour les invités
-  requiresDogVerification?: boolean;
-  guestDogValid?: boolean;
-  guestDogError?: string;
+  // Vérification de l'animal pour les invités (chien ou chat)
+  requiresAnimalVerification?: boolean;
+  acceptedAnimalTypes?: string[];
+  guestAnimalValid?: boolean;
+  guestAnimalError?: string;
   dogRestrictions?: {
     acceptedDogSizes: ("small" | "medium" | "large")[];
     dogCategoryAcceptance: "none" | "cat1" | "cat2" | "both";
   };
-  guestDogData?: any;
-  onGuestDogDataChange?: (data: any) => void;
-  onGuestDogValidationChange?: (isValid: boolean, error?: string) => void;
+  guestAnimalData?: GuestAnimalData | null;
+  onGuestAnimalDataChange?: (data: GuestAnimalData | null) => void;
+  onGuestAnimalValidationChange?: (isValid: boolean, error?: string) => void;
   // Erreurs de restriction pour les chiens des utilisateurs connectés
   connectedDogErrors?: Record<string, string>;
   // Callback pour finaliser la réservation
@@ -188,14 +189,15 @@ export default function AnnouncerFormules({
   announcerFirstName,
   announcerRadius,
   onLoginSuccess,
-  // Vérification du chien pour les invités
-  requiresDogVerification = false,
-  guestDogValid = false,
-  guestDogError,
+  // Vérification de l'animal pour les invités (chien ou chat)
+  requiresAnimalVerification = false,
+  acceptedAnimalTypes = [],
+  guestAnimalValid = false,
+  guestAnimalError,
   dogRestrictions,
-  guestDogData,
-  onGuestDogDataChange,
-  onGuestDogValidationChange,
+  guestAnimalData,
+  onGuestAnimalDataChange,
+  onGuestAnimalValidationChange,
   connectedDogErrors = {},
   onBook,
   onFinalize,
@@ -419,9 +421,9 @@ export default function AnnouncerFormules({
   const availableDesktopSteps = useMemo((): DesktopStep[] => {
     const steps: DesktopStep[] = ["formule"];
 
-    // Vérification du chien (invités uniquement)
-    if (requiresDogVerification) {
-      steps.push("dog");
+    // Vérification de l'animal (invités uniquement - chien ou chat)
+    if (requiresAnimalVerification) {
+      steps.push("dog"); // Garde le même nom d'étape pour compatibilité
     }
 
     // Sélection des animaux (utilisateurs connectés uniquement)
@@ -454,7 +456,7 @@ export default function AnnouncerFormules({
     }
 
     return steps;
-  }, [requiresDogVerification, isLoggedIn, userAnimals.length, service, isRangeMode, isCollectiveFormule, hasOptions, selectedFormule?.serviceLocation]);
+  }, [requiresAnimalVerification, isLoggedIn, userAnimals.length, service, isRangeMode, isCollectiveFormule, hasOptions, selectedFormule?.serviceLocation]);
 
   // Index de l'étape actuelle
   const currentStepIndex = availableDesktopSteps.indexOf(desktopStep);
@@ -463,7 +465,7 @@ export default function AnnouncerFormules({
   const getStepTitle = (step: DesktopStep): string => {
     switch (step) {
       case "formule": return "Choisissez votre formule";
-      case "dog": return "Vérifiez votre chien";
+      case "dog": return "Informations sur votre animal";
       case "animals": return "Sélectionnez vos animaux";
       case "dates": return isCollectiveFormule ? "Choisissez vos créneaux" : isMultiSessionIndividual ? "Choisissez vos séances" : "Choisissez vos dates";
       case "location": return isCollectiveFormule ? "Lieu des séances" : "Lieu de prestation";
@@ -478,7 +480,7 @@ export default function AnnouncerFormules({
       case "formule":
         return hasVariantSelected;
       case "dog":
-        return guestDogValid;
+        return guestAnimalValid;
       case "animals":
         return hasAnimalsSelected;
       case "dates":
@@ -781,8 +783,8 @@ export default function AnnouncerFormules({
                   </motion.div>
                 )}
 
-                {/* ÉTAPE: Vérification du chien */}
-                {desktopStep === "dog" && requiresDogVerification && dogRestrictions && onGuestDogDataChange && onGuestDogValidationChange && (
+                {/* ÉTAPE: Vérification de l'animal (chien ou chat) */}
+                {desktopStep === "dog" && requiresAnimalVerification && onGuestAnimalDataChange && onGuestAnimalValidationChange && (
                   <motion.div
                     key="dog"
                     initial={slideDirection === "right" ? "enterFromRight" : "enterFromLeft"}
@@ -793,14 +795,14 @@ export default function AnnouncerFormules({
                   >
                     <div className={cn(
                       "bg-white rounded-2xl p-5 sm:p-6 border-2 transition-colors duration-300",
-                      guestDogValid ? "border-green-200" : guestDogError ? "border-red-200" : "border-amber-200"
+                      guestAnimalValid ? "border-green-200" : guestAnimalError ? "border-red-200" : "border-amber-200"
                     )}>
-                      <GuestDogVerification
-                        acceptedDogSizes={dogRestrictions.acceptedDogSizes}
-                        dogCategoryAcceptance={dogRestrictions.dogCategoryAcceptance}
-                        onDogDataChange={onGuestDogDataChange}
-                        onValidationChange={onGuestDogValidationChange}
-                        initialData={guestDogData}
+                      <GuestAnimalVerification
+                        acceptedAnimalTypes={acceptedAnimalTypes}
+                        dogRestrictions={dogRestrictions}
+                        onAnimalDataChange={onGuestAnimalDataChange}
+                        onValidationChange={onGuestAnimalValidationChange}
+                        initialData={guestAnimalData}
                       />
                     </div>
 
@@ -1633,32 +1635,32 @@ export default function AnnouncerFormules({
         </motion.div>
       )}
 
-      {/* Section Vérification du chien - Desktop uniquement (mobile géré par AnnouncerMobileCTA) */}
-      {hasVariantSelected && requiresDogVerification && dogRestrictions && onGuestDogDataChange && onGuestDogValidationChange && (
+      {/* Section Vérification de l'animal - Desktop uniquement (mobile géré par AnnouncerMobileCTA) */}
+      {hasVariantSelected && requiresAnimalVerification && onGuestAnimalDataChange && onGuestAnimalValidationChange && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           className={cn(
             "hidden md:block bg-white rounded-2xl p-5 sm:p-6 border-2 transition-colors duration-300",
-            guestDogValid
+            guestAnimalValid
               ? "border-green-200"
-              : guestDogError
+              : guestAnimalError
                 ? "border-red-200"
                 : "border-amber-200"
           )}
         >
-          <GuestDogVerification
-            acceptedDogSizes={dogRestrictions.acceptedDogSizes}
-            dogCategoryAcceptance={dogRestrictions.dogCategoryAcceptance}
-            onDogDataChange={onGuestDogDataChange}
-            onValidationChange={onGuestDogValidationChange}
-            initialData={guestDogData}
+          <GuestAnimalVerification
+            acceptedAnimalTypes={acceptedAnimalTypes}
+            dogRestrictions={dogRestrictions}
+            onAnimalDataChange={onGuestAnimalDataChange}
+            onValidationChange={onGuestAnimalValidationChange}
+            initialData={guestAnimalData}
           />
         </motion.div>
       )}
 
-      {/* Message si vérification du chien requise mais pas faite - Desktop uniquement */}
-      {hasVariantSelected && requiresDogVerification && !guestDogValid && !guestDogError && (
+      {/* Message si vérification de l'animal requise mais pas faite - Desktop uniquement */}
+      {hasVariantSelected && requiresAnimalVerification && !guestAnimalValid && !guestAnimalError && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1667,14 +1669,14 @@ export default function AnnouncerFormules({
           <div className="flex items-center gap-3">
             <Dog className="w-5 h-5 text-amber-600" />
             <p className="text-sm text-amber-800">
-              Veuillez renseigner les informations de votre chien pour accéder au calendrier.
+              Veuillez renseigner les informations de votre animal pour accéder au calendrier.
             </p>
           </div>
         </motion.div>
       )}
 
       {/* Section Créneaux collectifs - Desktop uniquement (mobile géré par AnnouncerMobileCTA) */}
-      {hasVariantSelected && isCollectiveFormule && selectedFormule && onSlotsSelected && (!requiresDogVerification || guestDogValid) && (
+      {hasVariantSelected && isCollectiveFormule && selectedFormule && onSlotsSelected && (!requiresAnimalVerification || guestAnimalValid) && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1693,7 +1695,7 @@ export default function AnnouncerFormules({
       )}
 
       {/* Calendrier multi-séances - Desktop uniquement (mobile géré par AnnouncerMobileCTA) */}
-      {hasVariantSelected && isMultiSessionIndividual && onSessionsChange && calendarMonth && onMonthChange && (!requiresDogVerification || guestDogValid) && (
+      {hasVariantSelected && isMultiSessionIndividual && onSessionsChange && calendarMonth && onMonthChange && (!requiresAnimalVerification || guestAnimalValid) && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1716,8 +1718,8 @@ export default function AnnouncerFormules({
         </motion.div>
       )}
 
-      {/* Calendrier normal - visible quand une formule non-collective à 1 séance est sélectionnée (desktop seulement, bloqué si vérification du chien requise et pas faite) */}
-      {hasVariantSelected && !isCollectiveFormule && !isMultiSessionIndividual && (!requiresDogVerification || guestDogValid) && (
+      {/* Calendrier normal - visible quand une formule non-collective à 1 séance est sélectionnée (desktop seulement, bloqué si vérification animal requise et pas faite) */}
+      {hasVariantSelected && !isCollectiveFormule && !isMultiSessionIndividual && (!requiresAnimalVerification || guestAnimalValid) && (
         <div className="hidden md:block">
           {calendarMonth && onDateSelect && onEndDateSelect && onTimeSelect && onEndTimeSelect && onOvernightChange && onMonthChange && (
               <BookingCalendar

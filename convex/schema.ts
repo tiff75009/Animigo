@@ -793,6 +793,15 @@ export default defineSchema({
       })),
     })),
 
+    // Données pré-remplies de l'animal invité (depuis l'étape 2 de la page annonceur)
+    guestAnimalPreFill: v.optional(v.object({
+      type: v.string(), // "chien" ou "chat"
+      breed: v.optional(v.string()), // Race pure ou nom de la race
+      isMixedBreed: v.optional(v.boolean()),
+      primaryBreed: v.optional(v.string()), // Race dominante pour les croisés
+      secondaryBreed: v.optional(v.string()), // Race secondaire pour les croisés
+    })),
+
     // Prix calculé
     calculatedAmount: v.number(),
 
