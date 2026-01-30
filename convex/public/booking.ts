@@ -404,10 +404,13 @@ export const getPendingBooking = query({
       id: pendingBooking._id,
       announcer: {
         id: announcer._id,
+        slug: announcer.slug ?? null,
         firstName: announcer.firstName,
         lastName: announcer.lastName,
         profileImage: profileImageUrl,
         location: profile?.location ?? profile?.city ?? "",
+        city: profile?.city ?? null,
+        postalCode: profile?.postalCode ?? null,
         coordinates: profile?.coordinates,
         verified: announcer.accountType === "annonceur_pro",
         accountType: announcer.accountType,

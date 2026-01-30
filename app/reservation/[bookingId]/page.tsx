@@ -69,10 +69,13 @@ interface PendingBookingData {
   id: Id<"pendingBookings">;
   announcer: {
     id: Id<"users">;
+    slug?: string | null;
     firstName: string;
     lastName: string;
     profileImage: string | null;
     location: string;
+    city?: string | null;
+    postalCode?: string | null;
     coordinates?: { lat: number; lng: number };
     verified: boolean;
     accountType: string;
@@ -1103,7 +1106,56 @@ export default function ReservationPage({
         <div className="container max-w-5xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <button
-              onClick={() => router.back()}
+              onClick={() => {
+                // Retourner à la page annonceur avec tous les paramètres de réservation
+                const announcerSlug = bookingData.announcer.slug;
+                if (!announcerSlug) {
+                  // Fallback: retour simple
+                  router.back();
+                  return;
+                }
+
+                // Construire l'URL de retour vers /annonceur/[slug] avec tous les paramètres
+                const params = new URLSearchParams();
+
+                // Service et formule
+                if (bookingData.service?.category) params.set("service", bookingData.service.category);
+                if (bookingData.variant?.id) params.set("formule", bookingData.variant.id);
+
+                // Dates et heures
+                if (bookingData.dates?.startDate) params.set("date", bookingData.dates.startDate);
+                if (bookingData.dates?.endDate) params.set("endDate", bookingData.dates.endDate);
+                if (bookingData.dates?.startTime) params.set("startTime", bookingData.dates.startTime);
+                if (bookingData.dates?.endTime) params.set("endTime", bookingData.dates.endTime);
+
+                // Lieu de prestation
+                if (bookingData.serviceLocation) params.set("location", bookingData.serviceLocation);
+
+                // Options sélectionnées
+                if (bookingData.options && bookingData.options.length > 0) {
+                  params.set("options", bookingData.options.map(o => o.id).join(","));
+                }
+
+                // Créneaux collectifs
+                if (bookingData.collectiveSlotIds && bookingData.collectiveSlotIds.length > 0) {
+                  params.set("slotIds", bookingData.collectiveSlotIds.join(","));
+                }
+
+                // Sessions multi-séances
+                if (bookingData.sessions && bookingData.sessions.length > 0) {
+                  params.set("sessions", JSON.stringify(bookingData.sessions));
+                }
+
+                // Animaux
+                if (bookingData.animalCount) params.set("animalCount", String(bookingData.animalCount));
+                if (bookingData.selectedAnimalType) params.set("animalType", bookingData.selectedAnimalType);
+                if (bookingData.selectedAnimalIds && bookingData.selectedAnimalIds.length > 0) {
+                  params.set("animalIds", bookingData.selectedAnimalIds.join(","));
+                }
+
+                const returnUrl = `/annonceur/${announcerSlug}?${params.toString()}`;
+                router.push(returnUrl);
+              }}
               className="flex items-center gap-2 text-text-light hover:text-foreground transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />
@@ -1520,6 +1572,8 @@ export default function ReservationPage({
                   isLoggedIn={isLoggedIn}
                   serviceLocation={bookingData.serviceLocation}
                   announcerLocation={bookingData.announcer.location}
+                  announcerCity={bookingData.announcer.city}
+                  announcerPostalCode={bookingData.announcer.postalCode}
                   isCollectiveFormula={isCollectiveFormula}
                   currentAddress={address}
                   currentCity={city}
@@ -1599,7 +1653,9 @@ export default function ReservationPage({
                     </p>
                     <p className="text-sm text-text-light flex items-center gap-1 truncate">
                       <MapPin className="w-3 h-3 flex-shrink-0" />
-                      {extractCity(bookingData.announcer.location)}
+                      {bookingData.announcer.city && bookingData.announcer.postalCode
+                        ? `${bookingData.announcer.postalCode} ${bookingData.announcer.city}`
+                        : bookingData.announcer.city || extractCity(bookingData.announcer.location)}
                     </p>
                     {/* Badge statut */}
                     <span
@@ -1820,6 +1876,48 @@ export default function ReservationPage({
                     </>
                   )}
                 </div>
+
+                {/* Section Votre animal - pour utilisateurs invités */}
+                {!isLoggedIn && guestAnimalData.name && guestAnimalData.type && (
+                  <div className="py-4 border-b border-gray-100">
+                    <div className="flex items-center gap-2 mb-2">
+                      <PawPrint className="w-4 h-4 text-amber-600" />
+                      <span className="text-sm font-medium text-amber-800">
+                        {guestAnimalData.type === "chien" ? "Votre chien" : guestAnimalData.type === "chat" ? "Votre chat" : "Votre animal"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-amber-200 flex items-center justify-center text-amber-700 text-lg">
+                        {guestAnimalData.type === "chien" ? "🐕" : guestAnimalData.type === "chat" ? "🐱" : guestAnimalData.type === "nac" ? "🐹" : "🐾"}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-foreground">
+                          {guestAnimalData.name}
+                        </p>
+                        <p className="text-xs text-text-light">
+                          {/* Affichage de la race selon le type */}
+                          {guestAnimalData.type === "chien" ? (
+                            guestAnimalData.isMixedBreed ? (
+                              guestAnimalData.primaryBreed && guestAnimalData.secondaryBreed
+                                ? `${guestAnimalData.primaryBreed} x ${guestAnimalData.secondaryBreed}`
+                                : guestAnimalData.primaryBreed
+                                  ? `Croisé ${guestAnimalData.primaryBreed}`
+                                  : "Croisé"
+                            ) : (
+                              guestAnimalData.breed || "Race non spécifiée"
+                            )
+                          ) : (
+                            // Chat ou NAC
+                            <>
+                              {guestAnimalData.type === "chat" ? "Chat" : guestAnimalData.type === "nac" ? "NAC" : guestAnimalData.type}
+                              {guestAnimalData.breed && ` - ${guestAnimalData.breed}`}
+                            </>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Prix - Détail adapté selon le type de formule */}
                 <div className="pt-4">

@@ -6,6 +6,7 @@ import { AlertCircle, Clock, MapPin, Moon, Sun, Home, CalendarCheck, Users, Cred
 import { cn } from "@/app/lib/utils";
 import type { ServiceDetail, ServiceVariant } from "./FormulaStep";
 import type { ServiceOption } from "./OptionsStep";
+import type { GuestDogData } from "./GuestDogVerification";
 import AddressSection from "./AddressSection";
 import { GuestAddressSelector } from "@/app/annonceur/[id]/components/booking";
 import type { GuestAddress } from "@/app/annonceur/[id]/components/booking/types";
@@ -60,6 +61,8 @@ interface AnnouncerData {
   lastName?: string;
   profileImage: string | null;
   location: string;
+  city?: string | null;
+  postalCode?: string | null;
 }
 
 interface SummaryStepProps {
@@ -99,6 +102,8 @@ interface SummaryStepProps {
   guestAddress?: GuestAddress | null;
   onGuestAddressChange?: (address: GuestAddress | null) => void;
   announcerCoordinates?: { lat: number; lng: number };
+  // Données du chien invité (pour utilisateurs non connectés)
+  guestDogData?: GuestDogData | null;
   // Billing info pour affichage jours/demi-journées
   billingInfo?: {
     billingUnit?: string;
@@ -169,6 +174,8 @@ export default function SummaryStep({
   guestAddress = null,
   onGuestAddressChange,
   announcerCoordinates,
+  // Chien invité
+  guestDogData = null,
   // Billing info
   billingInfo,
   clientBillingMode,
@@ -266,7 +273,9 @@ export default function SummaryStep({
           </p>
           <p className="text-sm text-text-light flex items-center gap-1 truncate">
             <MapPin className="w-3 h-3 flex-shrink-0" />
-            {announcer.location}
+            {announcer.city && announcer.postalCode
+              ? `${announcer.postalCode} ${announcer.city}`
+              : announcer.city || announcer.location}
           </p>
         </div>
       </div>
@@ -322,10 +331,15 @@ export default function SummaryStep({
                   <div className="flex items-start gap-2">
                     <MapPin className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
                     <div>
-                      <p className="text-sm font-medium text-green-800">{guestAddress.address}</p>
+                      <p className="text-sm font-medium text-green-800">
+                        Adresse de la prestation
+                      </p>
+                      <p className="text-sm text-green-700 mt-1">
+                        {guestAddress.address}
+                      </p>
                       {(guestAddress.city || guestAddress.postalCode) && (
-                        <p className="text-xs text-green-600">
-                          {[guestAddress.postalCode, guestAddress.city].filter(Boolean).join(" ")}
+                        <p className="text-sm text-green-600">
+                          {guestAddress.postalCode}{guestAddress.postalCode && guestAddress.city ? " " : ""}{guestAddress.city}
                         </p>
                       )}
                     </div>
@@ -572,6 +586,39 @@ export default function SummaryStep({
                 Le prix est ajusté pour {selectedAnimals.length} animaux
               </p>
             )}
+          </div>
+        )}
+
+        {/* Section Animaux - utilisateurs invités (non connectés) */}
+        {!sessionToken && guestDogData && (
+          <div className="p-3 bg-amber-50 rounded-xl mt-3">
+            <div className="flex items-center gap-2 mb-2">
+              <PawPrint className="w-4 h-4 text-amber-600" />
+              <span className="text-sm font-medium text-amber-800">
+                Votre chien
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-amber-200 flex items-center justify-center text-amber-700 text-lg">
+                🐕
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  {/* Affichage de la race */}
+                  {guestDogData.isMixedBreed
+                    ? guestDogData.dominantBreed
+                      ? `Croisé ${guestDogData.dominantBreed}`
+                      : "Croisé"
+                    : guestDogData.breed || "Race non spécifiée"}
+                </p>
+                <p className="text-xs text-text-light">
+                  {guestDogData.size === "small" && "Petit chien (< 10 kg)"}
+                  {guestDogData.size === "medium" && "Chien moyen (10-25 kg)"}
+                  {guestDogData.size === "large" && "Grand chien (> 25 kg)"}
+                  {guestDogData.isMixedBreed && guestDogData.weight && ` • ${guestDogData.weight} kg`}
+                </p>
+              </div>
+            </div>
           </div>
         )}
       </div>

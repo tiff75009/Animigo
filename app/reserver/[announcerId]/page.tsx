@@ -392,6 +392,10 @@ export default function ReserverPage({
   // Direct finalization param (skip to step 4)
   const shouldFinalize = searchParams.get("finalize") === "true";
 
+  // Edit mode param (from /reservation page, allows navigation between steps)
+  const isEditMode = searchParams.get("edit") === "true";
+  const preSelectedStep = parseInt(searchParams.get("step") || "0", 10);
+
   // Address param
   const preSelectedAddressId = searchParams.get("addressId");
 
@@ -428,8 +432,13 @@ export default function ReserverPage({
   const preSelectedOptionIds = preSelectedOptions ? preSelectedOptions.split(",") : [];
 
   // Determine initial step
+  // If edit mode with step param, use that step
   // If finalize=true and all required data is present, go directly to step 4 (summary)
   const getInitialStep = () => {
+    // Si on revient de /reservation en mode édition avec un step spécifique
+    if (isEditMode && preSelectedStep >= 1 && preSelectedStep <= 4) {
+      return preSelectedStep;
+    }
     if (shouldFinalize && preSelectedServiceId && preSelectedVariantId) {
       // Pour les formules collectives, les slotIds suffisent
       if (preSelectedSlotIds.length > 0) {
@@ -484,7 +493,8 @@ export default function ReserverPage({
     return preSelectedDate ? new Date(preSelectedDate) : new Date();
   });
   // Flag pour éviter que l'useEffect ne réinitialise le step après navigation manuelle
-  const [hasManuallyNavigated, setHasManuallyNavigated] = useState(false);
+  // Initialisé à true si on est en mode édition (retour depuis /reservation)
+  const [hasManuallyNavigated, setHasManuallyNavigated] = useState(isEditMode);
 
   // Effect pour aller directement à l'étape 4 si finalize=true (seulement si pas de navigation manuelle)
   useEffect(() => {
@@ -1358,6 +1368,10 @@ export default function ReserverPage({
           currentStep={step}
           totalSteps={4}
           labels={STEP_LABELS}
+          onStepClick={(targetStep) => {
+            setHasManuallyNavigated(true);
+            setStep(targetStep);
+          }}
         />
 
         {/* Step Content */}
@@ -1469,6 +1483,8 @@ export default function ReserverPage({
                   lastName: announcerData.lastName,
                   profileImage: announcerData.profileImage,
                   location: announcerData.location,
+                  city: announcerData.city,
+                  postalCode: announcerData.postalCode,
                 }}
                 selectedService={selectedService}
                 selectedVariant={selectedVariant}
@@ -1508,6 +1524,8 @@ export default function ReserverPage({
                 guestAddress={bookingData.guestAddress}
                 onGuestAddressChange={handleGuestAddressChange}
                 announcerCoordinates={announcerData?.coordinates ?? undefined}
+                // Chien invité
+                guestDogData={guestDogData}
               />
             )}
           </motion.div>

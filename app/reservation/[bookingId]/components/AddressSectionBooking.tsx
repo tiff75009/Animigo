@@ -42,6 +42,8 @@ interface AddressSectionBookingProps {
   isLoggedIn: boolean;
   serviceLocation: "announcer_home" | "client_home" | undefined;
   announcerLocation: string;
+  announcerCity?: string | null;
+  announcerPostalCode?: string | null;
   // Pour les formules collectives (toujours chez l'annonceur)
   isCollectiveFormula?: boolean;
   // Pour l'adresse sélectionnée ou saisie
@@ -123,6 +125,8 @@ export default function AddressSectionBooking({
   isLoggedIn,
   serviceLocation,
   announcerLocation,
+  announcerCity,
+  announcerPostalCode,
   isCollectiveFormula = false,
   currentAddress,
   currentCity,
@@ -274,9 +278,11 @@ export default function AddressSectionBooking({
   const selectedAddress = addresses?.find((a: Address) => a._id === selectedAddressId);
   const isLoading = sessionToken && isLoggedIn && addresses === undefined;
 
-  // For collective formulas - always at announcer's location (show only city for privacy)
+  // For collective formulas - always at announcer's location (show only city + postal code for privacy)
   if (isCollectiveFormula) {
-    const cityOnly = extractCity(announcerLocation);
+    const locationDisplay = announcerCity && announcerPostalCode
+      ? `${announcerPostalCode} ${announcerCity}`
+      : announcerCity || extractCity(announcerLocation);
     return (
       <div className="p-4 bg-purple-50 rounded-xl border border-purple-200">
         <div className="flex items-center gap-3">
@@ -285,18 +291,20 @@ export default function AddressSectionBooking({
           </div>
           <div>
             <p className="text-sm font-medium text-foreground">Lieu de la prestation</p>
-            <p className="text-sm text-purple-600 font-medium">Seances collectives - Chez le prestataire</p>
-            <p className="text-sm text-foreground mt-1">{cityOnly}</p>
-            <p className="text-xs text-text-light mt-1">L&apos;adresse exacte sera communiquee apres confirmation</p>
+            <p className="text-sm text-purple-600 font-medium">Séances collectives - Chez le prestataire</p>
+            <p className="text-sm text-foreground mt-1">{locationDisplay}</p>
+            <p className="text-xs text-text-light mt-1">L&apos;adresse exacte sera communiquée après confirmation</p>
           </div>
         </div>
       </div>
     );
   }
 
-  // If service is at announcer's home - show announcer location (show only city for privacy)
+  // If service is at announcer's home - show announcer location (show only city + postal code for privacy)
   if (serviceLocation === "announcer_home") {
-    const cityOnly = extractCity(announcerLocation);
+    const locationDisplay = announcerCity && announcerPostalCode
+      ? `${announcerPostalCode} ${announcerCity}`
+      : announcerCity || extractCity(announcerLocation);
     return (
       <div className="p-4 bg-green-50 rounded-xl border border-green-200">
         <div className="flex items-center gap-3">
@@ -306,8 +314,8 @@ export default function AddressSectionBooking({
           <div>
             <p className="text-sm font-medium text-foreground">Lieu de la prestation</p>
             <p className="text-sm text-green-600 font-medium">Chez le pet-sitter</p>
-            <p className="text-sm text-foreground mt-1">{cityOnly}</p>
-            <p className="text-xs text-text-light mt-1">L&apos;adresse exacte sera communiquee apres confirmation</p>
+            <p className="text-sm text-foreground mt-1">{locationDisplay}</p>
+            <p className="text-xs text-text-light mt-1">L&apos;adresse exacte sera communiquée après confirmation</p>
           </div>
         </div>
       </div>

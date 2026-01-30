@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useQueryState } from "nuqs";
+import { useQueryState, parseAsString, parseAsArrayOf, parseAsBoolean, parseAsInteger, parseAsJson } from "nuqs";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -96,9 +96,65 @@ export default function AnnouncerProfilePage() {
   // Gérer la formule pré-sélectionnée via l'URL (pour redirection depuis la recherche)
   const [formuleQueryParam, setFormuleQueryParam] = useQueryState("formule");
 
+  // Paramètres de réservation via URL (pour restaurer l'état après retour de /reservation)
+  const [urlStartDate, setUrlStartDate] = useQueryState("date");
+  const [urlEndDate, setUrlEndDate] = useQueryState("endDate");
+  const [urlStartTime, setUrlStartTime] = useQueryState("startTime");
+  const [urlEndTime, setUrlEndTime] = useQueryState("endTime");
+  const [urlLocation, setUrlLocation] = useQueryState("location");
+  const [urlOptions, setUrlOptions] = useQueryState("options");
+  const [urlSlotIds, setUrlSlotIds] = useQueryState("slotIds");
+  const [urlSessions, setUrlSessions] = useQueryState("sessions");
+  const [urlAnimalCount, setUrlAnimalCount] = useQueryState("animalCount");
+  const [urlAnimalType, setUrlAnimalType] = useQueryState("animalType");
+  const [urlAnimalIds, setUrlAnimalIds] = useQueryState("animalIds");
+
   // État de la réservation (formule, options, dates, heures)
   const [bookingSelection, setBookingSelection] = useState<BookingSelection>(DEFAULT_BOOKING_SELECTION);
-  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
+
+  // Flag pour savoir si on a déjà initialisé depuis l'URL
+  const [hasInitializedFromUrl, setHasInitializedFromUrl] = useState(false);
+
+  // Effet pour initialiser le state depuis les paramètres URL (après retour de /reservation)
+  useEffect(() => {
+    if (hasInitializedFromUrl) return;
+
+    // Vérifier si on a des paramètres de retour
+    const hasReturnParams = urlStartDate || urlSlotIds || urlSessions;
+    if (!hasReturnParams) return;
+
+    setBookingSelection(prev => ({
+      ...prev,
+      startDate: urlStartDate || prev.startDate,
+      endDate: urlEndDate || prev.endDate,
+      startTime: urlStartTime || prev.startTime,
+      endTime: urlEndTime || prev.endTime,
+      serviceLocation: (urlLocation as "announcer_home" | "client_home") || prev.serviceLocation,
+      selectedOptionIds: urlOptions ? urlOptions.split(",").filter(Boolean) : prev.selectedOptionIds,
+      selectedSlotIds: urlSlotIds ? urlSlotIds.split(",").filter(Boolean) : prev.selectedSlotIds,
+      selectedSessions: urlSessions ? (() => { try { return JSON.parse(urlSessions); } catch { return prev.selectedSessions; } })() : prev.selectedSessions,
+      animalCount: urlAnimalCount ? parseInt(urlAnimalCount, 10) || 1 : prev.animalCount,
+      selectedAnimalType: urlAnimalType || prev.selectedAnimalType,
+      selectedAnimalIds: urlAnimalIds ? urlAnimalIds.split(",").filter(Boolean) : prev.selectedAnimalIds,
+    }));
+    setHasInitializedFromUrl(true);
+
+    // Mettre à jour le mois du calendrier si on a une date
+    if (urlStartDate) {
+      setCalendarMonth(new Date(urlStartDate));
+    }
+  }, [urlStartDate, urlEndDate, urlStartTime, urlEndTime, urlLocation, urlOptions, urlSlotIds, urlSessions, urlAnimalCount, urlAnimalType, urlAnimalIds, hasInitializedFromUrl]);
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    // Initialiser avec la date de l'URL si présente
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const dateParam = urlParams.get('date');
+      if (dateParam) {
+        return new Date(dateParam);
+      }
+    }
+    return new Date();
+  });
 
   // Récupérer les données de l'annonceur par son slug
   const announcerData = useQuery(

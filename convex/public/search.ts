@@ -1874,6 +1874,9 @@ export const getAnnouncerById = query({
       lastName: announcer.lastName,
       profileImage: profileImageUrl,
       location: profile?.city ?? profile?.location ?? "",
+      city: profile?.city ?? null,
+      postalCode: profile?.postalCode ?? null,
+      coordinates: profile?.coordinates ?? null,
       statusType,
     };
   },
