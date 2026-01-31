@@ -22,7 +22,7 @@ export async function notifyNewMission(params: {
     message: `${params.clientName} souhaite reserver "${params.serviceName}" pour ${params.animalName}`,
     linkType: "mission",
     linkId: params.missionId as string,
-    linkUrl: `/dashboard/missions/accepter`,
+    linkUrl: `/dashboard/missions?tab=pending_acceptance`,
   });
 }
 

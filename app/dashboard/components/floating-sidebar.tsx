@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, memo, useCallback, useEffect, useRef } from "react";
+import { useState, memo, useCallback, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard,
@@ -39,6 +39,28 @@ interface NavItem {
   icon: React.ReactNode;
   label: string;
   badge?: number;
+}
+
+// Helper pour comparer les chemins (gère les query params)
+function isPathActive(currentPath: string, itemHref: string): boolean {
+  // Exacte correspondance
+  if (currentPath === itemHref) return true;
+
+  // Pour les liens avec query params, on compare le path de base et les params
+  const [itemBase, itemQuery] = itemHref.split("?");
+  const [currentBase] = currentPath.split("?");
+
+  // Si le href a un query param, on doit avoir le même base + le même param
+  if (itemQuery) {
+    return currentPath === itemHref;
+  }
+
+  // Pour les liens sans query param (ex: /dashboard/missions)
+  // On vérifie si le chemin de base correspond (même avec des query params)
+  if (currentBase === itemBase) return true;
+
+  // Ou si c'est un sous-chemin
+  return currentPath.startsWith(itemHref + "/");
 }
 
 interface NavLinkProps {
@@ -124,7 +146,7 @@ const NavSection = memo(function NavSection({
         <NavLink
           key={item.href}
           item={item}
-          isActive={currentPath === item.href}
+          isActive={isPathActive(currentPath, item.href)}
           isCollapsed={isCollapsed}
           onClick={onItemClick}
         />
@@ -151,7 +173,7 @@ const CollapsibleNavSection = memo(function CollapsibleNavSection({
   isCollapsed,
   onItemClick,
 }: CollapsibleNavSectionProps) {
-  const hasActiveItem = items.some(item => currentPath === item.href || currentPath.startsWith(item.href + "/"));
+  const hasActiveItem = items.some(item => isPathActive(currentPath, item.href));
   const [isOpen, setIsOpen] = useState(hasActiveItem);
 
   // Si collapsed, on ne montre que l'icône du premier item actif ou l'icône par défaut
@@ -162,7 +184,7 @@ const CollapsibleNavSection = memo(function CollapsibleNavSection({
           <NavLink
             key={item.href}
             item={item}
-            isActive={currentPath === item.href}
+            isActive={isPathActive(currentPath, item.href)}
             isCollapsed={isCollapsed}
             onClick={onItemClick}
           />
@@ -213,7 +235,7 @@ const CollapsibleNavSection = memo(function CollapsibleNavSection({
                 <NavLink
                   key={item.href}
                   item={item}
-                  isActive={currentPath === item.href}
+                  isActive={isPathActive(currentPath, item.href)}
                   isCollapsed={false}
                   onClick={onItemClick}
                 />
@@ -244,9 +266,13 @@ function useMediaQuery(query: string, defaultValue = false) {
   return mounted ? matches : defaultValue;
 }
 
-export default function FloatingSidebar() {
+function FloatingSidebarContent() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { user, token, logout, isLoading } = useAuth();
+
+  // Pour les liens avec query params (comme les missions), on compare le chemin complet
+  const currentFullPath = pathname + (searchParams.toString() ? `?${searchParams.toString()}` : "");
   const { isCollapsed: isManuallyCollapsed, toggleCollapse } = useSidebar();
   const { activeConversationId } = useActiveConversation();
 
@@ -255,6 +281,13 @@ export default function FloatingSidebar() {
     api.messaging.queries.totalUnreadCount,
     token ? { token } : "skip"
   ) as number | undefined;
+
+  // Compteur de missions à accepter
+  const dashboardStats = useQuery(
+    api.planning.missions.getAnnouncerDashboardStats,
+    token ? { token } : "skip"
+  );
+  const pendingMissionsCount = dashboardStats?.pendingAcceptance ?? 0;
 
   // Récupérer les conversations pour connaître le unreadCount de la conversation active
   const conversations = useQuery(
@@ -327,18 +360,9 @@ export default function FloatingSidebar() {
 
   const mainNavItems: NavItem[] = [
     { href: "/dashboard", icon: <LayoutDashboard className="w-5 h-5" />, label: "Tableau de bord" },
+    { href: "/dashboard/missions", icon: <ClipboardList className="w-5 h-5" />, label: "Missions", badge: pendingMissionsCount },
     { href: "/dashboard/planning", icon: <Calendar className="w-5 h-5" />, label: "Planning" },
     { href: "/dashboard/messagerie", icon: <MessageSquare className="w-5 h-5" />, label: "Messages", badge: unreadCount },
-  ];
-
-  const missionNavItems: NavItem[] = [
-    { href: "/dashboard/missions/accepter", icon: <HelpCircle className="w-5 h-5" />, label: "À accepter" },
-    { href: "/dashboard/missions/confirmation", icon: <Clock className="w-5 h-5" />, label: "En attente" },
-    { href: "/dashboard/missions/en-cours", icon: <CalendarClock className="w-5 h-5" />, label: "En cours" },
-    { href: "/dashboard/missions/a-venir", icon: <Calendar className="w-5 h-5" />, label: "À venir" },
-    { href: "/dashboard/missions/terminees", icon: <CheckCircle className="w-5 h-5" />, label: "Terminées" },
-    { href: "/dashboard/missions/refusees", icon: <XCircle className="w-5 h-5" />, label: "Refusées" },
-    { href: "/dashboard/missions/annulees", icon: <Ban className="w-5 h-5" />, label: "Annulées" },
   ];
 
   const accountNavItems: NavItem[] = [
@@ -504,22 +528,14 @@ export default function FloatingSidebar() {
             <NavSection
               title="Principal"
               items={mainNavItems}
-              currentPath={pathname}
-              isCollapsed={isCollapsed}
-            />
-
-            <CollapsibleNavSection
-              title="Missions"
-              icon={<ClipboardList className="w-5 h-5" />}
-              items={missionNavItems}
-              currentPath={pathname}
+              currentPath={currentFullPath}
               isCollapsed={isCollapsed}
             />
 
             <NavSection
               title="Compte"
               items={accountNavItems}
-              currentPath={pathname}
+              currentPath={currentFullPath}
               isCollapsed={isCollapsed}
             />
           </nav>
@@ -578,5 +594,13 @@ export default function FloatingSidebar() {
         </div>
       </motion.aside>
     </div>
+  );
+}
+
+export default function FloatingSidebar() {
+  return (
+    <Suspense fallback={null}>
+      <FloatingSidebarContent />
+    </Suspense>
   );
 }

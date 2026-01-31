@@ -25,10 +25,21 @@ import {
   Loader2,
   Repeat,
   CalendarDays,
+  ShieldCheck,
+  Star,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+
+// Types pour les stats de confiance client
+export interface ClientTrustStats {
+  totalBookings: number;
+  cancelled: number;
+  notFinalized: number;
+  completed: number;
+  trustScore: number;
+}
 
 // Types pour les missions Convex
 // Accepte à la fois Id<"missions"> (Convex) et string (données de test)
@@ -80,6 +91,8 @@ export interface ConvexMission {
   }>;
   // Timestamp de réservation
   bookedAt?: number;
+  // Stats de confiance du client
+  clientTrustStats?: ClientTrustStats;
 }
 
 interface MissionCardProps {
@@ -229,6 +242,17 @@ function formatDistance(km: number): string {
   return `${km.toFixed(1)} km`;
 }
 
+// Helper pour obtenir la couleur du score de confiance
+function getTrustScoreColor(score: number): { bg: string; text: string } {
+  if (score >= 80) {
+    return { bg: "bg-green-100", text: "text-green-700" };
+  } else if (score >= 50) {
+    return { bg: "bg-orange-100", text: "text-orange-700" };
+  } else {
+    return { bg: "bg-red-100", text: "text-red-700" };
+  }
+}
+
 // Formate le temps écoulé depuis la réservation
 // < 24h: "il y a 2h 30m 15s"
 // >= 24h: "il y a 2j 5h"
@@ -309,148 +333,177 @@ export function MissionCard({
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        {/* Header compact */}
-        <div className="p-3 flex items-center gap-3">
-          <div className="w-11 h-11 bg-primary/10 rounded-xl flex items-center justify-center text-xl flex-shrink-0">
-            {mission.animal.emoji}
-          </div>
+        <div className="flex">
+          {/* Contenu principal */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <p className="font-semibold text-foreground truncate">{firstName}</p>
-              <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-medium", status.color)}>
-                {status.label}
-              </span>
+            {/* Header compact */}
+            <div className="p-3 flex items-center gap-3">
+              <div className="w-11 h-11 bg-primary/10 rounded-xl flex items-center justify-center text-xl flex-shrink-0">
+                {mission.animal.emoji}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-semibold text-foreground truncate">{firstName}</p>
+                  <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-medium", status.color)}>
+                    {status.label}
+                  </span>
+                  {/* Indicateur de confiance client */}
+                  {mission.clientTrustStats && (
+                    <span
+                      className={cn(
+                        "flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium",
+                        getTrustScoreColor(mission.clientTrustStats.trustScore).bg,
+                        getTrustScoreColor(mission.clientTrustStats.trustScore).text
+                      )}
+                      title={`${mission.clientTrustStats.totalBookings} réservation${mission.clientTrustStats.totalBookings > 1 ? "s" : ""} • ${mission.clientTrustStats.completed} terminée${mission.clientTrustStats.completed > 1 ? "s" : ""}`}
+                    >
+                      <ShieldCheck className="w-3 h-3" />
+                      {mission.clientTrustStats.trustScore}%
+                      {mission.clientTrustStats.totalBookings === 1 && (
+                        <span className="flex items-center gap-0.5 ml-0.5 px-1 bg-white/50 rounded">
+                          <Star className="w-2.5 h-2.5" />
+                          Nouveau
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-text-light truncate">
+                  {mission.animal.name} • {mission.serviceName}
+                </p>
+                {/* Temps écoulé depuis la réservation */}
+                {mission.bookedAt && mission.status === "pending_acceptance" && (
+                  <p className="text-[10px] text-orange-500 font-medium">
+                    Réservé {formatBookedAtElapsed(mission.bookedAt)}
+                  </p>
+                )}
+              </div>
             </div>
-            <p className="text-xs text-text-light truncate">
-              {mission.animal.name} • {mission.serviceName}
-            </p>
-            {/* Temps écoulé depuis la réservation */}
-            {mission.bookedAt && mission.status === "pending_acceptance" && (
-              <p className="text-[10px] text-orange-500 font-medium">
-                Réservé {formatBookedAtElapsed(mission.bookedAt)}
-              </p>
+
+            {/* Infos principales - compact */}
+            <div className="px-3 pb-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+              <span className="flex items-center gap-1 text-foreground">
+                <Calendar className="w-3.5 h-3.5 text-purple" />
+                {formatDateRange(mission.startDate, mission.endDate)}
+                {/* Afficher le nombre de jours uniquement pour les formules uni-séance standard */}
+                {days > 1 && !mission.sessions && mission.sessionType !== "collective" && (
+                  <span className="text-text-light">({days}j)</span>
+                )}
+              </span>
+              {mission.startTime && (
+                <span className="flex items-center gap-1 text-foreground">
+                  <Clock className="w-3.5 h-3.5 text-accent" />
+                  {formatTime(mission.startTime, mission.endTime)}
+                </span>
+              )}
+              {cityDisplay && (
+                <span className="flex items-center gap-1 text-text-light">
+                  <MapPin className="w-3.5 h-3.5 text-secondary" />
+                  {cityDisplay}
+                </span>
+              )}
+              {distance !== null && (
+                <span className="flex items-center gap-1 text-text-light">
+                  <Navigation className="w-3.5 h-3.5 text-blue-500" />
+                  {formatDistance(distance)}
+                </span>
+              )}
+            </div>
+
+            {/* Prix et revenus - compact */}
+            <div className="mx-3 mb-2 bg-gradient-to-r from-secondary/5 to-primary/5 rounded-lg p-2 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] text-text-light">Votre revenu</p>
+                <p className="text-base font-bold text-secondary">
+                  {formatPrice(mission.announcerEarnings ?? mission.amount * 0.85)}
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {/* Badge type de formule */}
+                {mission.sessionType === "collective" ? (
+                  <span className="flex items-center gap-1 text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-md">
+                    <Users className="w-3 h-3" />
+                    Collectif
+                  </span>
+                ) : mission.sessions && mission.sessions.length > 1 ? (
+                  <span className="flex items-center gap-1 text-[10px] bg-secondary/20 text-secondary px-1.5 py-0.5 rounded-md">
+                    <Repeat className="w-3 h-3" />
+                    {mission.sessions.length}x
+                  </span>
+                ) : null}
+                {mission.variantName && (
+                  <span className="text-xs bg-white/80 px-2 py-1 rounded-md text-foreground">
+                    {mission.variantName}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Bouton voir détails */}
+            <button
+              className="w-full py-2 px-3 bg-slate-50 hover:bg-slate-100 text-sm text-foreground flex items-center justify-center gap-1.5 transition-colors"
+              onClick={() => setShowDetails(true)}
+            >
+              <Eye className="w-4 h-4" />
+              Voir les détails
+              <ChevronRight className="w-4 h-4" />
+            </button>
+
+            {/* Actions pour les missions à venir (upcoming) ou en cours (in_progress) - en bas de la carte */}
+            {(mission.status === "upcoming" || mission.status === "in_progress") && (
+              <div className="p-2 border-t border-slate-100 flex gap-2">
+                <motion.button
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-secondary hover:bg-secondary/90 text-white rounded-lg text-sm font-semibold"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => onContact?.(mission.id as string)}
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  Contacter
+                </motion.button>
+                {mission.status === "upcoming" && (
+                  <motion.button
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-semibold"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => onCancel?.(mission.id as string)}
+                  >
+                    <X className="w-4 h-4" />
+                    Annuler
+                  </motion.button>
+                )}
+              </div>
             )}
           </div>
-        </div>
 
-        {/* Infos principales - compact */}
-        <div className="px-3 pb-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-          <span className="flex items-center gap-1 text-foreground">
-            <Calendar className="w-3.5 h-3.5 text-purple" />
-            {formatDateRange(mission.startDate, mission.endDate)}
-            {/* Afficher le nombre de jours uniquement pour les formules uni-séance standard */}
-            {days > 1 && !mission.sessions && mission.sessionType !== "collective" && (
-              <span className="text-text-light">({days}j)</span>
-            )}
-          </span>
-          {mission.startTime && (
-            <span className="flex items-center gap-1 text-foreground">
-              <Clock className="w-3.5 h-3.5 text-accent" />
-              {formatTime(mission.startTime, mission.endTime)}
-            </span>
-          )}
-          {cityDisplay && (
-            <span className="flex items-center gap-1 text-text-light">
-              <MapPin className="w-3.5 h-3.5 text-secondary" />
-              {cityDisplay}
-            </span>
-          )}
-          {distance !== null && (
-            <span className="flex items-center gap-1 text-text-light">
-              <Navigation className="w-3.5 h-3.5 text-blue-500" />
-              {formatDistance(distance)}
-            </span>
-          )}
-        </div>
-
-        {/* Prix et revenus - compact */}
-        <div className="mx-3 mb-2 bg-gradient-to-r from-secondary/5 to-primary/5 rounded-lg p-2 flex items-center justify-between">
-          <div>
-            <p className="text-[10px] text-text-light">Votre revenu</p>
-            <p className="text-base font-bold text-secondary">
-              {formatPrice(mission.announcerEarnings ?? mission.amount * 0.85)}
-            </p>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {/* Badge type de formule */}
-            {mission.sessionType === "collective" ? (
-              <span className="flex items-center gap-1 text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-md">
-                <Users className="w-3 h-3" />
-                Collectif
-              </span>
-            ) : mission.sessions && mission.sessions.length > 1 ? (
-              <span className="flex items-center gap-1 text-[10px] bg-secondary/20 text-secondary px-1.5 py-0.5 rounded-md">
-                <Repeat className="w-3 h-3" />
-                {mission.sessions.length}x
-              </span>
-            ) : null}
-            {mission.variantName && (
-              <span className="text-xs bg-white/80 px-2 py-1 rounded-md text-foreground">
-                {mission.variantName}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Bouton voir détails */}
-        <button
-          className="w-full py-2 px-3 bg-slate-50 hover:bg-slate-100 text-sm text-foreground flex items-center justify-center gap-1.5 transition-colors"
-          onClick={() => setShowDetails(true)}
-        >
-          <Eye className="w-4 h-4" />
-          Voir les détails
-          <ChevronRight className="w-4 h-4" />
-        </button>
-
-        {/* Actions - seulement si showActions */}
-        {showActions && mission.status === "pending_acceptance" && (
-          <div className="p-2 border-t border-slate-100 flex gap-2">
-            <motion.button
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-secondary hover:bg-secondary/90 text-white rounded-lg text-sm font-semibold"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => onAccept?.(mission.id as string)}
-            >
-              <Check className="w-4 h-4" />
-              Accepter
-            </motion.button>
-            <motion.button
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-semibold"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => onRefuse?.(mission.id as string)}
-            >
-              <X className="w-4 h-4" />
-              Refuser
-            </motion.button>
-          </div>
-        )}
-
-        {/* Actions pour les missions à venir (upcoming) ou en cours (in_progress) */}
-        {(mission.status === "upcoming" || mission.status === "in_progress") && (
-          <div className="p-2 border-t border-slate-100 flex gap-2">
-            <motion.button
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-secondary hover:bg-secondary/90 text-white rounded-lg text-sm font-semibold"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => onContact?.(mission.id as string)}
-            >
-              <MessageSquare className="w-4 h-4" />
-              Contacter
-            </motion.button>
-            {mission.status === "upcoming" && (
+          {/* Boutons d'action à droite - uniquement pour pending_acceptance */}
+          {showActions && mission.status === "pending_acceptance" && (
+            <div className="flex flex-col border-l border-slate-100">
+              {/* Bouton Accepter */}
               <motion.button
-                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-semibold"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => onCancel?.(mission.id as string)}
+                className="flex-1 w-16 flex items-center justify-center bg-secondary/10 hover:bg-secondary text-secondary hover:text-white transition-colors"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => onAccept?.(mission.id as string)}
+                title="Accepter"
               >
-                <X className="w-4 h-4" />
-                Annuler
+                <Check className="w-6 h-6" />
               </motion.button>
-            )}
-          </div>
-        )}
+              {/* Séparateur */}
+              <div className="h-px bg-slate-100" />
+              {/* Bouton Refuser */}
+              <motion.button
+                className="flex-1 w-16 flex items-center justify-center bg-primary/10 hover:bg-primary text-primary hover:text-white transition-colors"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => onRefuse?.(mission.id as string)}
+                title="Refuser"
+              >
+                <X className="w-6 h-6" />
+              </motion.button>
+            </div>
+          )}
+        </div>
       </motion.div>
 
       {/* Modal de détails */}

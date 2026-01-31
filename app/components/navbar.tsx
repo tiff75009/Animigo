@@ -56,20 +56,9 @@ const announcerDashboardSections = [
     collapsible: false,
     items: [
       { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
+      { href: "/dashboard/missions", label: "Missions", icon: ClipboardList },
       { href: "/dashboard/planning", label: "Planning", icon: Calendar },
       { href: "/dashboard/messagerie", label: "Messages", icon: MessageCircle },
-    ],
-  },
-  {
-    title: "Missions",
-    collapsible: true,
-    icon: ClipboardList,
-    items: [
-      { href: "/dashboard/missions/accepter", label: "À accepter", icon: ClipboardList },
-      { href: "/dashboard/missions/confirmation", label: "En attente", icon: Calendar },
-      { href: "/dashboard/missions/en-cours", label: "En cours", icon: Calendar },
-      { href: "/dashboard/missions/a-venir", label: "À venir", icon: Calendar },
-      { href: "/dashboard/missions/terminees", label: "Terminées", icon: Calendar },
     ],
   },
   {

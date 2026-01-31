@@ -1,0 +1,169 @@
+"use client";
+
+import { useState } from "react";
+import { motion } from "framer-motion";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
+import { MissionCard } from "../../../components/mission-card";
+import { MissionsStats } from "../MissionsStats";
+import { MissionsEmptyState } from "../MissionsEmptyState";
+import { MissionsInfoBanner } from "../MissionsInfoBanner";
+import { useMissionFilters } from "../useMissionFilters";
+import { Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useToast } from "@/app/components/ui/toast";
+import type { MissionTab } from "../MissionsTabs";
+import type { FunctionReturnType } from "convex/server";
+import type { ServiceTypeFilter, SessionTypeFilter, AnimalTypeFilter, MonthFilter } from "../MissionsFilters";
+
+type MissionType = FunctionReturnType<typeof api.planning.missions.getMissionsByStatus>[number];
+
+type MissionStatus =
+  | "pending_confirmation"
+  | "in_progress"
+  | "completed"
+  | "refused"
+  | "cancelled";
+
+interface GenericMissionTabProps {
+  token: string | null;
+  status: MissionStatus;
+  serviceType?: ServiceTypeFilter;
+  sessionType?: SessionTypeFilter;
+  animalType?: AnimalTypeFilter;
+  month?: MonthFilter;
+}
+
+export function GenericMissionTab({
+  token,
+  status,
+  serviceType = "all",
+  sessionType = "all",
+  animalType = "all",
+  month = "all",
+}: GenericMissionTabProps) {
+  const router = useRouter();
+  const { error: toastError } = useToast();
+  const [isContacting, setIsContacting] = useState(false);
+
+  const missions = useQuery(
+    api.planning.missions.getMissionsByStatus,
+    token ? { token, status } : "skip"
+  );
+
+  const announcerData = useQuery(
+    api.planning.missions.getAnnouncerCoordinates,
+    token ? { token } : "skip"
+  );
+
+  const getOrCreateConversation = useMutation(api.messaging.mutations.getOrCreateConversation);
+
+  // Appliquer les filtres
+  const filteredMissions = useMissionFilters(missions, serviceType, sessionType, animalType, month);
+
+  const isLoading = missions === undefined;
+
+  // Calcul des montants
+  let totalAmount = 0;
+  let paidAmount = 0;
+  for (const m of filteredMissions) {
+    const amount = m.announcerEarnings ?? m.amount * 0.85;
+    totalAmount += amount;
+    if (m.paymentStatus === "paid") {
+      paidAmount += amount;
+    }
+  }
+
+  // Tri par date (récent en premier pour completed/refused/cancelled, proche en premier pour les autres)
+  const sortedMissions = [...filteredMissions].sort((a, b) => {
+    if (status === "completed" || status === "refused" || status === "cancelled") {
+      return new Date(b.endDate).getTime() - new Date(a.endDate).getTime();
+    }
+    return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+  });
+
+  const handleContact = async (missionId: string) => {
+    if (!token || isContacting) return;
+
+    setIsContacting(true);
+    try {
+      const result = await getOrCreateConversation({
+        token,
+        missionId: missionId as Id<"missions">,
+      });
+
+      if (result?.conversationId) {
+        router.push(`/dashboard/messagerie?conversation=${result.conversationId}`);
+      }
+    } catch (error) {
+      console.error("Erreur lors de l'ouverture de la conversation:", error);
+      toastError("Impossible d'ouvrir la conversation");
+    } finally {
+      setIsContacting(false);
+    }
+  };
+
+  // Couleur du loader selon le statut
+  const loaderColors: Record<MissionStatus, string> = {
+    pending_confirmation: "text-orange-600",
+    in_progress: "text-blue-600",
+    completed: "text-green-600",
+    refused: "text-red-600",
+    cancelled: "text-gray-600",
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center">
+          <Loader2 className={`w-8 h-8 animate-spin mx-auto mb-4 ${loaderColors[status]}`} />
+          <p className="text-text-light">Chargement des missions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const tabId = status as MissionTab;
+  const pendingAmount = totalAmount - paidAmount;
+
+  return (
+    <div className="space-y-6">
+      {/* Stats */}
+      <MissionsStats
+        tab={tabId}
+        count={filteredMissions.length}
+        totalAmount={totalAmount}
+        paidAmount={paidAmount}
+      />
+
+      {/* Info banner */}
+      {filteredMissions.length > 0 && (
+        <MissionsInfoBanner tab={tabId} pendingAmount={pendingAmount} />
+      )}
+
+      {/* Liste des missions */}
+      {sortedMissions.length === 0 ? (
+        <MissionsEmptyState tab={tabId} />
+      ) : (
+        <div className="space-y-4">
+          {sortedMissions.map((mission: MissionType, index: number) => (
+            <motion.div
+              key={mission.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.05 * (index + 1) }}
+            >
+              <MissionCard
+                mission={mission}
+                announcerCoordinates={announcerData?.coordinates}
+                token={token}
+                onContact={status === "in_progress" ? handleContact : undefined}
+              />
+            </motion.div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

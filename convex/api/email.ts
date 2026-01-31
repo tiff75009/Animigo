@@ -649,7 +649,7 @@ export const sendNewReservationRequestEmail = internalAction({
       const variables = {
         announcerFirstName: args.announcerFirstName,
         siteName,
-        dashboardUrl: `${appUrl}/dashboard/missions/accepter`,
+        dashboardUrl: `${appUrl}/dashboard/missions?tab=pending_acceptance`,
         clientName: args.clientName,
         serviceName: args.reservation.serviceName,
         dateRange,

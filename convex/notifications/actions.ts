@@ -128,7 +128,7 @@ export const sendNewMissionNotification = action({
       type: "new_mission",
       title: "Nouvelle demande !",
       message: `${args.clientName} souhaite réserver "${args.serviceName}" pour ${args.animalName}`,
-      linkUrl: "/dashboard/missions/accepter",
+      linkUrl: "/dashboard/missions?tab=pending_acceptance",
     };
 
     return sendNotificationWithFallback(ctx, qstashConfig, payload);

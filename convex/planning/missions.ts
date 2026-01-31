@@ -211,6 +211,55 @@ export const getMissionsByStatus = query({
       ? await missionsQuery.take(args.limit)
       : await missionsQuery.collect();
 
+    // Collecter les IDs clients uniques pour calculer les stats de confiance
+    const uniqueClientIds = [...new Set(missions.map(m => m.clientId))];
+
+    // Calculer les stats de confiance pour chaque client
+    const clientTrustStats: Record<string, {
+      totalBookings: number;
+      cancelled: number;
+      notFinalized: number;
+      completed: number;
+      trustScore: number;
+    }> = {};
+
+    for (const clientId of uniqueClientIds) {
+      // Récupérer toutes les missions de ce client
+      const clientMissions = await ctx.db
+        .query("missions")
+        .withIndex("by_client", (q) => q.eq("clientId", clientId))
+        .collect();
+
+      const totalBookings = clientMissions.length;
+      const cancelled = clientMissions.filter(m => m.status === "cancelled").length;
+      const completed = clientMissions.filter(m => m.status === "completed").length;
+      // Non finalisées = pending_confirmation depuis plus de 48h
+      const now = Date.now();
+      const fortyEightHours = 48 * 60 * 60 * 1000;
+      const notFinalized = clientMissions.filter(m =>
+        m.status === "pending_confirmation" &&
+        m.updatedAt &&
+        (now - m.updatedAt) > fortyEightHours
+      ).length;
+
+      // Calcul du score de confiance
+      // Base 100%, pénalité pour annulations et non-finalisées
+      let trustScore = 100;
+      if (totalBookings > 0) {
+        const cancelPenalty = (cancelled / totalBookings) * 40; // Max 40%
+        const notFinalizedPenalty = (notFinalized / totalBookings) * 30; // Max 30%
+        trustScore = Math.max(0, Math.round(100 - cancelPenalty - notFinalizedPenalty));
+      }
+
+      clientTrustStats[clientId] = {
+        totalBookings,
+        cancelled,
+        notFinalized,
+        completed,
+        trustScore
+      };
+    }
+
     // Enrichir avec les dates des créneaux collectifs si applicable
     const enrichedMissions = await Promise.all(
       missions.map(async (m) => {
@@ -227,6 +276,15 @@ export const getMissionsByStatus = query({
           }
           collectiveSlotDates = slotDates;
         }
+
+        // Stats de confiance du client
+        const clientStats = clientTrustStats[m.clientId] || {
+          totalBookings: 1,
+          cancelled: 0,
+          notFinalized: 0,
+          completed: 0,
+          trustScore: 100,
+        };
 
         return {
           id: m._id,
@@ -268,6 +326,8 @@ export const getMissionsByStatus = query({
           sessions: m.sessions,
           // Timestamp de réservation
           bookedAt: m.bookedAt,
+          // Stats de confiance du client
+          clientTrustStats: clientStats,
         };
       })
     );
@@ -1067,6 +1127,8 @@ export const getAnnouncerDashboardStats = query({
     const upcoming = missions.filter((m) => m.status === "upcoming");
     const inProgress = missions.filter((m) => m.status === "in_progress");
     const completed = missions.filter((m) => m.status === "completed");
+    const refused = missions.filter((m) => m.status === "refused");
+    const cancelled = missions.filter((m) => m.status === "cancelled");
 
     // Revenus à venir = missions confirmées (upcoming + in_progress) - utiliser announcerEarnings
     const upcomingRevenue = [...upcoming, ...inProgress].reduce(
@@ -1093,13 +1155,13 @@ export const getAnnouncerDashboardStats = query({
       }));
 
     return {
-      counts: {
-        pendingAcceptance: pendingAcceptance.length,
-        pendingConfirmation: pendingConfirmation.length,
-        upcoming: upcoming.length,
-        inProgress: inProgress.length,
-        completed: completed.length,
-      },
+      pendingAcceptance: pendingAcceptance.length,
+      pendingConfirmation: pendingConfirmation.length,
+      upcoming: upcoming.length,
+      inProgress: inProgress.length,
+      completed: completed.length,
+      refused: refused.length,
+      cancelled: cancelled.length,
       upcomingRevenue,
       completedRevenue,
       activeMissions,
