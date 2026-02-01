@@ -282,32 +282,94 @@ export async function checkBookingConflict(
   }
 
   // Mode standard: vérifier les chevauchements
+  // IMPORTANT: On vérifie TOUTES les missions de l'annonceur (toutes catégories)
+  // car un annonceur ne peut être qu'à un seul endroit à la fois
   const existingMissions = await db
     .query("missions")
     .withIndex("by_announcer", (q) => q.eq("announcerId", announcerId))
     .filter((q) =>
       q.and(
-        q.eq(q.field("serviceCategory"), categorySlug),
         q.neq(q.field("status"), "cancelled"),
         q.neq(q.field("status"), "refused")
       )
     )
     .collect();
 
-  for (const mission of existingMissions) {
-    const missionSlot = {
-      startDate: mission.startDate,
-      endDate: mission.endDate,
-      startTime: mission.startTime,
-      endTime: mission.endTime,
-    };
+  console.log(`[checkBookingConflict] Found ${existingMissions.length} active missions for announcer`);
+  console.log(`[checkBookingConflict] Checking newSlot:`, newSlot);
 
-    if (missionsOverlapWithBuffers(missionSlot, newSlot, bufferBefore, bufferAfter)) {
-      return {
-        hasConflict: true,
-        isCapacityBased: false,
-        conflictMessage: "L'annonceur a déjà une réservation sur ce créneau (temps de préparation inclus)",
-      };
+  for (const mission of existingMissions) {
+    console.log(`[checkBookingConflict] Checking mission ${mission._id} status=${mission.status} dates=${mission.startDate}-${mission.endDate} sessions=${mission.sessions?.length || 0}`);
+
+    // Gérer les missions multi-sessions: vérifier chaque session individuellement
+    if (mission.sessions && mission.sessions.length > 0) {
+      for (const session of mission.sessions) {
+        const sessionSlot = {
+          startDate: session.date,
+          endDate: session.date,
+          startTime: session.startTime,
+          endTime: session.endTime,
+        };
+
+        if (missionsOverlapWithBuffers(sessionSlot, newSlot, bufferBefore, bufferAfter)) {
+          console.log(`[checkBookingConflict] CONFLICT with session on ${session.date} ${session.startTime}-${session.endTime}`);
+          return {
+            hasConflict: true,
+            isCapacityBased: false,
+            conflictMessage: `L'annonceur a déjà une réservation sur ce créneau (temps de préparation inclus) - Mission ${mission._id} session ${session.date}`,
+          };
+        }
+      }
+    } else {
+      // Mission standard (sans sessions): utiliser startDate/endDate
+
+      // IMPORTANT: Détecter les missions multi-sessions sans sessions définies
+      // Ces missions ont startDate !== endDate (plusieurs jours) mais pas de sessions
+      // ET ont un startTime/endTime défini (donc ce n'est pas une garde continue)
+      // Elles ne devraient pas bloquer toute la plage de dates
+      const isMultiDayWithTimeSlot = mission.startDate !== mission.endDate &&
+        mission.startTime && mission.endTime &&
+        !mission.sessions?.length;
+
+      if (isMultiDayWithTimeSlot) {
+        // C'est probablement une formule multi-sessions dont les sessions n'ont pas été définies
+        // On vérifie uniquement si le nouveau créneau chevauche le premier jour de la mission
+        // (car les autres jours ne sont pas encore planifiés)
+        console.log(`[checkBookingConflict] Mission ${mission._id} is multi-day without sessions - checking only first day`);
+
+        const firstDaySlot = {
+          startDate: mission.startDate,
+          endDate: mission.startDate, // Seulement le premier jour
+          startTime: mission.startTime,
+          endTime: mission.endTime,
+        };
+
+        if (missionsOverlapWithBuffers(firstDaySlot, newSlot, bufferBefore, bufferAfter)) {
+          console.log(`[checkBookingConflict] CONFLICT with mission ${mission._id} first day on ${mission.startDate} ${mission.startTime}-${mission.endTime}`);
+          return {
+            hasConflict: true,
+            isCapacityBased: false,
+            conflictMessage: `L'annonceur a déjà une réservation sur ce créneau (temps de préparation inclus) - Mission ${mission._id}`,
+          };
+        }
+      } else {
+        // Mission vraiment multi-jours (garde continue) ou uni-jour
+        const missionSlot = {
+          startDate: mission.startDate,
+          endDate: mission.endDate,
+          startTime: mission.startTime,
+          endTime: mission.endTime,
+        };
+
+        if (missionsOverlapWithBuffers(missionSlot, newSlot, bufferBefore, bufferAfter)) {
+          console.log(`[checkBookingConflict] CONFLICT with mission ${mission._id} on ${mission.startDate} ${mission.startTime}-${mission.endTime}`);
+          return {
+            hasConflict: true,
+            isCapacityBased: false,
+            conflictMessage: `L'annonceur a déjà une réservation sur ce créneau (temps de préparation inclus) - Mission ${mission._id}`,
+          };
+        }
+      }
     }
   }
 

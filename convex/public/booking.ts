@@ -7,6 +7,10 @@ import { internal } from "../_generated/api";
 import { missionsOverlap, missionsOverlapWithBuffers, addMinutesToTime } from "../lib/timeUtils";
 import { checkBookingConflict } from "../lib/capacityUtils";
 import { hashPassword, generateUniqueSlug } from "../auth/utils";
+import {
+  calculateAcceptanceDeadline,
+  isBookingAdvanceValid,
+} from "../planning/acceptanceDeadline";
 
 // Générer toutes les dates entre deux dates (YYYY-MM-DD)
 // Utilise une approche sans conversion UTC pour éviter les décalages de fuseau horaire
@@ -600,6 +604,32 @@ export const finalizeBooking = mutation({
 
     // Pour les formules collectives, les créneaux sont déjà validés lors de la sélection
     // On ne vérifie pas la disponibilité standard car ils ont leur propre système
+    // Pour les formules multi-séances individuelles, on vérifie uniquement les dates des sessions
+
+    // Détecter les formules multi-sessions via le variant OU via les sessions présentes
+    const isVariantMultiSession = (variant.numberOfSessions ?? 1) > 1;
+    const hasSessions = pendingBooking.sessions && pendingBooking.sessions.length > 0;
+    const isMultiSessionFormule = hasSessions || isVariantMultiSession;
+
+    console.log("[finalizeBooking] Multi-session detection:", {
+      variantNumberOfSessions: variant.numberOfSessions,
+      isVariantMultiSession,
+      hasSessions,
+      sessionsCount: pendingBooking.sessions?.length ?? 0,
+      isMultiSessionFormule,
+    });
+
+    // Si c'est une formule multi-sessions mais qu'aucune session n'est fournie,
+    // on ne doit vérifier que les sessions, pas toute la plage startDate-endDate
+    // Dans ce cas, on utilise startDate comme seule date à vérifier
+    const requestedDatesForAvailability = hasSessions
+      ? pendingBooking.sessions!.map((s) => s.date)
+      : isVariantMultiSession
+        // Formule multi-sessions sans sessions définies: vérifier seulement la première date
+        // (les sessions seront planifiées plus tard)
+        ? [pendingBooking.startDate]
+        : getDatesBetween(pendingBooking.startDate, pendingBooking.endDate);
+
     if (!isCollectiveFormule) {
       // Récupérer toutes les disponibilités de l'annonceur
       const availabilities = await ctx.db
@@ -607,19 +637,69 @@ export const finalizeBooking = mutation({
         .withIndex("by_user", (q) => q.eq("userId", pendingBooking.announcerId))
         .collect();
 
-      const requestedDates = getDatesBetween(pendingBooking.startDate, pendingBooking.endDate);
-      console.log("[finalizeBooking] Checking availability for dates:", requestedDates);
+      // Utiliser les dates calculées plus haut
+      console.log("[finalizeBooking] Checking availability for dates:", requestedDatesForAvailability);
+      console.log("[finalizeBooking] categoryTypeId:", categoryTypeId);
+      console.log("[finalizeBooking] Total availabilities found:", availabilities.length);
 
-      for (const date of requestedDates) {
+      // Debug: montrer les disponibilités pour les dates demandées
+      for (const date of requestedDatesForAvailability) {
+        const availsForDate = availabilities.filter((a) => a.date === date);
+        console.log(`[finalizeBooking] Availabilities for ${date}:`, availsForDate.map((a) => ({
+          status: a.status,
+          categoryTypeId: a.categoryTypeId,
+        })));
+      }
+
+      for (const date of requestedDatesForAvailability) {
         // Chercher une disponibilité pour ce jour et ce type de catégorie
-        const availabilityForDate = availabilities.find(
+        let availabilityForDate = availabilities.find(
           (a) => a.date === date &&
                  (categoryTypeId ? String(a.categoryTypeId) === String(categoryTypeId) : !a.categoryTypeId)
         );
 
-        // Si pas de disponibilité explicite "available", le jour est indisponible
-        if (!availabilityForDate || availabilityForDate.status !== "available") {
+        // Si la catégorie n'a pas de typeId et qu'on n'a pas trouvé de disponibilité sans type,
+        // OU si la disponibilité trouvée est "unavailable",
+        // chercher une disponibilité "available" pour n'importe quel type
+        if (!categoryTypeId && (!availabilityForDate || availabilityForDate.status === "unavailable")) {
+          const anyAvailableForDate = availabilities.find(
+            (a) => a.date === date && a.status === "available"
+          );
+          if (anyAvailableForDate) {
+            availabilityForDate = anyAvailableForDate;
+            console.log(`[finalizeBooking] Fallback: using available entry with categoryTypeId ${anyAvailableForDate.categoryTypeId} for ${date}`);
+          }
+        }
+
+        // Si pas d'entrée ou status "unavailable" → indisponible
+        if (!availabilityForDate || availabilityForDate.status === "unavailable") {
           throw new ConvexError(`L'annonceur n'est plus disponible le ${date}`);
+        }
+
+        // Si status "partial", vérifier que le créneau demandé est dans les timeSlots
+        if (availabilityForDate.status === "partial") {
+          // Pour les multi-séances, récupérer le créneau horaire de la session spécifique
+          let startTimeToCheck = pendingBooking.startTime;
+          let endTimeToCheck = pendingBooking.endTime;
+
+          if (hasSessions) {
+            const sessionForDate = pendingBooking.sessions!.find((s) => s.date === date);
+            if (sessionForDate) {
+              startTimeToCheck = sessionForDate.startTime;
+              endTimeToCheck = sessionForDate.endTime;
+            }
+          }
+
+          if (startTimeToCheck && endTimeToCheck) {
+            const isInSlot = availabilityForDate.timeSlots?.some(
+              (ts) => startTimeToCheck! >= ts.startTime && endTimeToCheck! <= ts.endTime
+            );
+            if (!isInSlot) {
+              throw new ConvexError(
+                `L'annonceur n'est pas disponible sur ce créneau horaire le ${date}`
+              );
+            }
+          }
         }
       }
 
@@ -632,26 +712,55 @@ export const finalizeBooking = mutation({
       const bufferBefore = announcerProfile?.bufferBefore ?? 0;
       const bufferAfter = announcerProfile?.bufferAfter ?? 0;
 
-      // Construire l'objet de la nouvelle mission pour la comparaison temporelle
-      const newMissionSlot = {
-        startDate: pendingBooking.startDate,
-        endDate: pendingBooking.endDate,
-        startTime: pendingBooking.startTime,
-        endTime: pendingBooking.endTime,
-      };
+      // Pour les multi-séances avec sessions définies, vérifier les conflits pour chaque session
+      if (hasSessions) {
+        for (const session of pendingBooking.sessions!) {
+          const sessionSlot = {
+            startDate: session.date,
+            endDate: session.date,
+            startTime: session.startTime,
+            endTime: session.endTime,
+          };
 
-      // Vérifier les conflits en tenant compte de la capacité pour les catégories de garde
-      const conflictCheck = await checkBookingConflict(
-        ctx.db,
-        pendingBooking.announcerId,
-        service.category,
-        newMissionSlot,
-        bufferBefore,
-        bufferAfter
-      );
+          console.log(`[finalizeBooking] Checking conflict for session: ${session.date} ${session.startTime}-${session.endTime}`);
 
-      if (conflictCheck.hasConflict) {
-        throw new ConvexError(conflictCheck.conflictMessage || "L'annonceur n'est pas disponible sur ce créneau");
+          const conflictCheck = await checkBookingConflict(
+            ctx.db,
+            pendingBooking.announcerId,
+            service.category,
+            sessionSlot,
+            bufferBefore,
+            bufferAfter
+          );
+
+          if (conflictCheck.hasConflict) {
+            console.log(`[finalizeBooking] CONFLICT on ${session.date}: ${conflictCheck.conflictMessage}`);
+            throw new ConvexError(conflictCheck.conflictMessage || `L'annonceur n'est pas disponible le ${session.date}`);
+          }
+          console.log(`[finalizeBooking] No conflict for ${session.date}`);
+        }
+      } else {
+        // Mode standard: vérifier la plage globale
+        const newMissionSlot = {
+          startDate: pendingBooking.startDate,
+          endDate: pendingBooking.endDate,
+          startTime: pendingBooking.startTime,
+          endTime: pendingBooking.endTime,
+        };
+
+        // Vérifier les conflits en tenant compte de la capacité pour les catégories de garde
+        const conflictCheck = await checkBookingConflict(
+          ctx.db,
+          pendingBooking.announcerId,
+          service.category,
+          newMissionSlot,
+          bufferBefore,
+          bufferAfter
+        );
+
+        if (conflictCheck.hasConflict) {
+          throw new ConvexError(conflictCheck.conflictMessage || "L'annonceur n'est pas disponible sur ce créneau");
+        }
       }
     } else {
       console.log("[finalizeBooking] Skipping availability check for collective formule");
@@ -661,6 +770,26 @@ export const finalizeBooking = mutation({
     const animalType = ANIMAL_TYPES.find((t) => t.id === animal.type);
 
     const now = Date.now();
+
+    // Récupérer la configuration des délais d'acceptation
+    const deadlineConfig = await ctx.runQuery(
+      internal.planning.acceptanceDeadline.getAcceptanceDeadlineConfig,
+      {}
+    );
+
+    // Valider le minimum à l'avance (24h par défaut)
+    if (!isBookingAdvanceValid(pendingBooking.startDate, pendingBooking.startTime, deadlineConfig)) {
+      throw new ConvexError(
+        `Les réservations doivent être effectuées au minimum ${deadlineConfig.minimumBookingAdvanceHours}h à l'avance`
+      );
+    }
+
+    // Calculer la deadline d'acceptation
+    const acceptanceDeadline = calculateAcceptanceDeadline(
+      now,
+      pendingBooking.startDate,
+      deadlineConfig
+    );
 
     // Utiliser le montant mis à jour si fourni, sinon utiliser celui de la réservation
     // Ce montant représente le prix du service (ce que l'annonceur recevra)
@@ -745,6 +874,8 @@ export const finalizeBooking = mutation({
       bookedAt: now, // Date/heure de la réservation par le client
       createdAt: now,
       updatedAt: now,
+      // Délai d'acceptation
+      acceptanceDeadline: acceptanceDeadline ?? undefined,
     });
 
     // Supprimer la réservation en attente
@@ -1019,6 +1150,19 @@ export const finalizeBookingAsGuest = mutation({
     }
 
     const now = Date.now();
+
+    // Récupérer la configuration des délais d'acceptation
+    const deadlineConfigGuest = await ctx.runQuery(
+      internal.planning.acceptanceDeadline.getAcceptanceDeadlineConfig,
+      {}
+    );
+
+    // Valider le minimum à l'avance (24h par défaut)
+    if (!isBookingAdvanceValid(pendingBooking.startDate, pendingBooking.startTime, deadlineConfigGuest)) {
+      throw new ConvexError(
+        `Les réservations doivent être effectuées au minimum ${deadlineConfigGuest.minimumBookingAdvanceHours}h à l'avance`
+      );
+    }
 
     // Utiliser le montant mis à jour si fourni, sinon utiliser celui de la réservation
     const finalAmount = args.updatedAmount ?? pendingBooking.calculatedAmount;

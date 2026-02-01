@@ -633,12 +633,17 @@ export default defineSchema({
     bookedAt: v.optional(v.number()), // Date/heure de la réservation par le client
     createdAt: v.number(),
     updatedAt: v.number(),
+
+    // Délai d'acceptation
+    acceptanceDeadline: v.optional(v.number()),        // Timestamp deadline pour accepter
+    acceptanceDeadlineAutoRefused: v.optional(v.boolean()), // true si auto-refusé par expiration
   })
     .index("by_announcer", ["announcerId"])
     .index("by_client", ["clientId"])
     .index("by_announcer_status", ["announcerId", "status"])
     .index("by_announcer_dates", ["announcerId", "startDate"])
-    .index("by_auto_capture", ["autoCaptureScheduledAt"]),
+    .index("by_auto_capture", ["autoCaptureScheduledAt"])
+    .index("by_pending_deadline", ["status", "acceptanceDeadline"]),
 
   // Disponibilités / Indisponibilités des annonceurs
   // NOTE: Par défaut, un annonceur est INDISPONIBLE. Une entrée dans cette table

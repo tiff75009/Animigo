@@ -1649,38 +1649,17 @@ export const getAnnouncerAvailabilityCalendar = query({
           return true;
         });
 
-        // S'il n'y a plus de missions actives ni de créneaux collectifs, sortir du bloc
+        // S'il n'y a plus de missions actives ni de créneaux collectifs, gérer ce cas
         if (missionsActiveOnThisDate.length === 0 && dayCollectiveSlots.length === 0) {
           // Ce jour n'a pas de missions actives ni de créneaux collectifs
-          // Continuer vers le code qui gère les jours sans activité (en bas de la boucle)
-        } else {
-          // NOUVEAU: Vérifier la disponibilité explicite même avec des missions existantes
-          // Si pas de disponibilité pour ce type, le jour est indisponible pour de NOUVELLES réservations
+          // Vérifier la disponibilité explicite
           if (!hasExplicitAvailability) {
             calendar.push({ date, status: "unavailable" });
             continue;
           }
-
-          // Vérifier si une mission bloque toute la journée
-          const hasFullDayBlock = missionsActiveOnThisDate.some((m) => {
-            const isMultiDay = m.startDate !== m.endDate;
-            const hasNoTimeSlot = !m.startTime || !m.endTime;
-
-            // Mission collective avec créneaux ne bloque pas toute la journée
-            if (m.sessionType === "collective" && m.startTime && m.endTime) return false;
-
-            // Mission multi-séances avec créneaux ne bloque pas toute la journée
-            if (m.sessions && m.sessions.length > 0 && m.startTime && m.endTime) return false;
-
-            return isMultiDay || hasNoTimeSlot;
-          });
-
-          if (hasFullDayBlock) {
-            calendar.push({ date, status: "unavailable" });
-            continue;
-          }
-
-          // Extraire les créneaux occupés AVEC les buffers
+          // Jour disponible sans missions actives - sera géré en fin de boucle
+        } else {
+          // Extraire les créneaux occupés AVEC les buffers (TOUJOURS, même si pas de disponibilité explicite)
           const missionBookedSlots: Array<{
             startTime: string;
             endTime: string;
@@ -1743,6 +1722,41 @@ export const getAnnouncerAvailabilityCalendar = query({
 
           // Combiner missions et créneaux collectifs
           const bookedSlots = [...missionBookedSlots, ...collectiveSlotsForDay];
+
+          // NOUVEAU: Vérifier la disponibilité explicite même avec des missions existantes
+          // Si pas de disponibilité pour ce type, le jour est indisponible pour de NOUVELLES réservations
+          // MAIS on inclut quand même les bookedSlots pour information
+          if (!hasExplicitAvailability) {
+            calendar.push({
+              date,
+              status: "unavailable",
+              bookedSlots: bookedSlots.length > 0 ? bookedSlots : undefined,
+            });
+            continue;
+          }
+
+          // Vérifier si une mission bloque toute la journée
+          const hasFullDayBlock = missionsActiveOnThisDate.some((m) => {
+            const isMultiDay = m.startDate !== m.endDate;
+            const hasNoTimeSlot = !m.startTime || !m.endTime;
+
+            // Mission collective avec créneaux ne bloque pas toute la journée
+            if (m.sessionType === "collective" && m.startTime && m.endTime) return false;
+
+            // Mission multi-séances avec créneaux ne bloque pas toute la journée
+            if (m.sessions && m.sessions.length > 0 && m.startTime && m.endTime) return false;
+
+            return isMultiDay || hasNoTimeSlot;
+          });
+
+          if (hasFullDayBlock) {
+            calendar.push({
+              date,
+              status: "unavailable",
+              bookedSlots: bookedSlots.length > 0 ? bookedSlots : undefined,
+            });
+            continue;
+          }
 
           // Vérifier disponibilité partielle manuelle
           const partialAvail = unavailabilities.find((a) => a.date === date && a.status === "partial");

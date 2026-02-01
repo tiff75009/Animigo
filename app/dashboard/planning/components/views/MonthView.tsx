@@ -204,6 +204,9 @@ export function MonthView({
     return "";
   };
 
+  // Noms des jours abrégés pour mobile
+  const dayNamesShort = ["L", "M", "M", "J", "V", "S", "D"];
+
   return (
     <div
       onMouseUp={handleMouseUp}
@@ -211,29 +214,30 @@ export function MonthView({
       className="select-none"
     >
       {/* Day Headers */}
-      <div className="grid grid-cols-7 gap-1 mb-2">
-        {dayNames.map((day) => (
+      <div className="grid grid-cols-7 gap-0.5 sm:gap-1 mb-1 sm:mb-2">
+        {dayNames.map((day, idx) => (
           <div
             key={day}
-            className="text-center text-sm font-medium text-text-light py-2"
+            className="text-center text-[10px] sm:text-sm font-medium text-text-light py-1 sm:py-2"
           >
-            {day}
+            <span className="hidden sm:inline">{day}</span>
+            <span className="sm:hidden">{dayNamesShort[idx]}</span>
           </div>
         ))}
       </div>
 
       {/* Selection hint */}
       {onRangeSelect && (
-        <p className="text-xs text-text-light mb-2 text-center">
+        <p className="text-[10px] sm:text-xs text-text-light mb-1 sm:mb-2 text-center hidden sm:block">
           Cliquez et glissez pour selectionner plusieurs jours
         </p>
       )}
 
       {/* Calendar Grid */}
-      <div className="grid grid-cols-7 gap-1">
+      <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
         {calendarDays.map((item, index) => {
           if (!item.isCurrentMonth) {
-            return <div key={index} className="h-24 md:h-28" />;
+            return <div key={index} className="h-16 sm:h-24 md:h-28" />;
           }
 
           const dayMissions = getMissionsForDate(item.day);
@@ -253,8 +257,9 @@ export function MonthView({
                 handleMouseDown(dateStr);
               }}
               onMouseEnter={() => handleMouseEnter(dateStr)}
+              onTouchStart={() => handleMouseDown(dateStr)}
               className={cn(
-                "h-24 md:h-28 p-1 rounded-lg border transition-colors",
+                "h-16 sm:h-24 md:h-28 p-0.5 sm:p-1 rounded-md sm:rounded-lg border transition-colors",
                 // Past dates styling
                 past
                   ? "bg-gray-50 border-gray-100 cursor-not-allowed opacity-60"
@@ -270,10 +275,10 @@ export function MonthView({
               )}
               animate={!past && inSelection ? { scale: 1.02 } : { scale: 1 }}
             >
-              <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center justify-between mb-0.5 sm:mb-1">
                 <span
                   className={cn(
-                    "text-sm font-medium",
+                    "text-[10px] sm:text-sm font-medium",
                     past && "text-gray-400",
                     !past && today && "text-primary",
                     !past && !today && "text-foreground",
@@ -296,7 +301,7 @@ export function MonthView({
                       return (
                         <span
                           key={type._id}
-                          className="w-2 h-2 rounded-full"
+                          className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full"
                           style={{ backgroundColor: type.color }}
                           title={`${type.name}: ${typeAvail.status === "available" ? "Disponible" : "Partiel"}`}
                         />
@@ -307,7 +312,7 @@ export function MonthView({
 
                 {/* Indicateur si aucune dispo (tous types indisponibles) */}
                 {!past && !inSelection && dayAvailabilities.length === 0 && categoryTypes.length > 0 && (
-                  <span className="text-[10px] text-gray-400">-</span>
+                  <span className="text-[8px] sm:text-[10px] text-gray-400">-</span>
                 )}
               </div>
 
@@ -319,9 +324,12 @@ export function MonthView({
                   const slotsWithBookings = daySlots.filter((s) => s.bookings && s.bookings.length > 0);
                   const slotsWithoutBookings = daySlots.filter((s) => !s.bookings || s.bookings.length === 0);
 
-                  // Afficher tous les créneaux avec réservations (max 2), sinon 1 créneau vide
+                  // Sur mobile, afficher max 1 élément, sur desktop max 2
+                  const maxSlots = typeof window !== 'undefined' && window.innerWidth < 640 ? 1 : 2;
+
+                  // Afficher les créneaux avec réservations en priorité
                   const slotsToShow = slotsWithBookings.length > 0
-                    ? slotsWithBookings.slice(0, 2)
+                    ? slotsWithBookings.slice(0, maxSlots)
                     : slotsWithoutBookings.slice(0, 1);
 
                   return slotsToShow.map((slot) => (
@@ -333,18 +341,24 @@ export function MonthView({
                         onSlotClick?.(slot);
                       }}
                       className={cn(
-                        "text-[10px] md:text-xs text-white px-1.5 py-0.5 rounded truncate flex items-center gap-0.5 cursor-pointer",
+                        "text-[8px] sm:text-[10px] md:text-xs text-white px-1 sm:px-1.5 py-0.5 rounded truncate flex items-center gap-0.5 cursor-pointer",
                         slot.bookings && slot.bookings.length > 0
                           ? "bg-purple-600"
                           : "bg-purple-400"
                       )}
                       whileHover={{ scale: 1.05 }}
                     >
-                      <Users className="w-2.5 h-2.5" />
-                      <span className="truncate">
+                      <Users className="w-2 h-2 sm:w-2.5 sm:h-2.5 flex-shrink-0" />
+                      <span className="truncate hidden sm:inline">
                         {slot.bookings && slot.bookings.length > 0
-                          ? `${slot.bookings[0].animalEmoji} ${slot.bookings.length} résa`
+                          ? `${slot.bookings[0].animalEmoji} ${slot.bookings.length}`
                           : `${slot.bookedAnimals}/${slot.maxAnimals}`
+                        }
+                      </span>
+                      <span className="truncate sm:hidden">
+                        {slot.bookings && slot.bookings.length > 0
+                          ? slot.bookings.length
+                          : `${slot.bookedAnimals}`
                         }
                       </span>
                     </motion.div>
@@ -353,10 +367,11 @@ export function MonthView({
                 {/* Missions (filtrer les missions collectives qui sont déjà affichées dans les créneaux) */}
                 {(() => {
                   const slotsWithBookings = daySlots.filter((s) => s.bookings && s.bookings.length > 0);
+                  const maxSlots = typeof window !== 'undefined' && window.innerWidth < 640 ? 1 : 2;
                   const displayedSlots = slotsWithBookings.length > 0
-                    ? Math.min(slotsWithBookings.length, 2)
+                    ? Math.min(slotsWithBookings.length, maxSlots)
                     : daySlots.length > 0 ? 1 : 0;
-                  const maxMissions = Math.max(0, 2 - displayedSlots);
+                  const maxMissions = Math.max(0, maxSlots - displayedSlots);
 
                   return dayMissions
                     .filter((m) => m.sessionType !== "collective")
@@ -370,12 +385,13 @@ export function MonthView({
                           onMissionClick(mission);
                         }}
                         className={cn(
-                          "text-[10px] md:text-xs text-white px-1.5 py-0.5 rounded truncate cursor-pointer",
+                          "text-[8px] sm:text-[10px] md:text-xs text-white px-1 sm:px-1.5 py-0.5 rounded truncate cursor-pointer",
                           statusColors[mission.status]
                         )}
                         whileHover={{ scale: 1.05 }}
                       >
-                        {mission.animal.emoji} {mission.animal.name}
+                        <span className="sm:hidden">{mission.animal.emoji}</span>
+                        <span className="hidden sm:inline">{mission.animal.emoji} {mission.animal.name}</span>
                       </motion.div>
                     ));
                 })()}
@@ -383,19 +399,20 @@ export function MonthView({
                   const slotsWithBookings = daySlots.filter((s) => s.bookings && s.bookings.length > 0);
                   const nonCollectiveMissions = dayMissions.filter((m) => m.sessionType !== "collective");
 
+                  const maxSlots = typeof window !== 'undefined' && window.innerWidth < 640 ? 1 : 2;
                   const displayedSlots = slotsWithBookings.length > 0
-                    ? Math.min(slotsWithBookings.length, 2)
+                    ? Math.min(slotsWithBookings.length, maxSlots)
                     : daySlots.length > 0 ? 1 : 0;
-                  const displayedMissions = Math.min(nonCollectiveMissions.length, Math.max(0, 2 - displayedSlots));
+                  const displayedMissions = Math.min(nonCollectiveMissions.length, Math.max(0, maxSlots - displayedSlots));
 
                   // Compter les items non affichés
-                  const remainingSlots = slotsWithBookings.length > 2 ? slotsWithBookings.length - 2 : 0;
+                  const remainingSlots = slotsWithBookings.length > maxSlots ? slotsWithBookings.length - maxSlots : 0;
                   const remainingMissions = nonCollectiveMissions.length - displayedMissions;
                   const remaining = remainingSlots + remainingMissions;
 
                   return remaining > 0 ? (
-                    <p className="text-[10px] text-text-light">
-                      +{remaining} autre{remaining > 1 ? "s" : ""}
+                    <p className="text-[8px] sm:text-[10px] text-text-light">
+                      +{remaining}
                     </p>
                   ) : null;
                 })()}

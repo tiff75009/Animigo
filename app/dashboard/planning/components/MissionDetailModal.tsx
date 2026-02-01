@@ -13,9 +13,39 @@ import {
   AlertCircle,
   XCircle,
   MessageSquare,
+  Lock,
+  Info,
+  Star,
+  Repeat,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { Mission, statusColors, statusLabels, formatPrice } from "./types";
+
+// Extraire uniquement le code postal et la ville d'une adresse française
+// Ex: "3 Rue de l'Abbé Gruet, 75001 Paris, France" → "75001 Paris"
+function extractCityAndPostalCode(address: string): string {
+  if (!address) return "Localisation non précisée";
+
+  // Chercher le pattern "code postal + ville" (ex: "75001 Paris")
+  const match = address.match(/(\d{5})\s+([A-Za-zÀ-ÿ'-]+(?:\s+[A-Za-zÀ-ÿ'-]+)*)/);
+  if (match) {
+    const postalCode = match[1];
+    // Nettoyer la ville (enlever "France" ou autre pays si présent)
+    let city = match[2].trim();
+    if (city.toLowerCase().endsWith("france")) {
+      city = city.replace(/,?\s*france$/i, "").trim();
+    }
+    return `${postalCode} ${city}`;
+  }
+
+  // Chercher juste un code postal
+  const postalMatch = address.match(/\d{5}/);
+  if (postalMatch) {
+    return postalMatch[0];
+  }
+
+  return "Localisation non précisée";
+}
 
 interface MissionDetailModalProps {
   mission: Mission | null;
@@ -41,6 +71,10 @@ export function MissionDetailModal({
   const [notes, setNotes] = useState("");
 
   if (!mission) return null;
+
+  // Vérifier si les informations sensibles peuvent être affichées
+  // (mission acceptée ET payée = status upcoming, in_progress ou completed)
+  const canShowSensitiveInfo = ["upcoming", "in_progress", "completed"].includes(mission.status);
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("fr-FR", {
@@ -185,7 +219,19 @@ export function MissionDetailModal({
 
             <div className="flex items-center gap-3 text-sm">
               <MapPin className="w-4 h-4 text-text-light flex-shrink-0" />
-              <span className="text-foreground">{mission.location}</span>
+              {mission.serviceLocation === "announcer_home" ? (
+                <span className="text-secondary font-medium">Chez vous</span>
+              ) : canShowSensitiveInfo ? (
+                <span className="text-foreground">{mission.location}</span>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-foreground">{extractCityAndPostalCode(mission.location)}</span>
+                  <span className="flex items-center gap-1 text-xs text-text-light bg-slate-100 px-2 py-0.5 rounded-full">
+                    <Lock className="w-3 h-3" />
+                    Adresse masquée
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-3 text-sm">
@@ -216,8 +262,27 @@ export function MissionDetailModal({
           <div className="bg-gray-50 rounded-xl p-4 mb-4">
             <p className="text-sm text-text-light mb-2">Client</p>
             <div className="flex items-center justify-between">
-              <p className="font-medium text-foreground">{mission.clientName}</p>
-              {mission.clientPhone && (
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Afficher nom complet si infos sensibles visibles, sinon juste le prénom */}
+                <p className="font-medium text-foreground">
+                  {canShowSensitiveInfo ? mission.clientName : mission.clientName.split(" ")[0]}
+                </p>
+                {/* Badge historique client */}
+                {mission.clientHistory && (
+                  mission.clientHistory.isNewClient ? (
+                    <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-purple/10 text-purple rounded-full text-[10px] font-medium">
+                      <Star className="w-2.5 h-2.5" />
+                      Nouveau
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-medium">
+                      <Repeat className="w-2.5 h-2.5" />
+                      {mission.clientHistory.previousMissionsCount}x
+                    </span>
+                  )
+                )}
+              </div>
+              {canShowSensitiveInfo && mission.clientPhone ? (
                 <a
                   href={`tel:${mission.clientPhone}`}
                   className="flex items-center gap-1 text-primary text-sm"
@@ -225,9 +290,24 @@ export function MissionDetailModal({
                   <Phone className="w-4 h-4" />
                   {mission.clientPhone}
                 </a>
+              ) : (
+                <span className="flex items-center gap-1 text-xs text-text-light bg-slate-100 px-2 py-0.5 rounded-full">
+                  <Lock className="w-3 h-3" />
+                  Masqué
+                </span>
               )}
             </div>
           </div>
+
+          {/* Info sur les données masquées */}
+          {!canShowSensitiveInfo && (
+            <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-xl mb-4">
+              <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-blue-800">
+                L'adresse exacte et le numéro de téléphone du client seront visibles une fois la mission acceptée et le paiement effectué.
+              </p>
+            </div>
+          )}
 
           {/* Notes */}
           {mission.clientNotes && (

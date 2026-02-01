@@ -30,6 +30,8 @@ import {
   ImageIcon,
   CreditCard,
   Percent,
+  Timer,
+  Info,
 } from "lucide-react";
 import { Id, Doc } from "@/convex/_generated/dataModel";
 import { uploadToCloudinary } from "@/app/lib/cloudinary";
@@ -95,8 +97,15 @@ export default function ParametresPage() {
   // États pour TVA et frais Stripe
   const [vatRate, setVatRate] = useState(20);
   const [stripeFeeRate, setStripeFeeRate] = useState(3);
-  const [isSavingVat, setIsSavingVat] = useState(false);
-  const [isSavingStripeFee, setIsSavingStripeFee] = useState(false);
+
+  // États pour les délais d'acceptation
+  const [deadlineEnabled, setDeadlineEnabled] = useState(true);
+  const [intervalShortDays, setIntervalShortDays] = useState(7);
+  const [intervalLongDays, setIntervalLongDays] = useState(30);
+  const [deadlineShortHours, setDeadlineShortHours] = useState(12);
+  const [deadlineMediumHours, setDeadlineMediumHours] = useState(36);
+  const [deadlineLongHours, setDeadlineLongHours] = useState(168);
+  const [minimumBookingAdvanceHours, setMinimumBookingAdvanceHours] = useState(24);
 
   // Query pour récupérer toutes les configs
   const allConfigs = useQuery(
@@ -128,6 +137,12 @@ export default function ParametresPage() {
     token ? { token } : "skip"
   );
 
+  // Query pour les délais d'acceptation
+  const deadlineSettings = useQuery(
+    api.admin.config.getAcceptanceDeadlineSettings,
+    token ? { token } : "skip"
+  );
+
   // Mutations
   const toggleModeration = useMutation(api.admin.config.toggleServiceModeration);
   const updateConfig = useMutation(api.admin.config.updateConfig);
@@ -139,6 +154,7 @@ export default function ParametresPage() {
   const addManualIp = useMutation(api.maintenance.visitRequests.addManualIp);
   const updateVatRateMutation = useMutation(api.admin.commissions.updateVatRate);
   const updateStripeFeeRateMutation = useMutation(api.admin.commissions.updateStripeFeeRate);
+  const updateDeadlineSettings = useMutation(api.admin.config.updateAcceptanceDeadlineSettings);
 
   // Charger les configs existantes
   useEffect(() => {
@@ -201,6 +217,19 @@ export default function ParametresPage() {
       setStripeFeeRate(stripeFeeRateData.rate);
     }
   }, [stripeFeeRateData]);
+
+  // Charger les paramètres de délais d'acceptation
+  useEffect(() => {
+    if (deadlineSettings) {
+      setDeadlineEnabled(deadlineSettings.enabled);
+      setIntervalShortDays(deadlineSettings.intervalShortDays);
+      setIntervalLongDays(deadlineSettings.intervalLongDays);
+      setDeadlineShortHours(deadlineSettings.deadlineShortHours);
+      setDeadlineMediumHours(deadlineSettings.deadlineMediumHours);
+      setDeadlineLongHours(deadlineSettings.deadlineLongHours);
+      setMinimumBookingAdvanceHours(deadlineSettings.minimumBookingAdvanceHours);
+    }
+  }, [deadlineSettings]);
 
   const handleToggleModeration = async () => {
     if (!token) return;
@@ -345,29 +374,15 @@ export default function ParametresPage() {
     }
   };
 
-  // Handlers pour TVA et frais Stripe
-  const handleSaveVatRate = async () => {
-    if (!token) return;
-    setIsSavingVat(true);
-    try {
-      await updateVatRateMutation({ token, rate: vatRate });
-    } catch (error) {
-      console.error("Erreur lors de la sauvegarde du taux de TVA:", error);
-    } finally {
-      setIsSavingVat(false);
+  // Helper pour formater les heures en jours/heures
+  const formatHoursDisplay = (hours: number): string => {
+    if (hours >= 24) {
+      const days = Math.floor(hours / 24);
+      const remainingHours = hours % 24;
+      if (remainingHours === 0) return `${days}j`;
+      return `${days}j ${remainingHours}h`;
     }
-  };
-
-  const handleSaveStripeFeeRate = async () => {
-    if (!token) return;
-    setIsSavingStripeFee(true);
-    try {
-      await updateStripeFeeRateMutation({ token, rate: stripeFeeRate });
-    } catch (error) {
-      console.error("Erreur lors de la sauvegarde des frais Stripe:", error);
-    } finally {
-      setIsSavingStripeFee(false);
-    }
+    return `${hours}h`;
   };
 
   // Query pour la config Cloudinary
@@ -426,7 +441,7 @@ export default function ParametresPage() {
     setSaveSuccess(false);
 
     try {
-      // Sauvegarder tous les paramètres
+      // 1. Sauvegarder les configs générales
       const configsToSave = [
         { key: "site_name", value: siteName },
         { key: "contact_email", value: contactEmail },
@@ -448,6 +463,24 @@ export default function ParametresPage() {
           value: config.value,
         });
       }
+
+      // 2. Sauvegarder le taux de TVA
+      await updateVatRateMutation({ token, rate: vatRate });
+
+      // 3. Sauvegarder les frais Stripe
+      await updateStripeFeeRateMutation({ token, rate: stripeFeeRate });
+
+      // 4. Sauvegarder les délais d'acceptation
+      await updateDeadlineSettings({
+        token,
+        enabled: deadlineEnabled,
+        intervalShortDays,
+        intervalLongDays,
+        deadlineShortHours,
+        deadlineMediumHours,
+        deadlineLongHours,
+        minimumBookingAdvanceHours,
+      });
 
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -854,24 +887,6 @@ export default function ParametresPage() {
               </p>
             </div>
 
-            <button
-              onClick={handleSaveVatRate}
-              disabled={isSavingVat}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
-            >
-              {isSavingVat ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Enregistrement...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  Enregistrer le taux de TVA
-                </>
-              )}
-            </button>
-
             <div className="flex items-start gap-2 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
               <Percent className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-emerald-300">
@@ -919,24 +934,6 @@ export default function ParametresPage() {
               </p>
             </div>
 
-            <button
-              onClick={handleSaveStripeFeeRate}
-              disabled={isSavingStripeFee}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
-            >
-              {isSavingStripeFee ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Enregistrement...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  Enregistrer les frais Stripe
-                </>
-              )}
-            </button>
-
             <div className="flex items-start gap-2 p-3 bg-indigo-500/10 border border-indigo-500/30 rounded-lg">
               <CreditCard className="w-5 h-5 text-indigo-400 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-indigo-300">
@@ -948,6 +945,226 @@ export default function ParametresPage() {
                 <p className="font-bold mt-1">= Total client : {(40 + 6 + (6 * vatRate / 100) + (40 * stripeFeeRate / 100)).toFixed(2)}€</p>
               </div>
             </div>
+          </div>
+        </motion.div>
+
+        {/* Délais d'acceptation */}
+        <motion.div
+          className="bg-slate-900 rounded-xl p-6 border border-slate-800 md:col-span-2"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.08 }}
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-cyan-500/20 rounded-lg">
+              <Timer className="w-5 h-5 text-cyan-400" />
+            </div>
+            <h2 className="text-lg font-semibold text-white">Délais d&apos;acceptation</h2>
+          </div>
+
+          <div className="space-y-6">
+            {/* Toggle principal */}
+            <div className="flex items-center justify-between p-4 bg-slate-800 rounded-lg">
+              <div className="flex-1">
+                <p className="text-slate-200 font-medium">Activer le système de délais</p>
+                <p className="text-sm text-slate-400 mt-1">
+                  Les annonceurs auront un temps limité pour accepter les demandes.
+                  Passé ce délai, la mission sera automatiquement refusée.
+                </p>
+              </div>
+              <button
+                onClick={() => setDeadlineEnabled(!deadlineEnabled)}
+                className={`relative w-14 h-8 rounded-full transition-colors ${
+                  deadlineEnabled ? "bg-cyan-500" : "bg-slate-600"
+                }`}
+              >
+                <span
+                  className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow-md transition-transform flex items-center justify-center ${
+                    deadlineEnabled ? "left-7" : "left-1"
+                  }`}
+                >
+                  {deadlineEnabled && <Check className="w-4 h-4 text-cyan-500" />}
+                </span>
+              </button>
+            </div>
+
+            {deadlineEnabled && (
+              <>
+                {/* Minimum réservation */}
+                <div className="p-4 bg-slate-800/50 rounded-lg">
+                  <label className="block text-sm font-medium text-slate-300 mb-3">
+                    Réservation minimum à l&apos;avance
+                  </label>
+                  <div className="flex items-center gap-4">
+                    <input
+                      type="range"
+                      min={12}
+                      max={72}
+                      step={1}
+                      value={minimumBookingAdvanceHours}
+                      onChange={(e) => setMinimumBookingAdvanceHours(Number(e.target.value))}
+                      className="flex-1 accent-cyan-500"
+                    />
+                    <div className="w-20 px-3 py-2 bg-slate-700 rounded-lg text-center font-semibold text-cyan-400">
+                      {formatHoursDisplay(minimumBookingAdvanceHours)}
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Le client doit réserver au minimum ce délai avant le début de la prestation.
+                  </p>
+                </div>
+
+                {/* Seuils d'intervalle */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-slate-800/50 rounded-lg">
+                    <label className="block text-sm font-medium text-slate-300 mb-3">
+                      Seuil &quot;mission proche&quot;
+                    </label>
+                    <div className="flex items-center gap-4">
+                      <input
+                        type="range"
+                        min={1}
+                        max={14}
+                        value={intervalShortDays}
+                        onChange={(e) => setIntervalShortDays(Number(e.target.value))}
+                        className="flex-1 accent-cyan-500"
+                      />
+                      <div className="w-16 px-3 py-2 bg-slate-700 rounded-lg text-center font-semibold text-cyan-400">
+                        {intervalShortDays}j
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-2">
+                      Missions commençant dans moins de {intervalShortDays} jours
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-slate-800/50 rounded-lg">
+                    <label className="block text-sm font-medium text-slate-300 mb-3">
+                      Seuil &quot;mission lointaine&quot;
+                    </label>
+                    <div className="flex items-center gap-4">
+                      <input
+                        type="range"
+                        min={14}
+                        max={90}
+                        value={intervalLongDays}
+                        onChange={(e) => setIntervalLongDays(Number(e.target.value))}
+                        className="flex-1 accent-cyan-500"
+                      />
+                      <div className="w-16 px-3 py-2 bg-slate-700 rounded-lg text-center font-semibold text-cyan-400">
+                        {intervalLongDays}j
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-2">
+                      Missions commençant dans plus de {intervalLongDays} jours
+                    </p>
+                  </div>
+                </div>
+
+                {/* Délais d'acceptation */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
+                    <label className="block text-sm font-medium text-green-300 mb-3">
+                      Délai mission proche
+                    </label>
+                    <div className="flex items-center gap-4">
+                      <input
+                        type="range"
+                        min={1}
+                        max={48}
+                        value={deadlineShortHours}
+                        onChange={(e) => setDeadlineShortHours(Number(e.target.value))}
+                        className="flex-1 accent-green-500"
+                      />
+                      <div className="w-16 px-3 py-2 bg-green-500/20 rounded-lg text-center font-semibold text-green-400">
+                        {formatHoursDisplay(deadlineShortHours)}
+                      </div>
+                    </div>
+                    <p className="text-xs text-green-400/70 mt-2">
+                      &lt; {intervalShortDays} jours
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+                    <label className="block text-sm font-medium text-orange-300 mb-3">
+                      Délai mission moyenne
+                    </label>
+                    <div className="flex items-center gap-4">
+                      <input
+                        type="range"
+                        min={12}
+                        max={96}
+                        value={deadlineMediumHours}
+                        onChange={(e) => setDeadlineMediumHours(Number(e.target.value))}
+                        className="flex-1 accent-orange-500"
+                      />
+                      <div className="w-16 px-3 py-2 bg-orange-500/20 rounded-lg text-center font-semibold text-orange-400">
+                        {formatHoursDisplay(deadlineMediumHours)}
+                      </div>
+                    </div>
+                    <p className="text-xs text-orange-400/70 mt-2">
+                      {intervalShortDays} - {intervalLongDays} jours
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                    <label className="block text-sm font-medium text-blue-300 mb-3">
+                      Délai mission lointaine
+                    </label>
+                    <div className="flex items-center gap-4">
+                      <input
+                        type="range"
+                        min={24}
+                        max={336}
+                        step={12}
+                        value={deadlineLongHours}
+                        onChange={(e) => setDeadlineLongHours(Number(e.target.value))}
+                        className="flex-1 accent-blue-500"
+                      />
+                      <div className="w-16 px-3 py-2 bg-blue-500/20 rounded-lg text-center font-semibold text-blue-400">
+                        {formatHoursDisplay(deadlineLongHours)}
+                      </div>
+                    </div>
+                    <p className="text-xs text-blue-400/70 mt-2">
+                      &gt; {intervalLongDays} jours
+                    </p>
+                  </div>
+                </div>
+
+                {/* Tableau récapitulatif */}
+                <div className="p-4 bg-slate-800/50 rounded-lg">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Info className="w-4 h-4 text-cyan-400" />
+                    <span className="font-medium text-slate-200">Règles actives</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-slate-400 border-b border-slate-700">
+                          <th className="text-left py-2 px-3">Intervalle mission</th>
+                          <th className="text-left py-2 px-3">Délai acceptation</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-slate-300">
+                        <tr className="border-b border-slate-700/50">
+                          <td className="py-2 px-3">&lt; {intervalShortDays} jours</td>
+                          <td className="py-2 px-3 text-green-400 font-medium">{formatHoursDisplay(deadlineShortHours)}</td>
+                        </tr>
+                        <tr className="border-b border-slate-700/50">
+                          <td className="py-2 px-3">{intervalShortDays} - {intervalLongDays} jours</td>
+                          <td className="py-2 px-3 text-orange-400 font-medium">{formatHoursDisplay(deadlineMediumHours)}</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2 px-3">&gt; {intervalLongDays} jours</td>
+                          <td className="py-2 px-3 text-blue-400 font-medium">{formatHoursDisplay(deadlineLongHours)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
+
           </div>
         </motion.div>
 
@@ -1275,36 +1492,8 @@ export default function ParametresPage() {
         </motion.div>
       </div>
 
-      {/* Save Button */}
-      <motion.div
-        className="mt-8 flex items-center gap-4"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.5 }}
-      >
-        <button
-          onClick={handleSaveAll}
-          disabled={isSaving}
-          className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
-        >
-          {isSaving ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
-          ) : (
-            <Save className="w-5 h-5" />
-          )}
-          {isSaving ? "Sauvegarde en cours..." : "Sauvegarder les modifications"}
-        </button>
-        {saveSuccess && (
-          <motion.div
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="flex items-center gap-2 text-green-400"
-          >
-            <Check className="w-5 h-5" />
-            <span>Modifications enregistrées</span>
-          </motion.div>
-        )}
-      </motion.div>
+      {/* Spacer pour le bouton fixe */}
+      <div className="h-24" />
 
       {/* Maintenance */}
       <motion.div
@@ -1384,6 +1573,45 @@ export default function ParametresPage() {
         <p className="text-slate-400">
           Plus de paramètres à venir (sauvegarde, maintenance, logs...)
         </p>
+      </motion.div>
+
+      {/* Barre de sauvegarde fixe en bas */}
+      <motion.div
+        className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-sm border-t border-slate-700 px-8 py-4 z-50"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+      >
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <p className="text-slate-400 text-sm hidden sm:block">
+            N&apos;oubliez pas d&apos;enregistrer vos modifications
+          </p>
+          <div className="flex items-center gap-4">
+            {saveSuccess && (
+              <motion.div
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0 }}
+                className="flex items-center gap-2 text-green-400"
+              >
+                <Check className="w-5 h-5" />
+                <span className="hidden sm:inline">Modifications enregistrées</span>
+              </motion.div>
+            )}
+            <button
+              onClick={handleSaveAll}
+              disabled={isSaving}
+              className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 shadow-lg"
+            >
+              {isSaving ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Save className="w-5 h-5" />
+              )}
+              {isSaving ? "Sauvegarde..." : "Enregistrer tout"}
+            </button>
+          </div>
+        </div>
       </motion.div>
     </div>
   );

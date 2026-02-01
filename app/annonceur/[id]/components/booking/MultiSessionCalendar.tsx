@@ -242,17 +242,27 @@ export default function MultiSessionCalendar({
 
   // Vérifier si un créneau horaire est disponible
   const isTimeSlotAvailable = (dateStr: string, startTime: string): boolean => {
-    // Vérifier d'abord si le créneau est réservable (pas passé + délai minimum 2h)
+    // Vérifier d'abord si le créneau est réservable (pas passé + délai minimum 24h)
     if (!isSlotBookable(dateStr, startTime)) {
       return false;
     }
 
-    const availability = availabilityCalendar?.find((a) => a.date === dateStr);
-    if (!availability) return true;
+    // Si les données ne sont pas chargées, bloquer la sélection
+    if (!availabilityCalendar) return false;
+    const availability = availabilityCalendar.find((a) => a.date === dateStr);
+    // Si pas d'entrée pour cette date, considérer comme indisponible
+    if (!availability) return false;
     if (availability.status === "unavailable") return false;
 
     const startMinutes = parseTimeToMinutes(startTime);
     const endMinutes = startMinutes + variantDuration;
+
+    // IMPORTANT: Appliquer les buffers au NOUVEAU créneau aussi
+    // Les bookedSlots du backend incluent déjà les buffers, donc pour une comparaison équitable,
+    // on doit aussi appliquer les buffers au créneau qu'on vérifie
+    const newSlotStartWithBuffer = Math.max(0, startMinutes - bufferBefore);
+    const newSlotEndWithBuffer = endMinutes + bufferAfter;
+
     // Note: bookedSlots inclut déjà les créneaux collectifs ET les buffers sont déjà appliqués côté backend
     const bookedSlots = availability.bookedSlots || [];
     const availableTimeSlots = availability.timeSlots;
@@ -269,13 +279,13 @@ export default function MultiSessionCalendar({
 
     // Vérifier les conflits avec les créneaux réservés
     // Les bookedSlots du backend incluent DÉJÀ les buffers (temps de préparation)
-    // Donc on compare simplement notre créneau avec les créneaux déjà étendus
+    // On applique aussi les buffers au nouveau créneau pour une comparaison correcte
     const hasConflictWithBooked = bookedSlots.some((booked) => {
       const bookedStart = parseTimeToMinutes(booked.startTime);
       const bookedEnd = parseTimeToMinutes(booked.endTime);
 
-      // Conflit si notre créneau chevauche un créneau réservé (qui inclut déjà les buffers)
-      return startMinutes < bookedEnd && endMinutes > bookedStart;
+      // Conflit si notre créneau (avec buffers) chevauche un créneau réservé (qui inclut déjà les buffers)
+      return newSlotStartWithBuffer < bookedEnd && newSlotEndWithBuffer > bookedStart;
     });
 
     return !hasConflictWithBooked;
@@ -284,16 +294,21 @@ export default function MultiSessionCalendar({
   // Vérifier si un jour a des disponibilités
   const isDayAvailable = (dateStr: string): boolean => {
     if (dateStr < today) return false;
-    const availability = availabilityCalendar?.find((a) => a.date === dateStr);
-    if (!availability) return true;
+    // Si les données de calendrier ne sont pas encore chargées, bloquer la sélection
+    if (!availabilityCalendar) return false;
+    const availability = availabilityCalendar.find((a) => a.date === dateStr);
+    // Si pas d'entrée pour cette date, considérer comme indisponible (pas comme disponible)
+    if (!availability) return false;
     return availability.status !== "unavailable";
   };
 
   // Obtenir le statut de disponibilité d'un jour (pour les indicateurs colorés)
   const getDayAvailabilityStatus = (dateStr: string): "available" | "partial" | "unavailable" | "past" => {
     if (dateStr < today) return "past";
-    const availability = availabilityCalendar?.find((a) => a.date === dateStr);
-    if (!availability) return "available";
+    // Si pas de données ou pas d'entrée, considérer comme indisponible
+    if (!availabilityCalendar) return "unavailable";
+    const availability = availabilityCalendar.find((a) => a.date === dateStr);
+    if (!availability) return "unavailable";
     // Cast explicite car le type CalendarEntry.status est déjà bien typé
     const status = availability.status as "available" | "partial" | "unavailable" | "past";
     return status;
@@ -301,8 +316,11 @@ export default function MultiSessionCalendar({
 
   // Vérifier s'il reste des créneaux libres sur un jour
   const hasAvailableSlots = (dateStr: string): boolean => {
-    const availability = availabilityCalendar?.find((a) => a.date === dateStr);
-    if (!availability) return true;
+    // Si les données ne sont pas chargées, bloquer la sélection
+    if (!availabilityCalendar) return false;
+    const availability = availabilityCalendar.find((a) => a.date === dateStr);
+    // Si pas d'entrée pour cette date, considérer comme sans créneaux libres
+    if (!availability) return false;
     if (availability.status === "unavailable") return false;
 
     // Vérifier s'il y a au moins un créneau disponible
@@ -320,6 +338,10 @@ export default function MultiSessionCalendar({
     for (let startMinutes = dayStart; startMinutes <= dayEnd - variantDuration; startMinutes += slotInterval) {
       const endMinutes = startMinutes + variantDuration;
 
+      // IMPORTANT: Appliquer les buffers au nouveau créneau pour une comparaison correcte
+      const newSlotStartWithBuffer = Math.max(0, startMinutes - bufferBefore);
+      const newSlotEndWithBuffer = endMinutes + bufferAfter;
+
       // Vérifier si dans les créneaux disponibles (si partial)
       if (availableTimeSlots && availableTimeSlots.length > 0) {
         const isInAvailableSlot = availableTimeSlots.some((slot) => {
@@ -332,10 +354,11 @@ export default function MultiSessionCalendar({
 
       // Vérifier s'il y a conflit avec les créneaux réservés
       // Les bookedSlots incluent DÉJÀ les buffers côté backend
+      // On applique aussi les buffers au nouveau créneau pour une comparaison correcte
       const hasConflict = bookedSlots.some((booked) => {
         const bookedStart = parseTimeToMinutes(booked.startTime);
         const bookedEnd = parseTimeToMinutes(booked.endTime);
-        return startMinutes < bookedEnd && endMinutes > bookedStart;
+        return newSlotStartWithBuffer < bookedEnd && newSlotEndWithBuffer > bookedStart;
       });
 
       // Si pas de conflit, le créneau est disponible

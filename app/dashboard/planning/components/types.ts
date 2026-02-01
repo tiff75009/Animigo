@@ -31,6 +31,7 @@ export interface Mission {
   amount: number;
   paymentStatus: "not_due" | "pending" | "paid" | "refunded";
   location: string;
+  city?: string;
   clientNotes?: string;
   announcerNotes?: string;
   cancellationReason?: string;
@@ -41,6 +42,13 @@ export interface Mission {
   collectiveSlotIds?: string[];
   collectiveSlotDates?: string[]; // Dates des créneaux pour les formules collectives
   animalCount?: number;
+  // Lieu de prestation
+  serviceLocation?: "announcer_home" | "client_home";
+  // Historique client avec cet annonceur
+  clientHistory?: {
+    previousMissionsCount: number;
+    isNewClient: boolean;
+  };
 }
 
 export interface Availability {

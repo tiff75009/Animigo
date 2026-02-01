@@ -224,6 +224,33 @@ export const sendPaymentCapturedNotification = action({
   },
 });
 
+/**
+ * Envoyer une notification au client que sa mission a été auto-refusée
+ * (délai d'acceptation dépassé)
+ * Appelée par le cron autoRefuseExpiredMissions
+ */
+export const sendMissionAutoRefusedNotification = action({
+  args: {
+    clientId: v.id("users"),
+    announcerName: v.string(),
+    serviceName: v.string(),
+    missionId: v.id("missions"),
+  },
+  handler: async (ctx, args): Promise<ActionResult> => {
+    const qstashConfig = await ctx.runQuery(internal.notifications.queries.getQStashConfig);
+
+    const payload: NotificationPayload = {
+      userId: args.clientId,
+      type: "mission_refused",
+      title: "Demande non acceptée",
+      message: `${args.announcerName} n'a pas répondu à temps pour "${args.serviceName}". Recherchez un autre prestataire.`,
+      linkUrl: "/client/reservations",
+    };
+
+    return sendNotificationWithFallback(ctx, qstashConfig, payload);
+  },
+});
+
 // ============================================
 // ACTIONS DE TEST
 // ============================================

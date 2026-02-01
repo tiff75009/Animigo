@@ -374,6 +374,84 @@ export const getSiteLogo = query({
 });
 
 // ==========================================
+// DÉLAIS D'ACCEPTATION DES MISSIONS
+// ==========================================
+
+// Query: Récupérer les paramètres de délais d'acceptation (pour le panel admin)
+export const getAcceptanceDeadlineSettings = query({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx, args.token);
+
+    const configs = await ctx.db.query("systemConfig").collect();
+    const configMap = new Map(configs.map((c) => [c.key, c.value]));
+
+    return {
+      enabled: configMap.get("acceptance_deadline_enabled") !== "false",
+      intervalShortDays: parseInt(configMap.get("acceptance_interval_short_days") || "") || 7,
+      intervalLongDays: parseInt(configMap.get("acceptance_interval_long_days") || "") || 30,
+      deadlineShortHours: parseInt(configMap.get("acceptance_deadline_short_hours") || "") || 12,
+      deadlineMediumHours: parseInt(configMap.get("acceptance_deadline_medium_hours") || "") || 36,
+      deadlineLongHours: parseInt(configMap.get("acceptance_deadline_long_hours") || "") || 168,
+      minimumBookingAdvanceHours: parseInt(configMap.get("minimum_booking_advance_hours") || "") || 24,
+    };
+  },
+});
+
+// Mutation: Mettre à jour les paramètres de délais d'acceptation
+export const updateAcceptanceDeadlineSettings = mutation({
+  args: {
+    token: v.string(),
+    enabled: v.boolean(),
+    intervalShortDays: v.number(),
+    intervalLongDays: v.number(),
+    deadlineShortHours: v.number(),
+    deadlineMediumHours: v.number(),
+    deadlineLongHours: v.number(),
+    minimumBookingAdvanceHours: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireAdmin(ctx, args.token);
+
+    const configsToUpdate = [
+      { key: "acceptance_deadline_enabled", value: args.enabled ? "true" : "false" },
+      { key: "acceptance_interval_short_days", value: args.intervalShortDays.toString() },
+      { key: "acceptance_interval_long_days", value: args.intervalLongDays.toString() },
+      { key: "acceptance_deadline_short_hours", value: args.deadlineShortHours.toString() },
+      { key: "acceptance_deadline_medium_hours", value: args.deadlineMediumHours.toString() },
+      { key: "acceptance_deadline_long_hours", value: args.deadlineLongHours.toString() },
+      { key: "minimum_booking_advance_hours", value: args.minimumBookingAdvanceHours.toString() },
+    ];
+
+    for (const config of configsToUpdate) {
+      const existing = await ctx.db
+        .query("systemConfig")
+        .withIndex("by_key", (q) => q.eq("key", config.key))
+        .first();
+
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          value: config.value,
+          updatedAt: Date.now(),
+          updatedBy: user._id,
+        });
+      } else {
+        await ctx.db.insert("systemConfig", {
+          key: config.key,
+          value: config.value,
+          isSecret: false,
+          environment: "production",
+          updatedAt: Date.now(),
+          updatedBy: user._id,
+        });
+      }
+    }
+
+    return { success: true };
+  },
+});
+
+// ==========================================
 // MODE MAINTENANCE
 // ==========================================
 

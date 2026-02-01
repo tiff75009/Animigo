@@ -2,6 +2,7 @@ import { internalMutation, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
 import { Id } from "../_generated/dataModel";
 import { internal } from "../_generated/api";
+import { calculateAcceptanceDeadline } from "../planning/acceptanceDeadline";
 
 // Query interne pour récupérer les configs email
 export const getEmailConfigs = internalQuery({
@@ -250,6 +251,20 @@ export const verifyEmailToken = internalMutation({
         const announcerEarnings = serviceAmount;
         const totalAmount = serviceAmount + platformFee;
 
+        // Récupérer la configuration des délais d'acceptation
+        const deadlineConfig = await ctx.runQuery(
+          internal.planning.acceptanceDeadline.getAcceptanceDeadlineConfig,
+          {}
+        );
+
+        // Calculer la deadline d'acceptation
+        const now = Date.now();
+        const acceptanceDeadline = calculateAcceptanceDeadline(
+          now,
+          pendingBooking.startDate,
+          deadlineConfig
+        );
+
         // Créer la mission
         const missionId = await ctx.db.insert("missions", {
           announcerId: pendingBooking.announcerId,
@@ -282,8 +297,12 @@ export const verifyEmailToken = internalMutation({
           overnightAmount: pendingBooking.overnightAmount,
           dayStartTime: service?.dayStartTime,
           dayEndTime: service?.dayEndTime,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
+          // Timestamps
+          bookedAt: now,
+          createdAt: now,
+          updatedAt: now,
+          // Délai d'acceptation
+          acceptanceDeadline: acceptanceDeadline ?? undefined,
         });
 
         // Mettre à jour la pending booking

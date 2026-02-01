@@ -94,18 +94,18 @@ export function DayView({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       {/* Day header */}
-      <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-        <div>
-          <h3 className="text-lg font-bold text-foreground capitalize">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 p-3 sm:p-4 bg-gray-50 rounded-xl">
+        <div className="min-w-0">
+          <h3 className="text-base sm:text-lg font-bold text-foreground capitalize truncate">
             {formatDateDisplay(currentDate)}
           </h3>
-          <p className="text-sm text-text-light">
+          <p className="text-xs sm:text-sm text-text-light">
             {dayMissions.length} mission{dayMissions.length > 1 ? "s" : ""}
             {daySlots.length > 0 && (
               <span className="ml-2 text-purple-600">
-                • {daySlots.length} créneau{daySlots.length > 1 ? "x" : ""} collectif{daySlots.length > 1 ? "s" : ""}
+                • {daySlots.length} collectif{daySlots.length > 1 ? "s" : ""}
               </span>
             )}
           </p>
@@ -116,7 +116,7 @@ export function DayView({
           onClick={() => !past && onToggleAvailability(dateStr)}
           disabled={past}
           className={cn(
-            "px-4 py-2 rounded-lg text-sm font-medium border transition-colors",
+            "px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium border transition-colors flex-shrink-0",
             past
               ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
               : dayAvailability
@@ -125,29 +125,29 @@ export function DayView({
           )}
         >
           {past
-            ? "Date passée"
+            ? "Passé"
             : dayAvailability
               ? availabilityLabels[dayAvailability.status]
               : "Disponible"}
         </button>
       </div>
 
-      {/* Timeline */}
-      <div className="flex gap-4">
+      {/* Timeline - scrollable on mobile */}
+      <div className="flex gap-2 sm:gap-4 overflow-x-auto">
         {/* Time column */}
-        <div className="w-16 flex-shrink-0">
+        <div className="w-12 sm:w-16 flex-shrink-0">
           {hours.map((hour) => (
             <div
               key={hour}
-              className="h-12 flex items-start justify-end pr-2 text-xs text-text-light"
+              className="h-12 flex items-start justify-end pr-1 sm:pr-2 text-[10px] sm:text-xs text-text-light"
             >
-              {hour.toString().padStart(2, "0")}:00
+              {hour}h
             </div>
           ))}
         </div>
 
         {/* Events column */}
-        <div className="flex-1 relative border-l border-gray-200">
+        <div className="flex-1 relative border-l border-gray-200 min-w-[200px]">
           {/* Hour lines */}
           {hours.map((hour) => (
             <div

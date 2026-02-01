@@ -317,7 +317,8 @@ export default function BookingCalendar({
       ).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
       const isPast = dateStr < todayStr;
       const availability = availabilityCalendar?.find((a) => a.date === dateStr);
-      const status = isPast ? "past" : availability?.status || "available";
+      // Si pas de données de calendrier ou pas d'entrée, considérer comme indisponible
+      const status = isPast ? "past" : (!availabilityCalendar || !availability) ? "unavailable" : availability.status;
 
       const capacity = availability?.capacity;
       const hasCapacityInfo = isCapacityBased && capacity;
@@ -604,10 +605,13 @@ export default function BookingCalendar({
                   {getEndTimeSlots().map((time) => {
                     const startMinutes = parseTimeToMinutes(selectedTime);
                     const endMinutes = parseTimeToMinutes(time);
+                    // Appliquer les buffers pour une vérification correcte des conflits
+                    const effectiveStart = enableDurationBasedBlocking ? startMinutes - bufferBefore : startMinutes;
+                    const effectiveEnd = enableDurationBasedBlocking ? endMinutes + bufferAfter : endMinutes;
                     const hasConflict = bookedSlots.some((slot) => {
                       const bookedStart = parseTimeToMinutes(slot.startTime);
                       const bookedEnd = parseTimeToMinutes(slot.endTime);
-                      return startMinutes < bookedEnd && endMinutes > bookedStart;
+                      return effectiveStart < bookedEnd && effectiveEnd > bookedStart;
                     });
                     const isEndTimeAvailable = !hasConflict;
                     return (

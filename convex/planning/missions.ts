@@ -46,6 +46,27 @@ export const getMissionsByDateRange = query({
       return m.startDate <= args.endDate && m.endDate >= args.startDate;
     });
 
+    // Calculer l'historique client pour chaque client unique
+    const uniqueClientIds = [...new Set(filteredMissions.map(m => m.clientId))];
+    const clientHistoryMap: Record<string, { previousMissionsCount: number; isNewClient: boolean }> = {};
+
+    for (const clientId of uniqueClientIds) {
+      const clientMissions = await ctx.db
+        .query("missions")
+        .withIndex("by_client", (q) => q.eq("clientId", clientId))
+        .collect();
+
+      // Missions complétées avec cet annonceur
+      const completedWithAnnouncer = clientMissions.filter(
+        m => m.announcerId === session.userId && m.status === "completed"
+      );
+
+      clientHistoryMap[clientId] = {
+        previousMissionsCount: completedWithAnnouncer.length,
+        isNewClient: completedWithAnnouncer.length === 0,
+      };
+    }
+
     // Enrichir avec les dates des créneaux collectifs si applicable
     const enrichedMissions = await Promise.all(
       filteredMissions.map(async (m) => {
@@ -89,6 +110,10 @@ export const getMissionsByDateRange = query({
           collectiveSlotIds: m.collectiveSlotIds,
           collectiveSlotDates, // Dates des créneaux pour les formules collectives
           animalCount: m.animalCount,
+          // Lieu de prestation
+          serviceLocation: m.serviceLocation,
+          // Historique client avec cet annonceur
+          clientHistory: clientHistoryMap[m.clientId] || { previousMissionsCount: 0, isNewClient: true },
         };
       })
     );
@@ -223,6 +248,12 @@ export const getMissionsByStatus = query({
       trustScore: number;
     }> = {};
 
+    // Calculer l'historique client avec cet annonceur
+    const clientHistoryWithAnnouncer: Record<string, {
+      previousMissionsCount: number;
+      isNewClient: boolean;
+    }> = {};
+
     for (const clientId of uniqueClientIds) {
       // Récupérer toutes les missions de ce client
       const clientMissions = await ctx.db
@@ -258,6 +289,15 @@ export const getMissionsByStatus = query({
         completed,
         trustScore
       };
+
+      // Historique avec cet annonceur spécifique (missions complétées uniquement)
+      const missionsWithThisAnnouncer = clientMissions.filter(
+        m => m.announcerId === session.userId && m.status === "completed"
+      );
+      clientHistoryWithAnnouncer[clientId] = {
+        previousMissionsCount: missionsWithThisAnnouncer.length,
+        isNewClient: missionsWithThisAnnouncer.length === 0,
+      };
     }
 
     // Enrichir avec les dates des créneaux collectifs si applicable
@@ -284,6 +324,12 @@ export const getMissionsByStatus = query({
           notFinalized: 0,
           completed: 0,
           trustScore: 100,
+        };
+
+        // Historique client avec cet annonceur
+        const clientHistory = clientHistoryWithAnnouncer[m.clientId] || {
+          previousMissionsCount: 0,
+          isNewClient: true,
         };
 
         return {
@@ -326,8 +372,14 @@ export const getMissionsByStatus = query({
           sessions: m.sessions,
           // Timestamp de réservation
           bookedAt: m.bookedAt,
+          // Délai d'acceptation
+          acceptanceDeadline: m.acceptanceDeadline,
           // Stats de confiance du client
           clientTrustStats: clientStats,
+          // Lieu de prestation
+          serviceLocation: m.serviceLocation,
+          // Historique client avec cet annonceur
+          clientHistory,
         };
       })
     );

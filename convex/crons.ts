@@ -38,4 +38,15 @@ crons.daily(
   internal.notifications.mutations.cleanupExpired
 );
 
+/**
+ * Auto-refus des missions expirées
+ * Exécuté toutes les 15 minutes pour refuser automatiquement
+ * les missions dont le délai d'acceptation est dépassé
+ */
+crons.interval(
+  "auto-refuse-expired-missions",
+  { minutes: 15 },
+  internal.planning.acceptanceDeadline.autoRefuseExpiredMissions
+);
+
 export default crons;

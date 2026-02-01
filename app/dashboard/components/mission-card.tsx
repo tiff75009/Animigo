@@ -27,10 +27,12 @@ import {
   CalendarDays,
   ShieldCheck,
   Star,
+  Lock,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { DeadlineCountdown } from "./deadline-countdown";
 
 // Types pour les stats de confiance client
 export interface ClientTrustStats {
@@ -93,6 +95,15 @@ export interface ConvexMission {
   bookedAt?: number;
   // Stats de confiance du client
   clientTrustStats?: ClientTrustStats;
+  // Délai d'acceptation
+  acceptanceDeadline?: number;
+  // Lieu de prestation
+  serviceLocation?: "announcer_home" | "client_home";
+  // Historique client avec cet annonceur
+  clientHistory?: {
+    previousMissionsCount: number;
+    isNewClient: boolean;
+  };
 }
 
 interface MissionCardProps {
@@ -304,7 +315,10 @@ export function MissionCard({
   const [showAnimalModal, setShowAnimalModal] = useState(false);
   const [, setTick] = useState(0); // Force re-render pour mettre à jour le temps écoulé
   const status = statusConfig[mission.status] || statusConfig.pending_acceptance;
-  const isAccepted = mission.status !== "pending_acceptance" && mission.status !== "pending_confirmation";
+  // L'adresse exacte et le téléphone sont visibles uniquement après acceptation ET paiement
+  // (status: upcoming, in_progress, completed)
+  const canShowSensitiveInfo = ["upcoming", "in_progress", "completed"].includes(mission.status);
+  const isAccepted = canShowSensitiveInfo;
 
   // Mise à jour automatique du temps écoulé toutes les secondes
   useEffect(() => {
@@ -329,10 +343,31 @@ export function MissionCard({
   return (
     <>
       <motion.div
-        className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden border border-slate-100"
+        className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden border border-slate-100 relative"
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
       >
+        {/* Badge décompte à cheval sur le bord haut, juste avant les boutons */}
+        {mission.acceptanceDeadline && mission.status === "pending_acceptance" && showActions && (
+          <div className="absolute -top-2 right-[4.5rem] z-10 group">
+            <div className="flex items-center gap-1.5 bg-white rounded-lg shadow-md px-2 py-1 border border-slate-200">
+              <span className="text-[10px] text-text-light font-medium">Répondre sous</span>
+              <DeadlineCountdown
+                deadline={mission.acceptanceDeadline}
+                bookedAt={mission.bookedAt}
+                compact
+              />
+              <div className="relative">
+                <Info className="w-3.5 h-3.5 text-text-light hover:text-foreground cursor-help" />
+                {/* Tooltip - affiché en dessous */}
+                <div className="absolute top-full right-0 mt-2 w-56 p-2 bg-foreground text-white text-[10px] rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none">
+                  <div className="absolute top-0 right-3 -translate-y-1/2 rotate-45 w-2 h-2 bg-foreground"></div>
+                  <p>Si vous ne répondez pas avant la fin du délai, la demande sera <strong>automatiquement refusée</strong> et votre <strong>note de confiance</strong> pourrait baisser.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="flex">
           {/* Contenu principal */}
           <div className="flex-1 min-w-0">
@@ -359,13 +394,24 @@ export function MissionCard({
                     >
                       <ShieldCheck className="w-3 h-3" />
                       {mission.clientTrustStats.trustScore}%
-                      {mission.clientTrustStats.totalBookings === 1 && (
-                        <span className="flex items-center gap-0.5 ml-0.5 px-1 bg-white/50 rounded">
-                          <Star className="w-2.5 h-2.5" />
-                          Nouveau
-                        </span>
-                      )}
                     </span>
+                  )}
+                  {/* Indicateur historique client avec cet annonceur */}
+                  {mission.clientHistory && (
+                    mission.clientHistory.isNewClient ? (
+                      <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-purple/10 text-purple rounded-full text-[10px] font-medium">
+                        <Star className="w-2.5 h-2.5" />
+                        Nouveau
+                      </span>
+                    ) : (
+                      <span
+                        className="flex items-center gap-0.5 px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-medium"
+                        title={`${mission.clientHistory.previousMissionsCount} mission${mission.clientHistory.previousMissionsCount > 1 ? "s" : ""} terminée${mission.clientHistory.previousMissionsCount > 1 ? "s" : ""} ensemble`}
+                      >
+                        <Repeat className="w-2.5 h-2.5" />
+                        Client fidèle ({mission.clientHistory.previousMissionsCount}x)
+                      </span>
+                    )
                   )}
                 </div>
                 <p className="text-xs text-text-light truncate">
@@ -373,8 +419,8 @@ export function MissionCard({
                 </p>
                 {/* Temps écoulé depuis la réservation */}
                 {mission.bookedAt && mission.status === "pending_acceptance" && (
-                  <p className="text-[10px] text-orange-500 font-medium">
-                    Réservé {formatBookedAtElapsed(mission.bookedAt)}
+                  <p className="text-[10px] text-orange-500 font-medium mt-0.5">
+                    Reçue {formatBookedAtElapsed(mission.bookedAt)}
                   </p>
                 )}
               </div>
@@ -396,7 +442,13 @@ export function MissionCard({
                   {formatTime(mission.startTime, mission.endTime)}
                 </span>
               )}
-              {cityDisplay && (
+              {/* Lieu de prestation */}
+              {mission.serviceLocation === "announcer_home" ? (
+                <span className="flex items-center gap-1 text-secondary font-medium">
+                  <MapPin className="w-3.5 h-3.5" />
+                  Chez vous
+                </span>
+              ) : cityDisplay && (
                 <span className="flex items-center gap-1 text-text-light">
                   <MapPin className="w-3.5 h-3.5 text-secondary" />
                   {cityDisplay}
@@ -596,7 +648,23 @@ function MissionDetailsModal({
                 {mission.animal.emoji}
               </div>
               <div className="flex-1">
-                <p className="font-bold text-foreground">{firstName}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-bold text-foreground">{firstName}</p>
+                  {/* Badge historique client */}
+                  {mission.clientHistory && (
+                    mission.clientHistory.isNewClient ? (
+                      <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-purple/10 text-purple rounded-full text-[10px] font-medium">
+                        <Star className="w-2.5 h-2.5" />
+                        Nouveau client
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-medium">
+                        <Repeat className="w-2.5 h-2.5" />
+                        {mission.clientHistory.previousMissionsCount} mission{mission.clientHistory.previousMissionsCount > 1 ? "s" : ""} ensemble
+                      </span>
+                    )
+                  )}
+                </div>
                 <p className="text-sm text-text-light">
                   {mission.animal.name} ({mission.animal.type})
                 </p>
@@ -766,15 +834,28 @@ function MissionDetailsModal({
 
           {/* Lieu et Distance */}
           <div className="bg-slate-50 rounded-xl p-3 space-y-2">
-            {cityDisplay && (
+            {mission.serviceLocation === "announcer_home" ? (
               <div className="flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-secondary" />
-                <span className="text-sm text-foreground">
-                  {isAccepted ? mission.location : cityDisplay}
-                </span>
+                <span className="text-sm text-secondary font-medium">Chez vous</span>
+              </div>
+            ) : cityDisplay && (
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-secondary" />
+                {isAccepted ? (
+                  <span className="text-sm text-foreground">{mission.location}</span>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-foreground">{cityDisplay}</span>
+                    <span className="flex items-center gap-1 text-[10px] text-text-light bg-slate-200 px-1.5 py-0.5 rounded-full">
+                      <Lock className="w-3 h-3" />
+                      Masquée
+                    </span>
+                  </div>
+                )}
               </div>
             )}
-            {distance !== null && (
+            {distance !== null && mission.serviceLocation !== "announcer_home" && (
               <div className="flex items-center gap-2">
                 <Navigation className="w-4 h-4 text-blue-500" />
                 <span className="text-sm text-foreground">
@@ -822,7 +903,7 @@ function MissionDetailsModal({
             <div className="flex items-start gap-2 p-2.5 bg-blue-50 rounded-lg">
               <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
               <p className="text-xs text-blue-800">
-                L'adresse exacte et le téléphone seront visibles après acceptation de la mission.
+                L'adresse exacte et le téléphone du client seront visibles une fois la mission acceptée et le paiement effectué.
               </p>
             </div>
           )}
