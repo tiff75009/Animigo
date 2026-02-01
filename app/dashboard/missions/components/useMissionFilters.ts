@@ -8,6 +8,11 @@ interface Mission {
   animal?: {
     type?: string;
   };
+  // Champs supplémentaires pour la compatibilité
+  amount?: number;
+  announcerEarnings?: number;
+  paymentStatus?: string;
+  endDate?: string;
 }
 
 // Helper pour extraire le mois d'une date (format YYYY-MM)

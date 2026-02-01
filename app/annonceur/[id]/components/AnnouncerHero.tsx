@@ -67,7 +67,7 @@ export default function AnnouncerHero({
   };
 
   return (
-    <section className="pt-16">
+    <section className="pt-16 pb-8">
       {/* Cover Image */}
       <div className="relative h-40 sm:h-56 md:h-64 bg-gradient-to-br from-primary/20 via-secondary/10 to-primary/20">
         {announcer.coverImage && (
@@ -91,7 +91,7 @@ export default function AnnouncerHero({
 
       {/* Profile Info Card */}
       <div className="max-w-6xl mx-auto px-4 -mt-16 sm:-mt-20 relative z-10">
-        <div className="bg-white rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1),0_8px_40px_-8px_rgba(0,0,0,0.05)] border border-gray-100/80 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1),0_8px_40px_-8px_rgba(0,0,0,0.05)] border border-gray-100/80">
           {/* Top section with avatar and main info */}
           <div className="p-4 sm:p-6">
             <div className="flex flex-col sm:flex-row gap-4 sm:gap-5">
@@ -198,7 +198,7 @@ export default function AnnouncerHero({
           <div className="border-t border-gray-100" />
 
           {/* Bottom section with animals and bio */}
-          <div className="px-4 sm:px-6 py-3 sm:py-4 bg-gray-50/50">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 bg-gray-50/50 rounded-b-2xl">
             {/* Accepted animals as compact chips */}
             {displayedAnimals.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5 mb-3">

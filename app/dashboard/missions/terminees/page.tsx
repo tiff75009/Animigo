@@ -51,7 +51,7 @@ export default function MissionsTermineesPage() {
   let totalAmount = 0;
   let paidAmount = 0;
   for (const m of missionsList) {
-    const amount = m.announcerEarnings ?? m.amount * 0.85;
+    const amount = m.announcerEarnings ?? (m.amount ?? 0) * 0.85;
     totalAmount += amount;
     if (m.paymentStatus === "paid") {
       paidAmount += amount;
@@ -61,7 +61,7 @@ export default function MissionsTermineesPage() {
 
   // Sort by end date (most recent first)
   const sortedMissions = [...missionsList].sort(
-    (a, b) => new Date(b.endDate).getTime() - new Date(a.endDate).getTime()
+    (a, b) => new Date(b.endDate || 0).getTime() - new Date(a.endDate || 0).getTime()
   );
 
   return (

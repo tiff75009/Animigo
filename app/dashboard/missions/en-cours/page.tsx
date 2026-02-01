@@ -81,7 +81,7 @@ export default function MissionsEnCoursPage() {
   const missionsList = missions;
   let totalAmount = 0;
   for (const m of missionsList) {
-    totalAmount += m.announcerEarnings ?? m.amount * 0.85;
+    totalAmount += m.announcerEarnings ?? (m.amount ?? 0) * 0.85;
   }
 
   return (

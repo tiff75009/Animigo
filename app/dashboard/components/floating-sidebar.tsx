@@ -59,6 +59,11 @@ function isPathActive(currentPath: string, itemHref: string): boolean {
   // On vérifie si le chemin de base correspond (même avec des query params)
   if (currentBase === itemBase) return true;
 
+  // /dashboard doit être exact (page d'accueil), pas match les sous-pages
+  if (itemHref === "/dashboard") {
+    return currentPath === "/dashboard";
+  }
+
   // Ou si c'est un sous-chemin
   return currentPath.startsWith(itemHref + "/");
 }

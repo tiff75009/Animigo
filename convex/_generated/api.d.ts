@@ -67,6 +67,7 @@ import type * as public_booking from "../public/booking.js";
 import type * as public_categoryTypes from "../public/categoryTypes.js";
 import type * as public_emailVerify from "../public/emailVerify.js";
 import type * as public_legal from "../public/legal.js";
+import type * as public_profile from "../public/profile.js";
 import type * as public_search from "../public/search.js";
 import type * as seo_serviceCities from "../seo/serviceCities.js";
 import type * as seo_serviceCityPages from "../seo/serviceCityPages.js";
@@ -151,6 +152,7 @@ declare const fullApi: ApiFromModules<{
   "public/categoryTypes": typeof public_categoryTypes;
   "public/emailVerify": typeof public_emailVerify;
   "public/legal": typeof public_legal;
+  "public/profile": typeof public_profile;
   "public/search": typeof public_search;
   "seo/serviceCities": typeof seo_serviceCities;
   "seo/serviceCityPages": typeof seo_serviceCityPages;

@@ -64,7 +64,17 @@ export default function DashboardPage() {
     );
   }
 
-  const { counts, upcomingRevenue, completedRevenue, activeMissions } = dashboardStats;
+  const {
+    pendingAcceptance,
+    upcoming,
+    inProgress,
+    completed,
+    upcomingRevenue,
+    completedRevenue,
+    activeMissions
+  } = dashboardStats;
+
+  const counts = { pendingAcceptance, upcoming, inProgress, completed };
   const hasActiveMissions = activeMissions.length > 0;
 
   return (

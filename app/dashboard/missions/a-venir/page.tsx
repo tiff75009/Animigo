@@ -204,12 +204,12 @@ export default function MissionsAVenirPage() {
   const missionsList = missions;
   let totalAmount = 0;
   for (const m of missionsList) {
-    totalAmount += m.announcerEarnings ?? m.amount * 0.85;
+    totalAmount += m.announcerEarnings ?? (m.amount ?? 0) * 0.85;
   }
 
   // Sort by start date
   const sortedMissions = [...missionsList].sort(
-    (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+    (a, b) => new Date(a.startDate || 0).getTime() - new Date(b.startDate || 0).getTime()
   );
 
   return (

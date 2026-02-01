@@ -22,6 +22,14 @@ import {
   GenericMissionTab,
 } from "./components";
 
+// Type minimal pour les missions dans les filtres
+interface MissionForFilters {
+  animal?: { type?: string } | null;
+  startDate?: string;
+  serviceCategory?: string;
+  sessionType?: string;
+}
+
 function MissionsPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -72,7 +80,7 @@ function MissionsPageContent() {
   const availableAnimalTypes = useMemo(() => {
     if (!currentMissions) return [];
     const types = new Set<string>();
-    currentMissions.forEach((m) => {
+    (currentMissions as MissionForFilters[]).forEach((m) => {
       if (m.animal?.type) {
         types.add(m.animal.type.toLowerCase());
       }
@@ -84,7 +92,7 @@ function MissionsPageContent() {
   const availableMonths = useMemo(() => {
     if (!currentMissions) return [];
     const months = new Set<string>();
-    currentMissions.forEach((m) => {
+    (currentMissions as MissionForFilters[]).forEach((m) => {
       if (m.startDate) {
         try {
           const date = new Date(m.startDate);
@@ -110,7 +118,7 @@ function MissionsPageContent() {
     const byAnimal: Record<string, number> = {};
     const byMonth: Record<string, number> = {};
 
-    currentMissions.forEach((m) => {
+    (currentMissions as MissionForFilters[]).forEach((m) => {
       // Compteur par catégorie de service
       if (m.serviceCategory === "garde" || m.serviceCategory === "hébergement") {
         garde++;

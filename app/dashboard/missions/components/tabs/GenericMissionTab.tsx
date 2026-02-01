@@ -17,7 +17,9 @@ import type { MissionTab } from "../MissionsTabs";
 import type { FunctionReturnType } from "convex/server";
 import type { ServiceTypeFilter, SessionTypeFilter, AnimalTypeFilter, MonthFilter } from "../MissionsFilters";
 
-type MissionType = FunctionReturnType<typeof api.planning.missions.getMissionsByStatus>[number];
+type MissionType = FunctionReturnType<typeof api.planning.missions.getMissionsByStatus>[number] & {
+  announcerEarnings?: number;
+};
 
 type MissionStatus =
   | "pending_confirmation"
@@ -68,7 +70,7 @@ export function GenericMissionTab({
   let totalAmount = 0;
   let paidAmount = 0;
   for (const m of filteredMissions) {
-    const amount = m.announcerEarnings ?? m.amount * 0.85;
+    const amount = m.announcerEarnings ?? (m.amount ?? 0) * 0.85;
     totalAmount += amount;
     if (m.paymentStatus === "paid") {
       paidAmount += amount;
@@ -78,9 +80,9 @@ export function GenericMissionTab({
   // Tri par date (récent en premier pour completed/refused/cancelled, proche en premier pour les autres)
   const sortedMissions = [...filteredMissions].sort((a, b) => {
     if (status === "completed" || status === "refused" || status === "cancelled") {
-      return new Date(b.endDate).getTime() - new Date(a.endDate).getTime();
+      return new Date(b.endDate || 0).getTime() - new Date(a.endDate || 0).getTime();
     }
-    return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+    return new Date(a.startDate || 0).getTime() - new Date(b.startDate || 0).getTime();
   });
 
   const handleContact = async (missionId: string) => {

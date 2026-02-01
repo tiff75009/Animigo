@@ -44,12 +44,12 @@ export default function MissionsAnnuleesPage() {
   const missionsList = missions;
   let totalAmount = 0;
   for (const m of missionsList) {
-    totalAmount += m.announcerEarnings ?? m.amount * 0.85;
+    totalAmount += m.announcerEarnings ?? (m.amount ?? 0) * 0.85;
   }
 
   // Sort by start date (most recent first)
   const sortedMissions = [...missionsList].sort(
-    (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
+    (a, b) => new Date(b.startDate || 0).getTime() - new Date(a.startDate || 0).getTime()
   );
 
   return (

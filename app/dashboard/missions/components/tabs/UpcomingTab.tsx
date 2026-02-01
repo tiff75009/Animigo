@@ -62,12 +62,12 @@ export function UpcomingTab({
   // Calcul des revenus
   let totalAmount = 0;
   for (const m of filteredMissions) {
-    totalAmount += m.announcerEarnings ?? m.amount * 0.85;
+    totalAmount += m.announcerEarnings ?? (m.amount ?? 0) * 0.85;
   }
 
   // Tri par date de début
   const sortedMissions = [...filteredMissions].sort(
-    (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+    (a, b) => new Date(a.startDate || 0).getTime() - new Date(b.startDate || 0).getTime()
   );
 
   const handleContact = async (missionId: string) => {
