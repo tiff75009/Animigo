@@ -251,6 +251,44 @@ export const sendMissionAutoRefusedNotification = action({
   },
 });
 
+/**
+ * Envoyer une notification au client et à l'annonceur que le délai de paiement a expiré
+ * Appelée par le cron autoExpirePendingPayments
+ */
+export const sendPaymentExpiredNotification = action({
+  args: {
+    clientId: v.id("users"),
+    announcerId: v.id("users"),
+    serviceName: v.string(),
+    missionId: v.id("missions"),
+  },
+  handler: async (ctx, args): Promise<ActionResult> => {
+    const qstashConfig = await ctx.runQuery(internal.notifications.queries.getQStashConfig);
+
+    // Notification au client
+    const clientPayload: NotificationPayload = {
+      userId: args.clientId,
+      type: "mission_cancelled",
+      title: "Réservation annulée",
+      message: `Votre réservation pour "${args.serviceName}" a été annulée car le délai de paiement est dépassé.`,
+      linkUrl: "/client/reservations",
+    };
+
+    await sendNotificationWithFallback(ctx, qstashConfig, clientPayload);
+
+    // Notification à l'annonceur
+    const announcerPayload: NotificationPayload = {
+      userId: args.announcerId,
+      type: "mission_cancelled",
+      title: "Réservation annulée",
+      message: `La réservation pour "${args.serviceName}" a été annulée car le client n'a pas payé à temps.`,
+      linkUrl: "/dashboard/missions",
+    };
+
+    return sendNotificationWithFallback(ctx, qstashConfig, announcerPayload);
+  },
+});
+
 // ============================================
 // ACTIONS DE TEST
 // ============================================

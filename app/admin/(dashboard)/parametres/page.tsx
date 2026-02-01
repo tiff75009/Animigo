@@ -107,6 +107,10 @@ export default function ParametresPage() {
   const [deadlineLongHours, setDeadlineLongHours] = useState(168);
   const [minimumBookingAdvanceHours, setMinimumBookingAdvanceHours] = useState(24);
 
+  // États pour les délais de paiement
+  const [paymentDeadlineEnabled, setPaymentDeadlineEnabled] = useState(true);
+  const [paymentDeadlineHours, setPaymentDeadlineHours] = useState(48);
+
   // Query pour récupérer toutes les configs
   const allConfigs = useQuery(
     api.admin.config.getAllConfigs,
@@ -143,6 +147,12 @@ export default function ParametresPage() {
     token ? { token } : "skip"
   );
 
+  // Query pour les délais de paiement
+  const paymentDeadlineSettings = useQuery(
+    api.admin.config.getPaymentDeadlineSettings,
+    token ? { token } : "skip"
+  );
+
   // Mutations
   const toggleModeration = useMutation(api.admin.config.toggleServiceModeration);
   const updateConfig = useMutation(api.admin.config.updateConfig);
@@ -155,6 +165,7 @@ export default function ParametresPage() {
   const updateVatRateMutation = useMutation(api.admin.commissions.updateVatRate);
   const updateStripeFeeRateMutation = useMutation(api.admin.commissions.updateStripeFeeRate);
   const updateDeadlineSettings = useMutation(api.admin.config.updateAcceptanceDeadlineSettings);
+  const updatePaymentDeadlineSettings = useMutation(api.admin.config.updatePaymentDeadlineSettings);
 
   // Charger les configs existantes
   useEffect(() => {
@@ -230,6 +241,14 @@ export default function ParametresPage() {
       setMinimumBookingAdvanceHours(deadlineSettings.minimumBookingAdvanceHours);
     }
   }, [deadlineSettings]);
+
+  // Charger les paramètres de délais de paiement
+  useEffect(() => {
+    if (paymentDeadlineSettings) {
+      setPaymentDeadlineEnabled(paymentDeadlineSettings.enabled);
+      setPaymentDeadlineHours(paymentDeadlineSettings.hours);
+    }
+  }, [paymentDeadlineSettings]);
 
   const handleToggleModeration = async () => {
     if (!token) return;
@@ -480,6 +499,13 @@ export default function ParametresPage() {
         deadlineMediumHours,
         deadlineLongHours,
         minimumBookingAdvanceHours,
+      });
+
+      // 5. Sauvegarder les délais de paiement
+      await updatePaymentDeadlineSettings({
+        token,
+        enabled: paymentDeadlineEnabled,
+        hours: paymentDeadlineHours,
       });
 
       setSaveSuccess(true);
@@ -1165,6 +1191,83 @@ export default function ParametresPage() {
               </>
             )}
 
+          </div>
+        </motion.div>
+
+        {/* Délais de paiement */}
+        <motion.div
+          className="bg-slate-900 rounded-xl p-6 border border-slate-800"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.09 }}
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-orange-500/20 rounded-lg">
+              <CreditCard className="w-5 h-5 text-orange-400" />
+            </div>
+            <h2 className="text-lg font-semibold text-white">Délais de paiement</h2>
+          </div>
+
+          <div className="space-y-6">
+            {/* Toggle principal */}
+            <div className="flex items-center justify-between p-4 bg-slate-800 rounded-lg">
+              <div className="flex-1">
+                <p className="text-slate-200 font-medium">Activer le délai de paiement</p>
+                <p className="text-sm text-slate-400 mt-1">
+                  Les clients auront un temps limité pour payer après acceptation.
+                  Passé ce délai, la réservation sera automatiquement annulée.
+                </p>
+              </div>
+              <button
+                onClick={() => setPaymentDeadlineEnabled(!paymentDeadlineEnabled)}
+                className={`relative w-14 h-8 rounded-full transition-colors ${
+                  paymentDeadlineEnabled ? "bg-orange-500" : "bg-slate-600"
+                }`}
+              >
+                <span
+                  className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow-md transition-transform flex items-center justify-center ${
+                    paymentDeadlineEnabled ? "left-7" : "left-1"
+                  }`}
+                >
+                  {paymentDeadlineEnabled && <Check className="w-4 h-4 text-orange-500" />}
+                </span>
+              </button>
+            </div>
+
+            {paymentDeadlineEnabled && (
+              <div className="p-4 bg-slate-800/50 rounded-lg">
+                <label className="block text-sm font-medium text-slate-300 mb-3">
+                  Durée pour payer après acceptation
+                </label>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="range"
+                    min={12}
+                    max={96}
+                    step={12}
+                    value={paymentDeadlineHours}
+                    onChange={(e) => setPaymentDeadlineHours(Number(e.target.value))}
+                    className="flex-1 accent-orange-500"
+                  />
+                  <div className="w-20 px-3 py-2 bg-slate-700 rounded-lg text-center font-semibold text-orange-400">
+                    {formatHoursDisplay(paymentDeadlineHours)}
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500 mt-2">
+                  Le client doit payer dans ce délai après que l'annonceur ait accepté sa demande.
+                </p>
+              </div>
+            )}
+
+            <div className="flex items-start gap-2 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+              <CreditCard className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-orange-300">
+                {paymentDeadlineEnabled
+                  ? `Les réservations non payées dans les ${formatHoursDisplay(paymentDeadlineHours)} seront automatiquement annulées.`
+                  : "Le délai de paiement est désactivé. Les clients peuvent payer à tout moment."
+                }
+              </p>
+            </div>
           </div>
         </motion.div>
 

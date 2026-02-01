@@ -42,7 +42,6 @@ export function AcceptModal({
 
   if (!isOpen || !mission) return null;
 
-  const clientAmount = mission.amount / 100;
   const announcerEarnings = (mission.announcerEarnings ?? mission.amount * 0.85) / 100;
 
   return (
@@ -114,19 +113,12 @@ export function AcceptModal({
 
                 {/* Revenus */}
                 <div className="bg-gradient-to-r from-secondary/10 to-accent/10 rounded-2xl p-4 mb-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <TrendingUp className="w-5 h-5 text-secondary" />
-                    <span className="font-semibold text-foreground">Vos revenus</span>
-                  </div>
-                  <div className="flex justify-between items-end">
-                    <div>
-                      <p className="text-sm text-text-light">Prix client</p>
-                      <p className="text-lg text-foreground">{clientAmount.toFixed(0)} €</p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-secondary" />
+                      <span className="font-semibold text-foreground">Vos revenus</span>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm text-text-light">Votre revenu</p>
-                      <p className="text-2xl font-bold text-secondary">{announcerEarnings.toFixed(0)} €</p>
-                    </div>
+                    <p className="text-2xl font-bold text-secondary">{announcerEarnings.toFixed(2).replace(".", ",")} €</p>
                   </div>
                 </div>
 

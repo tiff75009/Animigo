@@ -10,73 +10,96 @@ import {
   Clock,
   MapPin,
   User,
-  Phone,
-  Mail,
   CreditCard,
   CheckCircle,
   XCircle,
-  AlertCircle,
   Loader2,
   Moon,
   Sun,
   MessageCircle,
   ExternalLink,
+  Home,
+  Lock,
+  Sparkles,
+  Users,
+  UserCircle,
+  PawPrint,
+  Scissors,
 } from "lucide-react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/app/lib/utils";
 import { useToast } from "@/app/components/ui/toast";
+import { SessionsList } from "../../components/sessions-list";
+import { PaymentCountdown } from "../components/PaymentCountdown";
 
-const statusConfig: Record<string, { label: string; color: string; bgColor: string; icon: React.ReactNode; description: string }> = {
+const statusConfig: Record<
+  string,
+  {
+    label: string;
+    color: string;
+    bgColor: string;
+    borderColor: string;
+    icon: React.ReactNode;
+    description: string;
+  }
+> = {
   pending_acceptance: {
     label: "En attente d'acceptation",
-    color: "text-yellow-700",
-    bgColor: "bg-yellow-100",
-    icon: <Loader2 className="w-5 h-5 animate-spin" />,
-    description: "L'annonceur doit accepter votre demande de réservation."
+    color: "text-amber-700",
+    bgColor: "bg-amber-50",
+    borderColor: "border-amber-200",
+    icon: <Clock className="w-5 h-5" />,
+    description: "L'annonceur doit accepter votre demande.",
   },
   pending_confirmation: {
     label: "En attente de paiement",
     color: "text-orange-700",
-    bgColor: "bg-orange-100",
+    bgColor: "bg-orange-50",
+    borderColor: "border-orange-200",
     icon: <CreditCard className="w-5 h-5" />,
-    description: "L'annonceur a accepté. Veuillez procéder au paiement pour confirmer."
+    description: "L'annonceur a accepté ! Confirmez en procédant au paiement.",
   },
   upcoming: {
     label: "Confirmée",
     color: "text-green-700",
-    bgColor: "bg-green-100",
+    bgColor: "bg-green-50",
+    borderColor: "border-green-200",
     icon: <CheckCircle className="w-5 h-5" />,
-    description: "Votre réservation est confirmée. Préparez-vous pour le jour J !"
+    description: "Réservation confirmée. Préparez-vous !",
   },
   in_progress: {
     label: "En cours",
     color: "text-blue-700",
-    bgColor: "bg-blue-100",
-    icon: <Clock className="w-5 h-5" />,
-    description: "La prestation est actuellement en cours."
+    bgColor: "bg-blue-50",
+    borderColor: "border-blue-200",
+    icon: <Sparkles className="w-5 h-5" />,
+    description: "La prestation est en cours.",
   },
   completed: {
     label: "Terminée",
     color: "text-gray-700",
-    bgColor: "bg-gray-100",
+    bgColor: "bg-gray-50",
+    borderColor: "border-gray-200",
     icon: <CheckCircle className="w-5 h-5" />,
-    description: "La prestation est terminée."
+    description: "La prestation est terminée.",
   },
   refused: {
     label: "Refusée",
     color: "text-red-700",
-    bgColor: "bg-red-100",
+    bgColor: "bg-red-50",
+    borderColor: "border-red-200",
     icon: <XCircle className="w-5 h-5" />,
-    description: "L'annonceur n'a pas pu accepter cette réservation."
+    description: "L'annonceur n'a pas pu accepter.",
   },
   cancelled: {
     label: "Annulée",
     color: "text-red-700",
-    bgColor: "bg-red-100",
+    bgColor: "bg-red-50",
+    borderColor: "border-red-200",
     icon: <XCircle className="w-5 h-5" />,
-    description: "Cette réservation a été annulée."
+    description: "Réservation annulée.",
   },
 };
 
@@ -85,16 +108,20 @@ export default function ReservationDetailPage() {
   const router = useRouter();
   const { error: toastError } = useToast();
   const missionId = params.missionId as string;
-  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const token =
+    typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
   const [isContacting, setIsContacting] = useState(false);
 
   const mission = useQuery(
     api.planning.missions.getClientMissionById,
-    token && missionId ? { token, missionId: missionId as Id<"missions"> } : "skip"
+    token && missionId
+      ? { token, missionId: missionId as Id<"missions"> }
+      : "skip"
   );
 
-  // Mutation pour obtenir ou créer une conversation
-  const getOrCreateConversation = useMutation(api.messaging.mutations.getOrCreateConversation);
+  const getOrCreateConversation = useMutation(
+    api.messaging.mutations.getOrCreateConversation
+  );
 
   const handleContact = async () => {
     if (!token || !missionId || isContacting) return;
@@ -117,8 +144,11 @@ export default function ReservationDetailPage() {
     }
   };
 
-  // Vérifier si le bouton contacter doit être affiché
-  const canContact = mission && ["upcoming", "in_progress", "completed"].includes(mission.status);
+  const isPaid =
+    mission &&
+    ["upcoming", "in_progress", "completed"].includes(mission.status);
+
+  const isMultiSession = mission?.sessions && mission.sessions.length > 1;
 
   if (!mission) {
     return (
@@ -129,10 +159,9 @@ export default function ReservationDetailPage() {
   }
 
   const status = statusConfig[mission.status] || statusConfig.pending_acceptance;
-  const duration = calculateDuration(mission.startDate, mission.endDate, mission.startTime, mission.endTime);
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
+    <div className="space-y-5 max-w-3xl mx-auto pb-8">
       {/* Header */}
       <div className="flex items-center gap-4">
         <button
@@ -142,383 +171,531 @@ export default function ReservationDetailPage() {
           <ArrowLeft className="w-5 h-5 text-gray-600" />
         </button>
         <div className="flex-1">
-          <h1 className="text-xl font-bold text-foreground">Détail de la réservation</h1>
-          <p className="text-sm text-gray-500">Réf: {missionId.slice(-8).toUpperCase()}</p>
+          <h1 className="text-xl font-bold text-foreground">Ma réservation</h1>
+          <p className="text-sm text-gray-500">
+            Réf: {missionId.slice(-8).toUpperCase()}
+          </p>
         </div>
       </div>
 
-      {/* Status Card */}
+      {/* Status Card fusionnée avec Récapitulatif paiement */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className={cn("rounded-2xl p-5", status.bgColor)}
+        className={cn(
+          "rounded-2xl p-5 border",
+          status.bgColor,
+          status.borderColor
+        )}
       >
+        {/* Status header */}
         <div className="flex items-start gap-4">
-          <div className={cn("p-3 rounded-xl bg-white/50", status.color)}>
+          <div
+            className={cn("p-3 rounded-xl bg-white/80 shadow-sm", status.color)}
+          >
             {status.icon}
           </div>
           <div className="flex-1">
-            <h2 className={cn("font-semibold text-lg", status.color)}>{status.label}</h2>
-            <p className={cn("text-sm mt-1", status.color.replace("700", "600"))}>{status.description}</p>
+            <h2 className={cn("font-semibold text-lg", status.color)}>
+              {status.label}
+            </h2>
+            <p className="text-sm mt-0.5 text-gray-600">{status.description}</p>
           </div>
         </div>
 
+        {/* Détails du paiement */}
+        <div className="mt-4 p-4 bg-white/70 rounded-xl space-y-2">
+          {/* Prix du service (ce que l'annonceur reçoit) */}
+          <div className="flex justify-between items-center text-sm">
+            <span className="text-gray-600">
+              {mission.variantName || mission.serviceName}
+              {mission.numberOfSessions && mission.numberOfSessions > 1 && (
+                <span className="text-gray-400 ml-1">
+                  × {mission.numberOfSessions} séances
+                </span>
+              )}
+              {/* Durée si mono-séance */}
+              {(!mission.numberOfSessions || mission.numberOfSessions === 1) &&
+                mission.startTime &&
+                mission.endTime && (
+                  <span className="text-gray-400 ml-1">
+                    ({calculateSessionDuration(mission.startTime, mission.endTime)})
+                  </span>
+                )}
+            </span>
+            <span className="font-medium text-foreground">
+              {formatPrice(mission.announcerEarnings || (mission.amount - (mission.platformFee || 0) - (mission.stripeFee || 0)))}
+            </span>
+          </div>
+
+          {/* Commission plateforme */}
+          {mission.platformFee && mission.platformFee > 0 && (
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-500">
+                Commission plateforme{mission.commissionRate ? ` (${mission.commissionRate}%)` : ""}
+              </span>
+              <span className="text-gray-500">
+                {formatPrice(mission.platformFee)}
+              </span>
+            </div>
+          )}
+
+          {/* Frais de gestion paiement (Stripe) */}
+          {mission.stripeFee && mission.stripeFee > 0 && (
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-500">
+                Frais de gestion paiement{mission.stripeFeeRate ? ` (${mission.stripeFeeRate}%)` : ""}
+              </span>
+              <span className="text-gray-500">
+                {formatPrice(mission.stripeFee)}
+              </span>
+            </div>
+          )}
+
+          {/* Total */}
+          <div className="flex justify-between items-center pt-2 border-t border-gray-200 mt-2">
+            <span className="font-semibold text-foreground">Total à payer</span>
+            <span className="font-bold text-xl text-foreground">
+              {formatPrice(mission.amount)}
+            </span>
+          </div>
+        </div>
+
+        {/* Info paiement */}
+        {mission.status === "pending_acceptance" && (
+          <p className="mt-3 text-xs text-gray-500 flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5" />
+            Le paiement sera demandé après acceptation par le pet-sitter.
+          </p>
+        )}
+
+        {mission.paymentStatus === "paid" && (
+          <p className="mt-3 text-xs text-green-600 flex items-center gap-1.5">
+            <CheckCircle className="w-3.5 h-3.5" />
+            Paiement effectué - Le montant sera encaissé à la fin de la prestation.
+          </p>
+        )}
+
+        {/* Délai de paiement */}
+        {mission.status === "pending_confirmation" && mission.paymentDeadline && (
+          <div className="mt-3 p-3 bg-white/60 rounded-xl border border-orange-200">
+            <PaymentCountdown deadline={mission.paymentDeadline} />
+          </div>
+        )}
+
         {/* Payment button if pending */}
-        {mission.status === "pending_confirmation" && mission.paymentDetails?.paymentUrl && (
+        {mission.status === "pending_confirmation" && (
           <Link
             href={`/client/paiement/${mission.id}`}
-            className="mt-4 flex items-center justify-center gap-2 w-full py-3 bg-primary text-white rounded-xl font-medium hover:bg-primary/90 transition-colors"
+            className="mt-4 flex items-center justify-center gap-3 w-full py-4 bg-primary text-white rounded-2xl font-semibold text-lg hover:bg-primary/90 transition-all hover:scale-[1.01] shadow-lg shadow-primary/20"
           >
-            <CreditCard className="w-5 h-5" />
-            Procéder au paiement
+            <CreditCard className="w-6 h-6" />
+            Confirmer ma réservation
           </Link>
         )}
 
-        {/* Cancellation reason if refused/cancelled */}
-        {(mission.status === "refused" || mission.status === "cancelled") && mission.cancellationReason && (
-          <div className="mt-4 p-3 bg-white/50 rounded-xl">
-            <p className="text-sm font-medium text-red-800">Motif :</p>
-            <p className="text-sm text-red-700">{mission.cancellationReason}</p>
-          </div>
-        )}
+        {/* Cancellation reason */}
+        {(mission.status === "refused" || mission.status === "cancelled") &&
+          mission.cancellationReason && (
+            <div className="mt-4 p-4 bg-white/60 rounded-xl border border-red-100">
+              <p className="text-sm font-medium text-red-800">Motif :</p>
+              <p className="text-sm text-red-700 mt-1">
+                {mission.cancellationReason}
+              </p>
+            </div>
+          )}
       </motion.div>
 
       {/* Service & Animal */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
+        transition={{ delay: 0.05 }}
         className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100"
       >
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center text-3xl">
+          <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0">
             {mission.animal?.emoji || "🐾"}
           </div>
-          <div className="flex-1">
-            <h3 className="font-bold text-lg text-foreground">{mission.serviceName}</h3>
-            <p className="text-gray-500">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-foreground truncate">
+              {mission.serviceName}
+            </h3>
+            <p className="text-gray-500 text-sm">
               Pour {mission.animal?.name || "votre animal"}
               {mission.animal?.type && ` (${mission.animal.type})`}
             </p>
           </div>
         </div>
+
+        {/* Badges */}
+        <div className="flex flex-wrap gap-2 mt-4">
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium",
+              mission.serviceCategory === "garde"
+                ? "bg-purple-100 text-purple-700"
+                : "bg-teal-100 text-teal-700"
+            )}
+          >
+            {mission.serviceCategory === "garde" ? (
+              <>
+                <PawPrint className="w-3.5 h-3.5" />
+                Garde
+              </>
+            ) : (
+              <>
+                <Scissors className="w-3.5 h-3.5" />
+                Service
+              </>
+            )}
+          </span>
+
+          {mission.sessionType && (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium",
+                mission.sessionType === "collective"
+                  ? "bg-blue-100 text-blue-700"
+                  : "bg-amber-100 text-amber-700"
+              )}
+            >
+              {mission.sessionType === "collective" ? (
+                <>
+                  <Users className="w-3.5 h-3.5" />
+                  Collectif
+                </>
+              ) : (
+                <>
+                  <UserCircle className="w-3.5 h-3.5" />
+                  Individuel
+                </>
+              )}
+            </span>
+          )}
+
+          {mission.numberOfSessions && mission.numberOfSessions > 1 && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+              <Calendar className="w-3.5 h-3.5" />
+              {mission.numberOfSessions} séances
+            </span>
+          )}
+        </div>
       </motion.div>
 
-      {/* Date & Time Details */}
+      {/* Annonceur + Lieu - Grid 2 colonnes */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Annonceur */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100"
+        >
+          <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2 text-sm">
+            <User className="w-4 h-4 text-primary" />
+            Votre pet-sitter
+          </h3>
+
+          <div className="flex items-center gap-3">
+            {mission.announcerPhotoUrl ? (
+              <img
+                src={mission.announcerPhotoUrl}
+                alt={mission.announcerName}
+                className="w-12 h-12 rounded-full object-cover flex-shrink-0"
+              />
+            ) : (
+              <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <User className="w-6 h-6 text-gray-400" />
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-foreground truncate">
+                {mission.announcerName}
+              </p>
+            </div>
+
+            {/* Boutons */}
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <Link
+                href={`/annonceur/${mission.announcerSlug || mission.announcerId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
+                title="Voir le profil"
+              >
+                <ExternalLink className="w-4 h-4" />
+              </Link>
+
+              {isPaid ? (
+                <button
+                  onClick={handleContact}
+                  disabled={isContacting}
+                  className="p-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors disabled:opacity-50"
+                  title="Contacter"
+                >
+                  {isContacting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <MessageCircle className="w-4 h-4" />
+                  )}
+                </button>
+              ) : (
+                <div
+                  className="p-2 bg-gray-100 text-gray-400 rounded-lg cursor-not-allowed relative"
+                  title="Disponible après paiement"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <Lock className="w-2 h-2 absolute -bottom-0.5 -right-0.5 bg-gray-100 rounded-full" />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {!isPaid && (
+            <p className="text-xs text-gray-400 mt-3 flex items-center gap-1">
+              <Lock className="w-3 h-3" />
+              Messagerie après paiement
+            </p>
+          )}
+        </motion.div>
+
+        {/* Lieu */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100"
+        >
+          <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2 text-sm">
+            <MapPin className="w-4 h-4 text-primary" />
+            Lieu de prestation
+          </h3>
+
+          {isPaid ? (
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <CheckCircle className="w-5 h-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-foreground font-medium text-sm">
+                  {mission.location}
+                </p>
+                {mission.city && (
+                  <p className="text-xs text-gray-500 mt-0.5">{mission.city}</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Home className="w-5 h-5 text-gray-400" />
+              </div>
+              <div>
+                <p className="text-gray-600 text-sm">
+                  Chez{" "}
+                  <span className="font-medium">
+                    {mission.serviceLocation === "client_home"
+                      ? "vous"
+                      : "l'annonceur"}
+                  </span>
+                </p>
+                <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                  <Lock className="w-3 h-3" />
+                  Adresse après paiement
+                </p>
+              </div>
+            </div>
+          )}
+        </motion.div>
+      </div>
+
+      {/* Séances / Dates */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.15 }}
         className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100"
       >
-        <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-          <Calendar className="w-5 h-5 text-primary" />
-          Dates et horaires
-        </h3>
-
-        <div className="space-y-4">
-          {/* Start */}
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
-              <Sun className="w-5 h-5 text-green-600" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Début</p>
-              <p className="font-semibold text-foreground">
-                {formatDate(mission.startDate)}
-                {mission.startTime && ` à ${mission.startTime}`}
-              </p>
-            </div>
-          </div>
-
-          {/* End */}
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
-              <Moon className="w-5 h-5 text-red-600" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Fin</p>
-              <p className="font-semibold text-foreground">
-                {formatDate(mission.endDate)}
-                {mission.endTime && ` à ${mission.endTime}`}
-              </p>
-            </div>
-          </div>
-
-          {/* Duration Summary */}
-          <div className="pt-3 border-t border-gray-100">
-            <div className="flex items-center gap-3 p-3 bg-primary/5 rounded-xl">
-              <Clock className="w-5 h-5 text-primary" />
-              <div>
-                <p className="text-sm text-gray-500">Durée totale</p>
-                <p className="font-semibold text-foreground">{duration.summary}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Overnight Stay */}
-          {mission.includeOvernightStay && mission.overnightNights && (
-            <div className="flex items-center gap-3 p-3 bg-indigo-50 rounded-xl">
-              <Moon className="w-5 h-5 text-indigo-600" />
-              <div>
-                <p className="text-sm text-indigo-600">Garde de nuit incluse</p>
-                <p className="font-semibold text-indigo-700">
-                  {mission.overnightNights} nuit{mission.overnightNights > 1 ? "s" : ""}
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-      </motion.div>
-
-      {/* Announcer */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100"
-      >
-        <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-          <User className="w-5 h-5 text-primary" />
-          Votre pet-sitter
-        </h3>
-
-        <div className="flex items-center gap-4">
-          {mission.announcerPhotoUrl ? (
-            <img
-              src={mission.announcerPhotoUrl}
-              alt={mission.announcerName}
-              className="w-16 h-16 rounded-full object-cover"
+        {isMultiSession && mission.sessions ? (
+          <>
+            <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-primary" />
+              Vos séances
+              <span className="text-sm font-normal text-gray-500">
+                ({mission.sessions.length} séances)
+              </span>
+            </h3>
+            <SessionsList
+              sessions={mission.sessions}
+              sessionType={mission.sessionType}
+              numberOfSessions={mission.numberOfSessions}
             />
-          ) : (
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
-              <User className="w-8 h-8 text-gray-400" />
+          </>
+        ) : (
+          <>
+            <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-primary" />
+              Dates et horaires
+            </h3>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="flex items-center gap-3 p-3 bg-green-50 rounded-xl border border-green-100">
+                <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                  <Sun className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-green-600 font-medium">Début</p>
+                  <p className="font-semibold text-foreground text-sm">
+                    {formatDateShort(mission.startDate)}
+                    {mission.startTime && ` • ${mission.startTime}`}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 p-3 bg-orange-50 rounded-xl border border-orange-100">
+                <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                  <Moon className="w-5 h-5 text-orange-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-orange-600 font-medium">Fin</p>
+                  <p className="font-semibold text-foreground text-sm">
+                    {formatDateShort(mission.endDate)}
+                    {mission.endTime && ` • ${mission.endTime}`}
+                  </p>
+                </div>
+              </div>
             </div>
-          )}
-          <div className="flex-1">
-            <p className="font-semibold text-foreground text-lg">{mission.announcerName}</p>
-            {mission.status !== "pending_acceptance" && mission.status !== "refused" && mission.status !== "cancelled" && (
-              <div className="mt-2 space-y-1">
-                {mission.announcerPhone && (
-                  <a
-                    href={`tel:${mission.announcerPhone}`}
-                    className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary"
-                  >
-                    <Phone className="w-4 h-4" />
-                    {mission.announcerPhone}
-                  </a>
-                )}
+
+            {mission.includeOvernightStay && mission.overnightNights && (
+              <div className="flex items-center gap-3 p-3 bg-indigo-50 rounded-xl border border-indigo-100 mt-3">
+                <Moon className="w-5 h-5 text-indigo-600" />
+                <div>
+                  <p className="font-medium text-indigo-700 text-sm">
+                    Garde de nuit incluse
+                  </p>
+                  <p className="text-xs text-indigo-600">
+                    {mission.overnightNights} nuit
+                    {mission.overnightNights > 1 ? "s" : ""}
+                  </p>
+                </div>
               </div>
             )}
-          </div>
-          {canContact && (
-            <button
-              onClick={handleContact}
-              disabled={isContacting}
-              className="p-3 bg-primary/10 text-primary rounded-xl hover:bg-primary/20 transition-colors disabled:opacity-50"
-            >
-              {isContacting ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <MessageCircle className="w-5 h-5" />
-              )}
-            </button>
-          )}
-        </div>
+          </>
+        )}
       </motion.div>
-
-      {/* Location */}
-      {mission.location && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25 }}
-          className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100"
-        >
-          <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-            <MapPin className="w-5 h-5 text-primary" />
-            Lieu de la prestation
-          </h3>
-          <p className="text-gray-600">{mission.location}</p>
-          {mission.city && <p className="text-sm text-gray-500 mt-1">{mission.city}</p>}
-        </motion.div>
-      )}
 
       {/* Notes */}
       {(mission.clientNotes || mission.announcerNotes) && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
+          transition={{ delay: 0.2 }}
           className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100"
         >
           <h3 className="font-semibold text-foreground mb-3">Notes</h3>
-          {mission.clientNotes && (
-            <div className="mb-3">
-              <p className="text-xs text-gray-500 mb-1">Vos instructions</p>
-              <p className="text-gray-600 text-sm bg-gray-50 p-3 rounded-xl">{mission.clientNotes}</p>
-            </div>
-          )}
-          {mission.announcerNotes && (
-            <div>
-              <p className="text-xs text-gray-500 mb-1">Notes du pet-sitter</p>
-              <p className="text-gray-600 text-sm bg-gray-50 p-3 rounded-xl">{mission.announcerNotes}</p>
-            </div>
-          )}
+          <div className="space-y-3">
+            {mission.clientNotes && (
+              <div>
+                <p className="text-xs text-gray-500 mb-1.5 font-medium">
+                  Vos instructions
+                </p>
+                <p className="text-gray-600 text-sm bg-gray-50 p-3 rounded-xl border border-gray-100">
+                  {mission.clientNotes}
+                </p>
+              </div>
+            )}
+            {mission.announcerNotes && (
+              <div>
+                <p className="text-xs text-gray-500 mb-1.5 font-medium">
+                  Notes du pet-sitter
+                </p>
+                <p className="text-gray-600 text-sm bg-primary/5 p-3 rounded-xl border border-primary/10">
+                  {mission.announcerNotes}
+                </p>
+              </div>
+            )}
+          </div>
         </motion.div>
       )}
-
-      {/* Price Summary */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.35 }}
-        className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100"
-      >
-        <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-          <CreditCard className="w-5 h-5 text-primary" />
-          Récapitulatif du paiement
-        </h3>
-
-        <div className="space-y-3">
-          <div className="flex justify-between items-center text-gray-600">
-            <span>Montant total</span>
-            <span className="font-bold text-xl text-foreground">
-              {(mission.amount / 100).toFixed(2).replace(".", ",")} €
-            </span>
-          </div>
-
-          {mission.includeOvernightStay && mission.overnightAmount && (
-            <div className="flex justify-between items-center text-sm text-gray-500">
-              <span className="flex items-center gap-1">
-                <Moon className="w-4 h-4" />
-                dont garde de nuit
-              </span>
-              <span>{(mission.overnightAmount / 100).toFixed(2).replace(".", ",")} €</span>
-            </div>
-          )}
-
-          {/* Payment Status */}
-          <div className="pt-3 border-t border-gray-100">
-            <div className={cn(
-              "flex items-start gap-3 p-3 rounded-xl",
-              mission.paymentStatus === "paid" ? "bg-green-50 text-green-700" :
-              mission.paymentStatus === "pending" ? "bg-orange-50 text-orange-700" :
-              mission.status === "pending_confirmation" ? "bg-blue-50 text-blue-700" :
-              "bg-gray-50 text-gray-600"
-            )}>
-              {mission.paymentStatus === "paid" ? (
-                <>
-                  <CheckCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-medium block">Paiement effectué</span>
-                    <span className="text-sm text-green-600">Le montant sera encaissé à la fin de la prestation.</span>
-                  </div>
-                </>
-              ) : mission.paymentStatus === "pending" ? (
-                <>
-                  <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-medium block">Paiement en attente</span>
-                    <span className="text-sm text-orange-600">Veuillez procéder au paiement pour confirmer la réservation.</span>
-                  </div>
-                </>
-              ) : mission.status === "pending_confirmation" ? (
-                <>
-                  <CreditCard className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-medium block">Paiement requis</span>
-                    <span className="text-sm text-blue-600">Le montant sera bloqué sur votre carte et encaissé uniquement à la fin de la mission.</span>
-                  </div>
-                </>
-              ) : mission.status === "pending_acceptance" ? (
-                <>
-                  <Clock className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-medium block">En attente d'acceptation</span>
-                    <span className="text-sm text-gray-500">Le paiement sera demandé après acceptation par le pet-sitter.</span>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                  <span className="font-medium">Réservation terminée</span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </motion.div>
 
       {/* Actions */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
+        transition={{ delay: 0.25 }}
         className="flex gap-3"
       >
         <Link
           href="/client/reservations"
-          className="flex-1 py-3 text-center bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors"
+          className="flex-1 py-3.5 text-center bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors"
         >
-          Retour aux réservations
+          Retour
         </Link>
         {mission.status === "pending_confirmation" && (
           <Link
             href={`/client/paiement/${mission.id}`}
-            className="flex-1 py-3 text-center bg-primary text-white rounded-xl font-medium hover:bg-primary/90 transition-colors"
+            className="flex-1 py-3.5 text-center bg-primary text-white rounded-xl font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
           >
-            Payer maintenant
+            <CreditCard className="w-5 h-5" />
+            Payer
           </Link>
+        )}
+        {isPaid && (
+          <button
+            onClick={handleContact}
+            disabled={isContacting}
+            className="flex-1 py-3.5 text-center bg-primary text-white rounded-xl font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {isContacting ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <>
+                <MessageCircle className="w-5 h-5" />
+                Contacter
+              </>
+            )}
+          </button>
         )}
       </motion.div>
     </div>
   );
 }
 
-// Helper functions
-function formatDate(dateStr: string): string {
+function formatDateShort(dateStr: string): string {
   const date = new Date(dateStr);
   return date.toLocaleDateString("fr-FR", {
-    weekday: "long",
+    weekday: "short",
     day: "numeric",
-    month: "long",
-    year: "numeric",
+    month: "short",
   });
 }
 
-function calculateDuration(
-  startDate: string,
-  endDate: string,
-  startTime?: string | null,
-  endTime?: string | null
-): { days: number; hours?: number; summary: string } {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const diffTime = Math.abs(end.getTime() - start.getTime());
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+function formatPrice(cents: number): string {
+  const euros = Math.round(cents) / 100;
+  return euros.toLocaleString("fr-FR", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
 
-  // If same day with times, calculate hours
-  if (startDate === endDate && startTime && endTime) {
-    const [startH, startM] = startTime.split(":").map(Number);
-    const [endH, endM] = endTime.split(":").map(Number);
-    const hours = endH - startH + (endM - startM) / 60;
+function calculateSessionDuration(startTime: string, endTime: string): string {
+  const [startH, startM] = startTime.split(":").map(Number);
+  const [endH, endM] = endTime.split(":").map(Number);
 
-    if (hours < 1) {
-      return { days: 1, hours, summary: `${Math.round(hours * 60)} minutes` };
-    }
-    return { days: 1, hours, summary: `${hours.toFixed(1).replace(".0", "")}h` };
+  let totalMinutes = (endH * 60 + endM) - (startH * 60 + startM);
+  if (totalMinutes < 0) totalMinutes += 24 * 60; // Gestion passage minuit
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours === 0) {
+    return `${minutes} min`;
+  } else if (minutes === 0) {
+    return `${hours}h`;
+  } else {
+    return `${hours}h${minutes.toString().padStart(2, "0")}`;
   }
-
-  // Multi-day
-  let summary = `${diffDays} jour${diffDays > 1 ? "s" : ""}`;
-
-  // Add time range if available
-  if (startTime && endTime) {
-    summary += ` (${startTime} - ${endTime})`;
-  } else if (startTime) {
-    summary += ` (à partir de ${startTime})`;
-  }
-
-  return { days: diffDays, summary };
 }

@@ -452,6 +452,69 @@ export const updateAcceptanceDeadlineSettings = mutation({
 });
 
 // ==========================================
+// DÉLAIS DE PAIEMENT
+// ==========================================
+
+// Query: Récupérer les paramètres de délais de paiement (pour le panel admin)
+export const getPaymentDeadlineSettings = query({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx, args.token);
+
+    const configs = await ctx.db.query("systemConfig").collect();
+    const configMap = new Map(configs.map((c) => [c.key, c.value]));
+
+    return {
+      enabled: configMap.get("payment_deadline_enabled") !== "false",
+      hours: parseInt(configMap.get("payment_deadline_hours") || "") || 48,
+    };
+  },
+});
+
+// Mutation: Mettre à jour les paramètres de délais de paiement
+export const updatePaymentDeadlineSettings = mutation({
+  args: {
+    token: v.string(),
+    enabled: v.boolean(),
+    hours: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireAdmin(ctx, args.token);
+
+    const configsToUpdate = [
+      { key: "payment_deadline_enabled", value: args.enabled ? "true" : "false" },
+      { key: "payment_deadline_hours", value: args.hours.toString() },
+    ];
+
+    for (const config of configsToUpdate) {
+      const existing = await ctx.db
+        .query("systemConfig")
+        .withIndex("by_key", (q) => q.eq("key", config.key))
+        .first();
+
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          value: config.value,
+          updatedAt: Date.now(),
+          updatedBy: user._id,
+        });
+      } else {
+        await ctx.db.insert("systemConfig", {
+          key: config.key,
+          value: config.value,
+          isSecret: false,
+          environment: "production",
+          updatedAt: Date.now(),
+          updatedBy: user._id,
+        });
+      }
+    }
+
+    return { success: true };
+  },
+});
+
+// ==========================================
 // MODE MAINTENANCE
 // ==========================================
 

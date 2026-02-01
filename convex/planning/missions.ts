@@ -485,6 +485,24 @@ export const acceptMission = mutation({
     const now = Date.now();
     const expiresAt = now + 24 * 60 * 60 * 1000; // +24h
 
+    // Récupérer la config du délai de paiement
+    const paymentDeadlineEnabled = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "payment_deadline_enabled"))
+      .first();
+    const paymentDeadlineHours = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "payment_deadline_hours"))
+      .first();
+
+    // Calculer paymentDeadline si activé
+    let paymentDeadline: number | undefined;
+    const isDeadlineEnabled = paymentDeadlineEnabled?.value !== "false";
+    if (isDeadlineEnabled) {
+      const hours = parseInt(paymentDeadlineHours?.value || "") || 48; // 48h par défaut
+      paymentDeadline = now + hours * 60 * 60 * 1000;
+    }
+
     // Créer le payment record AVANT de scheduler l'action
     // (car les actions ne peuvent pas appeler runMutation sur Convex self-hosted)
     const paymentId = await ctx.db.insert("stripePayments", {
@@ -503,6 +521,7 @@ export const acceptMission = mutation({
     await ctx.db.patch(args.missionId, {
       status: "pending_confirmation",
       stripePaymentId: paymentId,
+      paymentDeadline,
       updatedAt: now,
     });
 
@@ -1007,10 +1026,62 @@ export const getClientMissions = query({
       .order("desc")
       .collect();
 
-    // Récupérer les infos des annonceurs
+    // Cache pour les catégories et types (stocker les vrais IDs Convex)
+    const categoryCache = new Map<string, {
+      slug: string;
+      parentCategoryId?: typeof missions[0]["_id"] | null;
+      typeId?: typeof missions[0]["_id"] | null;
+    }>();
+    const categoryTypeCache = new Map<string, string>(); // typeId string -> slug
+
+    // Récupérer les infos des annonceurs et enrichir les missions
     const missionsWithDetails = await Promise.all(
       missions.map(async (m) => {
         const announcer = await ctx.db.get(m.announcerId);
+
+        // Déterminer le serviceTypeSlug (garde ou service)
+        let serviceTypeSlug: string | undefined;
+        if (m.serviceCategory) {
+          // Essayer depuis le cache
+          if (!categoryCache.has(m.serviceCategory)) {
+            const category = await ctx.db
+              .query("serviceCategories")
+              .withIndex("by_slug", (q) => q.eq("slug", m.serviceCategory))
+              .first();
+            if (category) {
+              categoryCache.set(m.serviceCategory, {
+                slug: category.slug,
+                parentCategoryId: category.parentCategoryId || null,
+                typeId: category.typeId || null,
+              });
+            }
+          }
+
+          const catInfo = categoryCache.get(m.serviceCategory);
+          if (catInfo) {
+            let typeId = catInfo.typeId;
+
+            // Si c'est une sous-catégorie, récupérer le typeId du parent
+            if (!typeId && catInfo.parentCategoryId) {
+              const parentCat = await ctx.db.get(catInfo.parentCategoryId as any);
+              if (parentCat?.typeId) {
+                typeId = parentCat.typeId;
+              }
+            }
+
+            // Récupérer le slug du type
+            if (typeId) {
+              const typeIdStr = typeId.toString();
+              if (!categoryTypeCache.has(typeIdStr)) {
+                const catType = await ctx.db.get(typeId as any);
+                if (catType?.slug) {
+                  categoryTypeCache.set(typeIdStr, catType.slug);
+                }
+              }
+              serviceTypeSlug = categoryTypeCache.get(typeIdStr);
+            }
+          }
+        }
 
         return {
           id: m._id,
@@ -1030,10 +1101,18 @@ export const getClientMissions = query({
           amount: m.amount,
           paymentStatus: m.paymentStatus,
           location: m.location,
+          city: m.city,
           clientNotes: m.clientNotes,
           announcerNotes: m.announcerNotes,
           cancellationReason: m.cancellationReason,
           createdAt: m.createdAt,
+          // Nouveaux champs pour filtres et affichage
+          sessionType: m.sessionType,           // "individual" | "collective"
+          numberOfSessions: m.numberOfSessions, // Nombre de séances
+          sessions: m.sessions,                 // Array des séances (pour affichage)
+          serviceTypeSlug,                      // "garde" | "service" (via lookup)
+          // Délai de paiement
+          paymentDeadline: m.paymentDeadline,   // Timestamp deadline
         };
       })
     );
@@ -1105,6 +1184,14 @@ export const getClientMissionById = query({
       }
     }
 
+    // Récupérer le profil de l'annonceur pour le slug
+    const announcerProfile = announcer
+      ? await ctx.db
+          .query("profiles")
+          .withIndex("by_user", (q) => q.eq("userId", mission.announcerId))
+          .first()
+      : null;
+
     return {
       id: mission._id,
       announcerId: mission.announcerId,
@@ -1115,17 +1202,28 @@ export const getClientMissionById = query({
       announcerPhone: announcer?.phone,
       announcerEmail: announcer?.email,
       announcerPhotoUrl,
+      announcerSlug: announcer?.slug,
       animal: mission.animal,
       animalId: mission.animalId,
       serviceName: mission.serviceName,
       serviceCategory: mission.serviceCategory,
+      // Formule et options
+      variantName: mission.variantName,
+      optionNames: mission.optionNames,
+      basePrice: mission.basePrice,
+      optionsPrice: mission.optionsPrice,
+      // Dates
       startDate: mission.startDate,
       endDate: mission.endDate,
       startTime: mission.startTime,
       endTime: mission.endTime,
       status: mission.status,
+      // Prix
       amount: mission.amount,
       platformFee: mission.platformFee,
+      stripeFee: mission.stripeFee,
+      commissionRate: mission.commissionRate,
+      stripeFeeRate: mission.stripeFeeRate,
       announcerEarnings: mission.announcerEarnings,
       paymentStatus: mission.paymentStatus,
       location: mission.location,
@@ -1141,8 +1239,16 @@ export const getClientMissionById = query({
       overnightAmount: mission.overnightAmount,
       dayStartTime: mission.dayStartTime || service?.dayStartTime,
       dayEndTime: mission.dayEndTime || service?.dayEndTime,
+      // Multi-séances
+      sessions: mission.sessions,
+      sessionType: mission.sessionType,
+      numberOfSessions: mission.numberOfSessions,
+      // Lieu de prestation
+      serviceLocation: mission.serviceLocation,
       // Paiement
       paymentDetails,
+      // Délai de paiement
+      paymentDeadline: mission.paymentDeadline,
     };
   },
 });

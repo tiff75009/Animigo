@@ -818,13 +818,25 @@ export const finalizeBooking = mutation({
       ? parseFloat(commissionConfig.value)
       : defaultRates[commissionType];
 
-    // Calculer les montants
-    // platformFee = commission (ce que la plateforme garde)
+    // Récupérer le taux de frais Stripe depuis la config
+    const stripeFeeConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "stripe_fee_rate"))
+      .first();
+    const stripeFeeRate = stripeFeeConfig
+      ? parseFloat(stripeFeeConfig.value)
+      : 3; // 3% par défaut
+
+    // Calculer les montants (même logique que SummaryStep.tsx)
+    // platformFee = commission sur le montant HT
+    // stripeFee = frais de paiement sur (montant HT + commission)
     // announcerEarnings = serviceAmount (ce que l'annonceur reçoit)
-    // amount = serviceAmount + platformFee (ce que le client paie)
+    // amount = serviceAmount + platformFee + stripeFee (ce que le client paie)
     const platformFee = Math.round((serviceAmount * commissionRate) / 100);
+    const totalBeforeStripeFee = serviceAmount + platformFee;
+    const stripeFee = Math.round((totalBeforeStripeFee * stripeFeeRate) / 100);
     const announcerEarnings = serviceAmount;
-    const totalAmount = serviceAmount + platformFee;
+    const totalAmount = serviceAmount + platformFee + stripeFee;
 
     // Créer la mission
     const missionId = await ctx.db.insert("missions", {
@@ -846,8 +858,11 @@ export const finalizeBooking = mutation({
       startTime: pendingBooking.startTime,
       endTime: pendingBooking.endTime,
       status: "pending_acceptance",
-      amount: totalAmount, // Montant total que le client paie (service + commission)
+      amount: totalAmount, // Montant total que le client paie (service + commission + frais Stripe)
       platformFee, // Commission de la plateforme
+      stripeFee, // Frais de gestion paiement Stripe
+      commissionRate, // Taux de commission appliqué (%)
+      stripeFeeRate, // Taux frais Stripe appliqué (%)
       announcerEarnings, // Ce que l'annonceur reçoit (prix du service)
       paymentStatus: "not_due",
       location: args.location,

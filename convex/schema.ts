@@ -548,6 +548,9 @@ export default defineSchema({
     basePrice: v.optional(v.number()), // Prix de base de la formule (centimes)
     optionsPrice: v.optional(v.number()), // Prix des options (centimes)
     platformFee: v.optional(v.number()), // Commission plateforme (centimes)
+    stripeFee: v.optional(v.number()), // Frais de gestion paiement Stripe (centimes)
+    commissionRate: v.optional(v.number()), // Taux de commission appliqué (%)
+    stripeFeeRate: v.optional(v.number()), // Taux frais Stripe appliqué (%)
     announcerEarnings: v.optional(v.number()), // Revenus annonceur après commission (centimes)
 
     // Dates
@@ -637,13 +640,18 @@ export default defineSchema({
     // Délai d'acceptation
     acceptanceDeadline: v.optional(v.number()),        // Timestamp deadline pour accepter
     acceptanceDeadlineAutoRefused: v.optional(v.boolean()), // true si auto-refusé par expiration
+
+    // Délai de paiement (après acceptation par l'annonceur)
+    paymentDeadline: v.optional(v.number()),              // Timestamp deadline paiement
+    paymentDeadlineAutoExpired: v.optional(v.boolean()),  // true si auto-expiré par délai dépassé
   })
     .index("by_announcer", ["announcerId"])
     .index("by_client", ["clientId"])
     .index("by_announcer_status", ["announcerId", "status"])
     .index("by_announcer_dates", ["announcerId", "startDate"])
     .index("by_auto_capture", ["autoCaptureScheduledAt"])
-    .index("by_pending_deadline", ["status", "acceptanceDeadline"]),
+    .index("by_pending_deadline", ["status", "acceptanceDeadline"])
+    .index("by_pending_payment_deadline", ["status", "paymentDeadline"]),
 
   // Disponibilités / Indisponibilités des annonceurs
   // NOTE: Par défaut, un annonceur est INDISPONIBLE. Une entrée dans cette table

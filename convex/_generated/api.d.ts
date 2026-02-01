@@ -63,6 +63,7 @@ import type * as planning_acceptanceDeadline from "../planning/acceptanceDeadlin
 import type * as planning_availability from "../planning/availability.js";
 import type * as planning_collectiveSlots from "../planning/collectiveSlots.js";
 import type * as planning_missions from "../planning/missions.js";
+import type * as planning_paymentDeadline from "../planning/paymentDeadline.js";
 import type * as public_announcer from "../public/announcer.js";
 import type * as public_booking from "../public/booking.js";
 import type * as public_categoryTypes from "../public/categoryTypes.js";
@@ -149,6 +150,7 @@ declare const fullApi: ApiFromModules<{
   "planning/availability": typeof planning_availability;
   "planning/collectiveSlots": typeof planning_collectiveSlots;
   "planning/missions": typeof planning_missions;
+  "planning/paymentDeadline": typeof planning_paymentDeadline;
   "public/announcer": typeof public_announcer;
   "public/booking": typeof public_booking;
   "public/categoryTypes": typeof public_categoryTypes;

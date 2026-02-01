@@ -49,4 +49,15 @@ crons.interval(
   internal.planning.acceptanceDeadline.autoRefuseExpiredMissions
 );
 
+/**
+ * Auto-expiration des paiements en attente
+ * Exécuté toutes les 15 minutes pour annuler automatiquement
+ * les missions dont le délai de paiement est dépassé
+ */
+crons.interval(
+  "auto-expire-pending-payments",
+  { minutes: 15 },
+  internal.planning.paymentDeadline.autoExpirePendingPayments
+);
+
 export default crons;
