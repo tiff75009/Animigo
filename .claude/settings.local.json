@@ -19,7 +19,9 @@
       "Bash(git push)",
       "Bash(bunx tsc:*)",
       "Bash(git reset:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "mcp__jina__read_url",
+      "mcp__jina__search_images"
     ]
   }
 }
