@@ -9,6 +9,7 @@ import {
   Clock,
   MapPin,
   User,
+  Users,
   Search,
   CheckCircle,
   XCircle,
@@ -18,6 +19,8 @@ import {
   MessageSquare,
   Lock,
   CalendarDays,
+  CreditCard,
+  Home,
 } from "lucide-react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -69,7 +72,7 @@ function extractCityAndPostalCode(fullAddress: string): string {
   return fullAddress;
 }
 
-// Calculer le temps restant avant le début
+// Calculer le temps restant avant le début (format J-X)
 function getTimeUntilStart(startDate: string): { text: string; color: string } | null {
   const start = new Date(startDate);
   const now = new Date();
@@ -84,14 +87,13 @@ function getTimeUntilStart(startDate: string): { text: string; color: string } |
   if (diffDays < 0) {
     return null; // Déjà passé
   } else if (diffDays === 0) {
-    return { text: "Aujourd'hui", color: "text-primary" };
-  } else if (diffDays === 1) {
-    return { text: "Demain", color: "text-orange-600" };
+    return { text: "Début aujourd'hui", color: "text-primary" };
+  } else if (diffDays <= 3) {
+    return { text: `Début J-${diffDays}`, color: "text-orange-600" };
   } else if (diffDays <= 7) {
-    return { text: `Dans ${diffDays} jours`, color: "text-blue-600" };
+    return { text: `Début J-${diffDays}`, color: "text-blue-600" };
   } else if (diffDays <= 30) {
-    const weeks = Math.floor(diffDays / 7);
-    return { text: `Dans ${weeks} sem.`, color: "text-text-light" };
+    return { text: `Début J-${diffDays}`, color: "text-text-light" };
   }
 
   return null; // Trop loin, pas besoin d'afficher
@@ -160,6 +162,7 @@ interface EnrichedReservation {
   numberOfSessions?: number;
   sessions?: Array<{ date: string; startTime: string; endTime: string }>;
   serviceTypeSlug?: string;
+  serviceLocation?: "announcer_home" | "client_home";
   paymentDeadline?: number;
 }
 
@@ -212,14 +215,16 @@ export default function ReservationsPage() {
   // Calculer les compteurs pour les filtres
   const counts = useMemo(() => {
     if (!reservations) return {
-      all: 0, upcoming: 0, completed: 0, cancelled: 0,
+      all: 0, pendingAcceptance: 0, pendingPayment: 0, upcoming: 0, completed: 0, cancelled: 0,
       garde: 0, service: 0, individual: 0, collective: 0,
     };
 
     return {
       all: reservations.length,
+      pendingAcceptance: reservations.filter(r => r.status === "pending_acceptance").length,
+      pendingPayment: reservations.filter(r => r.status === "pending_confirmation").length,
       upcoming: reservations.filter(r =>
-        ["pending_acceptance", "pending_confirmation", "upcoming", "in_progress"].includes(r.status)
+        ["upcoming", "in_progress"].includes(r.status)
       ).length,
       completed: reservations.filter(r => r.status === "completed").length,
       cancelled: reservations.filter(r => ["refused", "cancelled"].includes(r.status)).length,
@@ -236,8 +241,12 @@ export default function ReservationsPage() {
 
     return reservations.filter(r => {
       // Filtre statut
-      if (statusFilter === "upcoming") {
-        if (!["pending_acceptance", "pending_confirmation", "upcoming", "in_progress"].includes(r.status)) {
+      if (statusFilter === "pending_acceptance") {
+        if (r.status !== "pending_acceptance") return false;
+      } else if (statusFilter === "pending_payment") {
+        if (r.status !== "pending_confirmation") return false;
+      } else if (statusFilter === "upcoming") {
+        if (!["upcoming", "in_progress"].includes(r.status)) {
           return false;
         }
       } else if (statusFilter === "completed") {
@@ -298,6 +307,7 @@ export default function ReservationsPage() {
             const isConfirmed = canContactStatuses.includes(reservation.status);
             const isMultiSession = (reservation.sessions && reservation.sessions.length > 1) ||
                                    (reservation.numberOfSessions && reservation.numberOfSessions > 1);
+            const isPendingPayment = reservation.status === "pending_confirmation";
 
             // Temps restant avant le début (seulement pour les réservations à venir)
             const timeUntil = ["pending_acceptance", "pending_confirmation", "upcoming"].includes(reservation.status)
@@ -312,27 +322,36 @@ export default function ReservationsPage() {
                 transition={{ delay: index * 0.03 }}
               >
                 <Link href={`/client/reservations/${reservation.id}`} className="block group">
-                  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md hover:border-primary/20 transition-all">
-                    {/* Header avec statut, countdown et prix */}
-                    <div className="flex items-center justify-between px-4 py-3 bg-gray-50/50 border-b border-gray-100">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <div className={cn(
-                          "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold",
-                          status.bgColor,
-                          status.color
-                        )}>
-                          {status.icon}
-                          {status.label}
-                        </div>
-                        {timeUntil && (
-                          <span className={cn("text-xs font-medium", timeUntil.color)}>
-                            • {timeUntil.text}
-                          </span>
-                        )}
-                        {/* Countdown paiement pour pending_confirmation */}
-                        {reservation.status === "pending_confirmation" && reservation.paymentDeadline && (
+                  <div className={cn(
+                    "bg-white rounded-2xl shadow-sm border overflow-hidden hover:shadow-md transition-all",
+                    isPendingPayment ? "border-orange-200 hover:border-orange-300" : "border-gray-100 hover:border-primary/20"
+                  )}>
+                    {/* Bannière paiement urgent */}
+                    {isPendingPayment && reservation.paymentDeadline && (
+                      <div className="px-4 py-2.5 bg-gradient-to-r from-orange-50 to-amber-50 border-b border-orange-100">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center">
+                              <Clock className="w-3.5 h-3.5 text-orange-600" />
+                            </div>
+                            <span className="text-sm font-medium text-orange-800">
+                              Paiement en attente
+                            </span>
+                          </div>
                           <PaymentCountdown deadline={reservation.paymentDeadline} />
-                        )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Header avec statut et prix */}
+                    <div className="flex items-center justify-between px-4 py-3 bg-gray-50/50 border-b border-gray-100">
+                      <div className={cn(
+                        "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold",
+                        status.bgColor,
+                        status.color
+                      )}>
+                        {status.icon}
+                        {status.label}
                       </div>
                       <p className="text-lg font-bold text-foreground">
                         {(reservation.amount / 100).toFixed(2).replace(".", ",")} €
@@ -342,82 +361,106 @@ export default function ReservationsPage() {
                     {/* Contenu principal */}
                     <div className="p-4">
                       {/* Service et animal */}
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="w-11 h-11 bg-primary/10 rounded-xl flex items-center justify-center text-xl flex-shrink-0">
+                      <div className="flex items-start gap-3 mb-4">
+                        <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-2xl flex-shrink-0">
                           {reservation.animal?.emoji || "🐾"}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-semibold text-foreground truncate">
-                              {reservation.serviceName}
-                            </h3>
+                          <h3 className="font-semibold text-foreground truncate">
+                            {reservation.serviceName}
+                          </h3>
+                          <p className="text-sm text-text-light">
+                            Pour {reservation.animal?.name || "votre animal"}
+                          </p>
+                          {/* Badges */}
+                          <div className="flex items-center gap-2 mt-2 flex-wrap">
+                            {/* Badge J-X amélioré */}
+                            {timeUntil && (
+                              <span className={cn(
+                                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold",
+                                timeUntil.color === "text-primary"
+                                  ? "bg-primary/10 text-primary"
+                                  : timeUntil.color === "text-orange-600"
+                                    ? "bg-orange-100 text-orange-700"
+                                    : timeUntil.color === "text-blue-600"
+                                      ? "bg-blue-100 text-blue-700"
+                                      : "bg-gray-100 text-gray-600"
+                              )}>
+                                <Calendar className="w-3 h-3" />
+                                {timeUntil.text}
+                              </span>
+                            )}
+                            {/* Badge lieu de prestation */}
+                            {reservation.serviceLocation === "client_home" ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-teal-100 text-teal-700 text-xs font-medium rounded-lg">
+                                <Home className="w-3 h-3" />
+                                À domicile
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-700 text-xs font-medium rounded-lg">
+                                <MapPin className="w-3 h-3" />
+                                Chez le pet-sitter
+                              </span>
+                            )}
+                            {/* Badge type de session (individuel/collectif) */}
+                            {reservation.sessionType === "collective" ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-lg">
+                                <Users className="w-3 h-3" />
+                                Collectif
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 text-xs font-medium rounded-lg">
+                                <User className="w-3 h-3" />
+                                Individuel
+                              </span>
+                            )}
                             {/* Badge multi-séances */}
                             {isMultiSession && (
-                              <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-medium rounded-full flex items-center gap-1">
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded-lg">
                                 <CalendarDays className="w-3 h-3" />
                                 {reservation.sessions?.length || reservation.numberOfSessions} séances
                               </span>
                             )}
                           </div>
-                          <p className="text-sm text-text-light">
-                            {reservation.animal?.name || "Votre animal"}
-                          </p>
                         </div>
                       </div>
 
-                      {/* Infos en grille */}
-                      <div className="grid grid-cols-2 gap-3 mb-4">
+                      {/* Infos compactes */}
+                      <div className="flex items-center gap-4 text-sm text-text-light mb-4">
                         {/* Dates */}
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <Calendar className="w-4 h-4 text-primary" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-xs text-text-light">Dates</p>
-                            <p className="text-sm font-medium text-foreground truncate">
-                              {formatDatesDisplay(reservation)}
-                            </p>
-                          </div>
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="w-4 h-4 text-primary" />
+                          <span className="font-medium text-foreground">
+                            {formatDatesDisplay(reservation)}
+                          </span>
                         </div>
-
+                        {/* Séparateur */}
+                        <span className="text-gray-300">•</span>
                         {/* Pet-sitter */}
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-secondary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <User className="w-4 h-4 text-secondary" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-xs text-text-light">Pet-sitter</p>
-                            <p className="text-sm font-medium text-foreground truncate">
-                              {reservation.announcerName}
-                            </p>
-                          </div>
+                        <div className="flex items-center gap-1.5">
+                          <User className="w-4 h-4 text-secondary" />
+                          <span className="truncate">{reservation.announcerName}</span>
                         </div>
                       </div>
-
-                      {/* Localisation */}
-                      {reservation.location && (
-                        <div className="flex items-center gap-2 text-sm text-text-light mb-4">
-                          <MapPin className="w-4 h-4 flex-shrink-0" />
-                          {isConfirmed ? (
-                            <span className="truncate">{reservation.location}</span>
-                          ) : (
-                            <span className="text-gray-400 text-xs flex items-center gap-1">
-                              <Lock className="w-3 h-3" />
-                              Adresse visible après paiement
-                            </span>
-                          )}
-                        </div>
-                      )}
 
                       {/* Actions */}
                       <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
+                        {isPendingPayment && (
+                          <motion.div
+                            className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold shadow-md shadow-primary/25"
+                            whileHover={{ scale: 1.02 }}
+                          >
+                            <CreditCard className="w-4 h-4" />
+                            Payer maintenant
+                          </motion.div>
+                        )}
                         {isConfirmed && (
                           <motion.button
                             onClick={(e) => handleContact(e, reservation.id)}
                             disabled={isContacting === reservation.id}
                             className="flex items-center gap-2 px-4 py-2.5 bg-secondary hover:bg-secondary/90 text-white rounded-xl text-sm font-semibold shadow-md shadow-secondary/25 transition-all disabled:opacity-50"
-                            whileHover={{ scale: 1.03, y: -1 }}
-                            whileTap={{ scale: 0.97 }}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
                           >
                             {isContacting === reservation.id ? (
                               <Loader2 className="w-4 h-4 animate-spin" />

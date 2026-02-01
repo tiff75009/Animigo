@@ -214,8 +214,16 @@ export default function ReservationDetailPage() {
                   × {mission.numberOfSessions} séances
                 </span>
               )}
-              {/* Durée si mono-séance */}
-              {(!mission.numberOfSessions || mission.numberOfSessions === 1) &&
+              {/* Durée pour les gardes (jours) */}
+              {mission.serviceCategory === "garde" &&
+                (!mission.numberOfSessions || mission.numberOfSessions === 1) && (
+                  <span className="text-gray-400 ml-1">
+                    ({formatGardeDuration(mission.startDate, mission.endDate, mission.includeOvernightStay, mission.overnightNights)})
+                  </span>
+                )}
+              {/* Durée pour les services (heures) */}
+              {mission.serviceCategory !== "garde" &&
+                (!mission.numberOfSessions || mission.numberOfSessions === 1) &&
                 mission.startTime &&
                 mission.endTime && (
                   <span className="text-gray-400 ml-1">
@@ -472,37 +480,49 @@ export default function ReservationDetailPage() {
             Lieu de prestation
           </h3>
 
-          {isPaid ? (
+          {/* Adresse visible si payé OU si c'est chez le client (son propre domicile) */}
+          {isPaid || mission.serviceLocation === "client_home" ? (
             <div className="flex items-start gap-3">
-              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                <CheckCircle className="w-5 h-5 text-green-600" />
+              <div className={cn(
+                "w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0",
+                mission.serviceLocation === "client_home"
+                  ? "bg-teal-100"
+                  : "bg-green-100"
+              )}>
+                {mission.serviceLocation === "client_home" ? (
+                  <Home className="w-5 h-5 text-teal-600" />
+                ) : (
+                  <MapPin className="w-5 h-5 text-green-600" />
+                )}
               </div>
               <div>
+                <p className="text-xs text-gray-500 mb-1">
+                  {mission.serviceLocation === "client_home"
+                    ? "À votre domicile"
+                    : "Chez le pet-sitter"}
+                </p>
                 <p className="text-foreground font-medium text-sm">
                   {mission.location}
                 </p>
-                {mission.city && (
-                  <p className="text-xs text-gray-500 mt-0.5">{mission.city}</p>
+                {(mission.postalCode || mission.city) && (
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {[mission.postalCode, mission.city].filter(Boolean).join(" ")}
+                  </p>
                 )}
               </div>
             </div>
           ) : (
             <div className="flex items-start gap-3">
-              <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                <Home className="w-5 h-5 text-gray-400" />
+              <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <MapPin className="w-5 h-5 text-indigo-500" />
               </div>
               <div>
                 <p className="text-gray-600 text-sm">
-                  Chez{" "}
-                  <span className="font-medium">
-                    {mission.serviceLocation === "client_home"
-                      ? "vous"
-                      : "l'annonceur"}
-                  </span>
+                  Chez <span className="font-medium">le pet-sitter</span>
                 </p>
                 <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
                   <Lock className="w-3 h-3" />
-                  Adresse après paiement
+                  Adresse visible après paiement
                 </p>
               </div>
             </div>
@@ -698,4 +718,38 @@ function calculateSessionDuration(startTime: string, endTime: string): string {
   } else {
     return `${hours}h${minutes.toString().padStart(2, "0")}`;
   }
+}
+
+function formatGardeDuration(
+  startDate: string,
+  endDate: string,
+  includeOvernightStay?: boolean,
+  overnightNights?: number
+): string {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+
+  // Calculer le nombre de jours
+  start.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+  const diffTime = end.getTime() - start.getTime();
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+  const parts: string[] = [];
+
+  if (diffDays === 0) {
+    // Même jour = demi-journée
+    parts.push("1 demi-journée");
+  } else if (diffDays === 1) {
+    parts.push("1 jour");
+  } else {
+    parts.push(`${diffDays} jours`);
+  }
+
+  // Ajouter les nuits si présentes
+  if (includeOvernightStay && overnightNights && overnightNights > 0) {
+    parts.push(overnightNights === 1 ? "1 nuit" : `${overnightNights} nuits`);
+  }
+
+  return parts.join(" + ");
 }

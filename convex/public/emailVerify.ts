@@ -151,6 +151,7 @@ export const verifyEmail = mutation({
           paymentStatus: "not_due",
           location: pendingBooking.location || "",
           city: pendingBooking.city,
+          postalCode: pendingBooking.postalCode,
           clientCoordinates: pendingBooking.coordinates,
           clientNotes: pendingBooking.clientData?.notes,
           createdAt: Date.now(),

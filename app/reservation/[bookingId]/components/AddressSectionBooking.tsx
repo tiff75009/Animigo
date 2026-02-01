@@ -49,10 +49,12 @@ interface AddressSectionBookingProps {
   // Pour l'adresse sélectionnée ou saisie
   currentAddress: string;
   currentCity: string | null;
+  currentPostalCode: string | null;
   currentCoordinates: Coordinates | null;
   onAddressChange: (data: {
     address: string;
     city: string | null;
+    postalCode: string | null;
     coordinates: Coordinates | null;
   }) => void;
   error?: string;
@@ -130,6 +132,7 @@ export default function AddressSectionBooking({
   isCollectiveFormula = false,
   currentAddress,
   currentCity,
+  currentPostalCode,
   currentCoordinates,
   onAddressChange,
   error,
@@ -170,6 +173,7 @@ export default function AddressSectionBooking({
         onAddressChange({
           address: defaultAddr.address,
           city: defaultAddr.city || null,
+          postalCode: defaultAddr.postalCode || null,
           coordinates: defaultAddr.coordinates || null,
         });
       }
@@ -251,6 +255,7 @@ export default function AddressSectionBooking({
       onAddressChange({
         address: newAddress.address,
         city: newAddress.city,
+        postalCode: newAddress.postalCode,
         coordinates: newAddress.coordinates,
       });
 
@@ -269,6 +274,7 @@ export default function AddressSectionBooking({
     onAddressChange({
       address: addr.address,
       city: addr.city || null,
+      postalCode: addr.postalCode || null,
       coordinates: addr.coordinates || null,
     });
     setIsExpanded(false);
@@ -582,6 +588,7 @@ export default function AddressSectionBooking({
               onAddressChange({
                 address: data.address,
                 city: data.city,
+                postalCode: data.postalCode,
                 coordinates: data.coordinates,
               });
               setIsExpanded(false);
@@ -589,6 +596,7 @@ export default function AddressSectionBooking({
               onAddressChange({
                 address: currentAddress,
                 city: null,
+                postalCode: null,
                 coordinates: null,
               });
             }
@@ -596,12 +604,14 @@ export default function AddressSectionBooking({
           onInputChange={(value) => onAddressChange({
             address: value,
             city: currentCity,
+            postalCode: currentPostalCode,
             coordinates: currentCoordinates,
           })}
           onManualChange={(value) => {
             onAddressChange({
               address: value,
               city: null,
+              postalCode: null,
               coordinates: null,
             });
           }}
@@ -640,12 +650,14 @@ export default function AddressSectionBooking({
           onAddressChange({
             address: fullAddress,
             city: data.city,
+            postalCode: data.postalCode,
             coordinates: data.coordinates,
           });
         } else {
           onAddressChange({
             address: currentAddress,
             city: null,
+            postalCode: null,
             coordinates: null,
           });
         }
@@ -653,12 +665,14 @@ export default function AddressSectionBooking({
       onInputChange={(value) => onAddressChange({
         address: value,
         city: currentCity,
+        postalCode: currentPostalCode,
         coordinates: currentCoordinates,
       })}
       onManualChange={(value) => {
         onAddressChange({
           address: value,
           city: null,
+          postalCode: null,
           coordinates: null,
         });
       }}

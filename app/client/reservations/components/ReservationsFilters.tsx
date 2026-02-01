@@ -1,10 +1,10 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Home, Briefcase, Users, User, X } from "lucide-react";
+import { Home, Briefcase, Users, User, X, CreditCard, Clock } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 
-export type StatusFilter = "all" | "upcoming" | "completed" | "cancelled";
+export type StatusFilter = "all" | "pending_acceptance" | "pending_payment" | "upcoming" | "completed" | "cancelled";
 export type ServiceTypeFilter = "all" | "garde" | "service";
 export type SessionTypeFilter = "all" | "individual" | "collective";
 
@@ -21,6 +21,8 @@ interface ReservationsFiltersProps {
   // Compteurs pour les badges
   counts: {
     all: number;
+    pendingAcceptance: number;
+    pendingPayment: number;
     upcoming: number;
     completed: number;
     cancelled: number;
@@ -60,6 +62,22 @@ export function ReservationsFilters({
           onClick={() => onStatusChange("all")}
           label="Toutes"
           count={counts.all}
+        />
+        <FilterChip
+          active={statusFilter === "pending_acceptance"}
+          onClick={() => onStatusChange("pending_acceptance")}
+          label="En attente"
+          icon={<Clock className="w-3.5 h-3.5" />}
+          count={counts.pendingAcceptance}
+          color="purple"
+        />
+        <FilterChip
+          active={statusFilter === "pending_payment"}
+          onClick={() => onStatusChange("pending_payment")}
+          label="À payer"
+          icon={<CreditCard className="w-3.5 h-3.5" />}
+          count={counts.pendingPayment}
+          color="orange"
         />
         <FilterChip
           active={statusFilter === "upcoming"}

@@ -1111,6 +1111,8 @@ export const getClientMissions = query({
           numberOfSessions: m.numberOfSessions, // Nombre de séances
           sessions: m.sessions,                 // Array des séances (pour affichage)
           serviceTypeSlug,                      // "garde" | "service" (via lookup)
+          // Lieu de prestation
+          serviceLocation: m.serviceLocation,   // "announcer_home" | "client_home"
           // Délai de paiement
           paymentDeadline: m.paymentDeadline,   // Timestamp deadline
         };
@@ -1228,6 +1230,7 @@ export const getClientMissionById = query({
       paymentStatus: mission.paymentStatus,
       location: mission.location,
       city: mission.city,
+      postalCode: mission.postalCode,
       clientNotes: mission.clientNotes,
       announcerNotes: mission.announcerNotes,
       cancellationReason: mission.cancellationReason,

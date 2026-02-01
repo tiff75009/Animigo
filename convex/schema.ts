@@ -602,6 +602,7 @@ export default defineSchema({
     // Localisation
     location: v.string(), // Adresse complète
     city: v.optional(v.string()), // Ville extraite
+    postalCode: v.optional(v.string()), // Code postal
     clientCoordinates: v.optional(v.object({
       lat: v.number(),
       lng: v.number(),
@@ -846,6 +847,7 @@ export default defineSchema({
     // Adresse de la prestation
     location: v.optional(v.string()),
     city: v.optional(v.string()), // Ville extraite
+    postalCode: v.optional(v.string()), // Code postal
     coordinates: v.optional(v.object({
       lat: v.number(),
       lng: v.number(),

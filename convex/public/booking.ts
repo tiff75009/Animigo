@@ -443,6 +443,8 @@ export const getPendingBooking = query({
         overnightPrice: service.overnightPrice,
         // Blocage basé sur la durée
         enableDurationBasedBlocking: category?.enableDurationBasedBlocking,
+        // Mode de facturation client (arrondi demi-journée, journée, ou horaire exact)
+        clientBillingMode: category?.clientBillingMode as ("exact_hourly" | "round_half_day" | "round_full_day") | undefined,
       },
       variant: variant ? {
         id: variant._id,
@@ -502,6 +504,7 @@ export const finalizeBooking = mutation({
     animalId: v.id("animals"),
     location: v.string(),
     city: v.optional(v.string()),
+    postalCode: v.optional(v.string()),
     coordinates: v.optional(v.object({
       lat: v.number(),
       lng: v.number(),
@@ -867,6 +870,7 @@ export const finalizeBooking = mutation({
       paymentStatus: "not_due",
       location: args.location,
       city: args.city,
+      postalCode: args.postalCode,
       clientCoordinates: args.coordinates,
       clientNotes: args.notes,
       // Garde de nuit
@@ -1050,6 +1054,7 @@ export const finalizeBookingAsGuest = mutation({
     }),
     location: v.string(),
     city: v.optional(v.string()),
+    postalCode: v.optional(v.string()),
     coordinates: v.optional(v.object({
       lat: v.number(),
       lng: v.number(),
@@ -1222,7 +1227,7 @@ export const finalizeBookingAsGuest = mutation({
         label: "Domicile",
         address: args.location,
         city: args.city,
-        postalCode: undefined, // On peut extraire le code postal de l'adresse si besoin
+        postalCode: args.postalCode,
         coordinates: args.coordinates,
         isDefault: true,
         createdAt: now,
@@ -1259,6 +1264,7 @@ export const finalizeBookingAsGuest = mutation({
       status: "awaiting_email_verification",
       location: args.location,
       city: args.city,
+      postalCode: args.postalCode,
       coordinates: args.coordinates,
       calculatedAmount: finalAmount,
       optionIds: args.updatedOptionIds,

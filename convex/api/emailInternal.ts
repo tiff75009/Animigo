@@ -290,6 +290,8 @@ export const verifyEmailToken = internalMutation({
           announcerEarnings, // Ce que l'annonceur reçoit (prix du service)
           paymentStatus: "not_due",
           location: pendingBooking.location || "",
+          city: pendingBooking.city,
+          postalCode: pendingBooking.postalCode,
           clientNotes: pendingBooking.clientData?.notes,
           // Garde de nuit
           includeOvernightStay: pendingBooking.includeOvernightStay,

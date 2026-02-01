@@ -94,6 +94,8 @@ interface PendingBookingData {
     overnightPrice?: number;
     // Duration-based blocking
     enableDurationBasedBlocking?: boolean;
+    // Mode de facturation client
+    clientBillingMode?: "exact_hourly" | "round_half_day" | "round_full_day";
   };
   variant: {
     id: string;
@@ -164,18 +166,22 @@ interface PriceCalculationResult {
   firstDayAmount: number;
   firstDayHours: number;
   firstDayIsFullDay: boolean;
+  firstDayIsHalfDay: boolean;
   fullDays: number;
   fullDaysAmount: number;
   lastDayAmount: number;
   lastDayHours: number;
   lastDayIsFullDay: boolean;
+  lastDayIsHalfDay: boolean;
   nightsAmount: number;
   nights: number;
   optionsAmount: number;
   totalAmount: number;
   hourlyRate: number;
+  halfDailyRate: number;
   dailyRate: number;
   nightlyRate: number;
+  billingUnit: "hour" | "half_day" | "day" | "fixed";
 }
 
 // Helper: Parse time to minutes
@@ -228,7 +234,7 @@ function daysBetweenDates(startDate: string, endDate: string): number {
   return Math.floor(diffTime / (1000 * 60 * 60 * 24));
 }
 
-// Calculate smart pricing with partial day support
+// Calculate smart pricing with partial day support and billing mode
 function calculateSmartPrice(params: {
   startDate: string;
   endDate: string | null;
@@ -238,8 +244,10 @@ function calculateSmartPrice(params: {
   dayStartTime: string;
   dayEndTime: string;
   workdayHours: number;
+  halfDayHours?: number;
   pricing: {
     hourly?: number;
+    halfDaily?: number;
     daily?: number;
     nightly?: number;
   };
@@ -247,6 +255,8 @@ function calculateSmartPrice(params: {
   // For duration-based blocking: use fixed price instead of hourly calculation
   fixedServicePrice?: number;
   serviceDurationMinutes?: number;
+  // Client billing mode from category settings
+  clientBillingMode?: "exact_hourly" | "round_half_day" | "round_full_day";
 }): PriceCalculationResult {
   const {
     startDate,
@@ -257,16 +267,52 @@ function calculateSmartPrice(params: {
     dayStartTime,
     dayEndTime,
     workdayHours,
+    halfDayHours: customHalfDayHours,
     pricing,
     optionsTotal,
     fixedServicePrice,
     serviceDurationMinutes,
+    clientBillingMode,
   } = params;
+
+  // Calculate half-day hours (default to workdayHours / 2)
+  const halfDayHours = customHalfDayHours || workdayHours / 2;
 
   // Determine rates (derive missing rates from available ones)
   const hourlyRate = pricing.hourly || (pricing.daily ? Math.round(pricing.daily / workdayHours) : 0);
+  const halfDailyRate = pricing.halfDaily || (pricing.daily ? Math.round(pricing.daily / 2) : (hourlyRate ? hourlyRate * halfDayHours : 0));
   const dailyRate = pricing.daily || (hourlyRate ? hourlyRate * workdayHours : 0);
   const nightlyRate = pricing.nightly || 0;
+
+  // Helper: Calculate amount for a partial day based on billing mode
+  const calculatePartialDayAmount = (hours: number): { amount: number; isFullDay: boolean; isHalfDay: boolean } => {
+    // Si le nombre d'heures dépasse la journée de travail, c'est une journée complète
+    if (hours >= workdayHours) {
+      return { amount: dailyRate, isFullDay: true, isHalfDay: false };
+    }
+
+    // Mode arrondi à la demi-journée
+    if (clientBillingMode === "round_half_day") {
+      if (hours <= halfDayHours) {
+        return { amount: halfDailyRate, isFullDay: false, isHalfDay: true };
+      }
+      return { amount: dailyRate, isFullDay: true, isHalfDay: false };
+    }
+
+    // Mode arrondi à la journée
+    if (clientBillingMode === "round_full_day") {
+      return { amount: dailyRate, isFullDay: true, isHalfDay: false };
+    }
+
+    // Mode horaire exact (par défaut)
+    if (hourlyRate > 0) {
+      const hourlyAmount = Math.round(hourlyRate * hours);
+      const cappedAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
+      return { amount: cappedAmount, isFullDay: cappedAmount >= dailyRate, isHalfDay: false };
+    }
+
+    return { amount: dailyRate, isFullDay: true, isHalfDay: false };
+  };
 
   // Calculate total days
   const effectiveEndDate = endDate || startDate;
@@ -277,108 +323,94 @@ function calculateSmartPrice(params: {
     let firstDayHours: number;
     let firstDayAmount: number;
     let firstDayIsFullDay = false;
+    let firstDayIsHalfDay = false;
 
     // Duration-based blocking: use fixed price
     if (fixedServicePrice !== undefined && serviceDurationMinutes !== undefined) {
       firstDayHours = serviceDurationMinutes / 60;
       firstDayAmount = fixedServicePrice;
-      // Not a "full day" in the traditional sense, it's a fixed duration service
-      firstDayIsFullDay = false;
 
       return {
         firstDayAmount,
         firstDayHours,
-        firstDayIsFullDay,
+        firstDayIsFullDay: false,
+        firstDayIsHalfDay: false,
         fullDays: 0,
         fullDaysAmount: 0,
         lastDayAmount: 0,
         lastDayHours: 0,
         lastDayIsFullDay: false,
+        lastDayIsHalfDay: false,
         nightsAmount: 0,
         nights: 0,
         optionsAmount: optionsTotal,
         totalAmount: firstDayAmount + optionsTotal,
-        hourlyRate: 0, // Not applicable for fixed price
+        hourlyRate: 0,
+        halfDailyRate: 0,
         dailyRate: 0,
         nightlyRate,
+        billingUnit: "fixed",
       };
     }
 
     if (startTime && endTime) {
-      // Specific time range
       firstDayHours = calculateHoursBetween(startTime, endTime);
-      if (firstDayHours >= workdayHours && dailyRate > 0) {
-        firstDayAmount = dailyRate;
-        firstDayIsFullDay = true;
-      } else {
-        // Cap hourly amount at daily rate to avoid paying more for fewer hours
-        const hourlyAmount = Math.round(hourlyRate * firstDayHours);
-        firstDayAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
-      }
+      const partialDayResult = calculatePartialDayAmount(firstDayHours);
+      firstDayAmount = partialDayResult.amount;
+      firstDayIsFullDay = partialDayResult.isFullDay;
+      firstDayIsHalfDay = partialDayResult.isHalfDay;
     } else {
-      // Full day
       firstDayHours = workdayHours;
       firstDayAmount = dailyRate || (hourlyRate * workdayHours);
       firstDayIsFullDay = true;
     }
 
+    // Determine billing unit for display
+    let billingUnit: "hour" | "half_day" | "day" | "fixed" = "hour";
+    if (firstDayIsFullDay) billingUnit = "day";
+    else if (firstDayIsHalfDay) billingUnit = "half_day";
+
     return {
       firstDayAmount,
       firstDayHours,
       firstDayIsFullDay,
+      firstDayIsHalfDay,
       fullDays: 0,
       fullDaysAmount: 0,
       lastDayAmount: 0,
       lastDayHours: 0,
       lastDayIsFullDay: false,
+      lastDayIsHalfDay: false,
       nightsAmount: 0,
       nights: 0,
       optionsAmount: optionsTotal,
       totalAmount: firstDayAmount + optionsTotal,
       hourlyRate,
+      halfDailyRate,
       dailyRate,
       nightlyRate,
+      billingUnit,
     };
   }
 
   // Multi-day booking
-  // First day calculation
   const effectiveStartTime = startTime || dayStartTime;
   const firstDayEndTime = dayEndTime;
   const firstDayHours = calculateHoursBetween(effectiveStartTime, firstDayEndTime);
-  let firstDayAmount: number;
-  let firstDayIsFullDay = false;
 
-  if (firstDayHours >= workdayHours && dailyRate > 0) {
-    firstDayAmount = dailyRate;
-    firstDayIsFullDay = true;
-  } else if (hourlyRate > 0) {
-    // Cap hourly amount at daily rate to avoid paying more for fewer hours
-    const hourlyAmount = Math.round(hourlyRate * firstDayHours);
-    firstDayAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
-  } else {
-    firstDayAmount = dailyRate;
-    firstDayIsFullDay = true;
-  }
+  const firstDayResult = calculatePartialDayAmount(firstDayHours);
+  const firstDayAmount = firstDayResult.amount;
+  const firstDayIsFullDay = firstDayResult.isFullDay;
+  const firstDayIsHalfDay = firstDayResult.isHalfDay;
 
-  // Last day calculation
   const lastDayStartTime = dayStartTime;
   const effectiveEndTime = endTime || dayEndTime;
   const lastDayHours = calculateHoursBetween(lastDayStartTime, effectiveEndTime);
-  let lastDayAmount: number;
-  let lastDayIsFullDay = false;
 
-  if (lastDayHours >= workdayHours && dailyRate > 0) {
-    lastDayAmount = dailyRate;
-    lastDayIsFullDay = true;
-  } else if (hourlyRate > 0) {
-    // Cap hourly amount at daily rate to avoid paying more for fewer hours
-    const hourlyAmount = Math.round(hourlyRate * lastDayHours);
-    lastDayAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
-  } else {
-    lastDayAmount = dailyRate;
-    lastDayIsFullDay = true;
-  }
+  const lastDayResult = calculatePartialDayAmount(lastDayHours);
+  const lastDayAmount = lastDayResult.amount;
+  const lastDayIsFullDay = lastDayResult.isFullDay;
+  const lastDayIsHalfDay = lastDayResult.isHalfDay;
 
   // Full days in between (excluding first and last)
   const fullDays = Math.max(0, totalDays - 2);
@@ -390,22 +422,34 @@ function calculateSmartPrice(params: {
 
   const totalAmount = firstDayAmount + fullDaysAmount + lastDayAmount + nightsAmount + optionsTotal;
 
+  // Determine primary billing unit for display
+  let billingUnit: "hour" | "half_day" | "day" | "fixed" = "day";
+  if (!firstDayIsFullDay && !firstDayIsHalfDay && !lastDayIsFullDay && !lastDayIsHalfDay) {
+    billingUnit = "hour";
+  } else if ((firstDayIsHalfDay || lastDayIsHalfDay) && fullDays === 0) {
+    billingUnit = "half_day";
+  }
+
   return {
     firstDayAmount,
     firstDayHours,
     firstDayIsFullDay,
+    firstDayIsHalfDay,
     fullDays,
     fullDaysAmount,
     lastDayAmount,
     lastDayHours,
     lastDayIsFullDay,
+    lastDayIsHalfDay,
     nightsAmount,
     nights,
     optionsAmount: optionsTotal,
     totalAmount,
     hourlyRate,
+    halfDailyRate,
     dailyRate,
     nightlyRate,
+    billingUnit,
   };
 }
 
@@ -498,6 +542,7 @@ export default function ReservationPage({
   const [selectedAnimalIds, setSelectedAnimalIds] = useState<Id<"animals">[]>([]); // Pour formules collectives
   const [address, setAddress] = useState("");
   const [city, setCity] = useState<string | null>(null);
+  const [postalCode, setPostalCode] = useState<string | null>(null);
   const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(null);
   const [notes, setNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -703,10 +748,19 @@ export default function ReservationPage({
     const dayStartTime = bookingData.service.dayStartTime ||
                          announcerPreferences?.acceptReservationsFrom || "08:00";
     const dayEndTime = bookingData.service.dayEndTime ||
-                       announcerPreferences?.acceptReservationsTo || "20:00";
+                       announcerPreferences?.acceptReservationsTo || "18:00";
 
     // For duration-based blocking, use the variant's fixed price
     const useDurationBasedPricing = bookingData.service.enableDurationBasedBlocking && bookingData.variant.duration;
+
+    // Déterminer si c'est un service de garde (prix journalier) ou un service ponctuel (prix horaire)
+    const isGardeService = bookingData.service.category?.toLowerCase().includes("garde") || false;
+
+    // Pour les gardes, variant.price est le prix JOURNALIER, pas horaire
+    // Pour les services, variant.price est généralement le prix HORAIRE
+    const dailyRate = pricing?.daily || (isGardeService ? bookingData.variant.price : 0);
+    const hourlyRate = pricing?.hourly || (isGardeService && dailyRate ? Math.round(dailyRate / workdayHours) : bookingData.variant.price);
+    const halfDailyRate = dailyRate ? Math.round(dailyRate / 2) : 0;
 
     return calculateSmartPrice({
       startDate: bookingData.dates.startDate,
@@ -718,14 +772,17 @@ export default function ReservationPage({
       dayEndTime,
       workdayHours,
       pricing: {
-        hourly: pricing?.hourly || bookingData.variant.price,
-        daily: pricing?.daily,
+        hourly: hourlyRate,
+        halfDaily: halfDailyRate,
+        daily: dailyRate,
         nightly: pricing?.nightly || bookingData.service.overnightPrice,
       },
       optionsTotal,
       // Pass fixed price and duration for duration-based blocking
       fixedServicePrice: useDurationBasedPricing ? bookingData.variant.price : undefined,
       serviceDurationMinutes: useDurationBasedPricing ? bookingData.variant.duration : undefined,
+      // Mode de facturation client (arrondi demi-journée, journée, ou horaire exact)
+      clientBillingMode: bookingData.service.clientBillingMode,
     });
   })();
 
@@ -754,37 +811,16 @@ export default function ReservationPage({
 
   const isMultiDay = bookingData?.dates.endDate !== bookingData?.dates.startDate;
 
-  // Calculer les infos de facturation (jours/demi-journées)
+  // Calculer les infos de facturation (jours/demi-journées) en utilisant les résultats de priceCalculation
   const billingInfo = (() => {
     if (!bookingData?.dates || !priceCalculation) return null;
 
     const dayStartTime = bookingData.service.dayStartTime || announcerPreferences?.acceptReservationsFrom || "08:00";
     const dayEndTime = bookingData.service.dayEndTime || announcerPreferences?.acceptReservationsTo || "18:00";
 
-    // Calculer les heures de début/fin de journée
-    const dayStartHour = parseInt(dayStartTime.split(":")[0]);
-    const dayEndHour = parseInt(dayEndTime.split(":")[0]);
-    const midDayHour = Math.floor((dayStartHour + dayEndHour) / 2);
-
-    // Déterminer si premier/dernier jour est une demi-journée
-    let firstDayIsHalfDay = false;
-    let lastDayIsHalfDay = false;
-
-    if (bookingData.dates.startTime) {
-      const startHour = parseInt(bookingData.dates.startTime.split(":")[0]);
-      // Si on commence après la mi-journée, c'est une demi-journée
-      if (startHour >= midDayHour) {
-        firstDayIsHalfDay = true;
-      }
-    }
-
-    if (bookingData.dates.endTime && isMultiDay) {
-      const endHour = parseInt(bookingData.dates.endTime.split(":")[0]);
-      // Si on finit avant la mi-journée, c'est une demi-journée
-      if (endHour <= midDayHour) {
-        lastDayIsHalfDay = true;
-      }
-    }
+    // Utiliser les valeurs déjà calculées par calculateSmartPrice (qui respecte clientBillingMode)
+    const firstDayIsHalfDay = priceCalculation.firstDayIsHalfDay;
+    const lastDayIsHalfDay = priceCalculation.lastDayIsHalfDay;
 
     // Calculer le nombre de journées complètes et demi-journées
     let fullDays = 0;
@@ -794,33 +830,30 @@ export default function ReservationPage({
       // Un seul jour
       if (firstDayIsHalfDay) {
         halfDays = 1;
-      } else {
+      } else if (priceCalculation.firstDayIsFullDay) {
         fullDays = 1;
       }
     } else if (daysCount > 1) {
-      // Multi-jours
-      const middleDays = daysCount - 2;
+      // Multi-jours: jours intermédiaires
+      fullDays = priceCalculation.fullDays;
 
       // Premier jour
       if (firstDayIsHalfDay) {
         halfDays++;
-      } else {
+      } else if (priceCalculation.firstDayIsFullDay) {
         fullDays++;
       }
-
-      // Jours intermédiaires (tous complets)
-      fullDays += middleDays;
 
       // Dernier jour
       if (lastDayIsHalfDay) {
         halfDays++;
-      } else {
+      } else if (priceCalculation.lastDayIsFullDay) {
         fullDays++;
       }
     }
 
     return {
-      billingUnit: "day",
+      billingUnit: priceCalculation.billingUnit,
       fullDays,
       halfDays,
       firstDayIsHalfDay,
@@ -982,6 +1015,9 @@ export default function ReservationPage({
       const effectiveCity = useAnnouncerLocation
         ? null // La ville est incluse dans la localisation de l'annonceur
         : city;
+      const effectivePostalCode = useAnnouncerLocation
+        ? null
+        : postalCode;
       const effectiveCoordinates = useAnnouncerLocation
         ? null
         : coordinates;
@@ -1006,6 +1042,7 @@ export default function ReservationPage({
           animalId: effectiveAnimalId,
           location: effectiveLocation,
           city: effectiveCity || undefined,
+          postalCode: effectivePostalCode || undefined,
           coordinates: effectiveCoordinates || undefined,
           notes: notes || undefined,
           updatedOptionIds: selectedOptionIds,
@@ -1043,6 +1080,7 @@ export default function ReservationPage({
           },
           location: effectiveLocation.trim(),
           city: effectiveCity || undefined,
+          postalCode: effectivePostalCode || undefined,
           coordinates: effectiveCoordinates || undefined,
           notes: notes?.trim() || undefined,
           updatedOptionIds: selectedOptionIds,
@@ -1598,10 +1636,12 @@ export default function ReservationPage({
                   isCollectiveFormula={isCollectiveFormula}
                   currentAddress={address}
                   currentCity={city}
+                  currentPostalCode={postalCode}
                   currentCoordinates={coordinates}
                   onAddressChange={(data) => {
                     setAddress(data.address);
                     setCity(data.city);
+                    setPostalCode(data.postalCode);
                     setCoordinates(data.coordinates);
                   }}
                   error={fieldErrors.address}
