@@ -141,7 +141,7 @@ export default function AnnouncerHero({
                 </div>
                 {/* Status badge on avatar */}
                 <div className={cn(
-                  "absolute -bottom-1 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full text-xs font-semibold shadow-lg",
+                  "absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 px-2.5 py-0.5 rounded-full text-xs font-semibold shadow-lg",
                   getStatusColor()
                 )}>
                   {getStatusLabel()}
