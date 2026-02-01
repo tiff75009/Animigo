@@ -11,7 +11,9 @@
     "start": "next start",
     "lint": "eslint",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "commit": "./scripts/ai-commit.sh",
+    "commit:only": "./scripts/ai-commit.sh --no-push"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
