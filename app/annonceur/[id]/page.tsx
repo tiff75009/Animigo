@@ -400,10 +400,10 @@ export default function AnnouncerProfilePage() {
   const maxSelectableAnimals = useMemo(() => {
     if (!bookingVariant) return 1;
 
-    // Get accepted animal types
-    const acceptedTypes = bookingVariant.animalTypes || [];
+    // Get accepted animal types (comparaison insensible à la casse)
+    const acceptedTypes = (bookingVariant.animalTypes || []).map((t: string) => t.toLowerCase());
     const compatibleAnimals = userAnimals.filter((a: any) =>
-      acceptedTypes.length === 0 || acceptedTypes.includes(a.type)
+      acceptedTypes.length === 0 || acceptedTypes.includes(a.type?.toLowerCase())
     );
 
     // Permettre de sélectionner tous les animaux compatibles
@@ -414,12 +414,12 @@ export default function AnnouncerProfilePage() {
   useEffect(() => {
     if (selectedAnimalIds.length === 0) return;
 
-    // Filtrer les animaux compatibles (par type uniquement)
-    const acceptedTypes = bookingVariant?.animalTypes || [];
+    // Filtrer les animaux compatibles (par type uniquement, comparaison insensible à la casse)
+    const acceptedTypes = (bookingVariant?.animalTypes || []).map((t: string) => t.toLowerCase());
     const compatibleIds = selectedAnimalIds.filter((id) => {
       const animal = userAnimals.find((a: { id: string; type: string }) => a.id === id);
       if (!animal) return false;
-      return acceptedTypes.length === 0 || acceptedTypes.includes(animal.type);
+      return acceptedTypes.length === 0 || acceptedTypes.includes(animal.type?.toLowerCase());
     });
 
     // Si les IDs ont changé, mettre à jour
@@ -664,9 +664,13 @@ export default function AnnouncerProfilePage() {
   // Pas de limite : l'utilisateur peut sélectionner tous ses animaux compatibles
   // Les créneaux seront filtrés en fonction du nombre d'animaux sélectionnés
   const handleAnimalToggle = useCallback((animalId: string, animalType: string) => {
-    // Vérifier que le type d'animal est accepté par la formule
-    const acceptedTypes = bookingVariant?.animalTypes || [];
-    if (acceptedTypes.length > 0 && !acceptedTypes.includes(animalType)) {
+    // Vérifier que le type d'animal est accepté par la formule (comparaison insensible à la casse)
+    const variantTypes = bookingVariant?.animalTypes || [];
+    const serviceTypes = bookingService?.animalTypes || [];
+    const acceptedTypes = variantTypes.length > 0 ? variantTypes : serviceTypes;
+    const acceptedTypesLower = acceptedTypes.map((t: string) => t.toLowerCase());
+    const animalTypeLower = animalType?.toLowerCase();
+    if (acceptedTypesLower.length > 0 && !acceptedTypesLower.includes(animalTypeLower)) {
       console.warn(`Animal type ${animalType} not accepted for this variant`);
       return;
     }
@@ -972,7 +976,6 @@ export default function AnnouncerProfilePage() {
       {/* Hero Section avec Cover et Action Bar */}
       <AnnouncerHero
         announcer={announcer}
-        selectedServiceAnimals={selectedService?.animalTypes}
         distance={distance}
         isFavorite={isFavorite}
         onToggleFavorite={() => setIsFavorite(!isFavorite)}

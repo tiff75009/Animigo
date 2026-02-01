@@ -1154,7 +1154,7 @@ export default function ReservationPage({
 
                 // Options sélectionnées
                 if (bookingData.options && bookingData.options.length > 0) {
-                  params.set("options", bookingData.options.map((o: { id: string }) => o.id).join(","));
+                  params.set("options", bookingData.options.map((o: { id: string; name: string; price: number }) => o.id).join(","));
                 }
 
                 // Créneaux collectifs

@@ -64,17 +64,7 @@ export default function DashboardPage() {
     );
   }
 
-  const {
-    pendingAcceptance,
-    upcoming,
-    inProgress,
-    completed,
-    upcomingRevenue,
-    completedRevenue,
-    activeMissions
-  } = dashboardStats;
-
-  const counts = { pendingAcceptance, upcoming, inProgress, completed };
+  const { pendingAcceptance, pendingConfirmation, upcoming, inProgress, completed, refused, cancelled, upcomingRevenue, completedRevenue, activeMissions } = dashboardStats;
   const hasActiveMissions = activeMissions.length > 0;
 
   return (
@@ -185,44 +175,44 @@ export default function DashboardPage() {
         transition={{ delay: 0.2 }}
         className="grid grid-cols-2 md:grid-cols-4 gap-4"
       >
-        <Link href="/dashboard/missions/accepter" className="bg-white rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
+        <Link href="/dashboard/missions?tab=pending_acceptance" className="bg-white rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
               <HelpCircle className="w-5 h-5 text-amber-600" />
             </div>
             <span className="text-sm font-medium text-text-light">À accepter</span>
           </div>
-          <p className="text-3xl font-bold text-foreground">{counts.pendingAcceptance}</p>
+          <p className="text-3xl font-bold text-foreground">{pendingAcceptance}</p>
         </Link>
 
-        <Link href="/dashboard/missions/en-cours" className="bg-white rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
+        <Link href="/dashboard/missions?tab=in_progress" className="bg-white rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
               <Clock className="w-5 h-5 text-blue-600" />
             </div>
             <span className="text-sm font-medium text-text-light">En cours</span>
           </div>
-          <p className="text-3xl font-bold text-foreground">{counts.inProgress}</p>
+          <p className="text-3xl font-bold text-foreground">{inProgress}</p>
         </Link>
 
-        <Link href="/dashboard/missions/a-venir" className="bg-white rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
+        <Link href="/dashboard/missions?tab=upcoming" className="bg-white rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
               <Calendar className="w-5 h-5 text-purple-600" />
             </div>
             <span className="text-sm font-medium text-text-light">À venir</span>
           </div>
-          <p className="text-3xl font-bold text-foreground">{counts.upcoming}</p>
+          <p className="text-3xl font-bold text-foreground">{upcoming}</p>
         </Link>
 
-        <Link href="/dashboard/missions/terminees" className="bg-white rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
+        <Link href="/dashboard/missions?tab=completed" className="bg-white rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
               <CheckCircle className="w-5 h-5 text-green-600" />
             </div>
             <span className="text-sm font-medium text-text-light">Terminées</span>
           </div>
-          <p className="text-3xl font-bold text-foreground">{counts.completed}</p>
+          <p className="text-3xl font-bold text-foreground">{completed}</p>
         </Link>
       </motion.div>
 
@@ -253,7 +243,7 @@ export default function DashboardPage() {
                 {activeMissions.map((mission: ActiveMission) => (
                   <Link
                     key={mission.id}
-                    href={`/dashboard/missions/${mission.status === 'pending_acceptance' ? 'accepter' : mission.status === 'in_progress' ? 'en-cours' : 'a-venir'}`}
+                    href={`/dashboard/missions?tab=${mission.status}`}
                   >
                     <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer">
                       <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-2xl shadow-sm flex-shrink-0">

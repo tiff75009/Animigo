@@ -297,21 +297,41 @@ export default function CatBreedAutocomplete({
         )}
       </AnimatePresence>
 
-      {/* Message si pas de résultats */}
+      {/* Message si pas de résultats avec option saisie manuelle */}
       <AnimatePresence>
         {isOpen && inputValue.trim().length >= 2 && searchResults.length === 0 && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="absolute z-50 w-full mt-1 p-4 bg-white rounded-xl shadow-lg border border-gray-200 text-center"
+            className="absolute z-50 w-full mt-1 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden"
           >
-            <p className="text-gray-500 text-sm">
-              Aucune race trouvée pour &quot;{inputValue}&quot;
-            </p>
-            <p className="text-gray-400 text-xs mt-1">
-              Vous pouvez quand même utiliser ce nom
-            </p>
+            <div className="p-4 text-center border-b border-gray-100">
+              <p className="text-gray-500 text-sm">
+                Aucune race trouvée pour &quot;{inputValue}&quot;
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                // Valider la saisie manuelle
+                onChange(inputValue.trim());
+                setIsOpen(false);
+              }}
+              className="w-full px-4 py-3 text-left hover:bg-purple-50 transition-colors flex items-center justify-between"
+            >
+              <div>
+                <p className="font-medium text-gray-900">
+                  Utiliser &quot;{inputValue.trim()}&quot;
+                </p>
+                <p className="text-xs text-gray-500">
+                  Saisie manuelle de la race
+                </p>
+              </div>
+              <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">
+                Personnalisé
+              </span>
+            </button>
           </motion.div>
         )}
       </AnimatePresence>

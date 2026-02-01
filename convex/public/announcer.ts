@@ -167,6 +167,19 @@ export const getAnnouncerProfile = query({
       content: string;
     }> = [];
 
+    // Calculer les statistiques de missions pour le ratio de confiance
+    const allMissions = await ctx.db
+      .query("missions")
+      .withIndex("by_announcer", (q) => q.eq("announcerId", args.userId))
+      .collect();
+
+    const missionStats = {
+      completed: allMissions.filter((m) => m.status === "completed").length,
+      cancelled: allMissions.filter((m) => m.status === "cancelled").length,
+      refused: allMissions.filter((m) => m.status === "refused").length,
+      total: allMissions.length,
+    };
+
     // Construire l'adresse d'affichage (ville + code postal uniquement)
     const buildDisplayLocation = () => {
       if (profile?.city && profile?.postalCode) {
@@ -290,6 +303,9 @@ export const getAnnouncerProfile = query({
 
       // Rayon d'intervention
       radius: profile?.radius || null,
+
+      // Statistiques de missions pour le ratio de confiance
+      missionStats,
     };
   },
 });
@@ -463,6 +479,19 @@ export const getAnnouncerBySlug = query({
       content: string;
     }> = [];
 
+    // Calculer les statistiques de missions pour le ratio de confiance
+    const allMissions = await ctx.db
+      .query("missions")
+      .withIndex("by_announcer", (q) => q.eq("announcerId", user._id))
+      .collect();
+
+    const missionStats = {
+      completed: allMissions.filter((m) => m.status === "completed").length,
+      cancelled: allMissions.filter((m) => m.status === "cancelled").length,
+      refused: allMissions.filter((m) => m.status === "refused").length,
+      total: allMissions.length,
+    };
+
     // Construire l'adresse d'affichage (ville + code postal uniquement)
     const buildDisplayLocation = () => {
       if (profile?.city && profile?.postalCode) {
@@ -585,6 +614,9 @@ export const getAnnouncerBySlug = query({
 
       // Rayon d'intervention
       radius: profile?.radius || null,
+
+      // Statistiques de missions pour le ratio de confiance
+      missionStats,
     };
   },
 });

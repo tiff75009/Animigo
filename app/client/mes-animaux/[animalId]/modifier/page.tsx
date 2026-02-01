@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import BreedAutocomplete from "@/app/components/ui/BreedAutocomplete";
+import CatBreedAutocomplete from "@/app/components/ui/CatBreedAutocomplete";
 
 // Types d'animaux
 const ANIMAL_TYPES = [
@@ -607,8 +608,8 @@ export default function EditAnimalPage() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <label className="block text-sm font-medium text-gray-700">Race / Espèce</label>
-                    {/* Checkbox Race croisée (uniquement pour les chiens) */}
-                    {formData.type === "chien" && (
+                    {/* Checkbox Race croisée (pour chiens et chats) */}
+                    {(formData.type === "chien" || formData.type === "chat") && (
                       <label className="flex items-center gap-2 cursor-pointer group">
                         <div
                           className={`relative w-4 h-4 rounded border-2 transition-all ${
@@ -635,14 +636,16 @@ export default function EditAnimalPage() {
                             className="sr-only"
                           />
                         </div>
-                        <span className="text-sm text-gray-600">Race croisée</span>
+                        <span className="text-sm text-gray-600">
+                          {formData.type === "chat" ? "Chat croisé" : "Race croisée"}
+                        </span>
                       </label>
                     )}
                   </div>
 
                   {formData.type === "chien" ? (
                     formData.isMixedBreed ? (
-                      /* Mode race croisée */
+                      /* Mode race croisée chien */
                       <div className="space-y-3">
                         <BreedAutocomplete
                           value={formData.primaryBreed}
@@ -687,7 +690,7 @@ export default function EditAnimalPage() {
                         )}
                       </div>
                     ) : (
-                      /* Mode race pure */
+                      /* Mode race pure chien */
                       <BreedAutocomplete
                         value={formData.breed}
                         onChange={(breed, breedData) => {
@@ -708,12 +711,80 @@ export default function EditAnimalPage() {
                         placeholder="Rechercher une race de chien..."
                       />
                     )
+                  ) : formData.type === "chat" ? (
+                    formData.isMixedBreed ? (
+                      /* Mode chat croisé */
+                      <div className="space-y-3">
+                        <CatBreedAutocomplete
+                          value={formData.primaryBreed}
+                          onChange={(breed, breedData) => {
+                            setFormData((prev) => ({
+                              ...prev,
+                              primaryBreed: breed,
+                              size: breedData?.size
+                                ? breedData.size === "small"
+                                  ? "petit"
+                                  : breedData.size === "medium"
+                                  ? "moyen"
+                                  : breedData.size === "large"
+                                  ? "grand"
+                                  : prev.size
+                                : prev.size,
+                            }));
+                          }}
+                          placeholder="Race dominante..."
+                        />
+                        <CatBreedAutocomplete
+                          value={formData.secondaryBreed}
+                          onChange={(breed) => {
+                            setFormData((prev) => ({
+                              ...prev,
+                              secondaryBreed: breed,
+                            }));
+                          }}
+                          placeholder="Race secondaire (optionnel)..."
+                        />
+                        {/* Aperçu du résultat */}
+                        {(formData.primaryBreed || formData.secondaryBreed) && (
+                          <p className="text-sm text-gray-500">
+                            Affiché : <span className="font-medium text-gray-700">
+                              {formData.primaryBreed && formData.secondaryBreed
+                                ? `${formData.primaryBreed} x ${formData.secondaryBreed}`
+                                : formData.primaryBreed
+                                ? `Croisé ${formData.primaryBreed}`
+                                : "Croisé"}
+                            </span>
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      /* Mode race pure chat */
+                      <CatBreedAutocomplete
+                        value={formData.breed}
+                        onChange={(breed, breedData) => {
+                          setFormData((prev) => ({
+                            ...prev,
+                            breed,
+                            size: breedData?.size
+                              ? breedData.size === "small"
+                                ? "petit"
+                                : breedData.size === "medium"
+                                ? "moyen"
+                                : breedData.size === "large"
+                                ? "grand"
+                                : prev.size
+                              : prev.size,
+                          }));
+                        }}
+                        placeholder="Rechercher une race de chat..."
+                      />
+                    )
                   ) : (
                     <input
                       type="text"
                       value={formData.breed}
                       onChange={(e) => setFormData({ ...formData, breed: e.target.value })}
-                      placeholder="Ex: Persan, Canari..."
+                      placeholder="Ex: Canari, Hamster..."
                       className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                     />
                   )}

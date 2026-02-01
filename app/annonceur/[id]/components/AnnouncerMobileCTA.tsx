@@ -497,9 +497,15 @@ export default function AnnouncerMobileCTA({
     : (hasAddress && !isAddressOutOfRange);
 
   // Animaux compatibles avec la formule sélectionnée
+  // Comparaison insensible à la casse pour gérer les différences de format
   const compatibleUserAnimals = userAnimals.filter((animal) => {
-    const acceptedTypes = bookingVariant?.animalTypes || bookingService?.animalTypes || [];
-    return acceptedTypes.length === 0 || acceptedTypes.includes(animal.type);
+    const variantTypes = bookingVariant?.animalTypes;
+    const serviceTypes = bookingService?.animalTypes;
+    // Fallback: si le variant n'a pas de types définis OU est un tableau vide, utiliser le service
+    const acceptedTypes = (variantTypes && variantTypes.length > 0) ? variantTypes : (serviceTypes || []);
+    if (acceptedTypes.length === 0) return true;
+    const animalTypeLower = animal.type?.toLowerCase();
+    return acceptedTypes.some((t: string) => t.toLowerCase() === animalTypeLower);
   });
 
   // Vérification du chien pour les invités (bloque les étapes si non vérifié)

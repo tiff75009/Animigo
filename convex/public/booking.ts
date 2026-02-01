@@ -508,6 +508,12 @@ export const finalizeBooking = mutation({
     updatedAmount: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    console.log("[finalizeBooking] Starting with args:", {
+      bookingId: args.bookingId,
+      animalId: args.animalId,
+      location: args.location
+    });
+
     // Vérifier la session
     const session = await ctx.db
       .query("sessions")
@@ -517,6 +523,7 @@ export const finalizeBooking = mutation({
     if (!session || session.expiresAt < Date.now()) {
       throw new ConvexError("Vous devez être connecté pour finaliser la réservation");
     }
+    console.log("[finalizeBooking] Session valid, userId:", session.userId);
 
     // Récupérer la réservation en attente
     const pendingBooking = await ctx.db.get(args.bookingId);
@@ -524,6 +531,7 @@ export const finalizeBooking = mutation({
     if (!pendingBooking) {
       throw new ConvexError("Réservation non trouvée");
     }
+    console.log("[finalizeBooking] PendingBooking found:", pendingBooking._id);
 
     if (pendingBooking.expiresAt < Date.now()) {
       throw new ConvexError("La réservation a expiré");
@@ -535,6 +543,7 @@ export const finalizeBooking = mutation({
     if (!animal) {
       throw new ConvexError("Animal non trouvé");
     }
+    console.log("[finalizeBooking] Animal found:", animal.name);
 
     if (animal.userId !== session.userId) {
       throw new ConvexError("Cet animal ne vous appartient pas");
@@ -545,12 +554,14 @@ export const finalizeBooking = mutation({
     if (!client) {
       throw new ConvexError("Utilisateur non trouvé");
     }
+    console.log("[finalizeBooking] Client found:", client.firstName);
 
     // Récupérer le service
     const service = await ctx.db.get(pendingBooking.serviceId);
     if (!service) {
       throw new ConvexError("Service non trouvé");
     }
+    console.log("[finalizeBooking] Service found:", service.category);
 
     // Récupérer la catégorie
     const category = await ctx.db
@@ -568,6 +579,12 @@ export const finalizeBooking = mutation({
     if (!variant) {
       throw new ConvexError("Formule non trouvée");
     }
+    console.log("[finalizeBooking] Variant found:", variant.name, "sessionType:", variant.sessionType);
+
+    // Pour les formules collectives, on ne vérifie pas la disponibilité standard
+    // car les créneaux collectifs ont leur propre système de disponibilité
+    const isCollectiveFormule = variant.sessionType === "collective";
+    console.log("[finalizeBooking] isCollectiveFormule:", isCollectiveFormule, "collectiveSlotIds:", pendingBooking.collectiveSlotIds?.length || 0);
 
     // Vérifier la disponibilité selon le categoryType
     // Récupérer le categoryTypeId de cette catégorie
@@ -581,56 +598,63 @@ export const finalizeBooking = mutation({
       }
     }
 
-    // Récupérer toutes les disponibilités de l'annonceur
-    const availabilities = await ctx.db
-      .query("availability")
-      .withIndex("by_user", (q) => q.eq("userId", pendingBooking.announcerId))
-      .collect();
+    // Pour les formules collectives, les créneaux sont déjà validés lors de la sélection
+    // On ne vérifie pas la disponibilité standard car ils ont leur propre système
+    if (!isCollectiveFormule) {
+      // Récupérer toutes les disponibilités de l'annonceur
+      const availabilities = await ctx.db
+        .query("availability")
+        .withIndex("by_user", (q) => q.eq("userId", pendingBooking.announcerId))
+        .collect();
 
-    const requestedDates = getDatesBetween(pendingBooking.startDate, pendingBooking.endDate);
+      const requestedDates = getDatesBetween(pendingBooking.startDate, pendingBooking.endDate);
+      console.log("[finalizeBooking] Checking availability for dates:", requestedDates);
 
-    for (const date of requestedDates) {
-      // Chercher une disponibilité pour ce jour et ce type de catégorie
-      const availabilityForDate = availabilities.find(
-        (a) => a.date === date &&
-               (categoryTypeId ? String(a.categoryTypeId) === String(categoryTypeId) : !a.categoryTypeId)
+      for (const date of requestedDates) {
+        // Chercher une disponibilité pour ce jour et ce type de catégorie
+        const availabilityForDate = availabilities.find(
+          (a) => a.date === date &&
+                 (categoryTypeId ? String(a.categoryTypeId) === String(categoryTypeId) : !a.categoryTypeId)
+        );
+
+        // Si pas de disponibilité explicite "available", le jour est indisponible
+        if (!availabilityForDate || availabilityForDate.status !== "available") {
+          throw new ConvexError(`L'annonceur n'est plus disponible le ${date}`);
+        }
+      }
+
+      // Récupérer le profil de l'annonceur pour les buffers (temps de préparation)
+      const announcerProfile = await ctx.db
+        .query("profiles")
+        .withIndex("by_user", (q) => q.eq("userId", pendingBooking.announcerId))
+        .first();
+
+      const bufferBefore = announcerProfile?.bufferBefore ?? 0;
+      const bufferAfter = announcerProfile?.bufferAfter ?? 0;
+
+      // Construire l'objet de la nouvelle mission pour la comparaison temporelle
+      const newMissionSlot = {
+        startDate: pendingBooking.startDate,
+        endDate: pendingBooking.endDate,
+        startTime: pendingBooking.startTime,
+        endTime: pendingBooking.endTime,
+      };
+
+      // Vérifier les conflits en tenant compte de la capacité pour les catégories de garde
+      const conflictCheck = await checkBookingConflict(
+        ctx.db,
+        pendingBooking.announcerId,
+        service.category,
+        newMissionSlot,
+        bufferBefore,
+        bufferAfter
       );
 
-      // Si pas de disponibilité explicite "available", le jour est indisponible
-      if (!availabilityForDate || availabilityForDate.status !== "available") {
-        throw new ConvexError(`L'annonceur n'est plus disponible le ${date}`);
+      if (conflictCheck.hasConflict) {
+        throw new ConvexError(conflictCheck.conflictMessage || "L'annonceur n'est pas disponible sur ce créneau");
       }
-    }
-
-    // Récupérer le profil de l'annonceur pour les buffers (temps de préparation)
-    const announcerProfile = await ctx.db
-      .query("profiles")
-      .withIndex("by_user", (q) => q.eq("userId", pendingBooking.announcerId))
-      .first();
-
-    const bufferBefore = announcerProfile?.bufferBefore ?? 0;
-    const bufferAfter = announcerProfile?.bufferAfter ?? 0;
-
-    // Construire l'objet de la nouvelle mission pour la comparaison temporelle
-    const newMissionSlot = {
-      startDate: pendingBooking.startDate,
-      endDate: pendingBooking.endDate,
-      startTime: pendingBooking.startTime,
-      endTime: pendingBooking.endTime,
-    };
-
-    // Vérifier les conflits en tenant compte de la capacité pour les catégories de garde
-    const conflictCheck = await checkBookingConflict(
-      ctx.db,
-      pendingBooking.announcerId,
-      service.category,
-      newMissionSlot,
-      bufferBefore,
-      bufferAfter
-    );
-
-    if (conflictCheck.hasConflict) {
-      throw new ConvexError(conflictCheck.conflictMessage || "L'annonceur n'est pas disponible sur ce créneau");
+    } else {
+      console.log("[finalizeBooking] Skipping availability check for collective formule");
     }
 
     // Trouver le type d'animal pour l'emoji

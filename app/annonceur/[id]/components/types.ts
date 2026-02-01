@@ -39,6 +39,13 @@ export interface AnnouncerData {
     nextAvailable: string;
   };
   radius: number | null;
+  // Statistiques de missions pour le ratio de confiance
+  missionStats?: {
+    completed: number;
+    cancelled: number;
+    refused: number;
+    total: number;
+  };
 }
 
 export interface ServiceData {

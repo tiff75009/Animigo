@@ -102,19 +102,21 @@ export default function CollectiveAnimalSelector({
   // Peut-on ajouter un animal de plus ?
   const canAddMore = currentAnimalCount < minAvailableSpots;
 
-  // Filtrer les animaux par type accepté
+  // Filtrer les animaux par type accepté (comparaison insensible à la casse)
   const eligibleAnimals = useMemo(() => {
     if (!userAnimals) return [];
+    const acceptedTypesLower = acceptedAnimalTypes.map(t => t.toLowerCase());
     return userAnimals.filter(animal =>
-      acceptedAnimalTypes.includes(animal.type)
+      acceptedTypesLower.includes(animal.type?.toLowerCase())
     );
   }, [userAnimals, acceptedAnimalTypes]);
 
   // Animaux non éligibles (mauvais type)
   const ineligibleAnimals = useMemo(() => {
     if (!userAnimals) return [];
+    const acceptedTypesLower = acceptedAnimalTypes.map(t => t.toLowerCase());
     return userAnimals.filter(animal =>
-      !acceptedAnimalTypes.includes(animal.type)
+      !acceptedTypesLower.includes(animal.type?.toLowerCase())
     );
   }, [userAnimals, acceptedAnimalTypes]);
 

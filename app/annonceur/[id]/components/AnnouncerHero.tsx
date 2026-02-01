@@ -9,10 +9,15 @@ import {
   User,
   ShieldCheck,
   ChevronDown,
-  MessageCircle,
   Zap,
+  Target,
+  TreePine,
+  Award,
+  CheckCircle2,
+  XCircle,
+  PawPrint,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useState } from "react";
 import { cn } from "@/app/lib/utils";
 import { AnnouncerData, animalEmojis } from "./types";
@@ -21,7 +26,6 @@ import AnnouncerActionBar from "./AnnouncerActionBar";
 
 interface AnnouncerHeroProps {
   announcer: AnnouncerData;
-  selectedServiceAnimals?: string[];
   distance?: number;
   isFavorite?: boolean;
   onToggleFavorite?: () => void;
@@ -29,20 +33,43 @@ interface AnnouncerHeroProps {
 
 export default function AnnouncerHero({
   announcer,
-  selectedServiceAnimals,
   distance,
   isFavorite = false,
   onToggleFavorite,
 }: AnnouncerHeroProps) {
   const [isBioExpanded, setIsBioExpanded] = useState(false);
 
-  // Utiliser les animaux du service sélectionné si disponible, sinon ceux de l'annonceur
-  const displayedAnimals = selectedServiceAnimals && selectedServiceAnimals.length > 0
-    ? selectedServiceAnimals
-    : announcer.acceptedAnimals;
-
   // Formater la distance
   const formattedDistance = formatDistance(distance);
+
+  // Statistiques de missions (avec valeurs par défaut si non disponibles)
+  const missionStats = announcer.missionStats || { completed: 0, cancelled: 0, refused: 0, total: 0 };
+
+  // Calculer le ratio de confiance (0-100)
+  // Par défaut 100% (5/5), s'ajuste avec les missions terminées/annulées/refusées
+  const calculateTrustScore = () => {
+    const { completed, cancelled, refused, total } = missionStats;
+
+    // Par défaut, score de confiance à 100% (5/5)
+    if (total === 0) return 100;
+
+    // Score basé sur: missions terminées positivement vs annulées/refusées
+    // Formule: (completed / total) * 100 - penalité pour refus/annulations
+    const successRate = (completed / total) * 100;
+    const penaltyRate = ((cancelled + refused) / total) * 20; // Penalité légère
+    const score = Math.max(0, Math.min(100, Math.round(successRate - penaltyRate)));
+
+    return score;
+  };
+
+  const trustScore = calculateTrustScore();
+
+  // Couleur du score de confiance
+  const getTrustScoreColor = (score: number) => {
+    if (score >= 90) return "text-green-600 bg-green-50";
+    if (score >= 70) return "text-amber-600 bg-amber-50";
+    return "text-red-600 bg-red-50";
+  };
 
   const getStatusLabel = () => {
     switch (announcer.statusType) {
@@ -67,7 +94,7 @@ export default function AnnouncerHero({
   };
 
   return (
-    <section className="pt-16 pb-8">
+    <section className="pt-16">
       {/* Cover Image */}
       <div className="relative h-40 sm:h-56 md:h-64 bg-gradient-to-br from-primary/20 via-secondary/10 to-primary/20">
         {announcer.coverImage && (
@@ -91,7 +118,7 @@ export default function AnnouncerHero({
 
       {/* Profile Info Card */}
       <div className="max-w-6xl mx-auto px-4 -mt-16 sm:-mt-20 relative z-10">
-        <div className="bg-white rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1),0_8px_40px_-8px_rgba(0,0,0,0.05)] border border-gray-100/80">
+        <div className="bg-white rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1),0_8px_40px_-8px_rgba(0,0,0,0.05)] border border-gray-100/80 overflow-hidden">
           {/* Top section with avatar and main info */}
           <div className="p-4 sm:p-6">
             <div className="flex flex-col sm:flex-row gap-4 sm:gap-5">
@@ -197,19 +224,85 @@ export default function AnnouncerHero({
           {/* Divider */}
           <div className="border-t border-gray-100" />
 
-          {/* Bottom section with animals and bio */}
-          <div className="px-4 sm:px-6 py-3 sm:py-4 bg-gray-50/50 rounded-b-2xl">
-            {/* Accepted animals as compact chips */}
-            {displayedAnimals.length > 0 && (
+          {/* Bottom section with zone, trust score, garden, animals */}
+          <div className="px-4 sm:px-6 py-3 sm:py-4 bg-gray-50/50">
+            {/* Row 1: Zone d'intervention, Score de confiance, Jardin */}
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              {/* Zone d'intervention */}
+              {announcer.radius && (
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 border border-blue-200 rounded-full">
+                  <Target className="w-3.5 h-3.5 text-blue-600" />
+                  <span className="text-xs font-medium text-blue-700">
+                    Zone : {announcer.radius} km
+                  </span>
+                </div>
+              )}
+
+              {/* Score de confiance */}
+              <div className={cn(
+                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border",
+                getTrustScoreColor(trustScore),
+                trustScore >= 90 ? "border-green-200" : trustScore >= 70 ? "border-amber-200" : "border-red-200"
+              )}>
+                <Award className="w-3.5 h-3.5" />
+                <span className="text-xs font-medium">
+                  Confiance : {trustScore}%
+                </span>
+                <span className="text-xs opacity-70">
+                  {missionStats.total === 0
+                    ? "(Nouveau)"
+                    : `(${missionStats.completed} mission${missionStats.completed > 1 ? "s" : ""})`
+                  }
+                </span>
+              </div>
+
+              {/* Jardin */}
+              {announcer.equipment.hasGarden && (
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-50 border border-green-200 rounded-full">
+                  <TreePine className="w-3.5 h-3.5 text-green-600" />
+                  <span className="text-xs font-medium text-green-700">
+                    Jardin{announcer.equipment.gardenSize ? ` (${announcer.equipment.gardenSize})` : ""}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Row 2: Stats missions détaillées (si missions existantes) */}
+            {missionStats.total > 0 && (
+              <div className="flex flex-wrap items-center gap-3 mb-3 text-xs">
+                <div className="flex items-center gap-1 text-green-600">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>{missionStats.completed} terminée{missionStats.completed > 1 ? "s" : ""}</span>
+                </div>
+                {missionStats.cancelled > 0 && (
+                  <div className="flex items-center gap-1 text-amber-600">
+                    <XCircle className="w-3.5 h-3.5" />
+                    <span>{missionStats.cancelled} annulée{missionStats.cancelled > 1 ? "s" : ""}</span>
+                  </div>
+                )}
+                {missionStats.refused > 0 && (
+                  <div className="flex items-center gap-1 text-red-600">
+                    <XCircle className="w-3.5 h-3.5" />
+                    <span>{missionStats.refused} refusée{missionStats.refused > 1 ? "s" : ""}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Row 3: Animaux de l'annonceur */}
+            {announcer.ownAnimals.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5 mb-3">
-                <span className="text-xs font-medium text-gray-500 mr-1">Accepte :</span>
-                {displayedAnimals.map((animal) => (
+                <span className="text-xs font-medium text-gray-500 mr-1 flex items-center gap-1">
+                  <PawPrint className="w-3 h-3" />
+                  Ses animaux :
+                </span>
+                {announcer.ownAnimals.map((animal, index) => (
                   <span
-                    key={animal}
+                    key={animal.id || index}
                     className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-gray-200 rounded-full text-xs font-medium text-gray-700"
                   >
-                    <span>{animalEmojis[animal.toLowerCase()] || "🐾"}</span>
-                    <span className="capitalize">{animal}</span>
+                    <span>{animalEmojis[animal.type.toLowerCase()] || "🐾"}</span>
+                    <span>{animal.name}</span>
                   </span>
                 ))}
               </div>

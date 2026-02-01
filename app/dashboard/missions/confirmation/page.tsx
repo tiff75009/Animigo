@@ -333,7 +333,7 @@ export default function MissionsConfirmationPage() {
               Toutes vos propositions ont été traitées par les clients.
             </p>
             <Link
-              href="/dashboard/missions/accepter"
+              href="/dashboard/missions?tab=pending_acceptance"
               className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white font-semibold rounded-xl hover:bg-primary/90 transition-colors"
             >
               Voir les demandes à accepter
