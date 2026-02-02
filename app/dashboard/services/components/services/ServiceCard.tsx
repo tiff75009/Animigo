@@ -263,6 +263,10 @@ export default function ServiceCard({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editingSection, setEditingSection] = useState<"variants" | "options" | "settings" | null>(null);
   const [managingSlotsVariant, setManagingSlotsVariant] = useState<Variant | null>(null);
+  const [editingVariantId, setEditingVariantId] = useState<Id<"serviceVariants"> | null>(null);
+  const [isAddingVariant, setIsAddingVariant] = useState(false);
+  const [editingOptionId, setEditingOptionId] = useState<Id<"serviceOptions"> | null>(null);
+  const [isAddingOption, setIsAddingOption] = useState(false);
 
   // Filtres pour la vue normale des formules
   const [previewFilterSessionType, setPreviewFilterSessionType] = useState<"all" | "individual" | "collective">("all");
@@ -459,7 +463,7 @@ export default function ServiceCard({
                     ) : (
                       <>
                         <Edit2 className="w-3.5 h-3.5" />
-                        Modifier
+                        Modifier le service
                       </>
                     )}
                   </button>
@@ -542,34 +546,16 @@ export default function ServiceCard({
                   <h4 className="font-semibold text-foreground flex items-center gap-2">
                     <Layers className="w-4 h-4 text-primary" />
                     Formules
+                    {variantsCount > 0 && (
+                      <span className="text-xs font-normal text-text-light">({variantsCount})</span>
+                    )}
                   </h4>
-                  <button
-                    onClick={() => setEditingSection(editingSection === "variants" ? null : "variants")}
-                    className={cn(
-                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                      editingSection === "variants"
-                        ? "bg-primary text-white"
-                        : "bg-primary/10 text-primary hover:bg-primary/20"
-                    )}
-                  >
-                    {editingSection === "variants" ? (
-                      <>
-                        <X className="w-3.5 h-3.5" />
-                        Fermer
-                      </>
-                    ) : (
-                      <>
-                        <Edit2 className="w-3.5 h-3.5" />
-                        Gérer
-                      </>
-                    )}
-                  </button>
                 </div>
 
                 <AnimatePresence mode="wait">
-                  {editingSection === "variants" ? (
+                  {editingSection === "variants" && isAddingVariant ? (
                     <motion.div
-                      key="edit-variants"
+                      key="add-variant"
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
@@ -583,6 +569,34 @@ export default function ServiceCard({
                         allowOvernightStay={service.allowOvernightStay}
                         serviceAnimalTypes={service.animalTypes}
                         onManageSlots={setManagingSlotsVariant}
+                        initialAddMode={true}
+                        onClose={() => {
+                          setIsAddingVariant(false);
+                          setEditingSection(null);
+                        }}
+                      />
+                    </motion.div>
+                  ) : editingSection === "variants" && editingVariantId ? (
+                    <motion.div
+                      key="edit-single-variant"
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                    >
+                      <VariantEditor
+                        serviceId={service.id}
+                        variants={service.variants || []}
+                        token={token}
+                        categoryData={categoryData}
+                        category={service.category}
+                        allowOvernightStay={service.allowOvernightStay}
+                        serviceAnimalTypes={service.animalTypes}
+                        onManageSlots={setManagingSlotsVariant}
+                        initialEditingId={editingVariantId}
+                        onClose={() => {
+                          setEditingVariantId(null);
+                          setEditingSection(null);
+                        }}
                       />
                     </motion.div>
                   ) : (
@@ -830,6 +844,21 @@ export default function ServiceCard({
                                   ))}
                                 </div>
                               </div>
+                              {/* Bouton Modifier la formule */}
+                              <div className="mt-2 pt-2 border-t border-foreground/5 flex justify-end">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingVariantId(variant.id);
+                                    setIsAddingVariant(false);
+                                    setEditingSection("variants");
+                                  }}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                  Modifier la formule
+                                </button>
+                              </div>
                               {/* Description */}
                               {variant.description && (
                                 <p className="text-xs text-text-light mt-2 pl-11 line-clamp-2">{variant.description}</p>
@@ -849,6 +878,19 @@ export default function ServiceCard({
                           );
                         })
                       )}
+
+                      {/* Bouton Ajouter une formule */}
+                      <button
+                        onClick={() => {
+                          setIsAddingVariant(true);
+                          setEditingVariantId(null);
+                          setEditingSection("variants");
+                        }}
+                        className="w-full flex items-center justify-center gap-2 p-3 mt-2 border-2 border-dashed border-primary/30 rounded-xl text-primary hover:bg-primary/5 hover:border-primary/50 transition-all"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span className="text-sm font-medium">Ajouter une formule</span>
+                      </button>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -864,33 +906,12 @@ export default function ServiceCard({
                       <span className="text-xs font-normal text-text-light">({optionsCount})</span>
                     )}
                   </h4>
-                  <button
-                    onClick={() => setEditingSection(editingSection === "options" ? null : "options")}
-                    className={cn(
-                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                      editingSection === "options"
-                        ? "bg-amber-500 text-white"
-                        : "bg-amber-100 text-amber-600 hover:bg-amber-200"
-                    )}
-                  >
-                    {editingSection === "options" ? (
-                      <>
-                        <X className="w-3.5 h-3.5" />
-                        Fermer
-                      </>
-                    ) : (
-                      <>
-                        <Edit2 className="w-3.5 h-3.5" />
-                        Gérer
-                      </>
-                    )}
-                  </button>
                 </div>
 
                 <AnimatePresence mode="wait">
-                  {editingSection === "options" ? (
+                  {editingSection === "options" && isAddingOption ? (
                     <motion.div
-                      key="edit-options"
+                      key="add-option"
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
@@ -899,33 +920,80 @@ export default function ServiceCard({
                         serviceId={service.id}
                         options={service.options || []}
                         token={token}
+                        initialAddMode={true}
+                        onClose={() => {
+                          setIsAddingOption(false);
+                          setEditingSection(null);
+                        }}
                       />
                     </motion.div>
-                  ) : activeOptions.length > 0 ? (
+                  ) : editingSection === "options" && editingOptionId ? (
+                    <motion.div
+                      key="edit-single-option"
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                    >
+                      <OptionEditor
+                        serviceId={service.id}
+                        options={service.options || []}
+                        token={token}
+                        initialEditingId={editingOptionId}
+                        onClose={() => {
+                          setEditingOptionId(null);
+                          setEditingSection(null);
+                        }}
+                      />
+                    </motion.div>
+                  ) : (
                     <motion.div
                       key="preview-options"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className="flex flex-wrap gap-2"
+                      className="space-y-2"
                     >
-                      {activeOptions.map((option) => (
-                        <span key={option.id} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-full text-sm font-medium">
-                          <Zap className="w-3.5 h-3.5" />
-                          {option.name}
-                          <span className="text-amber-500">+{formatPrice(option.price)}</span>
-                        </span>
-                      ))}
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="empty-options"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="text-sm text-text-light text-center py-2"
-                    >
-                      Aucune option - cliquez sur Gérer pour en ajouter
+                      {activeOptions.length > 0 ? (
+                        <div className="space-y-2">
+                          {activeOptions.map((option) => (
+                            <div key={option.id} className="flex items-center justify-between p-2 bg-amber-50/50 rounded-lg border border-amber-100">
+                              <div className="flex items-center gap-2">
+                                <Zap className="w-4 h-4 text-amber-500" />
+                                <span className="font-medium text-foreground">{option.name}</span>
+                                <span className="text-amber-600 font-semibold">+{formatPrice(option.price)}</span>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  setEditingOptionId(option.id);
+                                  setIsAddingOption(false);
+                                  setEditingSection("options");
+                                }}
+                                className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-amber-600 hover:bg-amber-100 rounded-lg transition-colors"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                                Modifier
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-text-light text-center py-2">
+                          Aucune option configurée
+                        </p>
+                      )}
+
+                      {/* Bouton Ajouter une option */}
+                      <button
+                        onClick={() => {
+                          setIsAddingOption(true);
+                          setEditingOptionId(null);
+                          setEditingSection("options");
+                        }}
+                        className="w-full flex items-center justify-center gap-2 p-3 border-2 border-dashed border-amber-300 rounded-xl text-amber-600 hover:bg-amber-50 hover:border-amber-400 transition-all"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span className="text-sm font-medium">Ajouter une option</span>
+                      </button>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -1025,11 +1093,15 @@ interface VariantEditorProps {
   allowOvernightStay?: boolean;
   serviceAnimalTypes: string[];
   onManageSlots?: (variant: Variant) => void;
+  // Props pour ouvrir directement en mode édition/ajout
+  initialEditingId?: Id<"serviceVariants"> | null;
+  initialAddMode?: boolean;
+  onClose?: () => void;
 }
 
-function VariantEditor({ serviceId, variants, token, categoryData, category, allowOvernightStay, serviceAnimalTypes, onManageSlots }: VariantEditorProps) {
-  const [isAdding, setIsAdding] = useState(false);
-  const [editingId, setEditingId] = useState<Id<"serviceVariants"> | null>(null);
+function VariantEditor({ serviceId, variants, token, categoryData, category, allowOvernightStay, serviceAnimalTypes, onManageSlots, initialEditingId, initialAddMode, onClose }: VariantEditorProps) {
+  const [isAdding, setIsAdding] = useState(initialAddMode || false);
+  const [editingId, setEditingId] = useState<Id<"serviceVariants"> | null>(initialEditingId || null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ id: Id<"serviceVariants">; name: string } | null>(null);
 
@@ -1105,6 +1177,82 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
     setFilterLocation("all");
     setFilterAnimal("all");
   };
+
+  // Mode édition directe d'une formule spécifique
+  if (initialEditingId) {
+    const variantToEdit = variants.find(v => v.id === initialEditingId);
+    if (variantToEdit) {
+      return (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between mb-2">
+            <h5 className="font-medium text-foreground">Modifier la formule</h5>
+            <button
+              onClick={onClose}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+              Annuler
+            </button>
+          </div>
+          <VariantEditForm
+            variant={variantToEdit}
+            token={token}
+            category={category}
+            recommendedPrice={recommendedPrice}
+            isGardeService={isGardeService}
+            allowOvernightStay={allowOvernightStay}
+            allowedPriceUnits={categoryData?.allowedPriceUnits}
+            announcerPriceMode={categoryData?.announcerPriceMode}
+            defaultNightlyPrice={categoryData?.defaultNightlyPrice}
+            serviceAnimalTypes={serviceAnimalTypes}
+            availableActivities={availableActivities}
+            onSave={async (data) => {
+              await updateVariantMutation({ token, variantId: variantToEdit.id, ...data });
+              onClose?.();
+            }}
+            onCancel={() => onClose?.()}
+          />
+        </div>
+      );
+    }
+  }
+
+  // Mode ajout direct d'une nouvelle formule
+  if (initialAddMode) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between mb-2">
+          <h5 className="font-medium text-foreground">Nouvelle formule</h5>
+          <button
+            onClick={onClose}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+            Annuler
+          </button>
+        </div>
+        <VariantAddForm
+          serviceId={serviceId}
+          token={token}
+          category={category}
+          recommendedPrice={recommendedPrice}
+          isGardeService={isGardeService}
+          allowOvernightStay={allowOvernightStay}
+          allowedPriceUnits={categoryData?.allowedPriceUnits}
+          announcerPriceMode={categoryData?.announcerPriceMode}
+          defaultNightlyPrice={categoryData?.defaultNightlyPrice}
+          serviceAnimalTypes={serviceAnimalTypes}
+          availableActivities={availableActivities}
+          existingCount={variants.length}
+          onSave={async (data) => {
+            await addVariantMutation({ token, serviceId, ...data });
+            onClose?.();
+          }}
+          onCancel={() => onClose?.()}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -3209,11 +3357,14 @@ interface OptionEditorProps {
   serviceId: Id<"services">;
   options: Option[];
   token: string;
+  initialAddMode?: boolean;
+  initialEditingId?: Id<"serviceOptions"> | null;
+  onClose?: () => void;
 }
 
-function OptionEditor({ serviceId, options, token }: OptionEditorProps) {
-  const [isAdding, setIsAdding] = useState(false);
-  const [editingId, setEditingId] = useState<Id<"serviceOptions"> | null>(null);
+function OptionEditor({ serviceId, options, token, initialAddMode, initialEditingId, onClose }: OptionEditorProps) {
+  const [isAdding, setIsAdding] = useState(initialAddMode || false);
+  const [editingId, setEditingId] = useState<Id<"serviceOptions"> | null>(initialEditingId || null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ id: Id<"serviceOptions">; name: string } | null>(null);
 
@@ -3231,6 +3382,63 @@ function OptionEditor({ serviceId, options, token }: OptionEditorProps) {
     setDeleteModalOpen(false);
     setItemToDelete(null);
   };
+
+  // Mode édition directe d'une option spécifique
+  if (initialEditingId) {
+    const optionToEdit = options.find(o => o.id === initialEditingId);
+    if (optionToEdit) {
+      return (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between mb-2">
+            <h5 className="font-medium text-foreground">Modifier l'option</h5>
+            <button
+              onClick={onClose}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+              Annuler
+            </button>
+          </div>
+          <OptionEditForm
+            option={optionToEdit}
+            token={token}
+            onSave={async (data) => {
+              await updateOptionMutation({ token, optionId: optionToEdit.id, ...data });
+              onClose?.();
+            }}
+            onCancel={() => onClose?.()}
+          />
+        </div>
+      );
+    }
+  }
+
+  // Mode ajout direct d'une nouvelle option
+  if (initialAddMode) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between mb-2">
+          <h5 className="font-medium text-foreground">Nouvelle option</h5>
+          <button
+            onClick={onClose}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+            Annuler
+          </button>
+        </div>
+        <OptionAddForm
+          serviceId={serviceId}
+          token={token}
+          onSave={async (data) => {
+            await addOptionMutation({ token, serviceId, ...data });
+            onClose?.();
+          }}
+          onCancel={() => onClose?.()}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
