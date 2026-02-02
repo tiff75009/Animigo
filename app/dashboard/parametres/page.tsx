@@ -308,11 +308,18 @@ function PaymentTab() {
   // Mutations & Actions
   const updatePayoutMode = useMutation(api.api.stripeConnectQueries.updatePayoutMode);
   const saveStripeAccountResult = useMutation(api.api.stripeConnectQueries.saveStripeAccountResult);
+  const clearStripeDataPublic = useMutation(api.api.stripeConnectQueries.clearStripeDataPublic);
+  const updateStripeStatus = useMutation(api.api.stripeConnectQueries.updateStripeStatus);
   const createStripeAccountDirect = useAction(api.api.stripeConnect.createStripeAccountDirect);
+  const deleteStripeAccount = useAction(api.api.stripeConnect.deleteStripeAccount);
+  const updateStripeAccountProfile = useAction(api.api.stripeConnect.updateStripeAccountProfile);
 
   // Local state
   const [showSetupForm, setShowSetupForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [selectedPayoutMode, setSelectedPayoutMode] = useState<"scheduled" | "instant">("scheduled");
@@ -417,11 +424,19 @@ function PaymentTab() {
         throw new Error(bankResult.error.message);
       }
 
-      // 3. Appeler l'action Stripe (crée le compte et ajoute le compte bancaire)
+      // 3. Construire l'URL du profil annonceur
+      const profileUrl = stripeInfo?.userSlug
+        ? `https://animigo.fr/profil/${stripeInfo.userSlug}`
+        : stripeInfo?.userId
+          ? `https://animigo.fr/profil/${stripeInfo.userId}`
+          : undefined;
+
+      // 4. Appeler l'action Stripe (crée le compte et ajoute le compte bancaire)
       const stripeResult = await createStripeAccountDirect({
         sessionToken: token,
         accountToken: accountResult.token.id,
         bankAccountToken: bankResult.token.id,
+        profileUrl,
       });
 
       if (stripeResult.success) {
@@ -466,6 +481,81 @@ function PaymentTab() {
   // Format IBAN pour affichage
   const formatIban = (iban: string) => {
     return iban.replace(/(.{4})/g, "$1 ").trim();
+  };
+
+  // Handle update Stripe profile (ajouter l'URL du profil)
+  const handleUpdateStripeProfile = async () => {
+    if (!stripeInfo?.stripeAccountId || !token) return;
+
+    // Construire l'URL du profil
+    const profileUrl = stripeInfo?.userSlug
+      ? `https://animigo.fr/profil/${stripeInfo.userSlug}`
+      : stripeInfo?.userId
+        ? `https://animigo.fr/profil/${stripeInfo.userId}`
+        : "https://animigo.fr";
+
+    setIsUpdatingProfile(true);
+    setErrorMessage("");
+
+    try {
+      // 1. Mettre à jour sur Stripe
+      const result = await updateStripeAccountProfile({
+        stripeAccountId: stripeInfo.stripeAccountId,
+        profileUrl,
+      });
+
+      // 2. Mettre à jour le statut dans Convex
+      if (result.success) {
+        await updateStripeStatus({
+          sessionToken: token,
+          status: result.status,
+          chargesEnabled: result.chargesEnabled,
+          payoutsEnabled: result.payoutsEnabled,
+        });
+      }
+
+      setSuccessMessage(result.payoutsEnabled
+        ? "Compte vérifié ! Les versements sont maintenant activés."
+        : "Profil mis à jour ! Stripe va revalider votre compte."
+      );
+    } catch (error: any) {
+      console.error("Erreur mise à jour profil:", error);
+      setErrorMessage(error?.message || "Erreur lors de la mise à jour");
+    } finally {
+      setIsUpdatingProfile(false);
+      setTimeout(() => {
+        setSuccessMessage("");
+        setErrorMessage("");
+      }, 8000);
+    }
+  };
+
+  // Handle delete Stripe account
+  const handleDeleteStripeAccount = async () => {
+    if (!token || !stripeInfo?.stripeAccountId) return;
+
+    setIsDeleting(true);
+    setErrorMessage("");
+
+    try {
+      // 1. Supprimer le compte Stripe via l'API
+      await deleteStripeAccount({ stripeAccountId: stripeInfo.stripeAccountId });
+
+      // 2. Effacer les données dans Convex
+      await clearStripeDataPublic({ sessionToken: token });
+
+      setSuccessMessage("Compte Stripe supprimé. Vous pouvez reconfigurer avec les bonnes données.");
+      setShowDeleteConfirm(false);
+    } catch (error: any) {
+      console.error("Erreur suppression:", error);
+      setErrorMessage(error?.message || "Erreur lors de la suppression");
+    } finally {
+      setIsDeleting(false);
+      setTimeout(() => {
+        setSuccessMessage("");
+        setErrorMessage("");
+      }, 8000);
+    }
   };
 
   // Status badge
@@ -554,10 +644,42 @@ function PaymentTab() {
                   Versements activés - Vous pouvez recevoir des paiements
                 </p>
               ) : (
-                <p className="text-xs text-orange-600 mt-3 flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" />
-                  Versements en cours d&apos;activation - Vérification en cours
-                </p>
+                <div className="mt-3 space-y-3">
+                  <p className="text-xs text-orange-600 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    Versements en cours d&apos;activation - Vérification en cours
+                  </p>
+
+                  {/* Bouton pour compléter la vérification */}
+                  <motion.button
+                    onClick={handleUpdateStripeProfile}
+                    disabled={isUpdatingProfile}
+                    className="px-4 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors flex items-center gap-2 disabled:opacity-50"
+                    whileHover={{ scale: isUpdatingProfile ? 1 : 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    {isUpdatingProfile ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Mise à jour...
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        Compléter la vérification
+                      </>
+                    )}
+                  </motion.button>
+
+                  <motion.button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="text-xs text-red-600 hover:text-red-700 underline flex items-center gap-1"
+                    whileHover={{ scale: 1.02 }}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Réinitialiser le compte (pour corriger les données)
+                  </motion.button>
+                </div>
               )}
             </div>
           ) : (
@@ -583,6 +705,78 @@ function PaymentTab() {
               </div>
             </div>
           )}
+
+          {/* Dialog de confirmation de suppression */}
+          <AnimatePresence>
+            {showDeleteConfirm && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+                onClick={() => setShowDeleteConfirm(false)}
+              >
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.9, opacity: 0 }}
+                  className="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-red-100 rounded-xl">
+                      <Trash2 className="w-5 h-5 text-red-600" />
+                    </div>
+                    <h3 className="text-lg font-bold text-foreground">Réinitialiser le compte Stripe ?</h3>
+                  </div>
+
+                  <p className="text-sm text-text-light mb-4">
+                    Cette action va supprimer votre compte Stripe Connect actuel. Vous pourrez ensuite reconfigurer avec les bonnes données de test.
+                  </p>
+
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
+                    <p className="text-xs text-amber-700">
+                      <strong>Rappel des données de test :</strong><br />
+                      • Date de naissance : <code className="bg-amber-100 px-1 rounded">01/01/1901</code><br />
+                      • Adresse : <code className="bg-amber-100 px-1 rounded">address_full_match</code><br />
+                      • IBAN : <code className="bg-amber-100 px-1 rounded">FR1420041010050500013M02606</code>
+                    </p>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <motion.button
+                      onClick={() => setShowDeleteConfirm(false)}
+                      className="flex-1 py-3 bg-gray-200 text-foreground rounded-xl font-semibold"
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.99 }}
+                      disabled={isDeleting}
+                    >
+                      Annuler
+                    </motion.button>
+                    <motion.button
+                      onClick={handleDeleteStripeAccount}
+                      disabled={isDeleting}
+                      className="flex-1 py-3 bg-red-600 text-white rounded-xl font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+                      whileHover={{ scale: isDeleting ? 1 : 1.01 }}
+                      whileTap={{ scale: 0.99 }}
+                    >
+                      {isDeleting ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          Suppression...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="w-4 h-4" />
+                          Supprimer
+                        </>
+                      )}
+                    </motion.button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Formulaire de configuration */}
           <AnimatePresence>

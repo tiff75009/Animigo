@@ -325,6 +325,7 @@ export const createStripeAccountDirect = action({
     sessionToken: v.string(),
     accountToken: v.string(),
     bankAccountToken: v.string(),
+    profileUrl: v.optional(v.string()), // URL du profil annonceur sur la plateforme
   },
   handler: async (ctx, args) => {
     console.log("=== createStripeAccountDirect START ===");
@@ -348,6 +349,11 @@ export const createStripeAccountDirect = action({
         account_token: args.accountToken,
         capabilities: {
           transfers: { requested: true },
+        },
+        business_profile: {
+          // URL du profil annonceur sur la plateforme (ou URL par défaut)
+          url: args.profileUrl || process.env.PLATFORM_URL || "https://animigo.fr",
+          mcc: "7299", // Services divers (pet services)
         },
         settings: {
           payouts: {
@@ -410,3 +416,93 @@ export const createStripeAccountDirect = action({
 
 // NOTE: Les queries (getAnnouncerStripeInfo, validateAnnouncerSession)
 // sont dans stripeConnectQueries.ts car ce fichier utilise "use node"
+
+/**
+ * Mettre à jour le business_profile d'un compte Stripe Connect existant
+ * Utile pour ajouter l'URL du profil annonceur
+ */
+export const updateStripeAccountProfile = action({
+  args: {
+    stripeAccountId: v.string(),
+    profileUrl: v.string(),
+  },
+  handler: async (ctx, args) => {
+    console.log("=== updateStripeAccountProfile START ===");
+    console.log("Account:", args.stripeAccountId, "URL:", args.profileUrl);
+
+    const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+    if (!stripeSecretKey) {
+      throw new ConvexError("Stripe non configuré");
+    }
+
+    try {
+      const stripe = new Stripe(stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+
+      // Mettre à jour le business_profile
+      const account = await stripe.accounts.update(args.stripeAccountId, {
+        business_profile: {
+          url: args.profileUrl,
+          mcc: "7299", // Services divers (pet services)
+        },
+      });
+
+      console.log("Compte mis à jour:", account.id);
+      console.log("chargesEnabled:", account.charges_enabled, "payoutsEnabled:", account.payouts_enabled);
+      console.log("=== updateStripeAccountProfile SUCCESS ===");
+
+      // Déterminer le statut
+      let status: "pending" | "verified" | "restricted" | "disabled" = "pending";
+      if (account.charges_enabled && account.payouts_enabled) {
+        status = "verified";
+      } else if (account.requirements?.disabled_reason) {
+        status = "disabled";
+      } else if (account.requirements?.currently_due?.length) {
+        status = "restricted";
+      }
+
+      return {
+        success: true,
+        status,
+        chargesEnabled: account.charges_enabled ?? false,
+        payoutsEnabled: account.payouts_enabled ?? false,
+      };
+    } catch (error: any) {
+      console.error("Erreur mise à jour compte Stripe:", error);
+      throw new ConvexError(error?.message || "Erreur lors de la mise à jour");
+    }
+  },
+});
+
+/**
+ * Supprimer un compte Stripe Connect (pour recréer avec les bonnes données de test)
+ * Contourne le proxy HTTP Convex self-hosted en prenant l'accountId directement
+ */
+export const deleteStripeAccount = action({
+  args: {
+    stripeAccountId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    console.log("=== deleteStripeAccount START ===");
+    console.log("Account à supprimer:", args.stripeAccountId);
+
+    const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+    if (!stripeSecretKey) {
+      throw new ConvexError("Stripe non configuré");
+    }
+
+    try {
+      const stripe = new Stripe(stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+
+      // Supprimer le compte Stripe
+      await stripe.accounts.del(args.stripeAccountId);
+      console.log("Compte Stripe supprimé:", args.stripeAccountId);
+
+      console.log("=== deleteStripeAccount SUCCESS ===");
+
+      return { success: true };
+    } catch (error: any) {
+      console.error("Erreur suppression compte Stripe:", error);
+      throw new ConvexError(error?.message || "Erreur lors de la suppression");
+    }
+  },
+});
