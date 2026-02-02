@@ -60,4 +60,26 @@ crons.interval(
   internal.planning.paymentDeadline.autoExpirePendingPayments
 );
 
+/**
+ * Auto-confirmation des missions terminées
+ * Exécuté toutes les heures pour confirmer automatiquement
+ * les missions dont le délai de confirmation client est dépassé
+ */
+crons.hourly(
+  "auto-confirm-completed-missions",
+  { minuteUTC: 30 },
+  internal.planning.payouts.autoConfirmMissions
+);
+
+/**
+ * Versements mensuels planifiés
+ * Exécuté le 25 de chaque mois à 9h UTC pour déclencher
+ * les versements groupés aux annonceurs (mode scheduled)
+ */
+crons.monthly(
+  "process-scheduled-payouts",
+  { day: 25, hourUTC: 9, minuteUTC: 0 },
+  internal.planning.payouts.processScheduledPayouts
+);
+
 export default crons;

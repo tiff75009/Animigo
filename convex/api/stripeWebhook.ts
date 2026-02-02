@@ -120,8 +120,21 @@ export const handleStripeWebhook = internalAction({
 
       case "payment_intent.succeeded": {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
-        console.log(`Capture réussie: ${paymentIntent.id}`);
-        // La capture est gérée par notre code, mais on log pour confirmation
+        console.log(`Paiement réussi: ${paymentIntent.id}`);
+
+        // Avec le nouveau système de paiement immédiat, on marque le paiement comme payé
+        // et la mission passe en "upcoming"
+        await ctx.runMutation(
+          internal.api.stripeInternal.markPaymentPaid,
+          {
+            paymentIntentId: paymentIntent.id,
+            stripeCustomerId:
+              typeof paymentIntent.customer === "string"
+                ? paymentIntent.customer
+                : undefined,
+          }
+        );
+        console.log(`Paiement marqué comme payé pour PaymentIntent: ${paymentIntent.id}`);
         break;
       }
 

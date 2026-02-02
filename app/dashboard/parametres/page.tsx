@@ -24,6 +24,13 @@ import {
   Clock,
   Calculator,
   ChevronRight,
+  Banknote,
+  Zap,
+  Loader2,
+  Building,
+  MapPin,
+  CalendarIcon,
+  Info,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { useQuery, useMutation } from "convex/react";
@@ -270,193 +277,642 @@ function InformationTab() {
   );
 }
 
-// Payment Tab
+// Payment Tab - Stripe Connect Custom avec Account Tokens
 function PaymentTab() {
-  const [cards, setCards] = useState([
-    {
-      id: "card1",
-      type: "visa",
-      last4: "4242",
-      expiry: "12/25",
-      isDefault: true,
-    },
-  ]);
-  const [showAddCard, setShowAddCard] = useState(false);
-  const iban = "FR76 •••• •••• •••• •••• •••• 847";
+  // Get token from localStorage
+  const [token, setToken] = useState<string | null>(null);
+  const [stripeInstance, setStripeInstance] = useState<any>(null);
 
-  const cardIcons: { [key: string]: string } = {
-    visa: "💳",
-    mastercard: "💳",
+  useEffect(() => {
+    setToken(localStorage.getItem("auth_token"));
+  }, []);
+
+  // Queries
+  const stripeInfo = useQuery(
+    api.api.stripeConnectQueries.getAnnouncerStripeInfo,
+    token ? { sessionToken: token } : "skip"
+  );
+
+  const payoutSettings = useQuery(api.admin.config.getPayoutSettingsPublic);
+  const stripePublicKey = useQuery(api.config.getStripePublicKey);
+
+  // Charger Stripe.js
+  useEffect(() => {
+    if (stripePublicKey && !stripeInstance) {
+      import("@stripe/stripe-js").then(({ loadStripe }) => {
+        loadStripe(stripePublicKey).then(setStripeInstance);
+      });
+    }
+  }, [stripePublicKey, stripeInstance]);
+
+  // Mutations
+  const updatePayoutMode = useMutation(api.api.stripeConnectQueries.updatePayoutMode);
+  const setupBankAccount = useMutation(api.api.stripeConnectQueries.setupBankAccount);
+
+  // Local state
+  const [showSetupForm, setShowSetupForm] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [selectedPayoutMode, setSelectedPayoutMode] = useState<"scheduled" | "instant">("scheduled");
+
+  // Form state for bank setup
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    dobDay: "",
+    dobMonth: "",
+    dobYear: "",
+    addressLine1: "",
+    addressLine2: "",
+    city: "",
+    postalCode: "",
+    iban: "",
+  });
+
+  // Sync payout mode with server
+  useEffect(() => {
+    if (stripeInfo?.payoutMode) {
+      setSelectedPayoutMode(stripeInfo.payoutMode);
+    }
+  }, [stripeInfo?.payoutMode]);
+
+  // Handle payout mode change
+  const handlePayoutModeChange = async (mode: "scheduled" | "instant") => {
+    if (!token) return;
+    setSelectedPayoutMode(mode);
+    try {
+      await updatePayoutMode({ sessionToken: token, payoutMode: mode });
+      setSuccessMessage("Mode de versement mis à jour");
+      setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (error) {
+      console.error("Erreur:", error);
+      setErrorMessage("Erreur lors de la mise à jour");
+      setTimeout(() => setErrorMessage(""), 5000);
+    }
   };
 
-  const handleDeleteCard = (cardId: string) => {
-    setCards(cards.filter((c) => c.id !== cardId));
+  // Handle bank account setup with Stripe.js tokens
+  const handleSetupBankAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token || !stripeInstance) {
+      setErrorMessage("Stripe n'est pas chargé. Veuillez réessayer.");
+      return;
+    }
+
+    // Validation basique
+    if (!formData.firstName || !formData.lastName || !formData.iban) {
+      setErrorMessage("Veuillez remplir tous les champs obligatoires");
+      return;
+    }
+
+    // Validation IBAN format basique
+    const ibanClean = formData.iban.replace(/\s/g, "").toUpperCase();
+    if (ibanClean.length < 15 || ibanClean.length > 34) {
+      setErrorMessage("Format IBAN invalide");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage("");
+
+    try {
+      // 1. Créer le token account avec Stripe.js (pour plateformes FR)
+      const accountResult = await stripeInstance.createToken("account", {
+        business_type: "individual",
+        individual: {
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          dob: {
+            day: parseInt(formData.dobDay) || 1,
+            month: parseInt(formData.dobMonth) || 1,
+            year: parseInt(formData.dobYear) || 1990,
+          },
+          address: {
+            line1: formData.addressLine1,
+            line2: formData.addressLine2 || undefined,
+            city: formData.city,
+            postal_code: formData.postalCode,
+            country: "FR",
+          },
+        },
+        tos_shown_and_accepted: true,
+      });
+
+      if (accountResult.error) {
+        throw new Error(accountResult.error.message);
+      }
+
+      // 2. Créer le token bank_account avec Stripe.js
+      const bankResult = await stripeInstance.createToken("bank_account", {
+        country: "FR",
+        currency: "eur",
+        account_holder_name: `${formData.firstName} ${formData.lastName}`,
+        account_holder_type: "individual",
+        account_number: ibanClean,
+      });
+
+      if (bankResult.error) {
+        throw new Error(bankResult.error.message);
+      }
+
+      // 3. Envoyer les tokens au backend
+      const result = await setupBankAccount({
+        sessionToken: token,
+        accountToken: accountResult.token.id,
+        bankAccountToken: bankResult.token.id,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        ibanLast4: ibanClean.slice(-4),
+      });
+
+      if (result.success) {
+        setSuccessMessage(result.message || "Configuration en cours...");
+        setShowSetupForm(false);
+        // Reset form
+        setFormData({
+          firstName: "",
+          lastName: "",
+          dobDay: "",
+          dobMonth: "",
+          dobYear: "",
+          addressLine1: "",
+          addressLine2: "",
+          city: "",
+          postalCode: "",
+          iban: "",
+        });
+      }
+    } catch (error: any) {
+      console.error("Erreur setup:", error);
+      setErrorMessage(error?.message || "Erreur lors de la configuration");
+    } finally {
+      setIsSubmitting(false);
+      setTimeout(() => {
+        setSuccessMessage("");
+        setErrorMessage("");
+      }, 8000);
+    }
   };
 
-  const handleSetDefault = (cardId: string) => {
-    setCards(cards.map((c) => ({ ...c, isDefault: c.id === cardId })));
+  // Format IBAN pour affichage
+  const formatIban = (iban: string) => {
+    return iban.replace(/(.{4})/g, "$1 ").trim();
+  };
+
+  // Status badge
+  const getStatusBadge = () => {
+    if (!stripeInfo?.hasStripeAccount) return null;
+
+    const status = stripeInfo.stripeAccountStatus;
+    const configs: Record<string, { label: string; color: string }> = {
+      verified: { label: "Vérifié", color: "bg-green-100 text-green-700" },
+      pending: { label: "En attente", color: "bg-yellow-100 text-yellow-700" },
+      restricted: { label: "Restreint", color: "bg-orange-100 text-orange-700" },
+      disabled: { label: "Désactivé", color: "bg-red-100 text-red-700" },
+    };
+
+    const config = configs[status || "pending"] || configs.pending;
+    return (
+      <span className={cn("px-2 py-1 text-xs font-medium rounded-full", config.color)}>
+        {config.label}
+      </span>
+    );
   };
 
   return (
-    <SectionCard title="Coordonnées de paiement" icon={CreditCard}>
-      <div className="space-y-6">
-        {/* Bank Account (IBAN) */}
-        <div>
-          <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-            <Euro className="w-4 h-4 text-primary" />
-            Compte bancaire (réception des paiements)
-          </h3>
-          <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm text-text-light">IBAN</p>
-              <p className="font-mono text-foreground">{iban}</p>
-            </div>
-            <motion.button
-              className="px-4 py-2 text-primary font-medium hover:bg-primary/10 rounded-lg transition-colors"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              Modifier
-            </motion.button>
-          </div>
-          <p className="text-xs text-text-light mt-2 flex items-center gap-1">
-            <Shield className="w-3 h-3" />
-            Vos coordonnées bancaires sont sécurisées et chiffrées
+    <div className="space-y-6">
+      {/* Messages */}
+      {successMessage && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-center gap-2"
+        >
+          <Check className="w-5 h-5" />
+          {successMessage}
+        </motion.div>
+      )}
+
+      {errorMessage && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center gap-2"
+        >
+          <AlertCircle className="w-5 h-5" />
+          {errorMessage}
+        </motion.div>
+      )}
+
+      {/* Compte bancaire */}
+      <SectionCard title="Compte bancaire" icon={Banknote}>
+        <div className="space-y-4">
+          <p className="text-sm text-text-light">
+            Configurez votre IBAN pour recevoir les versements de vos prestations.
           </p>
-        </div>
 
-        {/* Saved Cards */}
-        <div>
-          <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-            <CreditCard className="w-4 h-4 text-primary" />
-            Cartes enregistrées (paiement des services)
-          </h3>
+          {stripeInfo?.hasIban ? (
+            // IBAN déjà configuré
+            <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <Check className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">IBAN configuré</p>
+                    <p className="font-mono text-sm text-text-light">
+                      {stripeInfo.ibanMasked ? formatIban(stripeInfo.ibanMasked) : `•••• •••• •••• ${stripeInfo.ibanLast4}`}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {getStatusBadge()}
+                  <motion.button
+                    onClick={() => setShowSetupForm(true)}
+                    className="px-4 py-2 text-primary font-medium hover:bg-primary/10 rounded-lg transition-colors"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    Modifier
+                  </motion.button>
+                </div>
+              </div>
 
-          {cards.length === 0 ? (
-            <div className="bg-gray-50 rounded-xl p-6 text-center">
-              <p className="text-text-light">Aucune carte enregistrée</p>
+              {stripeInfo.payoutsEnabled ? (
+                <p className="text-xs text-green-600 mt-3 flex items-center gap-1">
+                  <Check className="w-3 h-3" />
+                  Versements activés - Vous pouvez recevoir des paiements
+                </p>
+              ) : (
+                <p className="text-xs text-orange-600 mt-3 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  Versements en cours d&apos;activation - Vérification en cours
+                </p>
+              )}
             </div>
           ) : (
-            <div className="space-y-3">
-              {cards.map((card) => (
-                <div
-                  key={card.id}
-                  className={cn(
-                    "bg-gray-50 rounded-xl p-4 flex items-center justify-between",
-                    card.isDefault && "ring-2 ring-primary"
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">{cardIcons[card.type]}</span>
-                    <div>
-                      <p className="font-medium text-foreground">
-                        •••• •••• •••• {card.last4}
-                      </p>
-                      <p className="text-sm text-text-light">Expire {card.expiry}</p>
-                    </div>
-                    {card.isDefault && (
-                      <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full font-medium">
-                        Par défaut
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {!card.isDefault && (
-                      <motion.button
-                        onClick={() => handleSetDefault(card.id)}
-                        className="px-3 py-1 text-sm text-primary hover:bg-primary/10 rounded-lg transition-colors"
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                      >
-                        Définir par défaut
-                      </motion.button>
-                    )}
-                    <motion.button
-                      onClick={() => handleDeleteCard(card.id)}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </motion.button>
-                  </div>
+            // Pas d'IBAN configuré
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-medium text-orange-800">Configuration requise</p>
+                  <p className="text-sm text-orange-700 mt-1">
+                    Ajoutez vos coordonnées bancaires pour recevoir vos versements.
+                  </p>
+                  <motion.button
+                    onClick={() => setShowSetupForm(true)}
+                    className="mt-3 px-4 py-2 bg-primary text-white font-semibold rounded-xl hover:bg-primary/90 transition-colors flex items-center gap-2"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <Plus className="w-4 h-4" />
+                    Configurer mon compte bancaire
+                  </motion.button>
                 </div>
-              ))}
+              </div>
             </div>
           )}
 
-          {/* Add Card Button */}
-          <motion.button
-            onClick={() => setShowAddCard(!showAddCard)}
-            className="mt-3 w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-text-light hover:border-primary hover:text-primary transition-colors flex items-center justify-center gap-2"
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
-          >
-            <Plus className="w-5 h-5" />
-            Ajouter une carte
-          </motion.button>
+          {/* Formulaire de configuration */}
+          <AnimatePresence>
+            {showSetupForm && (
+              <motion.form
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                onSubmit={handleSetupBankAccount}
+                className="bg-gray-50 rounded-xl p-6 space-y-6"
+              >
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-primary" />
+                  Informations bancaires
+                </h3>
 
-          {/* Add Card Form */}
-          {showAddCard && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              className="mt-4 p-4 bg-gray-50 rounded-xl space-y-4"
-            >
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Numéro de carte
-                </label>
-                <input
-                  type="text"
-                  placeholder="1234 5678 9012 3456"
-                  className="w-full px-4 py-3 bg-white rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+                {/* Identité */}
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Date d&apos;expiration
+                  <label className="block text-sm font-medium text-foreground mb-2 flex items-center gap-2">
+                    <User className="w-4 h-4 text-text-light" />
+                    Identité du titulaire
+                  </label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <input
+                      type="text"
+                      value={formData.firstName}
+                      onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                      placeholder="Prénom"
+                      required
+                      className="px-4 py-3 bg-white rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
+                    />
+                    <input
+                      type="text"
+                      value={formData.lastName}
+                      onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                      placeholder="Nom"
+                      required
+                      className="px-4 py-3 bg-white rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
+                    />
+                  </div>
+                </div>
+
+                {/* Date de naissance */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2 flex items-center gap-2">
+                    <CalendarIcon className="w-4 h-4 text-text-light" />
+                    Date de naissance
+                  </label>
+                  <div className="grid grid-cols-3 gap-4">
+                    <input
+                      type="text"
+                      value={formData.dobDay}
+                      onChange={(e) => setFormData({ ...formData, dobDay: e.target.value.replace(/\D/g, "").slice(0, 2) })}
+                      placeholder="Jour"
+                      required
+                      className="px-4 py-3 bg-white rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground text-center"
+                    />
+                    <input
+                      type="text"
+                      value={formData.dobMonth}
+                      onChange={(e) => setFormData({ ...formData, dobMonth: e.target.value.replace(/\D/g, "").slice(0, 2) })}
+                      placeholder="Mois"
+                      required
+                      className="px-4 py-3 bg-white rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground text-center"
+                    />
+                    <input
+                      type="text"
+                      value={formData.dobYear}
+                      onChange={(e) => setFormData({ ...formData, dobYear: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+                      placeholder="Année"
+                      required
+                      className="px-4 py-3 bg-white rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground text-center"
+                    />
+                  </div>
+                </div>
+
+                {/* Adresse */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2 flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-text-light" />
+                    Adresse
+                  </label>
+                  <div className="space-y-3">
+                    <input
+                      type="text"
+                      value={formData.addressLine1}
+                      onChange={(e) => setFormData({ ...formData, addressLine1: e.target.value })}
+                      placeholder="Adresse"
+                      required
+                      className="w-full px-4 py-3 bg-white rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
+                    />
+                    <input
+                      type="text"
+                      value={formData.addressLine2}
+                      onChange={(e) => setFormData({ ...formData, addressLine2: e.target.value })}
+                      placeholder="Complément d'adresse (optionnel)"
+                      className="w-full px-4 py-3 bg-white rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
+                    />
+                    <div className="grid grid-cols-2 gap-4">
+                      <input
+                        type="text"
+                        value={formData.postalCode}
+                        onChange={(e) => setFormData({ ...formData, postalCode: e.target.value.replace(/\D/g, "").slice(0, 5) })}
+                        placeholder="Code postal"
+                        required
+                        className="px-4 py-3 bg-white rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
+                      />
+                      <input
+                        type="text"
+                        value={formData.city}
+                        onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                        placeholder="Ville"
+                        required
+                        className="px-4 py-3 bg-white rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* IBAN */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2 flex items-center gap-2">
+                    <Building className="w-4 h-4 text-text-light" />
+                    IBAN
                   </label>
                   <input
                     type="text"
-                    placeholder="MM/AA"
-                    className="w-full px-4 py-3 bg-white rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
+                    value={formData.iban}
+                    onChange={(e) => setFormData({ ...formData, iban: e.target.value.toUpperCase() })}
+                    placeholder="FR76 1234 5678 9012 3456 7890 123"
+                    required
+                    className="w-full px-4 py-3 bg-white rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground font-mono"
                   />
+                  <p className="text-xs text-text-light mt-2 flex items-center gap-1">
+                    <Shield className="w-3 h-3" />
+                    Vos coordonnées bancaires sont sécurisées et chiffrées via Stripe
+                  </p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    CVC
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="123"
-                    className="w-full px-4 py-3 bg-white rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
-                  />
+
+                {/* CGU Stripe */}
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <p className="text-sm text-blue-700 flex items-start gap-2">
+                    <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    En soumettant ce formulaire, vous acceptez les{" "}
+                    <a
+                      href="https://stripe.com/fr/legal/connect-account"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline font-medium"
+                    >
+                      Conditions d&apos;utilisation Stripe Connect
+                    </a>
+                    .
+                  </p>
                 </div>
-              </div>
-              <div className="flex gap-3">
-                <motion.button
-                  onClick={() => setShowAddCard(false)}
-                  className="flex-1 py-3 bg-gray-200 text-foreground rounded-xl font-semibold"
-                  whileHover={{ scale: 1.01 }}
-                  whileTap={{ scale: 0.99 }}
-                >
-                  Annuler
-                </motion.button>
-                <motion.button
-                  className="flex-1 py-3 bg-primary text-white rounded-xl font-semibold"
-                  whileHover={{ scale: 1.01 }}
-                  whileTap={{ scale: 0.99 }}
-                >
-                  Ajouter
-                </motion.button>
-              </div>
-            </motion.div>
-          )}
+
+                {/* Boutons */}
+                <div className="flex gap-3">
+                  <motion.button
+                    type="button"
+                    onClick={() => setShowSetupForm(false)}
+                    className="flex-1 py-3 bg-gray-200 text-foreground rounded-xl font-semibold"
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.99 }}
+                  >
+                    Annuler
+                  </motion.button>
+                  <motion.button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex-1 py-3 bg-primary text-white rounded-xl font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+                    whileHover={{ scale: isSubmitting ? 1 : 1.01 }}
+                    whileTap={{ scale: 0.99 }}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Validation...
+                      </>
+                    ) : (
+                      "Enregistrer"
+                    )}
+                  </motion.button>
+                </div>
+              </motion.form>
+            )}
+          </AnimatePresence>
         </div>
-      </div>
-    </SectionCard>
+      </SectionCard>
+
+      {/* Mode de versement */}
+      {stripeInfo?.hasIban && (
+        <SectionCard title="Mode de versement" icon={Euro}>
+          <div className="space-y-4">
+            <p className="text-sm text-text-light">
+              Choisissez comment vous souhaitez recevoir vos paiements après confirmation des missions.
+            </p>
+
+            <div className="space-y-3">
+              {/* Mode scheduled */}
+              <motion.button
+                type="button"
+                onClick={() => handlePayoutModeChange("scheduled")}
+                className={cn(
+                  "w-full p-4 rounded-xl border-2 text-left transition-colors",
+                  selectedPayoutMode === "scheduled"
+                    ? "border-primary bg-primary/5"
+                    : "border-gray-200 hover:border-gray-300"
+                )}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={cn(
+                    "w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5",
+                    selectedPayoutMode === "scheduled" ? "border-primary bg-primary" : "border-gray-300"
+                  )}>
+                    {selectedPayoutMode === "scheduled" && <Check className="w-3 h-3 text-white" />}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-blue-500" />
+                      <p className="font-semibold text-foreground">Virement mensuel</p>
+                      {(payoutSettings?.monthlyFeePercent ?? 0) > 0 ? (
+                        <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
+                          {payoutSettings?.monthlyFeePercent}% de frais
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">
+                          Gratuit
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-text-light mt-1">
+                      Vos gains sont versés le {payoutSettings?.scheduledDay || 25} de chaque mois
+                    </p>
+                  </div>
+                </div>
+              </motion.button>
+
+              {/* Mode par mission */}
+              <motion.button
+                type="button"
+                onClick={() => handlePayoutModeChange("instant")}
+                className={cn(
+                  "w-full p-4 rounded-xl border-2 text-left transition-colors",
+                  selectedPayoutMode === "instant"
+                    ? "border-primary bg-primary/5"
+                    : "border-gray-200 hover:border-gray-300"
+                )}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={cn(
+                    "w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5",
+                    selectedPayoutMode === "instant" ? "border-primary bg-primary" : "border-gray-300"
+                  )}>
+                    {selectedPayoutMode === "instant" && <Check className="w-3 h-3 text-white" />}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-amber-500" />
+                      <p className="font-semibold text-foreground">Virement par mission</p>
+                      {(payoutSettings?.perMissionFeePercent ?? 2) > 0 ? (
+                        <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
+                          {payoutSettings?.perMissionFeePercent ?? 2}% de frais
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">
+                          Gratuit
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-text-light mt-1">
+                      Recevez vos gains après chaque mission confirmée par le client
+                    </p>
+                  </div>
+                </div>
+              </motion.button>
+            </div>
+
+            {/* Info box */}
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+              <h4 className="font-medium text-foreground mb-2 flex items-center gap-2">
+                <Info className="w-4 h-4 text-text-light" />
+                Comment ça marche ?
+              </h4>
+              <ul className="text-sm text-text-light space-y-2">
+                <li className="flex items-start gap-2">
+                  <span className="text-primary font-bold">1.</span>
+                  Le client paie lors de la réservation (fonds sécurisés sur Stripe)
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-primary font-bold">2.</span>
+                  Après la mission, le client confirme ou c&apos;est auto-confirmé après {payoutSettings?.confirmationHours || 48}h
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-primary font-bold">3.</span>
+                  {selectedPayoutMode === "instant"
+                    ? `Virement après confirmation${(payoutSettings?.perMissionFeePercent ?? 2) > 0 ? " (frais déduits)" : ""}`
+                    : `Virement groupé le ${payoutSettings?.scheduledDay || 25} du mois${(payoutSettings?.monthlyFeePercent ?? 0) > 0 ? " (frais déduits)" : ""}`
+                  }
+                </li>
+              </ul>
+            </div>
+
+            {/* Exemple de calcul selon le mode */}
+            {(() => {
+              const feePercent = selectedPayoutMode === "instant"
+                ? (payoutSettings?.perMissionFeePercent ?? 2)
+                : (payoutSettings?.monthlyFeePercent ?? 0);
+
+              if (feePercent > 0) {
+                return (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                    <h4 className="font-medium text-amber-800 mb-2 flex items-center gap-2">
+                      <Calculator className="w-4 h-4" />
+                      Exemple de calcul
+                    </h4>
+                    <div className="text-sm text-amber-700">
+                      <p>Pour une prestation de <span className="font-semibold">50€</span> :</p>
+                      <p className="mt-1">
+                        Frais ({feePercent}%) : -{((50 * feePercent) / 100).toFixed(2)}€
+                      </p>
+                      <p className="font-semibold mt-1">
+                        Vous recevez : {(50 - (50 * feePercent) / 100).toFixed(2)}€
+                      </p>
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+          </div>
+        </SectionCard>
+      )}
+    </div>
   );
 }
 

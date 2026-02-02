@@ -272,7 +272,71 @@ export const markPaymentAuthorized = internalMutation({
 });
 
 /**
+ * Marquer le paiement comme payé (nouveau flux paiement immédiat)
+ * Remplace markPaymentAuthorized pour le nouveau système
+ */
+export const markPaymentPaid = internalMutation({
+  args: {
+    paymentIntentId: v.string(),
+    stripeCustomerId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // Chercher le paiement par payment intent
+    const payment = await ctx.db
+      .query("stripePayments")
+      .withIndex("by_payment_intent", (q) =>
+        q.eq("paymentIntentId", args.paymentIntentId)
+      )
+      .first();
+
+    if (!payment) {
+      // Essayer de trouver par mission ID dans les paiements pending
+      console.log("Paiement non trouvé par paymentIntentId, recherche par status pending...");
+      // Ce cas peut arriver si le webhook arrive avant que le paymentIntentId soit enregistré
+      // On ignore silencieusement car un autre webhook ou mise à jour le gérera
+      return;
+    }
+
+    const now = Date.now();
+
+    // Mettre à jour le paiement - nouveau status "paid" au lieu de "captured"
+    await ctx.db.patch(payment._id, {
+      status: "captured", // On garde "captured" pour la rétrocompatibilité du schema
+      paymentIntentId: args.paymentIntentId,
+      stripeCustomerId: args.stripeCustomerId,
+      capturedAt: now, // paidAt serait mieux mais on garde capturedAt pour compatibilité
+      updatedAt: now,
+    });
+
+    // Mettre à jour la mission: passer en "upcoming" avec paymentStatus = "paid"
+    await ctx.db.patch(payment.missionId, {
+      status: "upcoming",
+      paymentStatus: "paid", // Paiement encaissé immédiatement
+      updatedAt: now,
+    });
+
+    // Envoyer la notification push à l'annonceur (paiement reçu, mission confirmée)
+    const mission = await ctx.db.get(payment.missionId);
+    if (mission) {
+      const client = await ctx.db.get(mission.clientId);
+      if (client) {
+        await ctx.scheduler.runAfter(0, internal.notifications.actions.sendMissionConfirmedNotification, {
+          announcerId: mission.announcerId,
+          clientName: `${client.firstName} ${client.lastName}`,
+          serviceName: mission.serviceName,
+          startDate: mission.startDate,
+          missionId: payment.missionId,
+        });
+      }
+    }
+
+    return { paymentId: payment._id, missionId: payment.missionId };
+  },
+});
+
+/**
  * Marquer le paiement comme capturé
+ * @deprecated Utilisé pour la rétrocompatibilité avec les anciens paiements pré-autorisés
  */
 export const markPaymentCaptured = internalMutation({
   args: {

@@ -566,3 +566,100 @@ export const toggleMaintenanceMode = mutation({
     return { success: true, enabled: args.enabled };
   },
 });
+
+// ==========================================
+// VERSEMENTS ANNONCEURS
+// ==========================================
+
+// Query: Récupérer les paramètres de versements (pour le panel admin)
+export const getPayoutSettings = query({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx, args.token);
+
+    const configs = await ctx.db.query("systemConfig").collect();
+    const configMap = new Map(configs.map((c) => [c.key, c.value]));
+
+    return {
+      scheduledDay: parseInt(configMap.get("payout_scheduled_day") || "") || 25,
+      monthlyFeePercent: parseFloat(configMap.get("payout_monthly_fee_percent") || "") || 0,
+      perMissionFeePercent: parseFloat(configMap.get("payout_per_mission_fee_percent") || "") || 2,
+      confirmationHours: parseInt(configMap.get("mission_confirmation_hours") || "") || 48,
+    };
+  },
+});
+
+// Query publique: Récupérer les paramètres de versements (pour les calculs)
+export const getPayoutSettingsPublic = query({
+  args: {},
+  handler: async (ctx) => {
+    const configs = await ctx.db.query("systemConfig").collect();
+    const configMap = new Map(configs.map((c) => [c.key, c.value]));
+
+    return {
+      scheduledDay: parseInt(configMap.get("payout_scheduled_day") || "") || 25,
+      monthlyFeePercent: parseFloat(configMap.get("payout_monthly_fee_percent") || "") || 0,
+      perMissionFeePercent: parseFloat(configMap.get("payout_per_mission_fee_percent") || "") || 2,
+      confirmationHours: parseInt(configMap.get("mission_confirmation_hours") || "") || 48,
+    };
+  },
+});
+
+// Mutation: Mettre à jour les paramètres de versements
+export const updatePayoutSettings = mutation({
+  args: {
+    token: v.string(),
+    scheduledDay: v.number(),
+    monthlyFeePercent: v.number(),
+    perMissionFeePercent: v.number(),
+    confirmationHours: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireAdmin(ctx, args.token);
+
+    // Validation des valeurs
+    const scheduledDay = Math.min(28, Math.max(1, args.scheduledDay));
+    const monthlyFeePercent = Math.min(10, Math.max(0, args.monthlyFeePercent));
+    const perMissionFeePercent = Math.min(10, Math.max(0, args.perMissionFeePercent));
+    const confirmationHours = Math.min(168, Math.max(12, args.confirmationHours));
+
+    const configsToUpdate = [
+      { key: "payout_scheduled_day", value: scheduledDay.toString() },
+      { key: "payout_monthly_fee_percent", value: monthlyFeePercent.toString() },
+      { key: "payout_per_mission_fee_percent", value: perMissionFeePercent.toString() },
+      { key: "mission_confirmation_hours", value: confirmationHours.toString() },
+    ];
+
+    for (const config of configsToUpdate) {
+      const existing = await ctx.db
+        .query("systemConfig")
+        .withIndex("by_key", (q) => q.eq("key", config.key))
+        .first();
+
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          value: config.value,
+          updatedAt: Date.now(),
+          updatedBy: user._id,
+        });
+      } else {
+        await ctx.db.insert("systemConfig", {
+          key: config.key,
+          value: config.value,
+          isSecret: false,
+          environment: "production",
+          updatedAt: Date.now(),
+          updatedBy: user._id,
+        });
+      }
+    }
+
+    return {
+      success: true,
+      scheduledDay,
+      monthlyFeePercent,
+      perMissionFeePercent,
+      confirmationHours,
+    };
+  },
+});

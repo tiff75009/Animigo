@@ -301,13 +301,16 @@ export default function ReservationsPage() {
 
       {/* Reservations list */}
       {filteredReservations.length > 0 ? (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {filteredReservations.map((reservation, index) => {
             const status = statusConfig[reservation.status] || statusConfig.pending_acceptance;
             const isConfirmed = canContactStatuses.includes(reservation.status);
             const isMultiSession = (reservation.sessions && reservation.sessions.length > 1) ||
                                    (reservation.numberOfSessions && reservation.numberOfSessions > 1);
             const isPendingPayment = reservation.status === "pending_confirmation";
+            const isPendingAcceptance = reservation.status === "pending_acceptance";
+            const isCompleted = reservation.status === "completed";
+            const isCancelled = ["refused", "cancelled"].includes(reservation.status);
 
             // Temps restant avant le début (seulement pour les réservations à venir)
             const timeUntil = ["pending_acceptance", "pending_confirmation", "upcoming"].includes(reservation.status)
@@ -323,132 +326,197 @@ export default function ReservationsPage() {
               >
                 <Link href={`/client/reservations/${reservation.id}`} className="block group">
                   <div className={cn(
-                    "bg-white rounded-2xl shadow-sm border overflow-hidden hover:shadow-md transition-all",
-                    isPendingPayment ? "border-orange-200 hover:border-orange-300" : "border-gray-100 hover:border-primary/20"
+                    "bg-white rounded-2xl overflow-hidden transition-all duration-300",
+                    "shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08)] hover:shadow-[0_8px_24px_-4px_rgba(0,0,0,0.12)]",
+                    isPendingPayment && "ring-2 ring-orange-200 ring-offset-1",
+                    isPendingAcceptance && "ring-1 ring-yellow-200",
+                    isCancelled && "opacity-75"
                   )}>
                     {/* Bannière paiement urgent */}
                     {isPendingPayment && reservation.paymentDeadline && (
-                      <div className="px-4 py-2.5 bg-gradient-to-r from-orange-50 to-amber-50 border-b border-orange-100">
+                      <div className="px-4 py-3 bg-gradient-to-r from-orange-500 to-amber-500">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center">
-                              <Clock className="w-3.5 h-3.5 text-orange-600" />
+                            <div className="w-7 h-7 bg-white/20 backdrop-blur rounded-full flex items-center justify-center">
+                              <CreditCard className="w-4 h-4 text-white" />
                             </div>
-                            <span className="text-sm font-medium text-orange-800">
-                              Paiement en attente
+                            <span className="text-sm font-semibold text-white">
+                              Paiement requis
                             </span>
                           </div>
-                          <PaymentCountdown deadline={reservation.paymentDeadline} />
+                          <div className="bg-white/20 backdrop-blur px-3 py-1 rounded-full">
+                            <PaymentCountdown deadline={reservation.paymentDeadline} />
+                          </div>
                         </div>
                       </div>
                     )}
 
-                    {/* Header avec statut et prix */}
-                    <div className="flex items-center justify-between px-4 py-3 bg-gray-50/50 border-b border-gray-100">
-                      <div className={cn(
-                        "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold",
-                        status.bgColor,
-                        status.color
-                      )}>
-                        {status.icon}
-                        {status.label}
-                      </div>
-                      <p className="text-lg font-bold text-foreground">
-                        {(reservation.amount / 100).toFixed(2).replace(".", ",")} €
-                      </p>
-                    </div>
-
-                    {/* Contenu principal */}
                     <div className="p-4">
-                      {/* Service et animal */}
-                      <div className="flex items-start gap-3 mb-4">
-                        <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-2xl flex-shrink-0">
-                          {reservation.animal?.emoji || "🐾"}
+                      {/* En-tête : Animal + Service + Prix */}
+                      <div className="flex items-start gap-4 mb-4">
+                        {/* Avatar animal avec badge statut */}
+                        <div className="relative flex-shrink-0">
+                          <div className={cn(
+                            "w-14 h-14 rounded-2xl flex items-center justify-center text-2xl",
+                            "bg-gradient-to-br from-primary/5 to-primary/15",
+                            "ring-2 ring-white shadow-sm"
+                          )}>
+                            {reservation.animal?.emoji || "🐾"}
+                          </div>
+                          {/* Mini badge statut sur l'avatar */}
+                          <div className={cn(
+                            "absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center",
+                            "ring-2 ring-white",
+                            status.bgColor
+                          )}>
+                            <span className={cn("scale-75", status.color)}>
+                              {status.icon}
+                            </span>
+                          </div>
                         </div>
+
+                        {/* Infos service */}
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-foreground truncate">
-                            {reservation.serviceName}
-                          </h3>
-                          <p className="text-sm text-text-light">
-                            Pour {reservation.animal?.name || "votre animal"}
-                          </p>
-                          {/* Badges */}
-                          <div className="flex items-center gap-2 mt-2 flex-wrap">
-                            {/* Badge J-X amélioré */}
-                            {timeUntil && (
-                              <span className={cn(
-                                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold",
-                                timeUntil.color === "text-primary"
-                                  ? "bg-primary/10 text-primary"
-                                  : timeUntil.color === "text-orange-600"
-                                    ? "bg-orange-100 text-orange-700"
-                                    : timeUntil.color === "text-blue-600"
-                                      ? "bg-blue-100 text-blue-700"
-                                      : "bg-gray-100 text-gray-600"
-                              )}>
-                                <Calendar className="w-3 h-3" />
-                                {timeUntil.text}
-                              </span>
-                            )}
-                            {/* Badge lieu de prestation */}
-                            {reservation.serviceLocation === "client_home" ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-teal-100 text-teal-700 text-xs font-medium rounded-lg">
-                                <Home className="w-3 h-3" />
-                                À domicile
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-700 text-xs font-medium rounded-lg">
-                                <MapPin className="w-3 h-3" />
-                                Chez le pet-sitter
-                              </span>
-                            )}
-                            {/* Badge type de session (individuel/collectif) */}
-                            {reservation.sessionType === "collective" ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-lg">
-                                <Users className="w-3 h-3" />
-                                Collectif
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 text-xs font-medium rounded-lg">
-                                <User className="w-3 h-3" />
-                                Individuel
-                              </span>
-                            )}
-                            {/* Badge multi-séances */}
-                            {isMultiSession && (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded-lg">
-                                <CalendarDays className="w-3 h-3" />
-                                {reservation.sessions?.length || reservation.numberOfSessions} séances
-                              </span>
-                            )}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <h3 className="font-bold text-foreground truncate text-base">
+                                {reservation.serviceName}
+                              </h3>
+                              <p className="text-sm text-text-light mt-0.5">
+                                {reservation.animal?.name || "Votre animal"} • {reservation.announcerName}
+                              </p>
+                            </div>
+                            {/* Prix */}
+                            <div className="text-right flex-shrink-0">
+                              <p className="text-xl font-bold text-foreground">
+                                {(reservation.amount / 100).toFixed(0)}<span className="text-sm font-semibold text-gray-400">,{(reservation.amount % 100).toString().padStart(2, '0')}€</span>
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Badge statut texte (visible sur mobile) */}
+                          <div className={cn(
+                            "inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full text-xs font-semibold",
+                            status.bgColor,
+                            status.color
+                          )}>
+                            {status.icon}
+                            {status.label}
                           </div>
                         </div>
                       </div>
 
-                      {/* Infos compactes */}
-                      <div className="flex items-center gap-4 text-sm text-text-light mb-4">
-                        {/* Dates */}
-                        <div className="flex items-center gap-1.5">
-                          <Calendar className="w-4 h-4 text-primary" />
-                          <span className="font-medium text-foreground">
-                            {formatDatesDisplay(reservation)}
-                          </span>
+                      {/* Ligne d'infos : Date + Lieu + Type */}
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3 px-3 -mx-1 bg-gray-50/80 rounded-xl mb-4">
+                        {/* Date avec J-X */}
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                            <Calendar className="w-4 h-4 text-primary" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Dates</p>
+                            <p className="text-sm font-semibold text-foreground">
+                              {formatDatesDisplay(reservation)}
+                            </p>
+                          </div>
                         </div>
-                        {/* Séparateur */}
-                        <span className="text-gray-300">•</span>
-                        {/* Pet-sitter */}
-                        <div className="flex items-center gap-1.5">
-                          <User className="w-4 h-4 text-secondary" />
-                          <span className="truncate">{reservation.announcerName}</span>
+
+                        {/* Séparateur vertical */}
+                        <div className="hidden sm:block w-px h-8 bg-gray-200" />
+
+                        {/* Lieu */}
+                        <div className="flex items-center gap-2">
+                          <div className={cn(
+                            "w-8 h-8 rounded-lg flex items-center justify-center shadow-sm",
+                            reservation.serviceLocation === "client_home"
+                              ? "bg-teal-50"
+                              : "bg-indigo-50"
+                          )}>
+                            {reservation.serviceLocation === "client_home" ? (
+                              <Home className="w-4 h-4 text-teal-600" />
+                            ) : (
+                              <MapPin className="w-4 h-4 text-indigo-600" />
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Lieu</p>
+                            <p className="text-sm font-semibold text-foreground">
+                              {reservation.serviceLocation === "client_home" ? "À domicile" : "Pet-sitter"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Séparateur vertical */}
+                        <div className="hidden sm:block w-px h-8 bg-gray-200" />
+
+                        {/* Type de séance */}
+                        <div className="flex items-center gap-2">
+                          <div className={cn(
+                            "w-8 h-8 rounded-lg flex items-center justify-center shadow-sm",
+                            reservation.sessionType === "collective"
+                              ? "bg-blue-50"
+                              : "bg-amber-50"
+                          )}>
+                            {reservation.sessionType === "collective" ? (
+                              <Users className="w-4 h-4 text-blue-600" />
+                            ) : (
+                              <User className="w-4 h-4 text-amber-600" />
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Format</p>
+                            <p className="text-sm font-semibold text-foreground">
+                              {reservation.sessionType === "collective" ? "Collectif" : "Individuel"}
+                              {isMultiSession && ` • ${reservation.sessions?.length || reservation.numberOfSessions} séances`}
+                            </p>
+                          </div>
                         </div>
                       </div>
 
+                      {/* Badge J-X en évidence si proche */}
+                      {timeUntil && (
+                        <div className={cn(
+                          "flex items-center gap-2 px-3 py-2 rounded-xl mb-4",
+                          timeUntil.color === "text-primary"
+                            ? "bg-primary/10 border border-primary/20"
+                            : timeUntil.color === "text-orange-600"
+                              ? "bg-orange-50 border border-orange-200"
+                              : timeUntil.color === "text-blue-600"
+                                ? "bg-blue-50 border border-blue-200"
+                                : "bg-gray-50 border border-gray-200"
+                        )}>
+                          <Clock className={cn(
+                            "w-4 h-4",
+                            timeUntil.color === "text-primary"
+                              ? "text-primary"
+                              : timeUntil.color === "text-orange-600"
+                                ? "text-orange-500"
+                                : timeUntil.color === "text-blue-600"
+                                  ? "text-blue-500"
+                                  : "text-gray-500"
+                          )} />
+                          <span className={cn(
+                            "text-sm font-semibold",
+                            timeUntil.color === "text-primary"
+                              ? "text-primary"
+                              : timeUntil.color === "text-orange-600"
+                                ? "text-orange-700"
+                                : timeUntil.color === "text-blue-600"
+                                  ? "text-blue-700"
+                                  : "text-gray-600"
+                          )}>
+                            {timeUntil.text}
+                          </span>
+                        </div>
+                      )}
+
                       {/* Actions */}
-                      <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
+                      <div className="flex items-center gap-2">
                         {isPendingPayment && (
                           <motion.div
-                            className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold shadow-md shadow-primary/25"
-                            whileHover={{ scale: 1.02 }}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-primary to-primary/90 text-white rounded-xl text-sm font-bold shadow-lg shadow-primary/30"
+                            whileHover={{ scale: 1.01 }}
+                            whileTap={{ scale: 0.99 }}
                           >
                             <CreditCard className="w-4 h-4" />
                             Payer maintenant
@@ -458,9 +526,9 @@ export default function ReservationsPage() {
                           <motion.button
                             onClick={(e) => handleContact(e, reservation.id)}
                             disabled={isContacting === reservation.id}
-                            className="flex items-center gap-2 px-4 py-2.5 bg-secondary hover:bg-secondary/90 text-white rounded-xl text-sm font-semibold shadow-md shadow-secondary/25 transition-all disabled:opacity-50"
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
+                            className="flex items-center justify-center gap-2 px-4 py-3 bg-secondary hover:bg-secondary/90 text-white rounded-xl text-sm font-bold shadow-lg shadow-secondary/30 transition-all disabled:opacity-50"
+                            whileHover={{ scale: 1.01 }}
+                            whileTap={{ scale: 0.99 }}
                           >
                             {isContacting === reservation.id ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
@@ -470,10 +538,19 @@ export default function ReservationsPage() {
                             Contacter
                           </motion.button>
                         )}
-                        <div className="flex-1 flex items-center justify-end gap-1 text-primary text-sm font-medium group-hover:gap-2 transition-all">
+                        <motion.div
+                          className={cn(
+                            "flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all",
+                            isPendingPayment || isConfirmed
+                              ? "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                              : "flex-1 bg-primary/10 text-primary hover:bg-primary/20"
+                          )}
+                          whileHover={{ scale: 1.01 }}
+                          whileTap={{ scale: 0.99 }}
+                        >
                           Voir détails
-                          <ChevronRight className="w-4 h-4" />
-                        </div>
+                          <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                        </motion.div>
                       </div>
                     </div>
                   </div>
@@ -484,33 +561,44 @@ export default function ReservationsPage() {
         </div>
       ) : (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="bg-white rounded-2xl p-12 text-center"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-br from-white to-gray-50/50 rounded-3xl p-10 text-center shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08)]"
         >
-          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Calendar className="w-10 h-10 text-gray-400" />
+          <div className="w-24 h-24 bg-gradient-to-br from-primary/10 to-primary/5 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner">
+            <span className="text-5xl">🐾</span>
           </div>
-          <h3 className="text-xl font-semibold text-foreground mb-2">
+          <h3 className="text-2xl font-bold text-foreground mb-3">
             {statusFilter === "all" && serviceTypeFilter === "all" && sessionTypeFilter === "all"
               ? "Aucune réservation"
-              : "Aucune réservation correspondante"
+              : "Aucun résultat"
             }
           </h3>
-          <p className="text-gray-500 mb-6 max-w-sm mx-auto">
+          <p className="text-gray-500 mb-8 max-w-md mx-auto leading-relaxed">
             {statusFilter === "all" && serviceTypeFilter === "all" && sessionTypeFilter === "all"
-              ? "Trouvez le pet-sitter idéal pour votre compagnon"
-              : "Aucune réservation ne correspond à ces filtres"
+              ? "Vous n'avez pas encore de réservation. Trouvez le pet-sitter idéal pour prendre soin de votre compagnon !"
+              : "Aucune réservation ne correspond à vos filtres. Essayez de modifier vos critères de recherche."
             }
           </p>
-          {statusFilter === "all" && serviceTypeFilter === "all" && sessionTypeFilter === "all" && (
+          {statusFilter === "all" && serviceTypeFilter === "all" && sessionTypeFilter === "all" ? (
             <Link
               href="/recherche"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl font-medium hover:bg-primary/90 transition-colors"
+              className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-primary to-primary/90 text-white rounded-2xl font-bold text-lg shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all hover:scale-[1.02]"
             >
               <Search className="w-5 h-5" />
               Trouver un pet-sitter
             </Link>
+          ) : (
+            <button
+              onClick={() => {
+                setStatusFilter("all");
+                setServiceTypeFilter("all");
+                setSessionTypeFilter("all");
+              }}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-all"
+            >
+              Réinitialiser les filtres
+            </button>
           )}
         </motion.div>
       )}

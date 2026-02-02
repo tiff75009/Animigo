@@ -56,11 +56,11 @@ export const createPaymentIntent = internalAction({
       const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
       const appUrl = args.appUrl || "http://localhost:3000";
 
-      // Créer le PaymentIntent avec capture manuelle (pré-autorisation)
+      // Créer le PaymentIntent avec paiement immédiat (plus de pré-autorisation)
       const paymentIntent = await stripe.paymentIntents.create({
         amount: args.amount,
         currency: "eur",
-        capture_method: "manual", // Pré-autorisation
+        // Plus de capture_method: "manual" - paiement immédiat
         receipt_email: args.clientEmail,
         metadata: {
           missionId: args.missionId,
@@ -151,7 +151,7 @@ export const createPaymentIntent = internalAction({
         <p style="margin: 0; color: #92400e; font-size: 14px;">⏰ <strong>Important :</strong> Ce lien expire dans 24 heures.</p>
       </div>
       <div style="margin-top: 20px; padding: 15px; background-color: #ecfdf5; border-radius: 12px;">
-        <p style="margin: 0; color: #065f46; font-size: 14px;">🔒 <strong>Paiement sécurisé :</strong> Vos fonds seront réservés jusqu'à la fin de la prestation.</p>
+        <p style="margin: 0; color: #065f46; font-size: 14px;">🔒 <strong>Paiement sécurisé :</strong> Votre paiement sera encaissé immédiatement pour confirmer la réservation.</p>
       </div>
     </div>
     <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
@@ -256,7 +256,7 @@ export const createCheckoutSession = internalAction({
       const session = await stripe.checkout.sessions.create({
         mode: "payment",
         payment_intent_data: {
-          capture_method: "manual", // Pré-autorisation
+          // Plus de capture_method: "manual" - paiement immédiat
           metadata: {
             missionId: args.missionId,
             platformFee: args.platformFee.toString(),
@@ -346,7 +346,7 @@ export const createCheckoutSession = internalAction({
         <p style="margin: 0; color: #92400e; font-size: 14px;">⏰ <strong>Important :</strong> Ce lien expire dans 1 heure.</p>
       </div>
       <div style="margin-top: 20px; padding: 15px; background-color: #ecfdf5; border-radius: 12px;">
-        <p style="margin: 0; color: #065f46; font-size: 14px;">🔒 <strong>Paiement sécurisé :</strong> Vos fonds seront réservés jusqu'à la fin de la prestation.</p>
+        <p style="margin: 0; color: #065f46; font-size: 14px;">🔒 <strong>Paiement sécurisé :</strong> Votre paiement sera encaissé immédiatement pour confirmer la réservation.</p>
       </div>
     </div>
     <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
@@ -514,7 +514,7 @@ export const sendPaymentEmail = internalAction({
         <p style="margin: 0; color: #92400e; font-size: 14px;">⏰ <strong>Important :</strong> Ce lien expire dans 1 heure.</p>
       </div>
       <div style="margin-top: 20px; padding: 15px; background-color: #ecfdf5; border-radius: 12px;">
-        <p style="margin: 0; color: #065f46; font-size: 14px;">🔒 <strong>Paiement sécurisé :</strong> Vos fonds seront réservés jusqu'à la fin de la prestation.</p>
+        <p style="margin: 0; color: #065f46; font-size: 14px;">🔒 <strong>Paiement sécurisé :</strong> Votre paiement sera encaissé immédiatement pour confirmer la réservation.</p>
       </div>
     </div>
     <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
@@ -652,7 +652,7 @@ export const sendPaymentEmailDirect = internalAction({
         <p style="margin: 0; color: #92400e; font-size: 14px;">⏰ <strong>Important :</strong> Ce lien expire dans 1 heure.</p>
       </div>
       <div style="margin-top: 20px; padding: 15px; background-color: #ecfdf5; border-radius: 12px;">
-        <p style="margin: 0; color: #065f46; font-size: 14px;">🔒 <strong>Paiement sécurisé :</strong> Vos fonds seront réservés jusqu'à la fin de la prestation.</p>
+        <p style="margin: 0; color: #065f46; font-size: 14px;">🔒 <strong>Paiement sécurisé :</strong> Votre paiement sera encaissé immédiatement pour confirmer la réservation.</p>
       </div>
     </div>
     <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">

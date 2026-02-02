@@ -32,6 +32,9 @@ import {
   Percent,
   Timer,
   Info,
+  Banknote,
+  Calendar,
+  Zap,
 } from "lucide-react";
 import { Id, Doc } from "@/convex/_generated/dataModel";
 import { uploadToCloudinary } from "@/app/lib/cloudinary";
@@ -111,6 +114,12 @@ export default function ParametresPage() {
   const [paymentDeadlineEnabled, setPaymentDeadlineEnabled] = useState(true);
   const [paymentDeadlineHours, setPaymentDeadlineHours] = useState(48);
 
+  // États pour les versements annonceurs
+  const [payoutScheduledDay, setPayoutScheduledDay] = useState(25);
+  const [payoutMonthlyFeePercent, setPayoutMonthlyFeePercent] = useState(0);
+  const [payoutPerMissionFeePercent, setPayoutPerMissionFeePercent] = useState(2);
+  const [missionConfirmationHours, setMissionConfirmationHours] = useState(48);
+
   // Query pour récupérer toutes les configs
   const allConfigs = useQuery(
     api.admin.config.getAllConfigs,
@@ -153,6 +162,12 @@ export default function ParametresPage() {
     token ? { token } : "skip"
   );
 
+  // Query pour les versements annonceurs
+  const payoutSettings = useQuery(
+    api.admin.config.getPayoutSettings,
+    token ? { token } : "skip"
+  );
+
   // Mutations
   const toggleModeration = useMutation(api.admin.config.toggleServiceModeration);
   const updateConfig = useMutation(api.admin.config.updateConfig);
@@ -166,6 +181,7 @@ export default function ParametresPage() {
   const updateStripeFeeRateMutation = useMutation(api.admin.commissions.updateStripeFeeRate);
   const updateDeadlineSettings = useMutation(api.admin.config.updateAcceptanceDeadlineSettings);
   const updatePaymentDeadlineSettings = useMutation(api.admin.config.updatePaymentDeadlineSettings);
+  const updatePayoutSettings = useMutation(api.admin.config.updatePayoutSettings);
 
   // Charger les configs existantes
   useEffect(() => {
@@ -249,6 +265,16 @@ export default function ParametresPage() {
       setPaymentDeadlineHours(paymentDeadlineSettings.hours);
     }
   }, [paymentDeadlineSettings]);
+
+  // Charger les paramètres de versements annonceurs
+  useEffect(() => {
+    if (payoutSettings) {
+      setPayoutScheduledDay(payoutSettings.scheduledDay);
+      setPayoutMonthlyFeePercent(payoutSettings.monthlyFeePercent);
+      setPayoutPerMissionFeePercent(payoutSettings.perMissionFeePercent);
+      setMissionConfirmationHours(payoutSettings.confirmationHours);
+    }
+  }, [payoutSettings]);
 
   const handleToggleModeration = async () => {
     if (!token) return;
@@ -506,6 +532,15 @@ export default function ParametresPage() {
         token,
         enabled: paymentDeadlineEnabled,
         hours: paymentDeadlineHours,
+      });
+
+      // 6. Sauvegarder les paramètres de versements
+      await updatePayoutSettings({
+        token,
+        scheduledDay: payoutScheduledDay,
+        monthlyFeePercent: payoutMonthlyFeePercent,
+        perMissionFeePercent: payoutPerMissionFeePercent,
+        confirmationHours: missionConfirmationHours,
       });
 
       setSaveSuccess(true);
@@ -1266,6 +1301,192 @@ export default function ParametresPage() {
                   ? `Les réservations non payées dans les ${formatHoursDisplay(paymentDeadlineHours)} seront automatiquement annulées.`
                   : "Le délai de paiement est désactivé. Les clients peuvent payer à tout moment."
                 }
+              </p>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Versements annonceurs */}
+        <motion.div
+          className="bg-slate-900 rounded-xl p-6 border border-slate-800 md:col-span-2"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.095 }}
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-green-500/20 rounded-lg">
+              <Banknote className="w-5 h-5 text-green-400" />
+            </div>
+            <h2 className="text-lg font-semibold text-white">Versements annonceurs</h2>
+          </div>
+
+          <div className="space-y-6">
+            {/* Délai de confirmation client */}
+            <div className="p-4 bg-slate-800/50 rounded-lg">
+              <label className="block text-sm font-medium text-slate-300 mb-3">
+                Délai de confirmation client
+              </label>
+              <div className="flex items-center gap-4">
+                <input
+                  type="range"
+                  min={12}
+                  max={168}
+                  step={12}
+                  value={missionConfirmationHours}
+                  onChange={(e) => setMissionConfirmationHours(Number(e.target.value))}
+                  className="flex-1 accent-green-500"
+                />
+                <div className="w-20 px-3 py-2 bg-slate-700 rounded-lg text-center font-semibold text-green-400">
+                  {formatHoursDisplay(missionConfirmationHours)}
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                Après la fin de la mission, le client a ce délai pour confirmer. Passé ce délai, la mission est auto-confirmée.
+              </p>
+            </div>
+
+            {/* Mode 1 : Mensuel */}
+            <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+              <div className="flex items-center gap-2 mb-4">
+                <Calendar className="w-5 h-5 text-blue-400" />
+                <h3 className="font-semibold text-blue-300">Mode mensuel</h3>
+                <span className="ml-auto px-2 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded-full">
+                  Virement groupé
+                </span>
+              </div>
+              <p className="text-sm text-blue-300/70 mb-4">
+                Tous les gains sont versés en une fois à une date fixe du mois.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-blue-400 mb-2">Jour du virement</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="range"
+                      min={1}
+                      max={28}
+                      value={payoutScheduledDay}
+                      onChange={(e) => setPayoutScheduledDay(Number(e.target.value))}
+                      className="flex-1 accent-blue-500"
+                    />
+                    <div className="w-14 px-2 py-1.5 bg-blue-500/20 rounded-lg text-center font-semibold text-blue-400 text-sm">
+                      {payoutScheduledDay}
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-blue-400 mb-2">Frais appliqués</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="range"
+                      min={0}
+                      max={5}
+                      step={0.5}
+                      value={payoutMonthlyFeePercent}
+                      onChange={(e) => setPayoutMonthlyFeePercent(Number(e.target.value))}
+                      className="flex-1 accent-blue-500"
+                    />
+                    <div className="w-14 px-2 py-1.5 bg-blue-500/20 rounded-lg text-center font-semibold text-blue-400 text-sm">
+                      {payoutMonthlyFeePercent}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Mode 2 : Par mission */}
+            <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+              <div className="flex items-center gap-2 mb-4">
+                <Zap className="w-5 h-5 text-amber-400" />
+                <h3 className="font-semibold text-amber-300">Mode par mission</h3>
+                <span className="ml-auto px-2 py-0.5 text-xs bg-amber-500/20 text-amber-400 rounded-full">
+                  Virement immédiat
+                </span>
+              </div>
+              <p className="text-sm text-amber-300/70 mb-4">
+                Chaque mission est versée individuellement dès que le client confirme.
+              </p>
+              <div>
+                <label className="block text-xs text-amber-400 mb-2">Frais appliqués</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={0}
+                    max={10}
+                    step={0.5}
+                    value={payoutPerMissionFeePercent}
+                    onChange={(e) => setPayoutPerMissionFeePercent(Number(e.target.value))}
+                    className="flex-1 accent-amber-500"
+                  />
+                  <div className="w-14 px-2 py-1.5 bg-amber-500/20 rounded-lg text-center font-semibold text-amber-400 text-sm">
+                    {payoutPerMissionFeePercent}%
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Récapitulatif */}
+            <div className="p-4 bg-slate-800/50 rounded-lg">
+              <div className="flex items-center gap-2 mb-3">
+                <Info className="w-4 h-4 text-green-400" />
+                <span className="font-medium text-slate-200">Récapitulatif des modes</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-slate-400 border-b border-slate-700">
+                      <th className="text-left py-2 px-3">Mode</th>
+                      <th className="text-left py-2 px-3">Délai de versement</th>
+                      <th className="text-left py-2 px-3">Frais</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-slate-300">
+                    <tr className="border-b border-slate-700/50">
+                      <td className="py-2 px-3 flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-blue-400" />
+                        Mensuel
+                      </td>
+                      <td className="py-2 px-3">Le {payoutScheduledDay} de chaque mois</td>
+                      <td className="py-2 px-3 font-medium">
+                        {payoutMonthlyFeePercent === 0 ? (
+                          <span className="text-green-400">Gratuit</span>
+                        ) : (
+                          <span className="text-blue-400">{payoutMonthlyFeePercent}%</span>
+                        )}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 px-3 flex items-center gap-2">
+                        <Zap className="w-4 h-4 text-amber-400" />
+                        Par mission
+                      </td>
+                      <td className="py-2 px-3">Après confirmation client</td>
+                      <td className="py-2 px-3 font-medium">
+                        {payoutPerMissionFeePercent === 0 ? (
+                          <span className="text-green-400">Gratuit</span>
+                        ) : (
+                          <span className="text-amber-400">{payoutPerMissionFeePercent}%</span>
+                        )}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+              <Banknote className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-green-300">
+                Les annonceurs choisissent leur mode de versement dans leurs paramètres.
+                {payoutMonthlyFeePercent === 0 && payoutPerMissionFeePercent > 0 && (
+                  <> Le mode mensuel est gratuit, le mode par mission applique {payoutPerMissionFeePercent}% de frais.</>
+                )}
+                {payoutMonthlyFeePercent > 0 && payoutPerMissionFeePercent > 0 && (
+                  <> Mode mensuel : {payoutMonthlyFeePercent}%, mode par mission : {payoutPerMissionFeePercent}%.</>
+                )}
+                {payoutMonthlyFeePercent === 0 && payoutPerMissionFeePercent === 0 && (
+                  <> Les deux modes sont actuellement gratuits.</>
+                )}
               </p>
             </div>
           </div>

@@ -45,12 +45,28 @@ export default defineSchema({
     // Role (admin ou user)
     role: v.optional(v.union(v.literal("user"), v.literal("admin"))),
 
-    // Stripe Connect (pour annonceurs - virements)
+    // Stripe Connect Custom (pour annonceurs - virements)
     stripeAccountId: v.optional(v.string()), // acct_xxx
+    stripeAccountStatus: v.optional(v.union(
+      v.literal("pending"),      // En cours de création
+      v.literal("verified"),     // Vérifié et actif
+      v.literal("restricted"),   // Informations manquantes
+      v.literal("disabled")      // Désactivé
+    )),
     stripeChargesEnabled: v.optional(v.boolean()), // Peut recevoir des paiements
     stripePayoutsEnabled: v.optional(v.boolean()), // Peut recevoir des virements
-    stripeDetailsSubmitted: v.optional(v.boolean()), // Onboarding terminé
+    stripeDetailsSubmitted: v.optional(v.boolean()), // Onboarding terminé (legacy Express)
     stripeAccountUpdatedAt: v.optional(v.number()), // Dernière mise à jour
+
+    // IBAN pour Stripe Connect Custom (stocké masqué)
+    iban: v.optional(v.string()),                  // FR76****1234 (masqué)
+    ibanLast4: v.optional(v.string()),             // 1234 (4 derniers chiffres)
+
+    // Préférence de versement
+    payoutMode: v.optional(v.union(
+      v.literal("scheduled"),    // Ponctuel mensuel (défaut, gratuit)
+      v.literal("instant")       // Instantané avec frais (%)
+    )),
   })
     .index("by_email", ["email"])
     .index("by_slug", ["slug"])
@@ -645,6 +661,15 @@ export default defineSchema({
     // Délai de paiement (après acceptation par l'annonceur)
     paymentDeadline: v.optional(v.number()),              // Timestamp deadline paiement
     paymentDeadlineAutoExpired: v.optional(v.boolean()),  // true si auto-expiré par délai dépassé
+
+    // Confirmation de fin de mission par le client
+    clientConfirmedAt: v.optional(v.number()),            // Date confirmation manuelle client
+    autoConfirmedAt: v.optional(v.number()),              // Date auto-confirmation (après délai)
+    confirmationDeadline: v.optional(v.number()),         // Deadline pour confirmation (endDate + X heures)
+
+    // Prêt pour versement à l'annonceur
+    readyForPayout: v.optional(v.boolean()),              // true quand confirmé (manuel ou auto)
+    payoutScheduledFor: v.optional(v.string()),           // "2025-02-25" si mode scheduled
   })
     .index("by_announcer", ["announcerId"])
     .index("by_client", ["clientId"])
@@ -1073,15 +1098,20 @@ export default defineSchema({
     announcerEarnings: v.number(), // Revenus annonceur
 
     // Statut du paiement
+    // Nouveau flux simplifié: pending → captured (paiement immédiat) → refunded
+    // Les anciens statuts sont conservés pour la rétrocompatibilité
     status: v.union(
-      v.literal("pending"), // Checkout Session créée, en attente client
-      v.literal("authorized"), // Pré-autorisation réussie (fonds bloqués)
-      v.literal("captured"), // Paiement capturé
-      v.literal("cancelled"), // Annulé (pré-autorisation relâchée)
+      v.literal("pending"), // En attente de paiement client
+      v.literal("authorized"), // @deprecated - Ancienne pré-autorisation (rétrocompat)
+      v.literal("captured"), // Paiement réussi (encaissé immédiatement)
+      v.literal("cancelled"), // Annulé avant paiement
       v.literal("expired"), // Session expirée (1h)
       v.literal("failed"), // Échec du paiement
       v.literal("refunded") // Remboursé au client
     ),
+
+    // Date de paiement effectif (nouveau champ)
+    paidAt: v.optional(v.number()),
 
     // URL de paiement (interne ou Stripe)
     checkoutUrl: v.optional(v.string()),
