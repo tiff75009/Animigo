@@ -316,65 +316,54 @@ export const createInstantPayout = internalAction({
 // NOTE: setupBankAccountMutation est dans stripeConnectQueries.ts car ce fichier utilise "use node"
 
 /**
- * Action interne pour configurer le compte bancaire avec Account Token
- * Pour les plateformes FR, Stripe exige l'utilisation d'account tokens
- * Le token est créé côté frontend avec Stripe.js
+ * Action PUBLIQUE pour créer le compte Stripe et ajouter l'IBAN
+ * Retourne les résultats pour que le frontend puisse sauvegarder via mutation
+ * (Contourne le problème de proxy HTTP sur Convex self-hosted)
  */
-export const setupBankAccountAction = internalAction({
+export const createStripeAccountDirect = action({
   args: {
-    userId: v.id("users"),
-    email: v.string(),
-    stripeAccountId: v.union(v.string(), v.null()),
-    stripeSecretKey: v.string(),
-    accountToken: v.string(), // Token créé côté frontend avec Stripe.js
-    bankAccountToken: v.string(), // Token pour le compte bancaire
-    firstName: v.string(),
-    lastName: v.string(),
+    sessionToken: v.string(),
+    accountToken: v.string(),
+    bankAccountToken: v.string(),
   },
   handler: async (ctx, args) => {
-    console.log("=== setupBankAccountAction START ===");
-    console.log("User:", args.userId);
+    console.log("=== createStripeAccountDirect START ===");
+
+    // Récupérer la clé Stripe depuis les variables d'environnement
+    // On ne peut pas utiliser runQuery ici à cause du proxy
+    const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+
+    if (!stripeSecretKey) {
+      throw new ConvexError("Stripe non configuré (variable d'environnement manquante)");
+    }
 
     try {
-      const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+      const stripe = new Stripe(stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
 
-      let accountId = args.stripeAccountId;
-
-      // Si pas de compte Stripe, en créer un avec le token
-      if (!accountId) {
-        console.log("Création du compte Custom avec account token...");
-        const account = await stripe.accounts.create({
-          type: "custom",
-          country: "FR",
-          email: args.email,
-          account_token: args.accountToken,
-          capabilities: {
-            transfers: { requested: true },
-          },
-          settings: {
-            payouts: {
-              schedule: {
-                interval: "manual",
-              },
+      // Créer le compte Custom avec le token
+      console.log("Création du compte Custom...");
+      const account = await stripe.accounts.create({
+        type: "custom",
+        country: "FR",
+        account_token: args.accountToken,
+        capabilities: {
+          transfers: { requested: true },
+        },
+        settings: {
+          payouts: {
+            schedule: {
+              interval: "manual",
             },
           },
-        });
+        },
+      });
 
-        console.log("Compte Custom créé:", account.id);
-        accountId = account.id;
-
-        // Sauvegarder dans Convex
-        await ctx.runMutation(internal.api.stripeConnectQueries.saveAccountToUser, {
-          userId: args.userId,
-          stripeAccountId: account.id,
-          status: "pending",
-        });
-      }
+      console.log("Compte Custom créé:", account.id);
 
       // Ajouter le compte bancaire avec le token
-      console.log("Ajout du compte bancaire avec token...");
+      console.log("Ajout du compte bancaire...");
       const bankAccount = await stripe.accounts.createExternalAccount(
-        accountId,
+        account.id,
         {
           external_account: args.bankAccountToken,
         }
@@ -382,41 +371,36 @@ export const setupBankAccountAction = internalAction({
 
       console.log("Compte bancaire ajouté:", bankAccount.id);
 
-      // Extraire les 4 derniers chiffres du compte bancaire
-      const last4 = (bankAccount as any).last4 || "****";
-      const ibanMasked = `****${last4}`;
-
-      await ctx.runMutation(internal.api.stripeConnectQueries.saveIbanToUser, {
-        userId: args.userId,
-        iban: ibanMasked,
-        ibanLast4: last4,
-      });
-
-      // Vérifier le statut du compte
-      const account = await stripe.accounts.retrieve(accountId);
+      // Vérifier le statut
+      const accountStatus = await stripe.accounts.retrieve(account.id);
       let status: "pending" | "verified" | "restricted" | "disabled" = "pending";
 
-      if (account.charges_enabled && account.payouts_enabled) {
+      if (accountStatus.charges_enabled && accountStatus.payouts_enabled) {
         status = "verified";
-      } else if (account.requirements?.disabled_reason) {
+      } else if (accountStatus.requirements?.disabled_reason) {
         status = "disabled";
-      } else if (account.requirements?.currently_due?.length) {
+      } else if (accountStatus.requirements?.currently_due?.length) {
         status = "restricted";
       }
 
-      await ctx.runMutation(internal.api.stripeConnectQueries.updateAccountStatus, {
-        stripeAccountId: accountId,
-        status: status,
-        chargesEnabled: account.charges_enabled ?? false,
-        payoutsEnabled: account.payouts_enabled ?? false,
-      });
+      const last4 = (bankAccount as any).last4 || "****";
 
-      console.log("=== setupBankAccountAction SUCCESS ===");
-      return { success: true };
+      console.log("=== createStripeAccountDirect SUCCESS ===");
+
+      // Retourner les résultats pour que le frontend sauvegarde
+      return {
+        success: true,
+        stripeAccountId: account.id,
+        status,
+        chargesEnabled: accountStatus.charges_enabled ?? false,
+        payoutsEnabled: accountStatus.payouts_enabled ?? false,
+        ibanLast4: last4,
+      };
 
     } catch (error: any) {
-      console.error("Erreur setupBankAccountAction:", error);
-      throw error;
+      console.error("Erreur createStripeAccountDirect:", error);
+      const message = error?.raw?.message || error?.message || "Erreur Stripe";
+      throw new ConvexError(message);
     }
   },
 });

@@ -212,18 +212,22 @@ export const updateAccountStatus = internalMutation({
 });
 
 /**
- * Mutation publique pour configurer le compte bancaire
- * Reçoit les tokens Stripe créés côté frontend avec Stripe.js
- * (Requis pour les plateformes FR - account tokens obligatoires)
+ * Mutation pour sauvegarder les résultats de la création du compte Stripe
+ * Appelée par le frontend après l'action createStripeAccountDirect
  */
-export const setupBankAccount = mutation({
+export const saveStripeAccountResult = mutation({
   args: {
     sessionToken: v.string(),
-    accountToken: v.string(), // Token créé avec stripe.createToken('account', {...})
-    bankAccountToken: v.string(), // Token créé avec stripe.createToken('bank_account', {...})
-    firstName: v.string(),
-    lastName: v.string(),
-    ibanLast4: v.string(), // Pour affichage (les 4 derniers chiffres)
+    stripeAccountId: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("verified"),
+      v.literal("restricted"),
+      v.literal("disabled")
+    ),
+    chargesEnabled: v.boolean(),
+    payoutsEnabled: v.boolean(),
+    ibanLast4: v.string(),
   },
   handler: async (ctx, args) => {
     // Valider la session
@@ -233,7 +237,7 @@ export const setupBankAccount = mutation({
       .first();
 
     if (!session || session.expiresAt < Date.now()) {
-      throw new ConvexError("Session invalide ou expirée. Veuillez vous reconnecter.");
+      throw new ConvexError("Session invalide ou expirée");
     }
 
     const user = await ctx.db.get(session.userId);
@@ -241,45 +245,20 @@ export const setupBankAccount = mutation({
       throw new ConvexError("Utilisateur non trouvé");
     }
 
-    // Vérifier que c'est un annonceur
-    if (user.accountType !== "annonceur_pro" && user.accountType !== "annonceur_particulier") {
-      throw new ConvexError("Cette fonctionnalité est réservée aux annonceurs");
-    }
-
-    // Récupérer la clé Stripe
-    const stripeConfig = await ctx.db
-      .query("systemConfig")
-      .withIndex("by_key", (q) => q.eq("key", "stripe_secret_key"))
-      .first();
-
-    if (!stripeConfig?.value) {
-      throw new ConvexError("Stripe n'est pas configuré. Contactez l'administrateur.");
-    }
-
-    if (!stripeConfig.value.startsWith("sk_")) {
-      throw new ConvexError("La clé Stripe configurée est invalide. Contactez l'administrateur.");
-    }
-
-    // Sauvegarder temporairement l'IBAN masqué (sera mis à jour après création du compte)
     const now = Date.now();
+
+    // Sauvegarder toutes les informations du compte Stripe
     await ctx.db.patch(user._id, {
-      ibanLast4: args.ibanLast4,
+      stripeAccountId: args.stripeAccountId,
+      stripeAccountStatus: args.status,
+      stripeChargesEnabled: args.chargesEnabled,
+      stripePayoutsEnabled: args.payoutsEnabled,
       iban: `****${args.ibanLast4}`,
+      ibanLast4: args.ibanLast4,
+      stripeAccountUpdatedAt: now,
       updatedAt: now,
     });
 
-    // Planifier l'action avec les tokens
-    await ctx.scheduler.runAfter(0, internal.api.stripeConnect.setupBankAccountAction, {
-      userId: user._id,
-      email: user.email,
-      stripeAccountId: user.stripeAccountId || null,
-      stripeSecretKey: stripeConfig.value,
-      accountToken: args.accountToken,
-      bankAccountToken: args.bankAccountToken,
-      firstName: args.firstName,
-      lastName: args.lastName,
-    });
-
-    return { success: true, message: "Configuration en cours. Veuillez patienter quelques secondes..." };
+    return { success: true };
   },
 });

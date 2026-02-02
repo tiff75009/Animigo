@@ -33,7 +33,7 @@ import {
   Info,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
 // Types
@@ -305,9 +305,10 @@ function PaymentTab() {
     }
   }, [stripePublicKey, stripeInstance]);
 
-  // Mutations
+  // Mutations & Actions
   const updatePayoutMode = useMutation(api.api.stripeConnectQueries.updatePayoutMode);
-  const setupBankAccount = useMutation(api.api.stripeConnectQueries.setupBankAccount);
+  const saveStripeAccountResult = useMutation(api.api.stripeConnectQueries.saveStripeAccountResult);
+  const createStripeAccountDirect = useAction(api.api.stripeConnect.createStripeAccountDirect);
 
   // Local state
   const [showSetupForm, setShowSetupForm] = useState(false);
@@ -416,18 +417,25 @@ function PaymentTab() {
         throw new Error(bankResult.error.message);
       }
 
-      // 3. Envoyer les tokens au backend
-      const result = await setupBankAccount({
+      // 3. Appeler l'action Stripe (crée le compte et ajoute le compte bancaire)
+      const stripeResult = await createStripeAccountDirect({
         sessionToken: token,
         accountToken: accountResult.token.id,
         bankAccountToken: bankResult.token.id,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        ibanLast4: ibanClean.slice(-4),
       });
 
-      if (result.success) {
-        setSuccessMessage(result.message || "Configuration en cours...");
+      if (stripeResult.success) {
+        // 4. Sauvegarder les résultats en base via mutation
+        await saveStripeAccountResult({
+          sessionToken: token,
+          stripeAccountId: stripeResult.stripeAccountId,
+          status: stripeResult.status,
+          chargesEnabled: stripeResult.chargesEnabled,
+          payoutsEnabled: stripeResult.payoutsEnabled,
+          ibanLast4: stripeResult.ibanLast4,
+        });
+
+        setSuccessMessage("Compte bancaire configuré avec succès !");
         setShowSetupForm(false);
         // Reset form
         setFormData({
