@@ -2,7 +2,8 @@
 
 import { useMemo, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, ArrowRight, Calendar, Clock, Moon, Sun, Users, ChevronRight, Check, Pencil } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ArrowLeft, ArrowRight, Calendar, Clock, Moon, Sun, Users, ChevronRight, Check, Pencil, X } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import type { CalendarEntry } from "./types";
 import { formatDateDisplay } from "./pricing";
@@ -169,6 +170,9 @@ export default function BookingCalendar({
   // État pour la vue repliée en mode non-garde
   const [isNonRangeCollapsed, setIsNonRangeCollapsed] = useState(false);
 
+  // État pour la transition calendrier/créneaux en mode non-garde
+  const [nonRangeView, setNonRangeView] = useState<"calendar" | "time">("calendar");
+
   // Déterminer si la sélection est complète en mode non-garde
   const isNonRangeComplete = selectedDate && selectedTime && (enableDurationBasedBlocking || selectedEndTime);
 
@@ -204,6 +208,13 @@ export default function BookingCalendar({
       setIsNonRangeCollapsed(false);
     }
   }, [isRangeMode, isNonRangeComplete]);
+
+  // Reset nonRangeView when date is cleared
+  useEffect(() => {
+    if (!isRangeMode && !selectedDate) {
+      setNonRangeView("calendar");
+    }
+  }, [isRangeMode, selectedDate]);
 
   // Calculate end time based on variant duration
   const calculateEndTimeForDuration = (startTime: string): string => {
@@ -265,6 +276,8 @@ export default function BookingCalendar({
     } else {
       onDateSelect(dateStr);
       onEndDateSelect(null);
+      // Passer à la vue créneaux horaires
+      setNonRangeView("time");
     }
   };
 
@@ -618,6 +631,14 @@ export default function BookingCalendar({
       );
     }
 
+    // Fonction pour revenir à la vue calendrier
+    const handleBackToCalendar = () => {
+      setNonRangeView("calendar");
+      onDateSelect("");
+      onTimeSelect("");
+      onEndTimeSelect("");
+    };
+
     return (
       <div className="bg-white rounded-2xl p-5 border border-gray-100">
         {/* Header */}
@@ -625,12 +646,18 @@ export default function BookingCalendar({
           <div>
             <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
               <span className="p-2 bg-primary/10 rounded-lg">
-                <Calendar className="w-5 h-5 text-primary" />
+                {nonRangeView === "calendar" ? (
+                  <Calendar className="w-5 h-5 text-primary" />
+                ) : (
+                  <Clock className="w-5 h-5 text-primary" />
+                )}
               </span>
-              Choisissez votre créneau
+              {nonRangeView === "calendar" ? "Choisissez une date" : "Choisissez un horaire"}
             </h3>
             <p className="text-sm text-gray-500 mt-1">
-              Sélectionnez une date et un horaire
+              {nonRangeView === "calendar"
+                ? "Sélectionnez une date disponible"
+                : `Pour le ${formatDateFull(selectedDate!)}`}
             </p>
           </div>
           <div
@@ -643,175 +670,138 @@ export default function BookingCalendar({
                 : "bg-gray-100 text-gray-600"
             )}
           >
-            {isNonRangeComplete ? "Complet" : selectedDate ? "Choisir l'heure" : "Choisir la date"}
+            {isNonRangeComplete ? "Complet" : selectedDate ? "Étape 2/2" : "Étape 1/2"}
           </div>
         </div>
 
-        {/* Calendar in gray background */}
-        <div className="bg-gray-50 rounded-2xl p-4 mb-4">
-          {/* Navigation */}
-          <div className="flex items-center justify-between mb-4">
-            <button
-              onClick={() => onMonthChange(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1))}
-              className="p-2 hover:bg-white rounded-lg transition-colors"
+        {/* Contenu avec transition */}
+        <AnimatePresence mode="wait">
+          {nonRangeView === "calendar" ? (
+            <motion.div
+              key="calendar"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2 }}
             >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-            <span className="font-semibold text-gray-900 capitalize">
-              {calendarMonth.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
-            </span>
-            <button
-              onClick={() => onMonthChange(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1))}
-              className="p-2 hover:bg-white rounded-lg transition-colors"
-            >
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Days header */}
-          <div className="grid grid-cols-7 gap-1 text-center text-xs mb-2">
-            {["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"].map((d) => (
-              <div key={d} className="py-2 text-gray-500 font-medium">{d}</div>
-            ))}
-          </div>
-
-          {/* Days grid */}
-          <div className="grid grid-cols-7 gap-1">{generateCalendarDaysEnhanced()}</div>
-
-          {/* Légende */}
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-3 mt-3 border-t border-gray-200 text-xs text-gray-500">
-            <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
-              <span>Libre</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-              <span>Partiel</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
-              <span>Complet</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-primary" />
-              <span>Sélectionné</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Time Selection for non-range mode */}
-        {selectedDate && (
-          <div className="space-y-4">
-            {/* Selected date display */}
-            <div className="flex items-center gap-2 p-3 bg-primary/5 rounded-xl">
-              <Calendar className="w-4 h-4 text-primary" />
-              <span className="text-sm font-medium text-gray-900 capitalize">{formatDateFull(selectedDate)}</span>
-            </div>
-
-            {bookedSlots.length > 0 && (
-              <div className="p-3 bg-gray-50 rounded-xl text-sm text-gray-600">
-                <span className="font-medium">Créneaux réservés : </span>
-                {bookedSlots.map((slot, i) => (
-                  <span key={i} className="text-red-500 font-medium">
-                    {slot.startTime}-{slot.endTime}{i < bookedSlots.length - 1 ? ", " : ""}
+              {/* Calendar in gray background */}
+              <div className="bg-gray-50 rounded-2xl p-4">
+                {/* Navigation */}
+                <div className="flex items-center justify-between mb-4">
+                  <button
+                    onClick={() => onMonthChange(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1))}
+                    className="p-2 hover:bg-white rounded-lg transition-colors"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                  <span className="font-semibold text-gray-900 capitalize">
+                    {calendarMonth.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
                   </span>
-                ))}
-              </div>
-            )}
-
-            {/* Duration info */}
-            {enableDurationBasedBlocking && variantDuration && (
-              <div className="p-3 bg-blue-50 rounded-xl text-sm text-blue-700 flex items-center gap-2">
-                <Clock className="w-4 h-4" />
-                <span>Durée de la séance : {variantDuration >= 60
-                  ? `${Math.floor(variantDuration / 60)}h${variantDuration % 60 > 0 ? variantDuration % 60 : ""}`
-                  : `${variantDuration}min`}
-                </span>
-              </div>
-            )}
-
-            <div>
-              <p className="text-sm font-medium text-gray-900 mb-3">Heure de début</p>
-
-              {/* Mobile button */}
-              <button
-                onClick={() => setShowStartTimePicker(true)}
-                className={cn(
-                  "w-full p-4 rounded-xl border-2 transition-colors flex items-center justify-between sm:hidden",
-                  selectedTime ? "border-primary bg-primary/5" : "border-gray-200 bg-white"
-                )}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={cn("p-2 rounded-lg", selectedTime ? "bg-primary/10" : "bg-gray-100")}>
-                    <Clock className={cn("w-5 h-5", selectedTime ? "text-primary" : "text-gray-400")} />
-                  </div>
-                  <div className="text-left">
-                    <p className="text-xs text-gray-500">Heure de début</p>
-                    <p className={cn("text-lg font-semibold", selectedTime ? "text-primary" : "text-gray-400")}>
-                      {selectedTime || "Sélectionner"}
-                    </p>
-                  </div>
+                  <button
+                    onClick={() => onMonthChange(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1))}
+                    className="p-2 hover:bg-white rounded-lg transition-colors"
+                  >
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
                 </div>
-                <ChevronRight className="w-5 h-5 text-gray-400" />
-              </button>
 
-              {/* Desktop grid */}
-              <div className="hidden sm:grid grid-cols-4 sm:grid-cols-6 gap-2">
-                {timeSlots.map((time) => {
-                  const isAvailable = isTimeSlotAvailable(time);
-                  const isSelected = selectedTime === time;
-                  return (
-                    <button
-                      key={time}
-                      disabled={!isAvailable}
-                      onClick={() => handleTimeSelect(time)}
-                      className={cn(
-                        "py-3 text-sm rounded-xl border-2 transition-all font-medium",
-                        !isAvailable && "opacity-40 cursor-not-allowed bg-gray-100 text-gray-400 border-gray-100",
-                        isAvailable && isSelected
-                          ? "border-primary bg-primary text-white"
-                          : isAvailable && "border-gray-200 hover:border-primary hover:bg-primary/5"
-                      )}
-                    >
-                      {time}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+                {/* Days header */}
+                <div className="grid grid-cols-7 gap-1 text-center text-xs mb-2">
+                  {["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"].map((d) => (
+                    <div key={d} className="py-2 text-gray-500 font-medium">{d}</div>
+                  ))}
+                </div>
 
-            {selectedTime && enableDurationBasedBlocking && variantDuration ? (
-              <div className="p-4 bg-green-50 rounded-xl border border-green-200">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <Check className="w-5 h-5 text-green-600" />
+                {/* Days grid */}
+                <div className="grid grid-cols-7 gap-1">{generateCalendarDaysEnhanced()}</div>
+
+                {/* Légende */}
+                <div className="flex flex-wrap items-center justify-center gap-3 pt-3 mt-3 border-t border-gray-200 text-xs text-gray-500">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
+                    <span>Libre</span>
                   </div>
-                  <div>
-                    <p className="font-medium text-green-800">Créneau confirmé</p>
-                    <p className="text-sm text-green-600">{selectedTime} → {calculatedEndTime}</p>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                    <span>Partiel</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                    <span>Complet</span>
                   </div>
                 </div>
               </div>
-            ) : selectedTime ? (
+            </motion.div>
+          ) : (
+            <motion.div
+              key="time"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-4"
+            >
+              {/* Bouton retour + date sélectionnée */}
+              <div className="flex items-center gap-3 p-3 bg-primary/5 rounded-xl">
+                <button
+                  onClick={handleBackToCalendar}
+                  className="p-2 hover:bg-primary/10 rounded-lg transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4 text-primary" />
+                </button>
+                <div className="flex items-center gap-2 flex-1">
+                  <Calendar className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-medium text-gray-900 capitalize">{formatDateFull(selectedDate!)}</span>
+                </div>
+                <button
+                  onClick={handleBackToCalendar}
+                  className="text-xs text-primary hover:underline font-medium"
+                >
+                  Changer
+                </button>
+              </div>
+
+              {bookedSlots.length > 0 && (
+                <div className="p-3 bg-gray-50 rounded-xl text-sm text-gray-600">
+                  <span className="font-medium">Créneaux réservés : </span>
+                  {bookedSlots.map((slot, i) => (
+                    <span key={i} className="text-red-500 font-medium">
+                      {slot.startTime}-{slot.endTime}{i < bookedSlots.length - 1 ? ", " : ""}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Duration info */}
+              {enableDurationBasedBlocking && variantDuration && (
+                <div className="p-3 bg-blue-50 rounded-xl text-sm text-blue-700 flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  <span>Durée de la séance : {variantDuration >= 60
+                    ? `${Math.floor(variantDuration / 60)}h${variantDuration % 60 > 0 ? variantDuration % 60 : ""}`
+                    : `${variantDuration}min`}
+                  </span>
+                </div>
+              )}
+
               <div>
-                <p className="text-sm font-medium text-gray-900 mb-3">Heure de fin</p>
+                <p className="text-sm font-medium text-gray-900 mb-3">Heure de début</p>
 
                 {/* Mobile button */}
                 <button
-                  onClick={() => setShowEndTimePicker(true)}
+                  onClick={() => setShowStartTimePicker(true)}
                   className={cn(
                     "w-full p-4 rounded-xl border-2 transition-colors flex items-center justify-between sm:hidden",
-                    selectedEndTime ? "border-secondary bg-secondary/5" : "border-gray-200 bg-white"
+                    selectedTime ? "border-primary bg-primary/5" : "border-gray-200 bg-white"
                   )}
                 >
                   <div className="flex items-center gap-3">
-                    <div className={cn("p-2 rounded-lg", selectedEndTime ? "bg-secondary/10" : "bg-gray-100")}>
-                      <Clock className={cn("w-5 h-5", selectedEndTime ? "text-secondary" : "text-gray-400")} />
+                    <div className={cn("p-2 rounded-lg", selectedTime ? "bg-primary/10" : "bg-gray-100")}>
+                      <Clock className={cn("w-5 h-5", selectedTime ? "text-primary" : "text-gray-400")} />
                     </div>
                     <div className="text-left">
-                      <p className="text-xs text-gray-500">Heure de fin</p>
-                      <p className={cn("text-lg font-semibold", selectedEndTime ? "text-secondary" : "text-gray-400")}>
-                        {selectedEndTime || "Sélectionner"}
+                      <p className="text-xs text-gray-500">Heure de début</p>
+                      <p className={cn("text-lg font-semibold", selectedTime ? "text-primary" : "text-gray-400")}>
+                        {selectedTime || "Sélectionner"}
                       </p>
                     </div>
                   </div>
@@ -820,29 +810,20 @@ export default function BookingCalendar({
 
                 {/* Desktop grid */}
                 <div className="hidden sm:grid grid-cols-4 sm:grid-cols-6 gap-2">
-                  {getEndTimeSlots().map((time) => {
-                    const startMinutes = parseTimeToMinutes(selectedTime);
-                    const endMinutes = parseTimeToMinutes(time);
-                    const effectiveStart = enableDurationBasedBlocking ? startMinutes - bufferBefore : startMinutes;
-                    const effectiveEnd = enableDurationBasedBlocking ? endMinutes + bufferAfter : endMinutes;
-                    const hasConflict = bookedSlots.some((slot) => {
-                      const bookedStart = parseTimeToMinutes(slot.startTime);
-                      const bookedEnd = parseTimeToMinutes(slot.endTime);
-                      return effectiveStart < bookedEnd && effectiveEnd > bookedStart;
-                    });
-                    const isEndTimeAvailable = !hasConflict;
-                    const isSelected = selectedEndTime === time;
+                  {timeSlots.map((time) => {
+                    const isAvailable = isTimeSlotAvailable(time);
+                    const isSelected = selectedTime === time;
                     return (
                       <button
                         key={time}
-                        disabled={!isEndTimeAvailable}
-                        onClick={() => onEndTimeSelect(time)}
+                        disabled={!isAvailable}
+                        onClick={() => handleTimeSelect(time)}
                         className={cn(
                           "py-3 text-sm rounded-xl border-2 transition-all font-medium",
-                          !isEndTimeAvailable && "opacity-40 cursor-not-allowed bg-gray-100 text-gray-400 border-gray-100",
-                          isEndTimeAvailable && isSelected
-                            ? "border-secondary bg-secondary text-white"
-                            : isEndTimeAvailable && "border-gray-200 hover:border-secondary hover:bg-secondary/5"
+                          !isAvailable && "opacity-40 cursor-not-allowed bg-gray-100 text-gray-400 border-gray-100",
+                          isAvailable && isSelected
+                            ? "border-primary bg-primary text-white"
+                            : isAvailable && "border-gray-200 hover:border-primary hover:bg-primary/5"
                         )}
                       >
                         {time}
@@ -851,25 +832,98 @@ export default function BookingCalendar({
                   })}
                 </div>
               </div>
-            ) : null}
 
-            {selectedTime && selectedEndTime && !enableDurationBasedBlocking && (
-              <div className="p-4 bg-green-50 rounded-xl border border-green-200">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <Check className="w-5 h-5 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-green-800">Créneau confirmé</p>
-                    <p className="text-sm text-green-600">
-                      {selectedTime} → {selectedEndTime} ({calculateDuration(selectedTime, selectedEndTime)})
-                    </p>
+              {selectedTime && enableDurationBasedBlocking && variantDuration ? (
+                <div className="p-4 bg-green-50 rounded-xl border border-green-200">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <Check className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-green-800">Créneau confirmé</p>
+                      <p className="text-sm text-green-600">{selectedTime} → {calculatedEndTime}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+              ) : selectedTime ? (
+                <div>
+                  <p className="text-sm font-medium text-gray-900 mb-3">Heure de fin</p>
+
+                  {/* Mobile button */}
+                  <button
+                    onClick={() => setShowEndTimePicker(true)}
+                    className={cn(
+                      "w-full p-4 rounded-xl border-2 transition-colors flex items-center justify-between sm:hidden",
+                      selectedEndTime ? "border-secondary bg-secondary/5" : "border-gray-200 bg-white"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={cn("p-2 rounded-lg", selectedEndTime ? "bg-secondary/10" : "bg-gray-100")}>
+                        <Clock className={cn("w-5 h-5", selectedEndTime ? "text-secondary" : "text-gray-400")} />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-xs text-gray-500">Heure de fin</p>
+                        <p className={cn("text-lg font-semibold", selectedEndTime ? "text-secondary" : "text-gray-400")}>
+                          {selectedEndTime || "Sélectionner"}
+                        </p>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-gray-400" />
+                  </button>
+
+                  {/* Desktop grid */}
+                  <div className="hidden sm:grid grid-cols-4 sm:grid-cols-6 gap-2">
+                    {getEndTimeSlots().map((time) => {
+                      const startMinutes = parseTimeToMinutes(selectedTime);
+                      const endMinutes = parseTimeToMinutes(time);
+                      const effectiveStart = enableDurationBasedBlocking ? startMinutes - bufferBefore : startMinutes;
+                      const effectiveEnd = enableDurationBasedBlocking ? endMinutes + bufferAfter : endMinutes;
+                      const hasConflict = bookedSlots.some((slot) => {
+                        const bookedStart = parseTimeToMinutes(slot.startTime);
+                        const bookedEnd = parseTimeToMinutes(slot.endTime);
+                        return effectiveStart < bookedEnd && effectiveEnd > bookedStart;
+                      });
+                      const isEndTimeAvailable = !hasConflict;
+                      const isSelected = selectedEndTime === time;
+                      return (
+                        <button
+                          key={time}
+                          disabled={!isEndTimeAvailable}
+                          onClick={() => onEndTimeSelect(time)}
+                          className={cn(
+                            "py-3 text-sm rounded-xl border-2 transition-all font-medium",
+                            !isEndTimeAvailable && "opacity-40 cursor-not-allowed bg-gray-100 text-gray-400 border-gray-100",
+                            isEndTimeAvailable && isSelected
+                              ? "border-secondary bg-secondary text-white"
+                              : isEndTimeAvailable && "border-gray-200 hover:border-secondary hover:bg-secondary/5"
+                          )}
+                        >
+                          {time}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              {selectedTime && selectedEndTime && !enableDurationBasedBlocking && (
+                <div className="p-4 bg-green-50 rounded-xl border border-green-200">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <Check className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-green-800">Créneau confirmé</p>
+                      <p className="text-sm text-green-600">
+                        {selectedTime} → {selectedEndTime} ({calculateDuration(selectedTime, selectedEndTime)})
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Mobile Time Pickers */}
         {typeof document !== "undefined" && createPortal(

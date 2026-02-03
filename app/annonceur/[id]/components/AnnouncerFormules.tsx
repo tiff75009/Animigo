@@ -446,18 +446,11 @@ export default function AnnouncerFormules({
     }
 
     // Lieu (AVANT les dates - même ordre que mobile)
-    // Ajouter l'étape location si:
-    // - La formule offre un choix (both)
-    // - OU la formule est uniquement à domicile (client_home) - pour saisir l'adresse
-    // - OU service garde (isRangeMode)
-    // - OU formule collective (pour afficher le lieu et la distance)
-    const formuleLocation = selectedFormule?.serviceLocation || service?.serviceLocation;
-    if (service && (
-      formuleLocation === "both" ||
-      formuleLocation === "client_home" ||
-      isRangeMode ||
-      isCollectiveFormule // Toujours afficher le lieu pour les collectives
-    )) {
+    // Toujours ajouter l'étape location pour tous les types de services
+    // - Pour afficher le lieu (announcer_home)
+    // - OU permettre le choix (both)
+    // - OU saisir l'adresse (client_home)
+    if (service) {
       steps.push("location");
     }
 
@@ -470,7 +463,7 @@ export default function AnnouncerFormules({
     }
 
     return steps;
-  }, [requiresAnimalVerification, isLoggedIn, userAnimals.length, service, isRangeMode, isCollectiveFormule, hasOptions, selectedFormule?.serviceLocation]);
+  }, [requiresAnimalVerification, isLoggedIn, userAnimals.length, service, hasOptions]);
 
   // Index de l'étape actuelle
   const currentStepIndex = availableDesktopSteps.indexOf(desktopStep);
