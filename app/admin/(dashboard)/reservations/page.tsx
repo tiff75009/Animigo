@@ -610,8 +610,8 @@ export default function ReservationsPage() {
                   </td>
                   <td className="px-4 py-4 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      {/* Bouton transfert manuel - visible si paiement client effectué */}
-                      {reservation.paymentStatus === "paid" && (
+                      {/* Bouton transfert manuel - visible si paiement effectué (upcoming/in_progress/completed implique paiement fait) */}
+                      {(reservation.status === "upcoming" || reservation.status === "in_progress" || reservation.status === "completed" || reservation.paymentStatus === "paid" || reservation.stripePaymentStatus === "captured") && (
                         <button
                           onClick={() => handleManualTransfer(reservation._id)}
                           disabled={transferringMissionId === reservation._id}

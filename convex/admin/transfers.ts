@@ -24,8 +24,16 @@ export const triggerManualTransfer = action({
       throw new ConvexError("Mission non trouvée");
     }
 
-    // Vérifications
-    if (mission.paymentStatus !== "paid") {
+    // Vérifications - Le paiement est considéré comme effectué si:
+    // 1. paymentStatus === "paid" OU
+    // 2. stripePaymentStatus === "captured" OU
+    // 3. Le statut de la mission est "upcoming", "in_progress" ou "completed" (qui implique un paiement confirmé)
+    const paymentConfirmed =
+      mission.paymentStatus === "paid" ||
+      mission.stripePaymentStatus === "captured" ||
+      ["upcoming", "in_progress", "completed"].includes(mission.status);
+
+    if (!paymentConfirmed) {
       throw new ConvexError("Le paiement client n'a pas été effectué pour cette mission");
     }
 

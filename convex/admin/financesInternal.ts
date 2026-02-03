@@ -12,13 +12,21 @@ export const getMissionForTransfer = internalQuery({
 
     const announcer = await ctx.db.get(mission.announcerId);
 
+    // Récupérer le paiement Stripe associé si existe
+    let stripePayment = null;
+    if (mission.stripePaymentId) {
+      stripePayment = await ctx.db.get(mission.stripePaymentId);
+    }
+
     return {
       _id: mission._id,
+      status: mission.status,
       paymentStatus: mission.paymentStatus,
       announcerPaymentStatus: mission.announcerPaymentStatus,
       announcerEarnings: mission.announcerEarnings,
       serviceName: mission.serviceName,
       announcerStripeAccountId: announcer?.stripeAccountId || null,
+      stripePaymentStatus: stripePayment?.status || null,
     };
   },
 });
@@ -42,10 +50,20 @@ export const markMissionTransferCompleted = internalMutation({
     transferId: v.string(),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.missionId, {
+    const mission = await ctx.db.get(args.missionId);
+
+    // Préparer les mises à jour
+    const updates: Record<string, unknown> = {
       announcerPaymentStatus: "paid",
       readyForPayout: true,
       updatedAt: Date.now(),
-    });
+    };
+
+    // Si paymentStatus n'est pas "paid", le corriger aussi
+    if (mission && mission.paymentStatus !== "paid") {
+      updates.paymentStatus = "paid";
+    }
+
+    await ctx.db.patch(args.missionId, updates);
   },
 });
