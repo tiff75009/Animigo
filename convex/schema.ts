@@ -1677,4 +1677,92 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_formule", ["userId", "formuleId"]),
+
+  // ============================================
+  // Support - FAQ et Tickets
+  // ============================================
+
+  // Catégories FAQ
+  faqCategories: defineTable({
+    name: v.string(),           // "Paiements", "Réservations", etc.
+    slug: v.string(),           // "paiements", "reservations"
+    icon: v.string(),           // Emoji ou nom d'icône
+    order: v.number(),          // Ordre d'affichage
+    isActive: v.boolean(),
+    targetAudience: v.union(v.literal("all"), v.literal("client"), v.literal("annonceur")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_order", ["order"])
+    .index("by_audience", ["targetAudience"])
+    .index("by_active", ["isActive"]),
+
+  // Articles FAQ
+  faqArticles: defineTable({
+    categoryId: v.id("faqCategories"),
+    title: v.string(),          // Question
+    content: v.string(),        // Réponse (markdown supporté)
+    slug: v.string(),
+    order: v.number(),
+    isActive: v.boolean(),
+    viewCount: v.number(),      // Statistiques
+    helpfulCount: v.number(),   // "Cet article vous a-t-il aidé ?"
+    notHelpfulCount: v.number(),
+    targetAudience: v.union(v.literal("all"), v.literal("client"), v.literal("annonceur")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_category", ["categoryId"])
+    .index("by_slug", ["slug"])
+    .index("by_views", ["viewCount"])
+    .index("by_active", ["isActive"])
+    .index("by_audience", ["targetAudience"]),
+
+  // Tickets de support
+  supportTickets: defineTable({
+    ticketNumber: v.string(),   // "TKT-2024-001234"
+    userId: v.id("users"),
+    userType: v.union(v.literal("client"), v.literal("annonceur")),
+    subject: v.string(),
+    category: v.string(),       // "paiement", "reservation", "technique", "autre"
+    priority: v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
+    status: v.union(
+      v.literal("open"),        // Nouveau ticket
+      v.literal("in_progress"), // Pris en charge par admin
+      v.literal("waiting_user"),// En attente réponse utilisateur
+      v.literal("resolved"),    // Résolu
+      v.literal("closed")       // Fermé
+    ),
+    assignedAdminId: v.optional(v.id("users")),
+    relatedMissionId: v.optional(v.id("missions")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+    closedAt: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_status", ["status"])
+    .index("by_ticket_number", ["ticketNumber"])
+    .index("by_assigned_admin", ["assignedAdminId"])
+    .index("by_priority", ["priority"])
+    .index("by_category", ["category"]),
+
+  // Messages des tickets
+  ticketMessages: defineTable({
+    ticketId: v.id("supportTickets"),
+    senderId: v.string(),       // ID user ou admin
+    senderType: v.union(v.literal("user"), v.literal("admin")),
+    senderName: v.string(),
+    content: v.string(),
+    attachments: v.optional(v.array(v.object({
+      name: v.string(),
+      url: v.string(),
+      type: v.string(),
+    }))),
+    isInternal: v.boolean(),    // Note interne admin (non visible user)
+    createdAt: v.number(),
+  })
+    .index("by_ticket", ["ticketId"])
+    .index("by_ticket_created", ["ticketId", "createdAt"]),
 });

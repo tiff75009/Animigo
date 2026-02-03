@@ -32,6 +32,8 @@ import {
   Globe,
   Layers,
   ListChecks,
+  Ticket,
+  HelpCircle,
 } from "lucide-react";
 
 interface NavItem {
@@ -163,6 +165,21 @@ export function AdminSidebar() {
           label: "Pages villes",
           href: "/admin/seo/pages-villes",
           icon: Globe,
+        },
+      ],
+    },
+    {
+      title: "Support",
+      items: [
+        {
+          label: "Tickets",
+          href: "/admin/support",
+          icon: Ticket,
+        },
+        {
+          label: "FAQ",
+          href: "/admin/faq",
+          icon: HelpCircle,
         },
       ],
     },

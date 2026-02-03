@@ -26,6 +26,7 @@ import {
   ClipboardList,
   ShieldCheck,
   AlertCircle,
+  Ticket,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { useQuery } from "convex/react";
@@ -375,6 +376,8 @@ function FloatingSidebarContent() {
     { href: "/dashboard/services", icon: <Briefcase className="w-5 h-5" />, label: "Mes services" },
     { href: "/dashboard/avis", icon: <Star className="w-5 h-5" />, label: "Mes avis" },
     { href: "/dashboard/paiements", icon: <CreditCard className="w-5 h-5" />, label: "Paiements" },
+    { href: "/dashboard/aide", icon: <HelpCircle className="w-5 h-5" />, label: "Aide" },
+    { href: "/dashboard/tickets", icon: <Ticket className="w-5 h-5" />, label: "Mes tickets" },
     { href: "/dashboard/parametres", icon: <Settings className="w-5 h-5" />, label: "Paramètres" },
   ];
 
