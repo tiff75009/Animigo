@@ -7,7 +7,6 @@ import { api } from "@/convex/_generated/api";
 import {
   Edit2,
   Trash2,
-  ChevronDown,
   Layers,
   Zap,
   AlertCircle,
@@ -22,7 +21,6 @@ import {
   Home,
   MapPin,
   Moon,
-  Sun,
   Plus,
   ToggleLeft,
   ToggleRight,
@@ -31,7 +29,6 @@ import {
   Loader2,
   User,
   Users,
-  Settings2,
   Calendar,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
@@ -82,7 +79,7 @@ interface Variant {
   maxAnimalsPerSession?: number;
   serviceLocation?: ServiceLocation; // Lieu de prestation
   animalTypes?: string[]; // Animaux acceptés
-  // Restrictions chiens (au niveau de la formule)
+  // Restrictions chiens (au niveau de la service)
   dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
   acceptedDogSizes?: ("small" | "medium" | "large")[];
   price: number;
@@ -92,12 +89,13 @@ interface Variant {
   includedFeatures?: string[];
   order: number;
   isActive: boolean;
-  needsSlotConfiguration?: boolean; // true si formule collective sans créneaux
+  needsSlotConfiguration?: boolean; // true si service collective sans créneaux
   slotsCount?: number; // Nombre de créneaux futurs configurés
 }
 
 interface Option {
   id: Id<"serviceOptions">;
+  variantId?: Id<"serviceVariants">; // ID du service lié (undefined = option partagée)
   name: string;
   description?: string;
   price: number;
@@ -129,8 +127,10 @@ interface Service {
 
 interface ServiceCardProps {
   service: Service;
+  filteredVariants?: Variant[];
   categoryData?: ServiceCategory;
   token: string;
+  viewMode?: "grid" | "list";
   onEdit: () => void;
   onToggle: () => void;
   onDelete: () => void;
@@ -254,63 +254,27 @@ const getPrimaryPrice = (variant: Variant, allowedPriceUnits?: string[], allowOv
 
 export default function ServiceCard({
   service,
+  filteredVariants,
   categoryData,
   token,
+  viewMode = "grid",
   onToggle,
   onDelete,
 }: ServiceCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [editingSection, setEditingSection] = useState<"variants" | "options" | "settings" | null>(null);
+  const [editingSection, setEditingSection] = useState<"variants" | "options" | null>(null);
   const [managingSlotsVariant, setManagingSlotsVariant] = useState<Variant | null>(null);
   const [editingVariantId, setEditingVariantId] = useState<Id<"serviceVariants"> | null>(null);
   const [isAddingVariant, setIsAddingVariant] = useState(false);
   const [editingOptionId, setEditingOptionId] = useState<Id<"serviceOptions"> | null>(null);
   const [isAddingOption, setIsAddingOption] = useState(false);
 
-  // Filtres pour la vue normale des formules
-  const [previewFilterSessionType, setPreviewFilterSessionType] = useState<"all" | "individual" | "collective">("all");
-  const [previewFilterLocation, setPreviewFilterLocation] = useState<"all" | "announcer_home" | "client_home" | "both">("all");
-  const [previewFilterAnimal, setPreviewFilterAnimal] = useState<string>("all");
-
-  // Check if any variant is collective (to restrict serviceLocation editing)
-  const hasCollectiveVariants = service.variants?.some(v => v.sessionType === "collective") || false;
-
-  const activeVariants = service.variants?.filter((v) => v.isActive) || [];
+  // Utiliser filteredVariants si fourni, sinon toutes les variants
+  const displayVariants = filteredVariants || service.variants || [];
+  const activeVariants = displayVariants.filter((v) => v.isActive);
   const activeOptions = service.options?.filter((o) => o.isActive) || [];
-  const variantsCount = service.variants?.length || 0;
+  const variantsCount = displayVariants.length;
   const optionsCount = service.options?.length || 0;
-
-  // Collecter tous les types d'animaux uniques dans les variantes actives
-  const allAnimalsInActiveVariants = [...new Set(activeVariants.flatMap(v => v.animalTypes || []))];
-
-  // Filtrer les variantes pour la vue prévisualisation
-  const filteredActiveVariants = activeVariants.filter(variant => {
-    if (previewFilterSessionType !== "all") {
-      const variantSessionType = variant.sessionType || "individual";
-      if (variantSessionType !== previewFilterSessionType) return false;
-    }
-    if (previewFilterLocation !== "all") {
-      if (!variant.serviceLocation) return false;
-      if (previewFilterLocation === "both") {
-        if (variant.serviceLocation !== "both") return false;
-      } else {
-        if (variant.serviceLocation !== previewFilterLocation && variant.serviceLocation !== "both") return false;
-      }
-    }
-    if (previewFilterAnimal !== "all") {
-      if (!variant.animalTypes || !variant.animalTypes.includes(previewFilterAnimal)) return false;
-    }
-    return true;
-  });
-
-  const hasPreviewFilters = previewFilterSessionType !== "all" || previewFilterLocation !== "all" || previewFilterAnimal !== "all";
-
-  const resetPreviewFilters = () => {
-    setPreviewFilterSessionType("all");
-    setPreviewFilterLocation("all");
-    setPreviewFilterAnimal("all");
-  };
 
   const allowedPriceUnits = categoryData?.allowedPriceUnits;
   const allowOvernightStay = categoryData?.allowOvernightStay;
@@ -327,25 +291,22 @@ export default function ServiceCard({
       className={cn(
         "bg-white rounded-2xl overflow-hidden transition-all",
         service.isActive
-          ? "border border-foreground/10 shadow-sm hover:shadow-md"
+          ? "border border-foreground/10 shadow-sm"
           : "border-2 border-red-200 bg-red-50/30"
       )}
     >
-      {/* Header - Always visible */}
+      {/* Header du service */}
       <div
-        onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
-          "p-4 cursor-pointer transition-colors",
-          service.isActive
-            ? "hover:bg-foreground/[0.02]"
-            : "bg-red-50/50 hover:bg-red-50"
+          "p-4",
+          !service.isActive && "bg-red-50/50"
         )}
       >
         <div className="flex items-center gap-4">
           {/* Icon */}
           <div
             className={cn(
-              "w-14 h-14 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0",
+              "w-12 h-12 rounded-xl flex items-center justify-center text-xl flex-shrink-0",
               service.isActive
                 ? "bg-gradient-to-br from-primary/10 to-secondary/10"
                 : "bg-red-100"
@@ -356,8 +317,8 @@ export default function ServiceCard({
 
           {/* Info */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-bold text-lg text-foreground truncate">
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-foreground truncate">
                 {categoryData?.name || service.category}
               </h3>
               {service.isActive ? (
@@ -372,673 +333,385 @@ export default function ServiceCard({
                 </span>
               )}
             </div>
-
-            {/* Quick info */}
-            <div className="flex flex-wrap items-center gap-2 text-sm text-text-light">
-              <span className="flex items-center gap-1">
-                <Layers className="w-3.5 h-3.5" />
-                {variantsCount} formule{variantsCount > 1 ? "s" : ""}
-              </span>
-              {optionsCount > 0 && (
-                <span className="flex items-center gap-1">
-                  <Zap className="w-3.5 h-3.5 text-amber-500" />
-                  {optionsCount} option{optionsCount > 1 ? "s" : ""}
-                </span>
-              )}
-              {service.serviceLocation && (
-                <span className="flex items-center gap-1">
-                  {service.serviceLocation === "announcer_home" && <Home className="w-3.5 h-3.5 text-primary" />}
-                  {service.serviceLocation === "client_home" && <MapPin className="w-3.5 h-3.5 text-secondary" />}
-                  {service.serviceLocation === "both" && (
-                    <>
-                      <Home className="w-3 h-3" />
-                      <MapPin className="w-3 h-3" />
-                    </>
-                  )}
-                </span>
-              )}
-              {service.allowOvernightStay && (
-                <span className="flex items-center gap-1 text-indigo-500">
-                  <Moon className="w-3.5 h-3.5" />
-                </span>
-              )}
-            </div>
+            <p className="text-sm text-text-light">
+              {variantsCount} service{variantsCount > 1 ? "s" : ""}
+              {optionsCount > 0 && ` • ${optionsCount} option${optionsCount > 1 ? "s" : ""}`}
+            </p>
           </div>
 
-          {/* Price & Expand */}
-          <div className="flex items-center gap-3 flex-shrink-0">
+          {/* Price & Actions */}
+          <div className="flex items-center gap-2 flex-shrink-0">
             {globalMinPrice && (
-              <div className="text-right hidden sm:block">
+              <div className="text-right hidden sm:block mr-2">
                 <div className="text-xs text-text-light">Dès</div>
-                <div className="text-xl font-bold text-primary">
+                <div className="text-lg font-bold text-primary">
                   {formatPrice(globalMinPrice.value)}
                   <span className="text-xs font-normal text-text-light">{globalMinPrice.label}</span>
                 </div>
               </div>
             )}
-            <motion.div
-              animate={{ rotate: isExpanded ? 180 : 0 }}
-              className={cn(
-                "p-2 rounded-xl transition-colors",
-                isExpanded ? "bg-primary/10 text-primary" : "bg-foreground/5 text-text-light"
-              )}
+            <button
+              onClick={() => {
+                setIsAddingVariant(true);
+                setEditingSection("variants");
+              }}
+              className="p-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
+              title="Ajouter une service"
             >
-              <ChevronDown className="w-5 h-5" />
-            </motion.div>
+              <Plus className="w-4 h-4" />
+            </button>
+            <button
+              onClick={onToggle}
+              className={cn(
+                "p-2 rounded-lg transition-colors",
+                service.isActive
+                  ? "bg-secondary/10 text-secondary hover:bg-secondary/20"
+                  : "bg-red-100 text-red-500 hover:bg-red-200"
+              )}
+              title={service.isActive ? "Désactiver" : "Activer"}
+            >
+              {service.isActive ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+            </button>
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors"
+              title="Supprimer"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Expanded Content */}
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <div className="border-t border-foreground/10">
-              {/* Animals & Location & Settings */}
-              <div className="p-4 bg-foreground/[0.02]">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold text-foreground flex items-center gap-2">
-                    <Settings2 className="w-4 h-4 text-text-light" />
-                    Paramètres du service
-                  </h4>
-                  <button
-                    onClick={() => setEditingSection(editingSection === "settings" ? null : "settings")}
-                    className={cn(
-                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                      editingSection === "settings"
-                        ? "bg-gray-700 text-white"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                    )}
-                  >
-                    {editingSection === "settings" ? (
-                      <>
-                        <X className="w-3.5 h-3.5" />
-                        Fermer
-                      </>
-                    ) : (
-                      <>
-                        <Edit2 className="w-3.5 h-3.5" />
-                        Modifier le service
-                      </>
-                    )}
-                  </button>
-                </div>
+      {/* Services - Affichées directement */}
+      <div className="border-t border-foreground/10">
+        <AnimatePresence mode="wait">
+          {editingSection === "variants" && isAddingVariant ? (
+            <motion.div
+              key="add-variant"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="p-4"
+            >
+              <VariantEditor
+                serviceId={service.id}
+                variants={service.variants || []}
+                token={token}
+                categoryData={categoryData}
+                category={service.category}
+                allowOvernightStay={service.allowOvernightStay}
+                serviceAnimalTypes={service.animalTypes}
+                onManageSlots={setManagingSlotsVariant}
+                initialAddMode={true}
+                onClose={() => {
+                  setIsAddingVariant(false);
+                  setEditingSection(null);
+                }}
+              />
+            </motion.div>
+          ) : editingSection === "variants" && editingVariantId ? (
+            <motion.div
+              key="edit-single-variant"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="p-4"
+            >
+              <VariantEditor
+                serviceId={service.id}
+                variants={service.variants || []}
+                token={token}
+                categoryData={categoryData}
+                category={service.category}
+                allowOvernightStay={service.allowOvernightStay}
+                serviceAnimalTypes={service.animalTypes}
+                onManageSlots={setManagingSlotsVariant}
+                initialEditingId={editingVariantId}
+                onClose={() => {
+                  setEditingVariantId(null);
+                  setEditingSection(null);
+                }}
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="preview-variants"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              {/* Services - Vue Grille ou Liste */}
+              {activeVariants.length > 0 ? (
+                <div className={cn(
+                  "p-4",
+                  viewMode === "grid"
+                    ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"
+                    : "flex flex-col gap-2"
+                )}>
+                  {activeVariants.map((variant) => {
+                    const primaryPrice = getPrimaryPrice(variant, allowedPriceUnits, allowOvernightStay, displayPriceUnit);
+                    const AnimalIcon = variant.animalTypes?.[0] ? (animalIcons[variant.animalTypes[0]] || Star) : null;
+                    // Options liées à ce service (variant)
+                    const variantOptions = activeOptions.filter(opt => opt.variantId === variant.id);
+                    // Options partagées (sans variantId)
+                    const sharedOptions = activeOptions.filter(opt => !opt.variantId);
 
-                <AnimatePresence mode="wait">
-                  {editingSection === "settings" ? (
-                    <motion.div
-                      key="edit-settings"
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                    >
-                      <ServiceSettingsEditor
-                        serviceId={service.id}
-                        serviceLocation={service.serviceLocation}
-                        dogCategoryAcceptance={service.dogCategoryAcceptance}
-                        animalTypes={service.animalTypes}
-                        hasCollectiveVariants={hasCollectiveVariants}
-                        token={token}
-                        onSaved={() => setEditingSection(null)}
-                      />
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="preview-settings"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="flex flex-wrap gap-2"
-                    >
-                      {service.animalTypes.map((type) => {
-                        const Icon = animalIcons[type] || Star;
-                        return (
-                          <span key={type} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-full text-sm font-medium border border-foreground/10">
-                            <Icon className="w-4 h-4 text-primary" />
-                            {animalLabels[type] || type}
-                          </span>
-                        );
-                      })}
-                      {service.serviceLocation && (
-                        <span className={cn(
-                          "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium",
-                          service.serviceLocation === "announcer_home" && "bg-primary/10 text-primary",
-                          service.serviceLocation === "client_home" && "bg-secondary/10 text-secondary",
-                          service.serviceLocation === "both" && "bg-purple-100 text-purple-600"
-                        )}>
-                          {service.serviceLocation === "announcer_home" && <><Home className="w-4 h-4" /> Mon domicile</>}
-                          {service.serviceLocation === "client_home" && <><MapPin className="w-4 h-4" /> Déplacement</>}
-                          {service.serviceLocation === "both" && <><Home className="w-3.5 h-3.5" /><MapPin className="w-3.5 h-3.5" /> Les deux</>}
-                        </span>
-                      )}
-                      {hasCollectiveVariants && (
-                        <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-orange-100 text-orange-600">
-                          <Users className="w-4 h-4" />
-                          Séances collectives
-                        </span>
-                      )}
-                      {service.allowOvernightStay && (
-                        <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-indigo-100 text-indigo-600">
-                          <Moon className="w-4 h-4" />
-                          Garde de nuit
-                          {service.overnightPrice && service.overnightPrice > 0 && ` (+${formatPrice(service.overnightPrice)})`}
-                        </span>
-                      )}
-                      {service.dayStartTime && service.dayEndTime && (
-                        <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-amber-50 text-amber-600">
-                          <Sun className="w-4 h-4" />
-                          {service.dayStartTime.replace(":00", "h")} - {service.dayEndTime.replace(":00", "h")}
-                        </span>
-                      )}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+                    // ========== VUE LISTE ==========
+                    if (viewMode === "list") {
+                      return (
+                        <motion.div
+                          key={variant.id}
+                          layout
+                          className="group flex items-center gap-4 p-3 bg-gradient-to-r from-foreground/[0.02] to-foreground/[0.04] rounded-xl border border-foreground/5 hover:border-primary/30 hover:shadow-sm transition-all"
+                        >
+                          {/* Badge collectif */}
+                          {variant.sessionType === "collective" && (
+                            <span className="flex items-center gap-1 px-2 py-1 bg-orange-500 text-white text-xs font-medium rounded-full">
+                              <Users className="w-3 h-3" />
+                            </span>
+                          )}
 
-              {/* Variants Section */}
-              <div className="p-4 border-t border-foreground/5">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold text-foreground flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-primary" />
-                    Formules
-                    {variantsCount > 0 && (
-                      <span className="text-xs font-normal text-text-light">({variantsCount})</span>
-                    )}
-                  </h4>
-                </div>
-
-                <AnimatePresence mode="wait">
-                  {editingSection === "variants" && isAddingVariant ? (
-                    <motion.div
-                      key="add-variant"
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                    >
-                      <VariantEditor
-                        serviceId={service.id}
-                        variants={service.variants || []}
-                        token={token}
-                        categoryData={categoryData}
-                        category={service.category}
-                        allowOvernightStay={service.allowOvernightStay}
-                        serviceAnimalTypes={service.animalTypes}
-                        onManageSlots={setManagingSlotsVariant}
-                        initialAddMode={true}
-                        onClose={() => {
-                          setIsAddingVariant(false);
-                          setEditingSection(null);
-                        }}
-                      />
-                    </motion.div>
-                  ) : editingSection === "variants" && editingVariantId ? (
-                    <motion.div
-                      key="edit-single-variant"
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                    >
-                      <VariantEditor
-                        serviceId={service.id}
-                        variants={service.variants || []}
-                        token={token}
-                        categoryData={categoryData}
-                        category={service.category}
-                        allowOvernightStay={service.allowOvernightStay}
-                        serviceAnimalTypes={service.animalTypes}
-                        onManageSlots={setManagingSlotsVariant}
-                        initialEditingId={editingVariantId}
-                        onClose={() => {
-                          setEditingVariantId(null);
-                          setEditingSection(null);
-                        }}
-                      />
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="preview-variants"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="space-y-3"
-                    >
-                      {/* Filtres pour la vue prévisualisation */}
-                      {activeVariants.length > 1 && (
-                        <div className="p-2 bg-gray-50 rounded-lg border border-gray-100">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <select
-                              value={previewFilterSessionType}
-                              onChange={(e) => setPreviewFilterSessionType(e.target.value as "all" | "individual" | "collective")}
-                              className={cn(
-                                "px-2 py-1 text-xs rounded-md border transition-colors",
-                                previewFilterSessionType !== "all"
-                                  ? "border-primary bg-primary/5 text-primary"
-                                  : "border-gray-200 bg-white text-foreground"
+                          {/* Nom et description */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-semibold text-foreground truncate">{variant.name}</h4>
+                              {variant.description && (
+                                <p className="text-xs text-text-light truncate hidden sm:block">— {variant.description}</p>
                               )}
-                            >
-                              <option value="all">Toutes</option>
-                              <option value="individual">👤 Individuel</option>
-                              <option value="collective">👥 Collectif</option>
-                            </select>
+                            </div>
+                          </div>
 
-                            <select
-                              value={previewFilterLocation}
-                              onChange={(e) => setPreviewFilterLocation(e.target.value as "all" | "announcer_home" | "client_home" | "both")}
-                              className={cn(
-                                "px-2 py-1 text-xs rounded-md border transition-colors",
-                                previewFilterLocation !== "all"
-                                  ? "border-primary bg-primary/5 text-primary"
-                                  : "border-gray-200 bg-white text-foreground"
-                              )}
-                            >
-                              <option value="all">Tous lieux</option>
-                              <option value="announcer_home">🏠 Mon domicile</option>
-                              <option value="client_home">📍 À domicile</option>
-                              <option value="both">🔄 Flexible</option>
-                            </select>
-
-                            {allAnimalsInActiveVariants.length > 0 && (
-                              <select
-                                value={previewFilterAnimal}
-                                onChange={(e) => setPreviewFilterAnimal(e.target.value)}
-                                className={cn(
-                                  "px-2 py-1 text-xs rounded-md border transition-colors",
-                                  previewFilterAnimal !== "all"
-                                    ? "border-primary bg-primary/5 text-primary"
-                                    : "border-gray-200 bg-white text-foreground"
-                                )}
-                              >
-                                <option value="all">Tous animaux</option>
-                                {allAnimalsInActiveVariants.map(animal => (
-                                  <option key={animal} value={animal}>{animalLabels[animal] || animal}</option>
-                                ))}
-                              </select>
+                          {/* Infos compactes */}
+                          <div className="hidden md:flex items-center gap-2 text-xs">
+                            {variant.animalTypes && variant.animalTypes.length > 0 && (
+                              <span className="flex items-center gap-1 px-2 py-1 bg-white rounded-md text-text-light">
+                                {AnimalIcon && <AnimalIcon className="w-3 h-3 text-primary" />}
+                                {variant.animalTypes.length > 1
+                                  ? `${variant.animalTypes.length}`
+                                  : animalLabels[variant.animalTypes[0]] || variant.animalTypes[0]
+                                }
+                              </span>
                             )}
-
-                            {hasPreviewFilters && (
-                              <button
-                                onClick={resetPreviewFilters}
-                                className="px-2 py-1 text-xs text-primary hover:underline"
-                              >
-                                Réinitialiser
-                              </button>
+                            {variant.serviceLocation && (
+                              <span className={cn(
+                                "flex items-center gap-1 px-2 py-1 rounded-md",
+                                variant.serviceLocation === "announcer_home" && "bg-primary/10 text-primary",
+                                variant.serviceLocation === "client_home" && "bg-secondary/10 text-secondary",
+                                variant.serviceLocation === "both" && "bg-purple-100 text-purple-600"
+                              )}>
+                                {variant.serviceLocation === "announcer_home" && <Home className="w-3 h-3" />}
+                                {variant.serviceLocation === "client_home" && <MapPin className="w-3 h-3" />}
+                                {variant.serviceLocation === "both" && <><Home className="w-3 h-3" /><MapPin className="w-3 h-3" /></>}
+                              </span>
+                            )}
+                            {variant.duration && (
+                              <span className="flex items-center gap-1 px-2 py-1 bg-white rounded-md text-text-light">
+                                <Clock className="w-3 h-3" />
+                                {variant.duration}min
+                              </span>
                             )}
                           </div>
-                          {hasPreviewFilters && (
-                            <p className="text-xs text-text-light mt-1">
-                              {filteredActiveVariants.length} sur {activeVariants.length}
-                            </p>
+
+                          {/* Options count */}
+                          {(variantOptions.length > 0 || sharedOptions.length > 0) && (
+                            <span className="hidden sm:flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-700 text-xs rounded-md">
+                              <Zap className="w-3 h-3" />
+                              {variantOptions.length + sharedOptions.length}
+                            </span>
+                          )}
+
+                          {/* Prix */}
+                          {primaryPrice && (
+                            <div className="text-right">
+                              <div className="text-lg font-bold text-primary">
+                                {formatPrice(primaryPrice.value)}
+                              </div>
+                              <div className="text-xs text-text-light">{primaryPrice.label}</div>
+                            </div>
+                          )}
+
+                          {/* Bouton éditer */}
+                          <button
+                            onClick={() => {
+                              setEditingVariantId(variant.id);
+                              setEditingSection("variants");
+                            }}
+                            className="p-2 text-text-light hover:text-primary hover:bg-primary/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                        </motion.div>
+                      );
+                    }
+
+                    // ========== VUE GRILLE ==========
+                    return (
+                      <motion.div
+                        key={variant.id}
+                        layout
+                        className="group relative p-4 bg-gradient-to-br from-foreground/[0.02] to-foreground/[0.04] rounded-xl border border-foreground/5 hover:border-primary/30 hover:shadow-sm transition-all"
+                      >
+                        {/* Badge séance collective */}
+                        {variant.sessionType === "collective" && (
+                          <span className="absolute -top-2 -right-2 flex items-center gap-1 px-2 py-0.5 bg-orange-500 text-white text-xs font-medium rounded-full">
+                            <Users className="w-3 h-3" />
+                            Collectif
+                          </span>
+                        )}
+
+                        {/* Header service */}
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold text-foreground truncate">{variant.name}</h4>
+                            {variant.description && (
+                              <p className="text-xs text-text-light line-clamp-2 mt-0.5">{variant.description}</p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => {
+                              setEditingVariantId(variant.id);
+                              setEditingSection("variants");
+                            }}
+                            className="ml-2 p-1.5 text-text-light hover:text-primary hover:bg-primary/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        {/* Prix */}
+                        {primaryPrice && (
+                          <div className="text-lg font-bold text-primary mb-2">
+                            {formatPrice(primaryPrice.value)}
+                            <span className="text-xs font-normal text-text-light">{primaryPrice.label}</span>
+                          </div>
+                        )}
+
+                        {/* Infos du service */}
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                          {/* Animaux */}
+                          {variant.animalTypes && variant.animalTypes.length > 0 && (
+                            <span className="flex items-center gap-1 px-2 py-1 bg-white rounded-md text-text-light">
+                              {AnimalIcon && <AnimalIcon className="w-3 h-3 text-primary" />}
+                              {variant.animalTypes.length > 1
+                                ? `${variant.animalTypes.length} types`
+                                : animalLabels[variant.animalTypes[0]] || variant.animalTypes[0]
+                              }
+                            </span>
+                          )}
+
+                          {/* Lieu */}
+                          {variant.serviceLocation && (
+                            <span className={cn(
+                              "flex items-center gap-1 px-2 py-1 rounded-md",
+                              variant.serviceLocation === "announcer_home" && "bg-primary/10 text-primary",
+                              variant.serviceLocation === "client_home" && "bg-secondary/10 text-secondary",
+                              variant.serviceLocation === "both" && "bg-purple-100 text-purple-600"
+                            )}>
+                              {variant.serviceLocation === "announcer_home" && <><Home className="w-3 h-3" />Domicile</>}
+                              {variant.serviceLocation === "client_home" && <><MapPin className="w-3 h-3" />Client</>}
+                              {variant.serviceLocation === "both" && <><Home className="w-3 h-3" /><MapPin className="w-3 h-3" /></>}
+                            </span>
+                          )}
+
+                          {/* Durée */}
+                          {variant.duration && (
+                            <span className="flex items-center gap-1 px-2 py-1 bg-white rounded-md text-text-light">
+                              <Clock className="w-3 h-3" />
+                              {variant.duration}min
+                            </span>
+                          )}
+
+                          {/* Garde de nuit */}
+                          {variant.pricing?.nightly && (
+                            <span className="flex items-center gap-1 px-2 py-1 bg-indigo-50 text-indigo-600 rounded-md">
+                              <Moon className="w-3 h-3" />
+                              +{formatPrice(variant.pricing.nightly)}
+                            </span>
+                          )}
+
+                          {/* Créneaux à configurer */}
+                          {variant.needsSlotConfiguration && (
+                            <button
+                              onClick={() => setManagingSlotsVariant(variant)}
+                              className="flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-md hover:bg-amber-200 transition-colors"
+                            >
+                              <Calendar className="w-3 h-3" />
+                              Créneaux
+                            </button>
                           )}
                         </div>
-                      )}
 
-                      {activeVariants.length === 0 ? (
-                        <div className="p-4 bg-amber-50 rounded-xl text-center">
-                          <AlertCircle className="w-6 h-6 text-amber-500 mx-auto mb-2" />
-                          <p className="text-sm text-amber-700">Aucune formule active</p>
-                        </div>
-                      ) : filteredActiveVariants.length === 0 ? (
-                        <div className="p-4 bg-gray-50 rounded-xl text-center">
-                          <p className="text-sm text-text-light">Aucune formule ne correspond aux filtres</p>
-                        </div>
-                      ) : (
-                        filteredActiveVariants.map((variant) => {
-                          const prices = getVariantPrices(variant, allowedPriceUnits, allowOvernightStay);
-                          return (
-                            <div
-                              key={variant.id}
-                              className="p-3 bg-foreground/[0.02] rounded-xl border border-foreground/5"
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex items-start gap-3 min-w-0 flex-1">
-                                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                                    <Sparkles className="w-4 h-4 text-primary" />
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <span className="font-medium text-foreground block truncate">{variant.name}</span>
-                                    {/* Badges */}
-                                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                                      {/* Type de séance */}
-                                      {variant.sessionType === "collective" ? (
-                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-orange-100 text-orange-600 text-xs rounded-full">
-                                          <Users className="w-3 h-3" />
-                                          Collectif
-                                        </span>
-                                      ) : (
-                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">
-                                          <User className="w-3 h-3" />
-                                          Individuel
-                                        </span>
-                                      )}
-                                      {/* Lieu */}
-                                      {variant.serviceLocation && (
-                                        <span className={cn(
-                                          "inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded-full",
-                                          variant.serviceLocation === "announcer_home" && "bg-primary/10 text-primary",
-                                          variant.serviceLocation === "client_home" && "bg-secondary/10 text-secondary",
-                                          variant.serviceLocation === "both" && "bg-purple-100 text-purple-600"
-                                        )}>
-                                          {variant.serviceLocation === "announcer_home" && <><Home className="w-3 h-3" /> Chez moi</>}
-                                          {variant.serviceLocation === "client_home" && <><MapPin className="w-3 h-3" /> À domicile</>}
-                                          {variant.serviceLocation === "both" && <><Home className="w-2.5 h-2.5" /><MapPin className="w-2.5 h-2.5" /> Flexible</>}
-                                        </span>
-                                      )}
-                                      {/* Durée */}
-                                      {variant.duration && (
-                                        <span className="text-xs text-text-light flex items-center gap-1">
-                                          <Clock className="w-3 h-3" />{variant.duration} min
-                                        </span>
-                                      )}
-                                      {/* Nombre de séances */}
-                                      {variant.numberOfSessions && variant.numberOfSessions > 1 && (
-                                        <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded-full">
-                                          {variant.numberOfSessions} séances
-                                        </span>
-                                      )}
-                                      {/* Bouton gérer créneaux pour les formules collectives */}
-                                      {variant.sessionType === "collective" && (
-                                        <>
-                                          {/* Indicateur créneaux requis ou nombre de créneaux */}
-                                          {(variant.needsSlotConfiguration || (!variant.slotsCount && variant.slotsCount !== 0)) ? (
-                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 text-xs rounded-full font-medium animate-pulse">
-                                              <AlertCircle className="w-3 h-3" />
-                                              Créneaux requis
-                                            </span>
-                                          ) : variant.slotsCount && variant.slotsCount > 0 ? (
-                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-600 text-xs rounded-full">
-                                              <Calendar className="w-3 h-3" />
-                                              {variant.slotsCount} créneaux
-                                            </span>
-                                          ) : null}
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setManagingSlotsVariant(variant);
-                                            }}
-                                            className={cn(
-                                              "inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full transition-colors",
-                                              variant.needsSlotConfiguration || !variant.slotsCount
-                                                ? "bg-orange-500 text-white hover:bg-orange-600"
-                                                : "bg-primary/10 text-primary hover:bg-primary/20"
-                                            )}
-                                          >
-                                            <Calendar className="w-3 h-3" />
-                                            Gérer
-                                          </button>
-                                        </>
-                                      )}
-                                    </div>
-                                    {/* Animaux */}
-                                    {variant.animalTypes && variant.animalTypes.length > 0 && (
-                                      <div className="flex flex-wrap gap-1 mt-1">
-                                        {variant.animalTypes.map((animal) => (
-                                          <span key={animal} className="px-1.5 py-0.5 bg-foreground/5 text-foreground/70 text-xs rounded-full">
-                                            {animalLabels[animal] || animal}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    )}
-                                    {/* Restrictions chiens */}
-                                    {(() => {
-                                      const formuleAcceptsDogs = variant.animalTypes?.includes("chien") ||
-                                        (!variant.animalTypes?.length && service.animalTypes?.includes("chien"));
-                                      if (!formuleAcceptsDogs) return null;
+                        {/* Features */}
+                        {variant.includedFeatures && variant.includedFeatures.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-foreground/5">
+                            <div className="flex flex-wrap gap-1">
+                              {variant.includedFeatures.slice(0, 3).map((feature, i) => (
+                                <span key={i} className="text-xs text-secondary flex items-center gap-0.5">
+                                  <Sparkles className="w-3 h-3" />
+                                  {feature}
+                                </span>
+                              ))}
+                              {variant.includedFeatures.length > 3 && (
+                                <span className="text-xs text-text-light">+{variant.includedFeatures.length - 3}</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
 
-                                      const dogSizes = variant.acceptedDogSizes || ["small", "medium", "large"];
-                                      const dogCategory = variant.dogCategoryAcceptance || "none";
-                                      const allSizes = dogSizes.length === 3;
-
-                                      return (
-                                        <div className="flex flex-wrap items-center gap-1 mt-1">
-                                          <span className="text-xs text-text-light">🐕</span>
-                                          {allSizes ? (
-                                            <span className="px-1.5 py-0.5 bg-green-100 text-green-600 text-xs rounded-full">Toutes tailles</span>
-                                          ) : (
-                                            <>
-                                              {dogSizes.includes("small") && (
-                                                <span className="px-1.5 py-0.5 bg-green-100 text-green-600 text-xs rounded-full">Petit</span>
-                                              )}
-                                              {dogSizes.includes("medium") && (
-                                                <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-600 text-xs rounded-full">Moyen</span>
-                                              )}
-                                              {dogSizes.includes("large") && (
-                                                <span className="px-1.5 py-0.5 bg-orange-100 text-orange-600 text-xs rounded-full">Grand</span>
-                                              )}
-                                            </>
-                                          )}
-                                          <span className={cn(
-                                            "px-1.5 py-0.5 text-xs rounded-full",
-                                            dogCategory === "none" && "bg-gray-100 text-gray-600",
-                                            dogCategory === "cat1" && "bg-amber-100 text-amber-700",
-                                            dogCategory === "cat2" && "bg-orange-100 text-orange-700",
-                                            dogCategory === "both" && "bg-red-100 text-red-700"
-                                          )}>
-                                            {dogCategory === "none" && "Cat. ✗"}
-                                            {dogCategory === "cat1" && "Cat. 1 ✓"}
-                                            {dogCategory === "cat2" && "Cat. 2 ✓"}
-                                            {dogCategory === "both" && "Cat. 1&2 ✓"}
-                                          </span>
-                                        </div>
-                                      );
-                                    })()}
-                                  </div>
-                                </div>
-                                <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                                  {prices.slice(0, 2).map((price, idx) => (
-                                    <span key={idx} className={cn(
-                                      "text-xs font-bold px-2 py-1 rounded-lg",
-                                      price.unit === "hour" && "bg-primary/10 text-primary",
-                                      price.unit === "half_day" && "bg-orange-100 text-orange-600",
-                                      price.unit === "day" && "bg-secondary/10 text-secondary",
-                                      price.unit === "week" && "bg-purple-100 text-purple-600",
-                                      price.unit === "month" && "bg-amber-100 text-amber-600",
-                                      price.unit === "nightly" && "bg-indigo-100 text-indigo-600"
-                                    )}>
-                                      {formatPrice(price.value)}{price.label}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                              {/* Bouton Modifier la formule */}
-                              <div className="mt-2 pt-2 border-t border-foreground/5 flex justify-end">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setEditingVariantId(variant.id);
-                                    setIsAddingVariant(false);
-                                    setEditingSection("variants");
-                                  }}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                        {/* Options du service */}
+                        {(variantOptions.length > 0 || sharedOptions.length > 0) && (
+                          <div className="mt-2 pt-2 border-t border-foreground/5">
+                            <div className="flex items-center gap-1 mb-1.5">
+                              <Zap className="w-3 h-3 text-amber-500" />
+                              <span className="text-xs font-medium text-amber-700">Options</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {variantOptions.map((option) => (
+                                <span
+                                  key={option.id}
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-700 text-xs rounded border border-amber-200"
                                 >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                  Modifier la formule
-                                </button>
-                              </div>
-                              {/* Description */}
-                              {variant.description && (
-                                <p className="text-xs text-text-light mt-2 pl-11 line-clamp-2">{variant.description}</p>
-                              )}
-                              {/* Objectifs */}
-                              {variant.objectives && variant.objectives.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mt-2 pl-11">
-                                  {variant.objectives.map((objective, idx) => (
-                                    <span key={idx} className="flex items-center gap-1 px-2 py-0.5 bg-purple-50 text-purple-600 text-xs rounded-full">
-                                      <span>{objective.icon}</span>
-                                      <span>{objective.text}</span>
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
+                                  {option.name}
+                                  <span className="font-medium">+{formatPrice(option.price)}</span>
+                                </span>
+                              ))}
+                              {sharedOptions.map((option) => (
+                                <span
+                                  key={option.id}
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-gray-50 text-gray-600 text-xs rounded border border-gray-200"
+                                  title="Option partagée"
+                                >
+                                  {option.name}
+                                  <span className="font-medium">+{formatPrice(option.price)}</span>
+                                </span>
+                              ))}
                             </div>
-                          );
-                        })
-                      )}
-
-                      {/* Bouton Ajouter une formule */}
-                      <button
-                        onClick={() => {
-                          setIsAddingVariant(true);
-                          setEditingVariantId(null);
-                          setEditingSection("variants");
-                        }}
-                        className="w-full flex items-center justify-center gap-2 p-3 mt-2 border-2 border-dashed border-primary/30 rounded-xl text-primary hover:bg-primary/5 hover:border-primary/50 transition-all"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span className="text-sm font-medium">Ajouter une formule</span>
-                      </button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* Options Section */}
-              <div className="p-4 border-t border-foreground/5">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold text-foreground flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-amber-500" />
-                    Options
-                    {optionsCount > 0 && (
-                      <span className="text-xs font-normal text-text-light">({optionsCount})</span>
-                    )}
-                  </h4>
+                          </div>
+                        )}
+                      </motion.div>
+                    );
+                  })}
                 </div>
-
-                <AnimatePresence mode="wait">
-                  {editingSection === "options" && isAddingOption ? (
-                    <motion.div
-                      key="add-option"
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                    >
-                      <OptionEditor
-                        serviceId={service.id}
-                        options={service.options || []}
-                        token={token}
-                        initialAddMode={true}
-                        onClose={() => {
-                          setIsAddingOption(false);
-                          setEditingSection(null);
-                        }}
-                      />
-                    </motion.div>
-                  ) : editingSection === "options" && editingOptionId ? (
-                    <motion.div
-                      key="edit-single-option"
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                    >
-                      <OptionEditor
-                        serviceId={service.id}
-                        options={service.options || []}
-                        token={token}
-                        initialEditingId={editingOptionId}
-                        onClose={() => {
-                          setEditingOptionId(null);
-                          setEditingSection(null);
-                        }}
-                      />
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="preview-options"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="space-y-2"
-                    >
-                      {activeOptions.length > 0 ? (
-                        <div className="space-y-2">
-                          {activeOptions.map((option) => (
-                            <div key={option.id} className="flex items-center justify-between p-2 bg-amber-50/50 rounded-lg border border-amber-100">
-                              <div className="flex items-center gap-2">
-                                <Zap className="w-4 h-4 text-amber-500" />
-                                <span className="font-medium text-foreground">{option.name}</span>
-                                <span className="text-amber-600 font-semibold">+{formatPrice(option.price)}</span>
-                              </div>
-                              <button
-                                onClick={() => {
-                                  setEditingOptionId(option.id);
-                                  setIsAddingOption(false);
-                                  setEditingSection("options");
-                                }}
-                                className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-amber-600 hover:bg-amber-100 rounded-lg transition-colors"
-                              >
-                                <Edit2 className="w-3 h-3" />
-                                Modifier
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-text-light text-center py-2">
-                          Aucune option configurée
-                        </p>
-                      )}
-
-                      {/* Bouton Ajouter une option */}
-                      <button
-                        onClick={() => {
-                          setIsAddingOption(true);
-                          setEditingOptionId(null);
-                          setEditingSection("options");
-                        }}
-                        className="w-full flex items-center justify-center gap-2 p-3 border-2 border-dashed border-amber-300 rounded-xl text-amber-600 hover:bg-amber-50 hover:border-amber-400 transition-all"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span className="text-sm font-medium">Ajouter une option</span>
-                      </button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* Actions */}
-              <div className="p-4 border-t border-foreground/10 bg-foreground/[0.02]">
-                <div className="flex items-center gap-2">
-                  <motion.button
-                    onClick={onToggle}
-                    className={cn(
-                      "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors",
-                      service.isActive
-                        ? "bg-secondary/10 text-secondary hover:bg-secondary/20"
-                        : "bg-primary/10 text-primary hover:bg-primary/20"
-                    )}
-                    whileTap={{ scale: 0.98 }}
+              ) : (
+                <div className="p-6 text-center">
+                  <p className="text-text-light mb-3">Aucun service actif</p>
+                  <button
+                    onClick={() => {
+                      setIsAddingVariant(true);
+                      setEditingSection("variants");
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors"
                   >
-                    {service.isActive ? (
-                      <>
-                        <ToggleRight className="w-4 h-4" />
-                        Désactiver
-                      </>
-                    ) : (
-                      <>
-                        <ToggleLeft className="w-4 h-4" />
-                        Activer
-                      </>
-                    )}
-                  </motion.button>
-
-                  <motion.button
-                    onClick={() => setShowDeleteModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-500 rounded-xl text-sm font-medium hover:bg-red-100 transition-colors ml-auto"
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Supprimer
-                  </motion.button>
+                    <Plus className="w-4 h-4" />
+                    Ajouter un service
+                  </button>
                 </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* Delete Modal */}
       <ConfirmModal
@@ -1049,7 +722,7 @@ export default function ServiceCard({
           setShowDeleteModal(false);
         }}
         title="Supprimer ce service"
-        message={`Êtes-vous sûr de vouloir supprimer le service "${categoryData?.name || service.category}" ? Cette action supprimera également toutes les formules et options associées.`}
+        message={`Êtes-vous sûr de vouloir supprimer le service "${categoryData?.name || service.category}" ? Cette action supprimera également tous les services et options associés.`}
         confirmLabel="Supprimer"
         cancelLabel="Annuler"
         variant="danger"
@@ -1178,14 +851,14 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
     setFilterAnimal("all");
   };
 
-  // Mode édition directe d'une formule spécifique
+  // Mode édition directe d'une service spécifique
   if (initialEditingId) {
     const variantToEdit = variants.find(v => v.id === initialEditingId);
     if (variantToEdit) {
       return (
         <div className="space-y-3">
           <div className="flex items-center justify-between mb-2">
-            <h5 className="font-medium text-foreground">Modifier la formule</h5>
+            <h5 className="font-medium text-foreground">Modifier la service</h5>
             <button
               onClick={onClose}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
@@ -1217,12 +890,12 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
     }
   }
 
-  // Mode ajout direct d'une nouvelle formule
+  // Mode ajout direct d'une nouvelle service
   if (initialAddMode) {
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between mb-2">
-          <h5 className="font-medium text-foreground">Nouvelle formule</h5>
+          <h5 className="font-medium text-foreground">Nouvelle service</h5>
           <button
             onClick={onClose}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
@@ -1260,8 +933,8 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
       {variants.length > 1 && (
         <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
           <div className="flex items-center gap-2 mb-2">
-            <Settings2 className="w-4 h-4 text-text-light" />
-            <span className="text-sm font-medium text-foreground">Filtrer les formules</span>
+            <Layers className="w-4 h-4 text-text-light" />
+            <span className="text-sm font-medium text-foreground">Filtrer les services</span>
             {hasActiveFilters && (
               <button
                 onClick={resetFilters}
@@ -1327,7 +1000,7 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
           {/* Résultat du filtre */}
           {hasActiveFilters && (
             <p className="text-xs text-text-light mt-2">
-              {filteredVariants.length} formule{filteredVariants.length > 1 ? "s" : ""} sur {variants.length}
+              {filteredVariants.length} service{filteredVariants.length > 1 ? "s" : ""} sur {variants.length}
             </p>
           )}
         </div>
@@ -1418,7 +1091,7 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
             whileTap={{ scale: 0.99 }}
           >
             <Plus className="w-5 h-5" />
-            <span className="font-medium">Ajouter une formule</span>
+            <span className="font-medium">Ajouter une service</span>
           </motion.button>
         )}
       </AnimatePresence>
@@ -1431,7 +1104,7 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
           setItemToDelete(null);
         }}
         onConfirm={handleDelete}
-        title="Supprimer cette formule"
+        title="Supprimer cette service"
         message={`Êtes-vous sûr de vouloir supprimer "${itemToDelete?.name}" ?`}
         confirmLabel="Supprimer"
         cancelLabel="Annuler"
@@ -1480,15 +1153,15 @@ function VariantPreviewCard({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               <h5 className="font-semibold text-foreground truncate">{variant.name}</h5>
-              {/* Formule collective sans créneaux */}
+              {/* Service collective sans créneaux */}
               {variant.sessionType === "collective" && (variant.needsSlotConfiguration || !variant.slotsCount) && (
                 <span className="text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full animate-pulse font-medium">Créneaux requis</span>
               )}
-              {/* Formule inactive (non collective ou autre raison) */}
+              {/* Service inactive (non collective ou autre raison) */}
               {!variant.isActive && variant.sessionType !== "collective" && (
                 <span className="text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full">Inactif</span>
               )}
-              {/* Formule collective avec créneaux configurés */}
+              {/* Service collective avec créneaux configurés */}
               {variant.sessionType === "collective" && variant.slotsCount && variant.slotsCount > 0 && (
                 <span className="text-xs px-2 py-0.5 bg-green-100 text-green-600 rounded-full">{variant.slotsCount} créneaux</span>
               )}
@@ -1570,10 +1243,10 @@ function VariantPreviewCard({
               )}
               {/* Restrictions chiens */}
               {(() => {
-                // Vérifier si cette formule accepte les chiens (fallback sur service)
-                const formuleAcceptsDogs = variant.animalTypes?.includes("chien") ||
+                // Vérifier si cette service accepte les chiens (fallback sur service)
+                const serviceAcceptsDogs = variant.animalTypes?.includes("chien") ||
                   (!variant.animalTypes?.length && serviceAnimalTypes.includes("chien"));
-                if (!formuleAcceptsDogs) return null;
+                if (!serviceAcceptsDogs) return null;
 
                 const dogSizes = variant.acceptedDogSizes || ["small", "medium", "large"];
                 const dogCategory = variant.dogCategoryAcceptance || "none";
@@ -1623,7 +1296,7 @@ function VariantPreviewCard({
         </div>
 
         <div className="flex items-center gap-1 flex-shrink-0">
-          {/* Bouton Créneaux pour les formules collectives */}
+          {/* Bouton Créneaux pour les services collectives */}
           {variant.sessionType === "collective" && onManageSlots && (
             <button
               onClick={() => onManageSlots(variant)}
@@ -1667,7 +1340,7 @@ function VariantPreviewCard({
                 Créneaux non configurés
               </p>
               <p className="text-xs text-orange-600 mt-1">
-                Cette formule collective est inactive car aucun créneau n'est défini.
+                Cette service collective est inactive car aucun créneau n'est défini.
                 Ajoutez des créneaux pour permettre aux clients de réserver.
               </p>
               <button
@@ -1891,7 +1564,7 @@ function VariantEditForm({
       <div className="flex items-center justify-between">
         <h5 className="font-semibold text-foreground flex items-center gap-2">
           <Edit2 className="w-4 h-4 text-primary" />
-          Modifier la formule
+          Modifier la service
         </h5>
         <label className="flex items-center gap-2 cursor-pointer">
           <span className="text-xs text-text-light">Active</span>
@@ -2175,7 +1848,7 @@ function VariantEditForm({
 
       {/* Animaux acceptés */}
       <div>
-        <label className="block text-sm font-medium text-foreground mb-2">Animaux acceptés pour cette formule</label>
+        <label className="block text-sm font-medium text-foreground mb-2">Animaux acceptés pour cette service</label>
         <div className="flex flex-wrap gap-2">
           {serviceAnimalTypes.map((animal) => {
             const isSelected = selectedAnimalTypes.includes(animal);
@@ -2594,7 +2267,7 @@ function VariantAddForm({
   }) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [name, setName] = useState(`Formule ${existingCount + 1}`);
+  const [name, setName] = useState(`Service ${existingCount + 1}`);
   const [description, setDescription] = useState("");
   const [objectives, setObjectives] = useState<Objective[]>([]);
   const [showActivitySelector, setShowActivitySelector] = useState(false);
@@ -2749,7 +2422,7 @@ function VariantAddForm({
     <div className="p-4 bg-secondary/5 rounded-xl border-2 border-secondary/20 space-y-4">
       <div className="flex items-center gap-2">
         <Plus className="w-4 h-4 text-secondary" />
-        <h5 className="font-semibold text-foreground">Nouvelle formule</h5>
+        <h5 className="font-semibold text-foreground">Nouvelle service</h5>
       </div>
 
       {/* Name */}
@@ -3023,7 +2696,7 @@ function VariantAddForm({
 
       {/* Animaux acceptés */}
       <div>
-        <label className="block text-sm font-medium text-foreground mb-2">Animaux acceptés pour cette formule</label>
+        <label className="block text-sm font-medium text-foreground mb-2">Animaux acceptés pour cette service</label>
         <div className="flex flex-wrap gap-2">
           {serviceAnimalTypes.map((animal) => {
             const isSelected = selectedAnimalTypes.includes(animal);
@@ -3794,260 +3467,3 @@ function OptionAddForm({
   );
 }
 
-// ============================================================================
-// Service Settings Editor Component
-// ============================================================================
-
-interface ServiceSettingsEditorProps {
-  serviceId: Id<"services">;
-  serviceLocation?: ServiceLocation;
-  dogCategoryAcceptance?: DogCategoryAcceptance;
-  animalTypes: string[];
-  hasCollectiveVariants: boolean;
-  token: string;
-  onSaved: () => void;
-}
-
-function ServiceSettingsEditor({
-  serviceId,
-  serviceLocation,
-  dogCategoryAcceptance: initialDogCategory,
-  animalTypes,
-  hasCollectiveVariants,
-  token,
-  onSaved,
-}: ServiceSettingsEditorProps) {
-  const [location, setLocation] = useState<ServiceLocation>(
-    hasCollectiveVariants ? "announcer_home" : (serviceLocation || "announcer_home")
-  );
-  const [dogCategory, setDogCategory] = useState<DogCategoryAcceptance>(
-    initialDogCategory || "none"
-  );
-  const [isSaving, setIsSaving] = useState(false);
-
-  const updateServiceMutation = useMutation(api.services.services.updateService);
-
-  // If collective variants exist, force announcer_home
-  const effectiveLocation = hasCollectiveVariants ? "announcer_home" : location;
-
-  // Vérifier si le service accepte les chiens
-  const acceptsDogs = animalTypes.includes("chien");
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      await updateServiceMutation({
-        token,
-        serviceId,
-        serviceLocation: effectiveLocation,
-        dogCategoryAcceptance: acceptsDogs ? dogCategory : undefined,
-      });
-      onSaved();
-    } catch (error) {
-      console.error("Erreur lors de la mise à jour:", error);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  return (
-    <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-4">
-      <div className="flex items-center gap-2">
-        <Settings2 className="w-4 h-4 text-gray-600" />
-        <h5 className="font-semibold text-foreground">Modifier les paramètres</h5>
-      </div>
-
-      {/* Message d'information si séances collectives */}
-      {hasCollectiveVariants && (
-        <div className="flex items-start gap-2 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-          <AlertCircle className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-orange-700">
-            <p className="font-medium">Ce service contient des séances collectives</p>
-            <p className="text-orange-600 mt-0.5">Le lieu de prestation est automatiquement défini à votre domicile et ne peut pas être modifié.</p>
-          </div>
-        </div>
-      )}
-
-      {/* Lieu de prestation */}
-      <div>
-        <label className="block text-sm font-medium text-foreground mb-2">
-          Où effectuez-vous cette prestation ?
-        </label>
-        <div className="grid grid-cols-3 gap-2">
-          <motion.button
-            type="button"
-            onClick={() => !hasCollectiveVariants && setLocation("announcer_home")}
-            disabled={hasCollectiveVariants && effectiveLocation !== "announcer_home"}
-            className={cn(
-              "flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all",
-              effectiveLocation === "announcer_home"
-                ? "border-primary bg-primary/5 text-primary"
-                : "border-foreground/10 bg-white hover:bg-foreground/5 text-foreground/60",
-              hasCollectiveVariants && effectiveLocation !== "announcer_home" && "opacity-50 cursor-not-allowed"
-            )}
-            whileHover={!hasCollectiveVariants ? { scale: 1.02 } : {}}
-            whileTap={!hasCollectiveVariants ? { scale: 0.98 } : {}}
-          >
-            <Home className={cn(
-              "w-5 h-5",
-              effectiveLocation === "announcer_home" ? "text-primary" : "text-foreground/40"
-            )} />
-            <span className="text-xs font-medium text-center">Mon domicile</span>
-          </motion.button>
-
-          <motion.button
-            type="button"
-            onClick={() => !hasCollectiveVariants && setLocation("client_home")}
-            disabled={hasCollectiveVariants}
-            className={cn(
-              "flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all",
-              effectiveLocation === "client_home"
-                ? "border-secondary bg-secondary/5 text-secondary"
-                : "border-foreground/10 bg-white hover:bg-foreground/5 text-foreground/60",
-              hasCollectiveVariants && "opacity-50 cursor-not-allowed"
-            )}
-            whileHover={!hasCollectiveVariants ? { scale: 1.02 } : {}}
-            whileTap={!hasCollectiveVariants ? { scale: 0.98 } : {}}
-          >
-            <MapPin className={cn(
-              "w-5 h-5",
-              effectiveLocation === "client_home" ? "text-secondary" : "text-foreground/40"
-            )} />
-            <span className="text-xs font-medium text-center">À domicile</span>
-          </motion.button>
-
-          <motion.button
-            type="button"
-            onClick={() => !hasCollectiveVariants && setLocation("both")}
-            disabled={hasCollectiveVariants}
-            className={cn(
-              "flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all",
-              effectiveLocation === "both"
-                ? "border-purple-500 bg-purple-50 text-purple-600"
-                : "border-foreground/10 bg-white hover:bg-foreground/5 text-foreground/60",
-              hasCollectiveVariants && "opacity-50 cursor-not-allowed"
-            )}
-            whileHover={!hasCollectiveVariants ? { scale: 1.02 } : {}}
-            whileTap={!hasCollectiveVariants ? { scale: 0.98 } : {}}
-          >
-            <div className="flex items-center gap-0.5">
-              <Home className={cn(
-                "w-4 h-4",
-                effectiveLocation === "both" ? "text-purple-600" : "text-foreground/40"
-              )} />
-              <MapPin className={cn(
-                "w-4 h-4",
-                effectiveLocation === "both" ? "text-purple-600" : "text-foreground/40"
-              )} />
-            </div>
-            <span className="text-xs font-medium text-center">Les deux</span>
-          </motion.button>
-        </div>
-      </div>
-
-      {/* Chiens catégorisés */}
-      {acceptsDogs && (
-        <div className="pt-2 border-t border-gray-200">
-          <label className="block text-sm font-medium text-foreground mb-2">
-            Chiens catégorisés (législation française)
-          </label>
-          <p className="text-xs text-gray-500 mb-3">
-            Acceptez-vous les chiens de catégorie 1 (attaque) ou 2 (garde/défense) ?
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <motion.button
-              type="button"
-              onClick={() => setDogCategory("none")}
-              className={cn(
-                "p-3 rounded-xl border-2 text-left transition-all",
-                dogCategory === "none"
-                  ? "border-amber-500 bg-amber-50"
-                  : "border-gray-200 bg-white hover:border-amber-300"
-              )}
-              whileTap={{ scale: 0.98 }}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                {dogCategory === "none" && <Check className="w-4 h-4 text-amber-600" />}
-                <span className="font-medium text-amber-900 text-sm">Non catégorisés</span>
-              </div>
-              <p className="text-xs text-amber-600">Je n&apos;accepte pas les chiens catégorisés</p>
-            </motion.button>
-
-            <motion.button
-              type="button"
-              onClick={() => setDogCategory("cat2")}
-              className={cn(
-                "p-3 rounded-xl border-2 text-left transition-all",
-                dogCategory === "cat2"
-                  ? "border-amber-500 bg-amber-50"
-                  : "border-gray-200 bg-white hover:border-amber-300"
-              )}
-              whileTap={{ scale: 0.98 }}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                {dogCategory === "cat2" && <Check className="w-4 h-4 text-amber-600" />}
-                <span className="font-medium text-amber-900 text-sm">Catégorie 2</span>
-              </div>
-              <p className="text-xs text-amber-600">Chiens de garde/défense</p>
-            </motion.button>
-
-            <motion.button
-              type="button"
-              onClick={() => setDogCategory("cat1")}
-              className={cn(
-                "p-3 rounded-xl border-2 text-left transition-all",
-                dogCategory === "cat1"
-                  ? "border-amber-500 bg-amber-50"
-                  : "border-gray-200 bg-white hover:border-amber-300"
-              )}
-              whileTap={{ scale: 0.98 }}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                {dogCategory === "cat1" && <Check className="w-4 h-4 text-amber-600" />}
-                <span className="font-medium text-amber-900 text-sm">Catégorie 1</span>
-              </div>
-              <p className="text-xs text-amber-600">Chiens d&apos;attaque</p>
-            </motion.button>
-
-            <motion.button
-              type="button"
-              onClick={() => setDogCategory("both")}
-              className={cn(
-                "p-3 rounded-xl border-2 text-left transition-all",
-                dogCategory === "both"
-                  ? "border-amber-500 bg-amber-50"
-                  : "border-gray-200 bg-white hover:border-amber-300"
-              )}
-              whileTap={{ scale: 0.98 }}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                {dogCategory === "both" && <Check className="w-4 h-4 text-amber-600" />}
-                <span className="font-medium text-amber-900 text-sm">Cat. 1 et 2</span>
-              </div>
-              <p className="text-xs text-amber-600">Tous les chiens catégorisés</p>
-            </motion.button>
-          </div>
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="flex items-center gap-2 pt-2">
-        <motion.button
-          onClick={handleSave}
-          disabled={isSaving}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-700 text-white rounded-xl font-medium disabled:opacity-50"
-          whileTap={{ scale: 0.98 }}
-        >
-          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-          Enregistrer
-        </motion.button>
-        <button
-          onClick={onSaved}
-          className="px-4 py-2 text-text-light hover:text-foreground transition-colors"
-        >
-          Annuler
-        </button>
-      </div>
-    </div>
-  );
-}

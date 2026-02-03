@@ -91,7 +91,8 @@ interface ServicesTabProps {
   token: string;
   onAddService: (data: {
     category: string;
-    animalTypes: string[];
+    // animalTypes est maintenant optionnel au niveau service (les animaux sont définis par formule)
+    animalTypes?: string[];
     serviceLocation?: ServiceLocation;
     initialVariants: Array<{
       name: string;
@@ -102,7 +103,11 @@ interface ServicesTabProps {
       sessionType?: "individual" | "collective";
       maxAnimalsPerSession?: number;
       serviceLocation?: ServiceLocation;
+      // Animaux acceptés au niveau de la formule
       animalTypes?: string[];
+      // Restrictions chiens au niveau de la formule
+      dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
+      acceptedDogSizes?: ("small" | "medium" | "large")[];
       price: number;
       priceUnit: "hour" | "half_day" | "day" | "week" | "month" | "flat";
       // Multi-tarification
@@ -112,6 +117,7 @@ interface ServicesTabProps {
         daily?: number;
         weekly?: number;
         monthly?: number;
+        nightly?: number;
       };
       duration?: number;
       includedFeatures?: string[];

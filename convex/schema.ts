@@ -367,6 +367,10 @@ export default defineSchema({
   // Options additionnelles pour les services
   serviceOptions: defineTable({
     serviceId: v.id("services"),
+    // Nouveau: lien optionnel vers une formule spécifique
+    // Si défini, l'option est liée à cette formule uniquement
+    // Sinon, l'option est disponible pour toutes les formules du service
+    variantId: v.optional(v.id("serviceVariants")),
     name: v.string(), // "Shampoing anti-puces", "Parfum"
     description: v.optional(v.string()),
     price: v.number(), // Prix en centimes
@@ -383,7 +387,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_service", ["serviceId"])
-    .index("by_service_active", ["serviceId", "isActive"]),
+    .index("by_service_active", ["serviceId", "isActive"])
+    .index("by_variant", ["variantId"]),
 
   // Types de catégories (garde, service, santé, reproduction, etc.)
   categoryTypes: defineTable({

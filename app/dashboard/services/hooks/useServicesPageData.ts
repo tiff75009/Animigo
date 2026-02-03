@@ -242,16 +242,17 @@ export function useServicesPageData(token: string | undefined) {
   // Service actions
   const addService = useCallback(async (data: {
     category: string;
-    animalTypes: string[];
+    // animalTypes est maintenant optionnel au niveau service (les animaux sont définis par formule)
+    animalTypes?: string[];
     serviceLocation?: "announcer_home" | "client_home" | "both";
     // Garde de nuit
     allowOvernightStay?: boolean;
     dayStartTime?: string;
     dayEndTime?: string;
     overnightPrice?: number;
-    // Chiens catégorisés
+    // Chiens catégorisés - legacy, maintenant au niveau formule
     dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
-    // Tailles de chiens acceptées
+    // Tailles de chiens acceptées - legacy, maintenant au niveau formule
     acceptedDogSizes?: ("small" | "medium" | "large")[];
     initialVariants: Array<{
       name: string;
@@ -262,7 +263,11 @@ export function useServicesPageData(token: string | undefined) {
       sessionType?: "individual" | "collective";
       maxAnimalsPerSession?: number;
       serviceLocation?: "announcer_home" | "client_home" | "both";
+      // Animaux acceptés au niveau de la formule
       animalTypes?: string[];
+      // Restrictions chiens au niveau de la formule
+      dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
+      acceptedDogSizes?: ("small" | "medium" | "large")[];
       price: number;
       priceUnit: "hour" | "half_day" | "day" | "week" | "month" | "flat";
       // Multi-tarification

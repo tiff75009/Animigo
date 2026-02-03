@@ -2,6 +2,7 @@ import { mutation, query } from "../_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { analyzeContent } from "../utils/contentModeration";
+import { Id } from "../_generated/dataModel";
 
 // Catégories de services (deprecated - utiliser serviceCategories table)
 export const SERVICE_CATEGORIES = [
@@ -169,11 +170,12 @@ export const getMyServices = query({
               needsSlotConfiguration: v.needsSlotConfiguration, // Créneaux requis pour collectives
               slotsCount: v.slotsCount, // Nombre de créneaux configurés
             })),
-          // Options triées par ordre
+          // Options triées par ordre (avec info variantId pour affichage par formule)
           options: options
             .sort((a, b) => a.order - b.order)
             .map((o) => ({
               id: o._id,
+              variantId: o.variantId, // ID de la formule liée (undefined = option partagée)
               name: o.name,
               description: o.description,
               price: o.price,
@@ -192,12 +194,15 @@ export const getMyServices = query({
 });
 
 // Ajouter un service (structure simplifiée: prestation + formules + options)
+// LOGIQUE UPSERT: Si un service existe déjà pour cette catégorie, on ajoute une nouvelle formule
 export const addService = mutation({
   args: {
     token: v.string(),
     category: v.string(), // Slug de la prestation (ex: "toilettage")
-    animalTypes: v.array(v.string()),
-    // Lieu de prestation
+    // animalTypes est maintenant optionnel au niveau service (legacy/rétrocompatibilité)
+    // Les animaux acceptés sont définis au niveau de chaque formule
+    animalTypes: v.optional(v.array(v.string())),
+    // Lieu de prestation (legacy - maintenant au niveau formule)
     serviceLocation: v.optional(v.union(
       v.literal("announcer_home"),
       v.literal("client_home"),
@@ -208,14 +213,14 @@ export const addService = mutation({
     dayStartTime: v.optional(v.string()),
     dayEndTime: v.optional(v.string()),
     overnightPrice: v.optional(v.number()),
-    // Chiens catégorisés (législation française)
+    // Chiens catégorisés (législation française) - legacy, maintenant au niveau formule
     dogCategoryAcceptance: v.optional(v.union(
       v.literal("none"),
       v.literal("cat1"),
       v.literal("cat2"),
       v.literal("both")
     )),
-    // Tailles de chiens acceptées
+    // Tailles de chiens acceptées - legacy, maintenant au niveau formule
     acceptedDogSizes: v.optional(v.array(v.union(
       v.literal("small"),
       v.literal("medium"),
@@ -238,6 +243,7 @@ export const addService = mutation({
         v.literal("client_home"),
         v.literal("both")
       )),
+      // Animaux acceptés au niveau de la formule (NOUVEAU: obligatoire)
       animalTypes: v.optional(v.array(v.string())),
       // Restrictions chiens (au niveau de la formule)
       dogCategoryAcceptance: v.optional(v.union(
@@ -272,7 +278,7 @@ export const addService = mutation({
       duration: v.optional(v.number()),
       includedFeatures: v.optional(v.array(v.string())),
     })),
-    // Options additionnelles (optionnelles)
+    // Options additionnelles (optionnelles) - seront liées aux formules créées
     initialOptions: v.optional(v.array(v.object({
       name: v.string(),
       description: v.optional(v.string()),
@@ -318,52 +324,73 @@ export const addService = mutation({
       throw new ConvexError("Catégorie de prestation invalide");
     }
 
-    // Vérifier si un service existe déjà pour cette catégorie
+    const now = Date.now();
+
+    // LOGIQUE UPSERT: Vérifier si un service existe déjà pour cette catégorie
     const existingService = await ctx.db
       .query("services")
       .withIndex("by_user", (q) => q.eq("userId", session.userId))
       .filter((q) => q.eq(q.field("category"), args.category))
       .first();
 
+    let serviceId: Id<"services">;
+    let isNewService = false;
+    let existingVariantsCount = 0;
+
     if (existingService) {
-      throw new ConvexError("Vous avez déjà un service pour cette prestation");
+      // Service existant: on va ajouter les nouvelles formules
+      serviceId = existingService._id;
+
+      // Récupérer le nombre de formules existantes pour l'ordre
+      const existingVariants = await ctx.db
+        .query("serviceVariants")
+        .withIndex("by_service", (q) => q.eq("serviceId", serviceId))
+        .collect();
+      existingVariantsCount = existingVariants.length;
+    } else {
+      // Nouveau service
+      isNewService = true;
+
+      // Collecter tous les types d'animaux des formules pour le service
+      const allAnimalTypes = [...new Set(args.initialVariants.flatMap(v => v.animalTypes || []))];
+      // Fallback sur args.animalTypes si aucun animal défini dans les formules
+      const serviceAnimalTypes = allAnimalTypes.length > 0 ? allAnimalTypes : (args.animalTypes || []);
+
+      // Calculer le prix de base (min des totaux: prix horaire × durée / 60 × nombre de séances)
+      const totalPrices = args.initialVariants.map(v => {
+        const duration = v.duration || 60; // Par défaut 60 minutes
+        const sessions = v.numberOfSessions || 1; // Par défaut 1 séance
+        return Math.round((v.price * duration / 60) * sessions);
+      });
+      const basePrice = Math.min(...totalPrices);
+
+      // Créer le service
+      serviceId = await ctx.db.insert("services", {
+        userId: session.userId,
+        category: args.category,
+        animalTypes: serviceAnimalTypes,
+        serviceLocation: args.serviceLocation,
+        allowOvernightStay: args.allowOvernightStay,
+        dayStartTime: args.dayStartTime,
+        dayEndTime: args.dayEndTime,
+        overnightPrice: args.overnightPrice,
+        dogCategoryAcceptance: args.dogCategoryAcceptance,
+        acceptedDogSizes: args.acceptedDogSizes,
+        isActive: true,
+        basePrice: basePrice,
+        moderationStatus: "approved", // Catégories gérées par admin = pas de modération
+        createdAt: now,
+        updatedAt: now,
+      });
     }
 
-    const now = Date.now();
-
-    // Calculer le prix de base (min des totaux: prix horaire × durée / 60 × nombre de séances)
-    const totalPrices = args.initialVariants.map(v => {
-      const duration = v.duration || 60; // Par défaut 60 minutes
-      const sessions = v.numberOfSessions || 1; // Par défaut 1 séance
-      return Math.round((v.price * duration / 60) * sessions);
-    });
-    const basePrice = Math.min(...totalPrices);
-
-    // Créer le service
-    const serviceId = await ctx.db.insert("services", {
-      userId: session.userId,
-      category: args.category,
-      animalTypes: args.animalTypes,
-      serviceLocation: args.serviceLocation,
-      allowOvernightStay: args.allowOvernightStay,
-      dayStartTime: args.dayStartTime,
-      dayEndTime: args.dayEndTime,
-      overnightPrice: args.overnightPrice,
-      dogCategoryAcceptance: args.dogCategoryAcceptance,
-      acceptedDogSizes: args.acceptedDogSizes,
-      isActive: true,
-      basePrice: basePrice,
-      moderationStatus: "approved", // Catégories gérées par admin = pas de modération
-      createdAt: now,
-      updatedAt: now,
-    });
-
     // Créer les formules
+    const createdVariantIds: Id<"serviceVariants">[] = [];
     for (let i = 0; i < args.initialVariants.length; i++) {
       const variant = args.initialVariants[i];
       // Si collective, forcer le lieu à announcer_home
       const effectiveLocation = variant.sessionType === "collective" ? "announcer_home" : variant.serviceLocation;
-      await ctx.db.insert("serviceVariants", {
+      const variantId = await ctx.db.insert("serviceVariants", {
         serviceId: serviceId,
         name: variant.name,
         description: variant.description,
@@ -381,26 +408,37 @@ export const addService = mutation({
         pricing: variant.pricing,
         duration: variant.duration,
         includedFeatures: variant.includedFeatures,
-        order: i,
+        order: existingVariantsCount + i, // Continuer l'ordre après les formules existantes
         isActive: true,
         createdAt: now,
         updatedAt: now,
       });
+      createdVariantIds.push(variantId);
     }
 
-    // Créer les options si fournies
+    // Créer les options si fournies - liées aux nouvelles formules créées
     if (args.initialOptions && args.initialOptions.length > 0) {
+      // Trouver l'ordre max des options existantes
+      const existingOptions = await ctx.db
+        .query("serviceOptions")
+        .withIndex("by_service", (q) => q.eq("serviceId", serviceId))
+        .collect();
+      const maxOrder = existingOptions.reduce((max, o) => Math.max(max, o.order), -1);
+
       for (let i = 0; i < args.initialOptions.length; i++) {
         const option = args.initialOptions[i];
+        // Lier l'option à la première formule créée (ou pas de variantId si plusieurs formules)
+        const variantId = createdVariantIds.length === 1 ? createdVariantIds[0] : undefined;
         await ctx.db.insert("serviceOptions", {
           serviceId: serviceId,
+          variantId: variantId,
           name: option.name,
           description: option.description,
           price: option.price,
           priceType: option.priceType,
           unitLabel: option.unitLabel,
           maxQuantity: option.maxQuantity,
-          order: i,
+          order: maxOrder + 1 + i,
           isActive: true,
           createdAt: now,
           updatedAt: now,
@@ -408,9 +446,40 @@ export const addService = mutation({
       }
     }
 
+    // Si service existant, mettre à jour les animalTypes et le basePrice
+    if (!isNewService) {
+      // Récupérer toutes les formules pour recalculer
+      const allVariants = await ctx.db
+        .query("serviceVariants")
+        .withIndex("by_service", (q) => q.eq("serviceId", serviceId))
+        .collect();
+
+      // Collecter tous les types d'animaux des formules
+      const allAnimalTypes = [...new Set(allVariants.flatMap(v => v.animalTypes || []))];
+
+      // Recalculer le prix de base
+      const totalPrices = allVariants.map(v => {
+        const duration = v.duration || 60;
+        const sessions = v.numberOfSessions || 1;
+        return Math.round((v.price * duration / 60) * sessions);
+      });
+      const newBasePrice = Math.min(...totalPrices);
+
+      await ctx.db.patch(serviceId, {
+        animalTypes: allAnimalTypes,
+        basePrice: newBasePrice,
+        updatedAt: now,
+      });
+    }
+
     return {
       success: true,
       serviceId,
+      variantIds: createdVariantIds,
+      isNewService,
+      message: isNewService
+        ? "Service créé avec succès"
+        : `${args.initialVariants.length} formule(s) ajoutée(s) au service existant`,
     };
   },
 });

@@ -57,6 +57,7 @@ import type * as lib_timeUtils from "../lib/timeUtils.js";
 import type * as maintenance_visitRequests from "../maintenance/visitRequests.js";
 import type * as messaging_mutations from "../messaging/mutations.js";
 import type * as messaging_queries from "../messaging/queries.js";
+import type * as migrations_migrateOptionsToVariants from "../migrations/migrateOptionsToVariants.js";
 import type * as notifications_actions from "../notifications/actions.js";
 import type * as notifications_index from "../notifications/index.js";
 import type * as notifications_mutations from "../notifications/mutations.js";
@@ -147,6 +148,7 @@ declare const fullApi: ApiFromModules<{
   "maintenance/visitRequests": typeof maintenance_visitRequests;
   "messaging/mutations": typeof messaging_mutations;
   "messaging/queries": typeof messaging_queries;
+  "migrations/migrateOptionsToVariants": typeof migrations_migrateOptionsToVariants;
   "notifications/actions": typeof notifications_actions;
   "notifications/index": typeof notifications_index;
   "notifications/mutations": typeof notifications_mutations;

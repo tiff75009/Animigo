@@ -12,12 +12,10 @@ import {
   Loader2,
   AlertCircle,
   Briefcase,
-  PawPrint,
   Layers,
   Zap,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
-import AnimalTypeSelector from "../shared/AnimalTypeSelector";
 import VariantManager, { LocalVariant } from "../VariantManager";
 import OptionManager, { LocalOption } from "../OptionManager";
 import { cn } from "@/app/lib/utils";
@@ -67,13 +65,12 @@ interface CategoryType {
   color?: string | null;
 }
 
-type FormStep = 1 | 2 | 3 | 4;
+type FormStep = 1 | 2 | 3;
 
 const STEPS = [
   { id: 1, label: "Prestation", icon: Briefcase },
-  { id: 2, label: "Animaux", icon: PawPrint },
-  { id: 3, label: "Prestations", icon: Layers },
-  { id: 4, label: "Options", icon: Zap },
+  { id: 2, label: "Formules", icon: Layers },
+  { id: 3, label: "Options", icon: Zap },
 ] as const;
 
 interface ServiceFormProps {
@@ -83,10 +80,11 @@ interface ServiceFormProps {
   onSubmit: (data: {
     category: string;
     description?: string;
-    animalTypes: string[];
-    // Catégories de chiens acceptées
+    // animalTypes est maintenant optionnel au niveau service (les animaux sont définis par formule)
+    animalTypes?: string[];
+    // Catégories de chiens acceptées - legacy, maintenant au niveau formule
     dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
-    // Tailles de chiens acceptées
+    // Tailles de chiens acceptées - legacy, maintenant au niveau formule
     acceptedDogSizes?: ("small" | "medium" | "large")[];
     // Garde de nuit
     allowOvernightStay?: boolean;
@@ -114,7 +112,11 @@ interface ServiceFormProps {
       numberOfSessions?: number;
       sessionInterval?: number;
       serviceLocation?: ServiceLocation;
+      // Animaux acceptés au niveau de la formule (NOUVEAU)
       animalTypes?: string[];
+      // Restrictions chiens au niveau de la formule
+      dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
+      acceptedDogSizes?: ("small" | "medium" | "large")[];
     }>;
     initialOptions?: Array<{
       name: string;
@@ -142,37 +144,36 @@ export default function ServiceForm({
   const [currentStep, setCurrentStep] = useState<FormStep>(1);
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
-  const [animalTypes, setAnimalTypes] = useState<string[]>([]);
   const [localVariants, setLocalVariants] = useState<LocalVariant[]>([]);
   const [localOptions, setLocalOptions] = useState<LocalOption[]>([]);
 
   // Garde de nuit
   const [allowOvernightStay, setAllowOvernightStay] = useState(false);
 
-  // Note: Les restrictions chiens (dogCategoryAcceptance, acceptedDogSizes) sont maintenant
-  // au niveau de chaque formule (variant) dans VariantManager, pas au niveau du service.
+  // Note: Les animaux et restrictions chiens sont maintenant au niveau de chaque formule (variant)
 
   // Récupérer les activités depuis l'admin
   const activities = useQuery(api.services.activities.getActiveActivities);
 
   const selectedCategory = categories.find((c) => c.slug === category);
-  const acceptsDogs = animalTypes.includes("chien");
 
-  // Available categories (not yet used)
-  const availableCategories = categories.filter(
-    (c) => !existingCategories.includes(c.slug)
-  );
+  // NOUVEAU: Vérifier si la catégorie sélectionnée a déjà un service existant
+  const isAddingToExistingService = existingCategories.includes(category);
+
+  // Toutes les catégories sont disponibles (mode UPSERT)
+  // On affiche un indicateur visuel pour les catégories déjà utilisées
+  const availableCategories = categories;
 
   const canProceed = () => {
     switch (currentStep) {
       case 1:
         return !!category;
       case 2:
-        return animalTypes.length > 0;
+        // Au moins une formule avec une durée définie ET des animaux définis
+        return localVariants.length > 0 && localVariants.every(v =>
+          v.duration && v.duration > 0 && v.animalTypes && v.animalTypes.length > 0
+        );
       case 3:
-        // Au moins une formule avec une durée définie
-        return localVariants.length > 0 && localVariants.every(v => v.duration && v.duration > 0);
-      case 4:
         return true; // Options are optional
       default:
         return false;
@@ -180,7 +181,7 @@ export default function ServiceForm({
   };
 
   const handleNext = () => {
-    if (currentStep < 4 && canProceed()) {
+    if (currentStep < 3 && canProceed()) {
       setCurrentStep((currentStep + 1) as FormStep);
     }
   };
@@ -207,7 +208,11 @@ export default function ServiceForm({
       numberOfSessions: v.numberOfSessions,
       sessionInterval: v.sessionInterval,
       serviceLocation: v.serviceLocation,
+      // Animaux acceptés au niveau de la formule
       animalTypes: v.animalTypes,
+      // Restrictions chiens au niveau de la formule
+      dogCategoryAcceptance: v.dogCategoryAcceptance,
+      acceptedDogSizes: v.acceptedDogSizes,
     }));
 
     const initialOptions = localOptions.map((o) => ({
@@ -230,11 +235,14 @@ export default function ServiceForm({
         }
       : {};
 
+    // Collecter tous les types d'animaux des formules pour le niveau service (rétrocompatibilité)
+    const allAnimalTypes = [...new Set(localVariants.flatMap(v => v.animalTypes || []))];
+
     const success = await onSubmit({
       category,
       description: description || undefined,
-      animalTypes,
-      // Note: dogCategoryAcceptance et acceptedDogSizes sont maintenant au niveau de chaque variant
+      // Les animaux au niveau service sont maintenant agrégés depuis les formules
+      animalTypes: allAnimalTypes.length > 0 ? allAnimalTypes : undefined,
       ...overnightData,
       initialVariants,
       initialOptions: initialOptions.length > 0 ? initialOptions : undefined,
@@ -256,7 +264,7 @@ export default function ServiceForm({
       <div className="p-5 border-b border-foreground/10 bg-foreground/[0.02]">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-foreground">
-            Nouveau service
+            {isAddingToExistingService ? "Ajouter une formule" : "Nouveau service"}
           </h3>
           <button
             onClick={onCancel}
@@ -350,14 +358,7 @@ export default function ServiceForm({
                 </p>
               </div>
 
-              {availableCategories.length === 0 ? (
-                <div className="p-6 bg-amber-50 border border-amber-200 rounded-xl text-center">
-                  <AlertCircle className="w-8 h-8 text-amber-500 mx-auto mb-2" />
-                  <p className="text-amber-700 font-medium">
-                    Vous avez déjà créé un service pour chaque catégorie
-                  </p>
-                </div>
-              ) : category && selectedCategory ? (
+              {category && selectedCategory ? (
                 // Vue compacte après sélection
                 <div className="space-y-3">
                   <div
@@ -377,6 +378,13 @@ export default function ServiceForm({
                         <p className="text-xs text-text-light">{selectedCategory.parentName}</p>
                       )}
                     </div>
+                    {/* Indicateur mode ajout de formule */}
+                    {isAddingToExistingService && (
+                      <span className="px-2 py-1 bg-secondary/10 text-secondary text-xs font-medium rounded-lg flex items-center gap-1">
+                        <Layers className="w-3 h-3" />
+                        Ajouter formule
+                      </span>
+                    )}
                     <motion.button
                       type="button"
                       onClick={() => setCategory("")}
@@ -387,6 +395,15 @@ export default function ServiceForm({
                       Changer
                     </motion.button>
                   </div>
+                  {/* Message explicatif si ajout de formule */}
+                  {isAddingToExistingService && (
+                    <div className="p-3 bg-secondary/5 border border-secondary/20 rounded-xl">
+                      <p className="text-sm text-secondary">
+                        <strong>Mode ajout de formule :</strong> Vous avez déjà un service {selectedCategory.name}.
+                        Une nouvelle formule sera ajoutée à ce service existant.
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : (
                 (() => {
@@ -469,34 +486,50 @@ export default function ServiceForm({
 
                                   {/* Grille des prestations */}
                                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                    {typeData.byParent[parentName].map((cat) => (
-                                      <motion.button
-                                        key={cat.slug}
-                                        type="button"
-                                        onClick={() => setCategory(cat.slug)}
-                                        className={cn(
-                                          "flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all",
-                                          category === cat.slug
-                                            ? "border-current bg-opacity-10"
-                                            : "border-foreground/10 hover:border-foreground/20"
-                                        )}
-                                        style={
-                                          category === cat.slug
-                                            ? {
-                                                borderColor: typeData.typeColor,
-                                                backgroundColor: `${typeData.typeColor}10`,
-                                              }
-                                            : undefined
-                                        }
-                                        whileHover={{ scale: 1.02 }}
-                                        whileTap={{ scale: 0.98 }}
-                                      >
-                                        <span className="text-2xl">{cat.icon || "✨"}</span>
-                                        <span className="text-xs font-medium text-foreground text-center leading-tight">
-                                          {cat.name}
-                                        </span>
-                                      </motion.button>
-                                    ))}
+                                    {typeData.byParent[parentName].map((cat) => {
+                                      const hasExisting = existingCategories.includes(cat.slug);
+                                      return (
+                                        <motion.button
+                                          key={cat.slug}
+                                          type="button"
+                                          onClick={() => setCategory(cat.slug)}
+                                          className={cn(
+                                            "flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all relative",
+                                            category === cat.slug
+                                              ? "border-current bg-opacity-10"
+                                              : hasExisting
+                                                ? "border-secondary/30 bg-secondary/5 hover:border-secondary/50"
+                                                : "border-foreground/10 hover:border-foreground/20"
+                                          )}
+                                          style={
+                                            category === cat.slug
+                                              ? {
+                                                  borderColor: typeData.typeColor,
+                                                  backgroundColor: `${typeData.typeColor}10`,
+                                                }
+                                              : undefined
+                                          }
+                                          whileHover={{ scale: 1.02 }}
+                                          whileTap={{ scale: 0.98 }}
+                                        >
+                                          {/* Badge "Ajouter formule" pour les catégories existantes */}
+                                          {hasExisting && (
+                                            <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 bg-secondary text-white text-[10px] font-bold rounded-full">
+                                              +
+                                            </span>
+                                          )}
+                                          <span className="text-2xl">{cat.icon || "✨"}</span>
+                                          <span className="text-xs font-medium text-foreground text-center leading-tight">
+                                            {cat.name}
+                                          </span>
+                                          {hasExisting && (
+                                            <span className="text-[10px] text-secondary font-medium">
+                                              Ajouter formule
+                                            </span>
+                                          )}
+                                        </motion.button>
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               ))}
@@ -530,43 +563,8 @@ export default function ServiceForm({
             </motion.div>
           )}
 
-          {/* Step 2: Animal Types */}
+          {/* Step 2: Formules (anciennement Step 3) */}
           {currentStep === 2 && (
-            <motion.div
-              key="step2"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="space-y-6"
-            >
-              <div>
-                <h4 className="font-medium text-foreground mb-1">
-                  Quels animaux acceptez-vous ?
-                </h4>
-                <p className="text-sm text-text-light">
-                  Sélectionnez tous les types d&apos;animaux pour ce service
-                </p>
-              </div>
-
-              <AnimalTypeSelector
-                selected={animalTypes}
-                onChange={setAnimalTypes}
-                variant="cards"
-              />
-
-              {animalTypes.length === 0 && (
-                <p className="text-xs text-amber-500">
-                  Sélectionnez au moins un type d&apos;animal
-                </p>
-              )}
-
-              {/* Note: Les restrictions chiens (catégories et tailles) sont configurées
-                  par formule dans l'étape 3 (VariantManager) */}
-            </motion.div>
-          )}
-
-          {/* Step 3: Variants */}
-          {currentStep === 3 && (
             <motion.div
               key="step3"
               initial={{ opacity: 0, x: 20 }}
@@ -598,7 +596,7 @@ export default function ServiceForm({
                 onAllowOvernightStayChange={setAllowOvernightStay}
                 isGardeService={selectedCategory?.isCapacityBased === true}
                 categoryAllowsOvernightStay={selectedCategory?.allowOvernightStay === true}
-                serviceAnimalTypes={animalTypes}
+                serviceAnimalTypes={[]} // Tous les animaux sont disponibles, sélection par formule
                 availableActivities={activities?.map((a: { _id: string; name: string; emoji: string; description?: string }) => ({
                   _id: a._id,
                   name: a.name,
@@ -613,10 +611,10 @@ export default function ServiceForm({
             </motion.div>
           )}
 
-          {/* Step 4: Options */}
-          {currentStep === 4 && (
+          {/* Step 3: Options (anciennement Step 4) */}
+          {currentStep === 3 && (
             <motion.div
-              key="step4"
+              key="step3"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
@@ -654,7 +652,7 @@ export default function ServiceForm({
             {currentStep === 1 ? "Annuler" : "Retour"}
           </button>
 
-          {currentStep < 4 ? (
+          {currentStep < 3 ? (
             <motion.button
               onClick={handleNext}
               disabled={!canProceed()}
@@ -682,12 +680,12 @@ export default function ServiceForm({
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Création...
+                  {isAddingToExistingService ? "Ajout..." : "Création..."}
                 </>
               ) : (
                 <>
                   <Check className="w-5 h-5" />
-                  Créer le service
+                  {isAddingToExistingService ? "Ajouter la formule" : "Créer le service"}
                 </>
               )}
             </motion.button>

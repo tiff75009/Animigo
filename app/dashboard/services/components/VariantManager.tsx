@@ -209,6 +209,18 @@ const animalLabels: Record<string, string> = {
   autre: "Autre",
 };
 
+// Types d'animaux disponibles avec emojis
+const ANIMAL_TYPES = [
+  { id: "chien", label: "Chien", emoji: "🐕" },
+  { id: "chat", label: "Chat", emoji: "🐱" },
+  { id: "lapin", label: "Lapin", emoji: "🐰" },
+  { id: "rongeur", label: "Rongeur", emoji: "🐹" },
+  { id: "oiseau", label: "Oiseau", emoji: "🐦" },
+  { id: "poisson", label: "Poisson", emoji: "🐟" },
+  { id: "reptile", label: "Reptile", emoji: "🦎" },
+  { id: "nac", label: "NAC", emoji: "🦔" },
+];
+
 // Composant pour afficher/éditer le prix d'une formule
 function PriceSlider({
   label,
@@ -548,6 +560,59 @@ function SimpleVariantCard({
         </div>
 
         {/* ═══════════════════════════════════════════════════════════════════ */}
+        {/* SECTION ANIMAUX: Sélection des animaux acceptés */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center text-xs">🐾</div>
+            Animaux acceptés <span className="text-primary">*</span>
+          </div>
+
+          <div className={cn(
+            "p-4 rounded-xl border space-y-3 transition-all",
+            (!variant.animalTypes || variant.animalTypes.length === 0)
+              ? "bg-green-50/50 border-green-300"
+              : "bg-gray-50/50 border-gray-100"
+          )}>
+            <p className="text-xs text-gray-500">
+              Sélectionnez les types d&apos;animaux que vous acceptez pour cette formule
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {ANIMAL_TYPES.map((animal) => {
+                const isSelected = variant.animalTypes?.includes(animal.id);
+                return (
+                  <button
+                    key={animal.id}
+                    type="button"
+                    onClick={() => {
+                      const currentTypes = variant.animalTypes || [];
+                      const newTypes = isSelected
+                        ? currentTypes.filter(t => t !== animal.id)
+                        : [...currentTypes, animal.id];
+                      onUpdate({ animalTypes: newTypes });
+                    }}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all",
+                      isSelected
+                        ? "bg-green-500 text-white shadow-sm"
+                        : "bg-white border border-gray-200 text-gray-600 hover:border-green-300 hover:bg-green-50"
+                    )}
+                  >
+                    <span>{animal.emoji}</span>
+                    <span>{animal.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {(!variant.animalTypes || variant.animalTypes.length === 0) && (
+              <p className="text-xs text-green-600 font-medium">
+                Sélectionnez au moins un type d&apos;animal
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════════════════ */}
         {/* SECTION 2: ORGANISATION (services uniquement) */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {!isGardeService && (
@@ -788,10 +853,9 @@ function SimpleVariantCard({
 
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {/* SECTION CHIENS: Restrictions par formule */}
-        {/* Affichée uniquement si le service accepte les chiens ET que cette formule accepte les chiens */}
+        {/* Affichée uniquement si cette formule accepte les chiens */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        {serviceAnimalTypes.includes("chien") &&
-          (variant.animalTypes?.includes("chien") || !variant.animalTypes?.length) && (
+        {variant.animalTypes?.includes("chien") && (
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
               <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center text-xs">🐕</div>
