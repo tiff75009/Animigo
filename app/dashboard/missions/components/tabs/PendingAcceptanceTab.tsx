@@ -2,19 +2,22 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { useQuery, useMutation } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { MissionCard, type ConvexMission } from "../../../components/mission-card";
 import { MissionsStats } from "../MissionsStats";
 import { MissionsEmptyState } from "../MissionsEmptyState";
+import { MissionListSkeleton } from "../MissionCardSkeleton";
 import { AcceptModal, RefuseModal } from "../modals";
 import { useMissionFilters } from "../useMissionFilters";
-import { Loader2 } from "lucide-react";
 import type { ServiceTypeFilter, SessionTypeFilter, AnimalTypeFilter, MonthFilter } from "../MissionsFilters";
 
 interface PendingAcceptanceTabProps {
   token: string | null;
+  // Missions passées par la page parente (évite les queries redondantes)
+  missions?: ConvexMission[];
+  announcerCoordinates?: { lat: number; lng: number } | null;
   serviceType?: ServiceTypeFilter;
   sessionType?: SessionTypeFilter;
   animalType?: AnimalTypeFilter;
@@ -23,6 +26,8 @@ interface PendingAcceptanceTabProps {
 
 export function PendingAcceptanceTab({
   token,
+  missions,
+  announcerCoordinates,
   serviceType = "all",
   sessionType = "all",
   animalType = "all",
@@ -32,20 +37,10 @@ export function PendingAcceptanceTab({
   const [refuseModalOpen, setRefuseModalOpen] = useState(false);
   const [selectedMission, setSelectedMission] = useState<ConvexMission | null>(null);
 
-  const missions = useQuery(
-    api.planning.missions.getMissionsByStatus,
-    token ? { token, status: "pending_acceptance" as const } : "skip"
-  ) as ConvexMission[] | undefined;
-
-  const announcerData = useQuery(
-    api.planning.missions.getAnnouncerCoordinates,
-    token ? { token } : "skip"
-  );
-
   const acceptMissionMutation = useMutation(api.planning.missions.acceptMission);
   const refuseMissionMutation = useMutation(api.planning.missions.refuseMission);
 
-  // Appliquer les filtres
+  // Appliquer les filtres sur les missions reçues en props
   const filteredMissions = useMissionFilters(missions, serviceType, sessionType, animalType, month);
 
   const isLoading = token !== null && missions === undefined;
@@ -93,11 +88,16 @@ export function PendingAcceptanceTab({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 text-primary animate-spin mx-auto mb-4" />
-          <p className="text-text-light">Chargement des missions...</p>
+      <div className="space-y-6">
+        {/* Stats skeleton */}
+        <div className="bg-white rounded-2xl p-5 shadow-sm animate-pulse">
+          <div className="flex justify-between items-center">
+            <div className="h-6 bg-gray-200 rounded w-40" />
+            <div className="h-8 bg-gray-200 rounded w-24" />
+          </div>
         </div>
+        {/* Mission cards skeleton */}
+        <MissionListSkeleton count={3} />
       </div>
     );
   }
@@ -128,7 +128,7 @@ export function PendingAcceptanceTab({
                 showActions={true}
                 onAccept={handleAcceptClick}
                 onRefuse={handleRefuseClick}
-                announcerCoordinates={announcerData?.coordinates}
+                announcerCoordinates={announcerCoordinates}
                 token={token}
               />
             </motion.div>

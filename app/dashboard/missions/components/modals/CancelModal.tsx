@@ -28,8 +28,13 @@ export function CancelModal({
       exit={{ opacity: 0 }}
       className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
       onClick={onClose}
+      role="presentation"
     >
       <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cancel-modal-title"
+        aria-describedby="cancel-modal-description"
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
@@ -38,15 +43,15 @@ export function CancelModal({
       >
         <div className="flex items-center gap-3 mb-4">
           <div className="p-3 bg-red-100 rounded-xl">
-            <AlertTriangle className="w-6 h-6 text-red-600" />
+            <AlertTriangle className="w-6 h-6 text-red-600" aria-hidden="true" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-foreground">Annuler la mission</h3>
+            <h3 id="cancel-modal-title" className="text-lg font-bold text-foreground">Annuler la mission</h3>
             <p className="text-sm text-text-light">Cette action est irréversible</p>
           </div>
         </div>
 
-        <p className="text-text-light mb-4">
+        <p id="cancel-modal-description" className="text-text-light mb-4">
           Voulez-vous vraiment annuler cette mission ? Le client sera notifié et remboursé.
         </p>
 

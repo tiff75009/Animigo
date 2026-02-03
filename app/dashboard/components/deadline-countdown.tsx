@@ -104,12 +104,32 @@ export function DeadlineCountdown({
   );
 
   useEffect(() => {
-    // Mise à jour chaque seconde
-    const interval = setInterval(() => {
-      setTimeRemaining(calculateTimeRemaining(deadline, bookedAt));
-    }, 1000);
+    // Intervalle adaptatif selon le temps restant
+    // > 1 jour : refresh toutes les 5 minutes
+    // > 1 heure : refresh toutes les minutes
+    // < 1 heure : refresh toutes les 10 secondes
+    const getIntervalMs = (remaining: TimeRemaining): number => {
+      if (remaining.days >= 1) return 5 * 60 * 1000; // 5 minutes
+      if (remaining.hours >= 1) return 60 * 1000; // 1 minute
+      return 10 * 1000; // 10 secondes
+    };
 
-    return () => clearInterval(interval);
+    let intervalId: NodeJS.Timeout;
+
+    const tick = () => {
+      const newTime = calculateTimeRemaining(deadline, bookedAt);
+      setTimeRemaining(newTime);
+
+      // Recalculer l'intervalle à chaque tick
+      const nextInterval = getIntervalMs(newTime);
+      intervalId = setTimeout(tick, nextInterval);
+    };
+
+    // Premier tick après l'intervalle initial
+    const initialInterval = getIntervalMs(timeRemaining);
+    intervalId = setTimeout(tick, initialInterval);
+
+    return () => clearTimeout(intervalId);
   }, [deadline, bookedAt]);
 
   // Si le délai est expiré
@@ -226,11 +246,24 @@ export function useDeadlineCountdown(deadline: number, bookedAt?: number) {
   );
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setTimeRemaining(calculateTimeRemaining(deadline, bookedAt));
-    }, 1000);
+    // Intervalle adaptatif selon le temps restant
+    const getIntervalMs = (remaining: TimeRemaining): number => {
+      if (remaining.days >= 1) return 5 * 60 * 1000; // 5 minutes
+      if (remaining.hours >= 1) return 60 * 1000; // 1 minute
+      return 10 * 1000; // 10 secondes
+    };
 
-    return () => clearInterval(interval);
+    let intervalId: NodeJS.Timeout;
+
+    const tick = () => {
+      const newTime = calculateTimeRemaining(deadline, bookedAt);
+      setTimeRemaining(newTime);
+      intervalId = setTimeout(tick, getIntervalMs(newTime));
+    };
+
+    intervalId = setTimeout(tick, getIntervalMs(timeRemaining));
+
+    return () => clearTimeout(intervalId);
   }, [deadline, bookedAt]);
 
   return {

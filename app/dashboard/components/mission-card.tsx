@@ -320,13 +320,32 @@ export function MissionCard({
   const canShowSensitiveInfo = ["upcoming", "in_progress", "completed"].includes(mission.status);
   const isAccepted = canShowSensitiveInfo;
 
-  // Mise à jour automatique du temps écoulé toutes les secondes
+  // Mise à jour automatique du temps écoulé avec intervalle adaptatif
+  // > 1 jour : refresh toutes les 5 minutes
+  // > 1 heure : refresh toutes les minutes
+  // < 1 heure : refresh toutes les 10 secondes
   useEffect(() => {
     if (mission.bookedAt && mission.status === "pending_acceptance") {
-      const interval = setInterval(() => {
+      const getIntervalMs = (): number => {
+        const diffMs = Date.now() - mission.bookedAt!;
+        const totalHours = diffMs / (1000 * 60 * 60);
+        const totalDays = totalHours / 24;
+
+        if (totalDays >= 1) return 5 * 60 * 1000; // 5 minutes
+        if (totalHours >= 1) return 60 * 1000; // 1 minute
+        return 10 * 1000; // 10 secondes
+      };
+
+      let timeoutId: NodeJS.Timeout;
+
+      const tick = () => {
         setTick((t) => t + 1);
-      }, 1000);
-      return () => clearInterval(interval);
+        timeoutId = setTimeout(tick, getIntervalMs());
+      };
+
+      timeoutId = setTimeout(tick, getIntervalMs());
+
+      return () => clearTimeout(timeoutId);
     }
   }, [mission.bookedAt, mission.status]);
 

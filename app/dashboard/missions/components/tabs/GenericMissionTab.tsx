@@ -2,15 +2,15 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { useQuery, useMutation } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { MissionCard } from "../../../components/mission-card";
 import { MissionsStats } from "../MissionsStats";
 import { MissionsEmptyState } from "../MissionsEmptyState";
 import { MissionsInfoBanner } from "../MissionsInfoBanner";
+import { MissionListSkeleton } from "../MissionCardSkeleton";
 import { useMissionFilters } from "../useMissionFilters";
-import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/app/components/ui/toast";
 import type { MissionTab } from "../MissionsTabs";
@@ -31,6 +31,9 @@ type MissionStatus =
 interface GenericMissionTabProps {
   token: string | null;
   status: MissionStatus;
+  // Missions passées par la page parente (évite les queries redondantes)
+  missions?: MissionType[];
+  announcerCoordinates?: { lat: number; lng: number } | null;
   serviceType?: ServiceTypeFilter;
   sessionType?: SessionTypeFilter;
   animalType?: AnimalTypeFilter;
@@ -40,6 +43,8 @@ interface GenericMissionTabProps {
 export function GenericMissionTab({
   token,
   status,
+  missions,
+  announcerCoordinates,
   serviceType = "all",
   sessionType = "all",
   animalType = "all",
@@ -49,19 +54,9 @@ export function GenericMissionTab({
   const { error: toastError } = useToast();
   const [isContacting, setIsContacting] = useState(false);
 
-  const missions = useQuery(
-    api.planning.missions.getMissionsByStatus,
-    token ? { token, status } : "skip"
-  );
-
-  const announcerData = useQuery(
-    api.planning.missions.getAnnouncerCoordinates,
-    token ? { token } : "skip"
-  );
-
   const getOrCreateConversation = useMutation(api.messaging.mutations.getOrCreateConversation);
 
-  // Appliquer les filtres
+  // Appliquer les filtres sur les missions reçues en props
   const filteredMissions = useMissionFilters(missions, serviceType, sessionType, animalType, month);
 
   const isLoading = missions === undefined;
@@ -106,22 +101,18 @@ export function GenericMissionTab({
     }
   };
 
-  // Couleur du loader selon le statut
-  const loaderColors: Record<MissionStatus, string> = {
-    pending_confirmation: "text-orange-600",
-    in_progress: "text-blue-600",
-    completed: "text-green-600",
-    refused: "text-red-600",
-    cancelled: "text-gray-600",
-  };
-
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-center">
-          <Loader2 className={`w-8 h-8 animate-spin mx-auto mb-4 ${loaderColors[status]}`} />
-          <p className="text-text-light">Chargement des missions...</p>
+      <div className="space-y-6">
+        {/* Stats skeleton */}
+        <div className="bg-white rounded-2xl p-5 shadow-sm animate-pulse">
+          <div className="flex justify-between items-center">
+            <div className="h-6 bg-gray-200 rounded w-40" />
+            <div className="h-8 bg-gray-200 rounded w-24" />
+          </div>
         </div>
+        {/* Mission cards skeleton */}
+        <MissionListSkeleton count={3} />
       </div>
     );
   }
@@ -158,7 +149,7 @@ export function GenericMissionTab({
             >
               <MissionCard
                 mission={mission}
-                announcerCoordinates={announcerData?.coordinates}
+                announcerCoordinates={announcerCoordinates}
                 token={token}
                 onContact={status === "in_progress" ? handleContact : undefined}
               />

@@ -18,6 +18,7 @@ export type PaymentStatus = "not_due" | "pending" | "paid";
 
 /**
  * Récupère les missions d'un annonceur pour une plage de dates
+ * OPTIMISÉ : Élimine les N+1 queries
  */
 export const getMissionsByDateRange = query({
   args: {
@@ -35,88 +36,97 @@ export const getMissionsByDateRange = query({
       throw new ConvexError("Session invalide");
     }
 
-    // Récupérer toutes les missions de l'annonceur
-    const missions = await ctx.db
+    // 1. Récupérer toutes les missions de l'annonceur (une seule query)
+    const allMissions = await ctx.db
       .query("missions")
       .withIndex("by_announcer", (q) => q.eq("announcerId", session.userId))
       .collect();
 
-    // Filtrer par plage de dates
-    const filteredMissions = missions.filter((m) => {
+    // 2. Filtrer par plage de dates
+    const filteredMissions = allMissions.filter((m) => {
       return m.startDate <= args.endDate && m.endDate >= args.startDate;
     });
 
-    // Calculer l'historique client pour chaque client unique
-    const uniqueClientIds = [...new Set(filteredMissions.map(m => m.clientId))];
+    // 3. Grouper par clientId en mémoire (évite N+1)
+    const clientMissionsMap = new Map<string, typeof allMissions>();
+    allMissions.forEach(m => {
+      const list = clientMissionsMap.get(m.clientId as string) || [];
+      list.push(m);
+      clientMissionsMap.set(m.clientId as string, list);
+    });
+
+    // 4. Calculer l'historique client SANS requête supplémentaire
+    const uniqueClientIds = [...new Set(filteredMissions.map(m => m.clientId as string))];
     const clientHistoryMap: Record<string, { previousMissionsCount: number; isNewClient: boolean }> = {};
 
     for (const clientId of uniqueClientIds) {
-      const clientMissions = await ctx.db
-        .query("missions")
-        .withIndex("by_client", (q) => q.eq("clientId", clientId))
-        .collect();
-
-      // Missions complétées avec cet annonceur
-      const completedWithAnnouncer = clientMissions.filter(
-        m => m.announcerId === session.userId && m.status === "completed"
-      );
+      const clientMissions = clientMissionsMap.get(clientId) || [];
+      const completedCount = clientMissions.filter(m => m.status === "completed").length;
 
       clientHistoryMap[clientId] = {
-        previousMissionsCount: completedWithAnnouncer.length,
-        isNewClient: completedWithAnnouncer.length === 0,
+        previousMissionsCount: completedCount,
+        isNewClient: completedCount === 0,
       };
     }
 
-    // Enrichir avec les dates des créneaux collectifs si applicable
-    const enrichedMissions = await Promise.all(
-      filteredMissions.map(async (m) => {
-        let collectiveSlotDates: string[] | undefined;
+    // 5. Batch lookup des collectiveSlots (évite N² queries)
+    const allSlotIds: string[] = [];
+    filteredMissions.forEach(m => {
+      if (m.sessionType === "collective" && m.collectiveSlotIds?.length) {
+        allSlotIds.push(...(m.collectiveSlotIds as string[]));
+      }
+    });
 
-        // Pour les missions collectives, récupérer les dates des créneaux réservés
-        if (m.sessionType === "collective" && m.collectiveSlotIds && m.collectiveSlotIds.length > 0) {
-          const slotDates: string[] = [];
-          for (const slotId of m.collectiveSlotIds) {
-            const slot = await ctx.db.get(slotId);
-            if (slot) {
-              slotDates.push(slot.date);
-            }
-          }
-          collectiveSlotDates = slotDates;
+    const slotMap = new Map<string, { date: string }>();
+    if (allSlotIds.length > 0) {
+      const slots = await Promise.all(
+        allSlotIds.map(id => ctx.db.get(id as any))
+      );
+      allSlotIds.forEach((id, i) => {
+        if (slots[i]) {
+          slotMap.set(id, { date: slots[i].date });
         }
+      });
+    }
 
-        return {
-          id: m._id,
-          clientId: m.clientId,
-          clientName: m.clientName,
-          clientPhone: m.clientPhone,
-          animal: m.animal,
-          serviceName: m.serviceName,
-          serviceCategory: m.serviceCategory,
-          startDate: m.startDate,
-          endDate: m.endDate,
-          startTime: m.startTime,
-          endTime: m.endTime,
-          status: m.status,
-          amount: m.amount,
-          paymentStatus: m.paymentStatus,
-          location: m.location,
-          clientNotes: m.clientNotes,
-          announcerNotes: m.announcerNotes,
-          cancellationReason: m.cancellationReason,
-          // Type de formule et données multi-séances/collectives
-          sessionType: m.sessionType,
-          numberOfSessions: m.numberOfSessions,
-          sessions: m.sessions,
-          collectiveSlotIds: m.collectiveSlotIds,
-          collectiveSlotDates, // Dates des créneaux pour les formules collectives
-          animalCount: m.animalCount,
-          // Lieu de prestation
-          serviceLocation: m.serviceLocation,
-          // Historique client avec cet annonceur
-          clientHistory: clientHistoryMap[m.clientId] || { previousMissionsCount: 0, isNewClient: true },
-        };
-      })
-    );
+    // 6. Enrichir les missions
+    const enrichedMissions = filteredMissions.map(m => {
+      let collectiveSlotDates: string[] | undefined;
+      if (m.sessionType === "collective" && m.collectiveSlotIds?.length) {
+        collectiveSlotDates = (m.collectiveSlotIds as string[])
+          .map(id => slotMap.get(id)?.date)
+          .filter((d): d is string => d !== undefined);
+      }
+
+      return {
+        id: m._id,
+        clientId: m.clientId,
+        clientName: m.clientName,
+        clientPhone: m.clientPhone,
+        animal: m.animal,
+        serviceName: m.serviceName,
+        serviceCategory: m.serviceCategory,
+        startDate: m.startDate,
+        endDate: m.endDate,
+        startTime: m.startTime,
+        endTime: m.endTime,
+        status: m.status,
+        amount: m.amount,
+        paymentStatus: m.paymentStatus,
+        location: m.location,
+        clientNotes: m.clientNotes,
+        announcerNotes: m.announcerNotes,
+        cancellationReason: m.cancellationReason,
+        sessionType: m.sessionType,
+        numberOfSessions: m.numberOfSessions,
+        sessions: m.sessions,
+        collectiveSlotIds: m.collectiveSlotIds,
+        collectiveSlotDates,
+        animalCount: m.animalCount,
+        serviceLocation: m.serviceLocation,
+        clientHistory: clientHistoryMap[m.clientId as string] || { previousMissionsCount: 0, isNewClient: true },
+      };
+    });
 
     return enrichedMissions;
   },
@@ -201,6 +211,7 @@ export const getMissionStats = query({
 
 /**
  * Récupère les missions par statut
+ * OPTIMISÉ : Élimine les N+1 queries en groupant les données en mémoire
  */
 export const getMissionsByStatus = query({
   args: {
@@ -226,20 +237,31 @@ export const getMissionsByStatus = query({
       return [];
     }
 
-    let missionsQuery = ctx.db
+    // 1. Récupérer TOUTES les missions de l'annonceur en une seule query
+    // Cela évite les N+1 queries pour calculer les stats client
+    const allAnnouncerMissions = await ctx.db
       .query("missions")
-      .withIndex("by_announcer_status", (q) =>
-        q.eq("announcerId", session.userId).eq("status", args.status)
-      );
+      .withIndex("by_announcer", (q) => q.eq("announcerId", session.userId))
+      .collect();
 
-    const missions = args.limit
-      ? await missionsQuery.take(args.limit)
-      : await missionsQuery.collect();
+    // 2. Filtrer par statut demandé
+    let missions = allAnnouncerMissions.filter(m => m.status === args.status);
+    if (args.limit) {
+      missions = missions.slice(0, args.limit);
+    }
 
-    // Collecter les IDs clients uniques pour calculer les stats de confiance
-    const uniqueClientIds = [...new Set(missions.map(m => m.clientId))];
+    // 3. Grouper toutes les missions par clientId en mémoire (évite N+1)
+    const clientMissionsMap = new Map<string, typeof allAnnouncerMissions>();
+    allAnnouncerMissions.forEach(m => {
+      const list = clientMissionsMap.get(m.clientId as string) || [];
+      list.push(m);
+      clientMissionsMap.set(m.clientId as string, list);
+    });
 
-    // Calculer les stats de confiance pour chaque client
+    // 4. Calculer les stats de confiance pour chaque client SANS requête supplémentaire
+    const now = Date.now();
+    const fortyEightHours = 48 * 60 * 60 * 1000;
+
     const clientTrustStats: Record<string, {
       totalBookings: number;
       cancelled: number;
@@ -248,25 +270,20 @@ export const getMissionsByStatus = query({
       trustScore: number;
     }> = {};
 
-    // Calculer l'historique client avec cet annonceur
     const clientHistoryWithAnnouncer: Record<string, {
       previousMissionsCount: number;
       isNewClient: boolean;
     }> = {};
 
+    // Calculer les stats pour les clients des missions filtrées uniquement
+    const uniqueClientIds = [...new Set(missions.map(m => m.clientId as string))];
+
     for (const clientId of uniqueClientIds) {
-      // Récupérer toutes les missions de ce client
-      const clientMissions = await ctx.db
-        .query("missions")
-        .withIndex("by_client", (q) => q.eq("clientId", clientId))
-        .collect();
+      const clientMissions = clientMissionsMap.get(clientId) || [];
 
       const totalBookings = clientMissions.length;
       const cancelled = clientMissions.filter(m => m.status === "cancelled").length;
       const completed = clientMissions.filter(m => m.status === "completed").length;
-      // Non finalisées = pending_confirmation depuis plus de 48h
-      const now = Date.now();
-      const fortyEightHours = 48 * 60 * 60 * 1000;
       const notFinalized = clientMissions.filter(m =>
         m.status === "pending_confirmation" &&
         m.updatedAt &&
@@ -274,11 +291,10 @@ export const getMissionsByStatus = query({
       ).length;
 
       // Calcul du score de confiance
-      // Base 100%, pénalité pour annulations et non-finalisées
       let trustScore = 100;
       if (totalBookings > 0) {
-        const cancelPenalty = (cancelled / totalBookings) * 40; // Max 40%
-        const notFinalizedPenalty = (notFinalized / totalBookings) * 30; // Max 30%
+        const cancelPenalty = (cancelled / totalBookings) * 40;
+        const notFinalizedPenalty = (notFinalized / totalBookings) * 30;
         trustScore = Math.max(0, Math.round(100 - cancelPenalty - notFinalizedPenalty));
       }
 
@@ -290,99 +306,100 @@ export const getMissionsByStatus = query({
         trustScore
       };
 
-      // Historique avec cet annonceur spécifique (missions complétées uniquement)
-      const missionsWithThisAnnouncer = clientMissions.filter(
-        m => m.announcerId === session.userId && m.status === "completed"
-      );
+      // Historique avec cet annonceur (déjà filtré car allAnnouncerMissions)
+      const completedWithAnnouncer = clientMissions.filter(m => m.status === "completed").length;
       clientHistoryWithAnnouncer[clientId] = {
-        previousMissionsCount: missionsWithThisAnnouncer.length,
-        isNewClient: missionsWithThisAnnouncer.length === 0,
+        previousMissionsCount: completedWithAnnouncer,
+        isNewClient: completedWithAnnouncer === 0,
       };
     }
 
-    // Enrichir avec les dates des créneaux collectifs si applicable
-    const enrichedMissions = await Promise.all(
-      missions.map(async (m) => {
-        let collectiveSlotDates: string[] | undefined;
+    // 5. Batch lookup des collectiveSlots (évite N² queries)
+    const allSlotIds: string[] = [];
+    missions.forEach(m => {
+      if (m.sessionType === "collective" && m.collectiveSlotIds?.length) {
+        allSlotIds.push(...(m.collectiveSlotIds as string[]));
+      }
+    });
 
-        // Pour les missions collectives, récupérer les dates des créneaux réservés
-        if (m.sessionType === "collective" && m.collectiveSlotIds && m.collectiveSlotIds.length > 0) {
-          const slotDates: string[] = [];
-          for (const slotId of m.collectiveSlotIds) {
-            const slot = await ctx.db.get(slotId);
-            if (slot) {
-              slotDates.push(slot.date);
-            }
-          }
-          collectiveSlotDates = slotDates;
+    // Récupérer tous les slots en parallèle (une seule vague)
+    const slotMap = new Map<string, { date: string }>();
+    if (allSlotIds.length > 0) {
+      const slots = await Promise.all(
+        allSlotIds.map(id => ctx.db.get(id as any))
+      );
+      allSlotIds.forEach((id, i) => {
+        if (slots[i]) {
+          slotMap.set(id, { date: slots[i].date });
         }
+      });
+    }
 
-        // Stats de confiance du client
-        const clientStats = clientTrustStats[m.clientId] || {
-          totalBookings: 1,
-          cancelled: 0,
-          notFinalized: 0,
-          completed: 0,
-          trustScore: 100,
-        };
+    // 6. Enrichir les missions avec les données calculées
+    const enrichedMissions = missions.map(m => {
+      // Dates des créneaux collectifs depuis le cache
+      let collectiveSlotDates: string[] | undefined;
+      if (m.sessionType === "collective" && m.collectiveSlotIds?.length) {
+        collectiveSlotDates = (m.collectiveSlotIds as string[])
+          .map(id => slotMap.get(id)?.date)
+          .filter((d): d is string => d !== undefined);
+      }
 
-        // Historique client avec cet annonceur
-        const clientHistory = clientHistoryWithAnnouncer[m.clientId] || {
-          previousMissionsCount: 0,
-          isNewClient: true,
-        };
+      const clientStats = clientTrustStats[m.clientId as string] || {
+        totalBookings: 1,
+        cancelled: 0,
+        notFinalized: 0,
+        completed: 0,
+        trustScore: 100,
+      };
 
-        return {
-          id: m._id,
-          clientId: m.clientId,
-          clientName: m.clientName,
-          clientPhone: m.clientPhone,
-          animal: m.animal,
-          animalId: m.animalId,
-          serviceName: m.serviceName,
-          serviceCategory: m.serviceCategory,
-          variantId: m.variantId,
-          variantName: m.variantName,
-          optionIds: m.optionIds,
-          optionNames: m.optionNames,
-          basePrice: m.basePrice,
-          optionsPrice: m.optionsPrice,
-          platformFee: m.platformFee,
-          announcerEarnings: m.announcerEarnings,
-          startDate: m.startDate,
-          endDate: m.endDate,
-          startTime: m.startTime,
-          endTime: m.endTime,
-          status: m.status,
-          amount: m.amount,
-          paymentStatus: m.paymentStatus,
-          location: m.location,
-          city: m.city,
-          clientCoordinates: m.clientCoordinates,
-          clientNotes: m.clientNotes,
-          announcerNotes: m.announcerNotes,
-          // Type de formule
-          sessionType: m.sessionType,
-          numberOfSessions: m.numberOfSessions,
-          // Créneaux collectifs
-          collectiveSlotIds: m.collectiveSlotIds,
-          collectiveSlotDates, // Dates des créneaux pour l'affichage
-          animalCount: m.animalCount,
-          // Séances multi-sessions
-          sessions: m.sessions,
-          // Timestamp de réservation
-          bookedAt: m.bookedAt,
-          // Délai d'acceptation
-          acceptanceDeadline: m.acceptanceDeadline,
-          // Stats de confiance du client
-          clientTrustStats: clientStats,
-          // Lieu de prestation
-          serviceLocation: m.serviceLocation,
-          // Historique client avec cet annonceur
-          clientHistory,
-        };
-      })
-    );
+      const clientHistory = clientHistoryWithAnnouncer[m.clientId as string] || {
+        previousMissionsCount: 0,
+        isNewClient: true,
+      };
+
+      return {
+        id: m._id,
+        clientId: m.clientId,
+        clientName: m.clientName,
+        clientPhone: m.clientPhone,
+        animal: m.animal,
+        animalId: m.animalId,
+        serviceName: m.serviceName,
+        serviceCategory: m.serviceCategory,
+        variantId: m.variantId,
+        variantName: m.variantName,
+        optionIds: m.optionIds,
+        optionNames: m.optionNames,
+        basePrice: m.basePrice,
+        optionsPrice: m.optionsPrice,
+        platformFee: m.platformFee,
+        announcerEarnings: m.announcerEarnings,
+        startDate: m.startDate,
+        endDate: m.endDate,
+        startTime: m.startTime,
+        endTime: m.endTime,
+        status: m.status,
+        amount: m.amount,
+        paymentStatus: m.paymentStatus,
+        location: m.location,
+        city: m.city,
+        clientCoordinates: m.clientCoordinates,
+        clientNotes: m.clientNotes,
+        announcerNotes: m.announcerNotes,
+        sessionType: m.sessionType,
+        numberOfSessions: m.numberOfSessions,
+        collectiveSlotIds: m.collectiveSlotIds,
+        collectiveSlotDates,
+        animalCount: m.animalCount,
+        sessions: m.sessions,
+        bookedAt: m.bookedAt,
+        acceptanceDeadline: m.acceptanceDeadline,
+        clientTrustStats: clientStats,
+        serviceLocation: m.serviceLocation,
+        clientHistory,
+      };
+    });
 
     return enrichedMissions;
   },
@@ -1326,6 +1343,219 @@ export const getAnnouncerDashboardStats = query({
       upcomingRevenue,
       completedRevenue,
       activeMissions,
+    };
+  },
+});
+
+/**
+ * Query unifiée : Récupère les missions ET les stats en une seule query
+ * OPTIMISÉ : Évite les appels dupliqués entre getAnnouncerDashboardStats et getMissionsByStatus
+ *
+ * Retourne :
+ * - missions : Liste des missions filtrées par statut (avec enrichissement)
+ * - stats : Compteurs par statut + revenus
+ * - announcerCoordinates : Coordonnées de l'annonceur pour calcul distance
+ */
+export const getAnnouncerMissionsWithStats = query({
+  args: {
+    token: v.string(),
+    status: v.optional(v.union(
+      v.literal("pending_acceptance"),
+      v.literal("pending_confirmation"),
+      v.literal("upcoming"),
+      v.literal("in_progress"),
+      v.literal("completed"),
+      v.literal("refused"),
+      v.literal("cancelled")
+    )),
+  },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+
+    if (!session || session.expiresAt < Date.now()) {
+      return null;
+    }
+
+    // 1. Récupérer TOUTES les missions de l'annonceur en UNE SEULE query
+    const allMissions = await ctx.db
+      .query("missions")
+      .withIndex("by_announcer", (q) => q.eq("announcerId", session.userId))
+      .collect();
+
+    // 2. Calculer les stats par statut
+    const pendingAcceptance = allMissions.filter(m => m.status === "pending_acceptance");
+    const pendingConfirmation = allMissions.filter(m => m.status === "pending_confirmation");
+    const upcoming = allMissions.filter(m => m.status === "upcoming");
+    const inProgress = allMissions.filter(m => m.status === "in_progress");
+    const completed = allMissions.filter(m => m.status === "completed");
+    const refused = allMissions.filter(m => m.status === "refused");
+    const cancelled = allMissions.filter(m => m.status === "cancelled");
+
+    // Revenus
+    const upcomingRevenue = [...upcoming, ...inProgress].reduce(
+      (sum, m) => sum + (m.announcerEarnings ?? Math.round(m.amount * 0.85)),
+      0
+    );
+    const completedRevenue = completed.reduce(
+      (sum, m) => sum + (m.announcerEarnings ?? Math.round(m.amount * 0.85)),
+      0
+    );
+
+    const stats = {
+      pending_acceptance: pendingAcceptance.length,
+      pending_confirmation: pendingConfirmation.length,
+      upcoming: upcoming.length,
+      in_progress: inProgress.length,
+      completed: completed.length,
+      refused: refused.length,
+      cancelled: cancelled.length,
+      upcomingRevenue,
+      completedRevenue,
+    };
+
+    // 3. Filtrer par statut demandé
+    const filteredMissions = args.status
+      ? allMissions.filter(m => m.status === args.status)
+      : allMissions;
+
+    // 4. Grouper par clientId pour les stats de confiance (évite N+1)
+    const clientMissionsMap = new Map<string, typeof allMissions>();
+    allMissions.forEach(m => {
+      const list = clientMissionsMap.get(m.clientId as string) || [];
+      list.push(m);
+      clientMissionsMap.set(m.clientId as string, list);
+    });
+
+    const now = Date.now();
+    const fortyEightHours = 48 * 60 * 60 * 1000;
+    const uniqueClientIds = [...new Set(filteredMissions.map(m => m.clientId as string))];
+
+    const clientTrustStats: Record<string, any> = {};
+    const clientHistoryWithAnnouncer: Record<string, any> = {};
+
+    for (const clientId of uniqueClientIds) {
+      const clientMissions = clientMissionsMap.get(clientId) || [];
+      const totalBookings = clientMissions.length;
+      const cancelledCount = clientMissions.filter(m => m.status === "cancelled").length;
+      const completedCount = clientMissions.filter(m => m.status === "completed").length;
+      const notFinalized = clientMissions.filter(m =>
+        m.status === "pending_confirmation" &&
+        m.updatedAt &&
+        (now - m.updatedAt) > fortyEightHours
+      ).length;
+
+      let trustScore = 100;
+      if (totalBookings > 0) {
+        const cancelPenalty = (cancelledCount / totalBookings) * 40;
+        const notFinalizedPenalty = (notFinalized / totalBookings) * 30;
+        trustScore = Math.max(0, Math.round(100 - cancelPenalty - notFinalizedPenalty));
+      }
+
+      clientTrustStats[clientId] = {
+        totalBookings,
+        cancelled: cancelledCount,
+        notFinalized,
+        completed: completedCount,
+        trustScore
+      };
+
+      clientHistoryWithAnnouncer[clientId] = {
+        previousMissionsCount: completedCount,
+        isNewClient: completedCount === 0,
+      };
+    }
+
+    // 5. Batch lookup des collectiveSlots
+    const allSlotIds: string[] = [];
+    filteredMissions.forEach(m => {
+      if (m.sessionType === "collective" && m.collectiveSlotIds?.length) {
+        allSlotIds.push(...(m.collectiveSlotIds as string[]));
+      }
+    });
+
+    const slotMap = new Map<string, { date: string }>();
+    if (allSlotIds.length > 0) {
+      const slots = await Promise.all(
+        allSlotIds.map(id => ctx.db.get(id as any))
+      );
+      allSlotIds.forEach((id, i) => {
+        if (slots[i]) {
+          slotMap.set(id, { date: slots[i].date });
+        }
+      });
+    }
+
+    // 6. Enrichir les missions
+    const enrichedMissions = filteredMissions.map(m => {
+      let collectiveSlotDates: string[] | undefined;
+      if (m.sessionType === "collective" && m.collectiveSlotIds?.length) {
+        collectiveSlotDates = (m.collectiveSlotIds as string[])
+          .map(id => slotMap.get(id)?.date)
+          .filter((d): d is string => d !== undefined);
+      }
+
+      return {
+        id: m._id,
+        clientId: m.clientId,
+        clientName: m.clientName,
+        clientPhone: m.clientPhone,
+        animal: m.animal,
+        animalId: m.animalId,
+        serviceName: m.serviceName,
+        serviceCategory: m.serviceCategory,
+        variantId: m.variantId,
+        variantName: m.variantName,
+        optionIds: m.optionIds,
+        optionNames: m.optionNames,
+        basePrice: m.basePrice,
+        optionsPrice: m.optionsPrice,
+        platformFee: m.platformFee,
+        announcerEarnings: m.announcerEarnings,
+        startDate: m.startDate,
+        endDate: m.endDate,
+        startTime: m.startTime,
+        endTime: m.endTime,
+        status: m.status,
+        amount: m.amount,
+        paymentStatus: m.paymentStatus,
+        location: m.location,
+        city: m.city,
+        clientCoordinates: m.clientCoordinates,
+        clientNotes: m.clientNotes,
+        announcerNotes: m.announcerNotes,
+        sessionType: m.sessionType,
+        numberOfSessions: m.numberOfSessions,
+        collectiveSlotIds: m.collectiveSlotIds,
+        collectiveSlotDates,
+        animalCount: m.animalCount,
+        sessions: m.sessions,
+        bookedAt: m.bookedAt,
+        acceptanceDeadline: m.acceptanceDeadline,
+        clientTrustStats: clientTrustStats[m.clientId as string] || {
+          totalBookings: 1, cancelled: 0, notFinalized: 0, completed: 0, trustScore: 100
+        },
+        serviceLocation: m.serviceLocation,
+        clientHistory: clientHistoryWithAnnouncer[m.clientId as string] || {
+          previousMissionsCount: 0, isNewClient: true
+        },
+      };
+    });
+
+    // 7. Récupérer les coordonnées de l'annonceur (pour calcul distance)
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", session.userId))
+      .first();
+
+    const announcerCoordinates = profile?.coordinates || null;
+
+    return {
+      missions: enrichedMissions,
+      stats,
+      announcerCoordinates,
     };
   },
 });

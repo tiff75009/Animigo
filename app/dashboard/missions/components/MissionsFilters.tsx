@@ -261,6 +261,8 @@ function FilterChip({ active, onClick, label, icon, emoji, count, color = "slate
   return (
     <motion.button
       onClick={onClick}
+      aria-pressed={active}
+      aria-label={`Filtre ${label}${count !== undefined && count > 0 ? `, ${count} résultat${count > 1 ? "s" : ""}` : ""}`}
       className={cn(
         "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
         active ? colorClasses[color].split(" ").slice(0, 2).join(" ") : colorClasses[color]
@@ -268,14 +270,17 @@ function FilterChip({ active, onClick, label, icon, emoji, count, color = "slate
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
     >
-      {emoji && <span>{emoji}</span>}
-      {icon && icon}
+      {emoji && <span aria-hidden="true">{emoji}</span>}
+      {icon && <span aria-hidden="true">{icon}</span>}
       <span>{label}</span>
       {count !== undefined && count > 0 && (
-        <span className={cn(
-          "min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center",
-          active ? "bg-white/20" : "bg-white"
-        )}>
+        <span
+          className={cn(
+            "min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center",
+            active ? "bg-white/20" : "bg-white"
+          )}
+          aria-hidden="true"
+        >
           {count}
         </span>
       )}

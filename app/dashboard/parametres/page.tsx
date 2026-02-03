@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Settings,
@@ -344,6 +344,27 @@ function PaymentTab() {
       setSelectedPayoutMode(stripeInfo.payoutMode);
     }
   }, [stripeInfo?.payoutMode]);
+
+  // Pré-remplir le formulaire avec les infos du compte quand on ouvre le formulaire
+  const prevShowSetupForm = useRef(false);
+  useEffect(() => {
+    // Pré-remplir seulement quand on ouvre le formulaire (transition false -> true)
+    if (showSetupForm && !prevShowSetupForm.current && stripeInfo) {
+      setFormData({
+        firstName: stripeInfo.firstName || "",
+        lastName: stripeInfo.lastName || "",
+        dobDay: "",
+        dobMonth: "",
+        dobYear: "",
+        addressLine1: stripeInfo.address || "",
+        addressLine2: "",
+        city: stripeInfo.city || "",
+        postalCode: stripeInfo.postalCode || "",
+        iban: "",
+      });
+    }
+    prevShowSetupForm.current = showSetupForm;
+  }, [showSetupForm, stripeInfo]);
 
   // Handle payout mode change
   const handlePayoutModeChange = async (mode: "scheduled" | "instant") => {

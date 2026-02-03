@@ -31,6 +31,12 @@ export const getAnnouncerStripeInfo = query({
       return null;
     }
 
+    // Récupérer le profil pour avoir city/postalCode/location
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", session.userId))
+      .first();
+
     return {
       hasStripeAccount: !!user.stripeAccountId,
       stripeAccountId: user.stripeAccountId,
@@ -44,6 +50,12 @@ export const getAnnouncerStripeInfo = query({
       // Pour construire l'URL du profil annonceur
       userSlug: user.slug || null,
       userId: user._id,
+      // Infos pour pré-remplir le formulaire RIB
+      firstName: user.firstName || null,
+      lastName: user.lastName || null,
+      city: profile?.city || null,
+      postalCode: profile?.postalCode || null,
+      address: profile?.location || null, // location = adresse texte libre
     };
   },
 });

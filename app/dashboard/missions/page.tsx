@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense, useMemo } from "react";
+import { useState, useEffect, Suspense, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery } from "convex/react";
@@ -30,49 +30,110 @@ interface MissionForFilters {
   sessionType?: string;
 }
 
+// Onglets valides pour la validation URL
+const VALID_TABS: MissionTab[] = [
+  "pending_acceptance",
+  "pending_confirmation",
+  "upcoming",
+  "in_progress",
+  "completed",
+  "refused",
+  "cancelled",
+];
+
 function MissionsPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { token, isLoading: authLoading } = useAuth();
 
-  // Récupérer l'onglet actif depuis l'URL ou utiliser la valeur par défaut
-  const tabFromUrl = searchParams.get("tab") as MissionTab | null;
-  const [activeTab, setActiveTab] = useState<MissionTab>(
-    tabFromUrl || "pending_acceptance"
-  );
+  // Récupérer et VALIDER l'onglet actif depuis l'URL
+  const tabFromUrl = searchParams.get("tab");
+  const validatedTab: MissionTab = VALID_TABS.includes(tabFromUrl as MissionTab)
+    ? (tabFromUrl as MissionTab)
+    : "pending_acceptance";
 
-  // États des filtres
-  const [serviceType, setServiceType] = useState<ServiceTypeFilter>("all");
-  const [sessionType, setSessionType] = useState<SessionTypeFilter>("all");
-  const [animalType, setAnimalType] = useState<AnimalTypeFilter>("all");
-  const [month, setMonth] = useState<MonthFilter>("all");
+  const [activeTab, setActiveTab] = useState<MissionTab>(validatedTab);
+
+  // Récupérer les filtres depuis l'URL
+  const serviceFromUrl = searchParams.get("service") as ServiceTypeFilter | null;
+  const sessionFromUrl = searchParams.get("session") as SessionTypeFilter | null;
+  const animalFromUrl = searchParams.get("animal") as AnimalTypeFilter | null;
+  const monthFromUrl = searchParams.get("month") as MonthFilter | null;
+
+  // États des filtres (initialisés depuis l'URL)
+  const [serviceType, setServiceType] = useState<ServiceTypeFilter>(serviceFromUrl || "all");
+  const [sessionType, setSessionType] = useState<SessionTypeFilter>(sessionFromUrl || "all");
+  const [animalType, setAnimalType] = useState<AnimalTypeFilter>(animalFromUrl || "all");
+  const [month, setMonth] = useState<MonthFilter>(monthFromUrl || "all");
   const [showFilters, setShowFilters] = useState(false);
 
   // Sync avec l'URL quand l'onglet change
   useEffect(() => {
-    if (tabFromUrl && tabFromUrl !== activeTab) {
-      setActiveTab(tabFromUrl);
+    if (tabFromUrl && VALID_TABS.includes(tabFromUrl as MissionTab) && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl as MissionTab);
     }
   }, [tabFromUrl]);
 
+  // Mettre à jour l'URL quand les filtres changent
+  const updateUrl = useCallback((tab: MissionTab, filters?: {
+    service?: ServiceTypeFilter;
+    session?: SessionTypeFilter;
+    animal?: AnimalTypeFilter;
+    month?: MonthFilter;
+  }) => {
+    const params = new URLSearchParams();
+    params.set("tab", tab);
+
+    const svc = filters?.service ?? serviceType;
+    const sess = filters?.session ?? sessionType;
+    const anim = filters?.animal ?? animalType;
+    const mon = filters?.month ?? month;
+
+    if (svc !== "all") params.set("service", svc);
+    if (sess !== "all") params.set("session", sess);
+    if (anim !== "all") params.set("animal", anim);
+    if (mon !== "all") params.set("month", mon);
+
+    router.replace(`/dashboard/missions?${params.toString()}`, { scroll: false });
+  }, [router, serviceType, sessionType, animalType, month]);
+
   const handleTabChange = (tab: MissionTab) => {
     setActiveTab(tab);
-    // Mettre à jour l'URL sans recharger la page
-    const newUrl = `/dashboard/missions?tab=${tab}`;
-    router.push(newUrl, { scroll: false });
+    updateUrl(tab);
   };
 
-  // Query pour les compteurs de toutes les missions
-  const stats = useQuery(
-    api.planning.missions.getAnnouncerDashboardStats,
-    token ? { token } : "skip"
-  );
+  // Wrapper pour les changements de filtres qui met à jour l'URL
+  const handleServiceTypeChange = (value: ServiceTypeFilter) => {
+    setServiceType(value);
+    updateUrl(activeTab, { service: value });
+  };
 
-  // Query pour récupérer toutes les missions de l'onglet actif (pour les filtres)
-  const currentMissions = useQuery(
-    api.planning.missions.getMissionsByStatus,
+  const handleSessionTypeChange = (value: SessionTypeFilter) => {
+    setSessionType(value);
+    updateUrl(activeTab, { session: value });
+  };
+
+  const handleAnimalTypeChange = (value: AnimalTypeFilter) => {
+    setAnimalType(value);
+    updateUrl(activeTab, { animal: value });
+  };
+
+  const handleMonthChange = (value: MonthFilter) => {
+    setMonth(value);
+    updateUrl(activeTab, { month: value });
+  };
+
+  // Query UNIFIÉE : récupère les missions ET les stats en une seule requête
+  // Optimisation : évite les appels dupliqués entre stats et missions
+  const data = useQuery(
+    api.planning.missions.getAnnouncerMissionsWithStats,
     token ? { token, status: activeTab } : "skip"
   );
+
+  // Extraire les données de la query unifiée
+  const stats = data?.stats;
+  const currentMissions = data?.missions;
+  const announcerCoordinates = data?.announcerCoordinates;
 
   const tabConfig = getTabConfig(activeTab);
 
@@ -159,10 +220,10 @@ function MissionsPageContent() {
   // Préparer les compteurs pour les badges des onglets
   const counts: Partial<Record<MissionTab, number>> = stats
     ? {
-        pending_acceptance: stats.pendingAcceptance ?? 0,
-        pending_confirmation: stats.pendingConfirmation ?? 0,
+        pending_acceptance: stats.pending_acceptance ?? 0,
+        pending_confirmation: stats.pending_confirmation ?? 0,
         upcoming: stats.upcoming ?? 0,
-        in_progress: stats.inProgress ?? 0,
+        in_progress: stats.in_progress ?? 0,
         completed: stats.completed ?? 0,
         refused: stats.refused ?? 0,
         cancelled: stats.cancelled ?? 0,
@@ -253,13 +314,13 @@ function MissionsPageContent() {
         >
           <MissionsFilters
             serviceType={serviceType}
-            onServiceTypeChange={setServiceType}
+            onServiceTypeChange={handleServiceTypeChange}
             sessionType={sessionType}
-            onSessionTypeChange={setSessionType}
+            onSessionTypeChange={handleSessionTypeChange}
             animalType={animalType}
-            onAnimalTypeChange={setAnimalType}
+            onAnimalTypeChange={handleAnimalTypeChange}
             month={month}
-            onMonthChange={setMonth}
+            onMonthChange={handleMonthChange}
             availableAnimalTypes={availableAnimalTypes}
             availableMonths={availableMonths}
             counts={filterCounts}
@@ -277,6 +338,8 @@ function MissionsPageContent() {
         {activeTab === "pending_acceptance" && (
           <PendingAcceptanceTab
             token={token}
+            missions={currentMissions}
+            announcerCoordinates={announcerCoordinates}
             serviceType={serviceType}
             sessionType={sessionType}
             animalType={animalType}
@@ -286,6 +349,8 @@ function MissionsPageContent() {
         {activeTab === "upcoming" && (
           <UpcomingTab
             token={token}
+            missions={currentMissions}
+            announcerCoordinates={announcerCoordinates}
             serviceType={serviceType}
             sessionType={sessionType}
             animalType={animalType}
@@ -296,6 +361,8 @@ function MissionsPageContent() {
           <GenericMissionTab
             token={token}
             status="pending_confirmation"
+            missions={currentMissions}
+            announcerCoordinates={announcerCoordinates}
             serviceType={serviceType}
             sessionType={sessionType}
             animalType={animalType}
@@ -306,6 +373,8 @@ function MissionsPageContent() {
           <GenericMissionTab
             token={token}
             status="in_progress"
+            missions={currentMissions}
+            announcerCoordinates={announcerCoordinates}
             serviceType={serviceType}
             sessionType={sessionType}
             animalType={animalType}
@@ -316,6 +385,8 @@ function MissionsPageContent() {
           <GenericMissionTab
             token={token}
             status="completed"
+            missions={currentMissions}
+            announcerCoordinates={announcerCoordinates}
             serviceType={serviceType}
             sessionType={sessionType}
             animalType={animalType}
@@ -326,6 +397,8 @@ function MissionsPageContent() {
           <GenericMissionTab
             token={token}
             status="refused"
+            missions={currentMissions}
+            announcerCoordinates={announcerCoordinates}
             serviceType={serviceType}
             sessionType={sessionType}
             animalType={animalType}
@@ -336,6 +409,8 @@ function MissionsPageContent() {
           <GenericMissionTab
             token={token}
             status="cancelled"
+            missions={currentMissions}
+            announcerCoordinates={announcerCoordinates}
             serviceType={serviceType}
             sessionType={sessionType}
             animalType={animalType}

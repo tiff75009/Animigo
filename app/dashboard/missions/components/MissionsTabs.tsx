@@ -98,7 +98,7 @@ interface MissionsTabsProps {
 
 export function MissionsTabs({ activeTab, onTabChange, counts = {} }: MissionsTabsProps) {
   return (
-    <div className="relative">
+    <div className="relative" role="tablist" aria-label="Onglets des missions">
       {/* Scroll container */}
       <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
         <div className="flex gap-2 min-w-max pb-2">
@@ -110,6 +110,10 @@ export function MissionsTabs({ activeTab, onTabChange, counts = {} }: MissionsTa
             return (
               <motion.button
                 key={tab.id}
+                role="tab"
+                aria-selected={isActive}
+                aria-controls={`tabpanel-${tab.id}`}
+                aria-label={`${tab.label}${count > 0 ? `, ${count} mission${count > 1 ? "s" : ""}` : ""}`}
                 onClick={() => onTabChange(tab.id)}
                 className={cn(
                   "relative flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition-all whitespace-nowrap",
@@ -120,7 +124,7 @@ export function MissionsTabs({ activeTab, onTabChange, counts = {} }: MissionsTa
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
-                <Icon className="w-4 h-4" />
+                <Icon className="w-4 h-4" aria-hidden="true" />
                 <span>{tab.label}</span>
                 {count > 0 && (
                   <span
@@ -130,6 +134,7 @@ export function MissionsTabs({ activeTab, onTabChange, counts = {} }: MissionsTa
                         ? "bg-white/80 text-foreground"
                         : `${tab.bgColor} ${tab.textColor}`
                     )}
+                    aria-hidden="true"
                   >
                     {count}
                   </span>
@@ -139,6 +144,7 @@ export function MissionsTabs({ activeTab, onTabChange, counts = {} }: MissionsTa
                     className="absolute inset-0 rounded-xl border-2 border-current opacity-20"
                     layoutId="activeTab"
                     transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                    aria-hidden="true"
                   />
                 )}
               </motion.button>

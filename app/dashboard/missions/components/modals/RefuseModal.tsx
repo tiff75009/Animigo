@@ -52,8 +52,13 @@ export function RefuseModal({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
+        role="presentation"
       >
         <motion.div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="refuse-modal-title"
+          aria-describedby="refuse-modal-description"
           className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl"
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -63,14 +68,15 @@ export function RefuseModal({
           {/* Header */}
           <div className="p-6 bg-gradient-to-r from-primary to-primary/80">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-white">Refuser la mission</h2>
+              <h2 id="refuse-modal-title" className="text-xl font-bold text-white">Refuser la mission</h2>
               <motion.button
                 className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center"
                 onClick={onClose}
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
+                aria-label="Fermer la modale"
               >
-                <X className="w-5 h-5 text-white" />
+                <X className="w-5 h-5 text-white" aria-hidden="true" />
               </motion.button>
             </div>
           </div>
@@ -108,7 +114,7 @@ export function RefuseModal({
 
                 {/* Raison du refus */}
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-foreground mb-2">
+                  <label id="refuse-modal-description" className="block text-sm font-medium text-foreground mb-2">
                     Raison du refus (optionnel)
                   </label>
                   <textarea

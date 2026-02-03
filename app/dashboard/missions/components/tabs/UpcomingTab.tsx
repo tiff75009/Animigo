@@ -2,16 +2,16 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useQuery, useMutation } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { MissionCard } from "../../../components/mission-card";
 import { MissionsStats } from "../MissionsStats";
 import { MissionsEmptyState } from "../MissionsEmptyState";
 import { MissionsInfoBanner } from "../MissionsInfoBanner";
+import { MissionListSkeleton } from "../MissionCardSkeleton";
 import { CancelModal } from "../modals";
 import { useMissionFilters } from "../useMissionFilters";
-import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/app/components/ui/toast";
 import type { FunctionReturnType } from "convex/server";
@@ -21,6 +21,9 @@ type MissionType = FunctionReturnType<typeof api.planning.missions.getMissionsBy
 
 interface UpcomingTabProps {
   token: string | null;
+  // Missions passées par la page parente (évite les queries redondantes)
+  missions?: MissionType[];
+  announcerCoordinates?: { lat: number; lng: number } | null;
   serviceType?: ServiceTypeFilter;
   sessionType?: SessionTypeFilter;
   animalType?: AnimalTypeFilter;
@@ -29,6 +32,8 @@ interface UpcomingTabProps {
 
 export function UpcomingTab({
   token,
+  missions,
+  announcerCoordinates,
   serviceType = "all",
   sessionType = "all",
   animalType = "all",
@@ -41,20 +46,10 @@ export function UpcomingTab({
   const [isCancelling, setIsCancelling] = useState(false);
   const [isContacting, setIsContacting] = useState(false);
 
-  const missions = useQuery(
-    api.planning.missions.getMissionsByStatus,
-    token ? { token, status: "upcoming" } : "skip"
-  );
-
-  const announcerData = useQuery(
-    api.planning.missions.getAnnouncerCoordinates,
-    token ? { token } : "skip"
-  );
-
   const cancelMission = useMutation(api.planning.missions.cancelMission);
   const getOrCreateConversation = useMutation(api.messaging.mutations.getOrCreateConversation);
 
-  // Appliquer les filtres
+  // Appliquer les filtres sur les missions reçues en props
   const filteredMissions = useMissionFilters(missions, serviceType, sessionType, animalType, month);
 
   const isLoading = missions === undefined;
@@ -117,11 +112,16 @@ export function UpcomingTab({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 text-purple animate-spin mx-auto mb-4" />
-          <p className="text-text-light">Chargement des missions...</p>
+      <div className="space-y-6">
+        {/* Stats skeleton */}
+        <div className="bg-white rounded-2xl p-5 shadow-sm animate-pulse">
+          <div className="flex justify-between items-center">
+            <div className="h-6 bg-gray-200 rounded w-40" />
+            <div className="h-8 bg-gray-200 rounded w-24" />
+          </div>
         </div>
+        {/* Mission cards skeleton */}
+        <MissionListSkeleton count={3} />
       </div>
     );
   }
@@ -152,7 +152,7 @@ export function UpcomingTab({
             >
               <MissionCard
                 mission={mission}
-                announcerCoordinates={announcerData?.coordinates}
+                announcerCoordinates={announcerCoordinates}
                 token={token}
                 onContact={handleContact}
                 onCancel={handleCancelClick}

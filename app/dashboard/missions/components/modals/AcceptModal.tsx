@@ -52,8 +52,13 @@ export function AcceptModal({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
+        role="presentation"
       >
         <motion.div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="accept-modal-title"
+          aria-describedby="accept-modal-description"
           className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl"
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -63,14 +68,15 @@ export function AcceptModal({
           {/* Header */}
           <div className="p-6 bg-gradient-to-r from-secondary to-secondary/80">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-white">Accepter la mission</h2>
+              <h2 id="accept-modal-title" className="text-xl font-bold text-white">Accepter la mission</h2>
               <motion.button
                 className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center"
                 onClick={onClose}
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
+                aria-label="Fermer la modale"
               >
-                <X className="w-5 h-5 text-white" />
+                <X className="w-5 h-5 text-white" aria-hidden="true" />
               </motion.button>
             </div>
           </div>
@@ -124,8 +130,8 @@ export function AcceptModal({
 
                 {/* Avertissement */}
                 <div className="flex items-start gap-2 p-3 bg-accent/10 rounded-xl mb-6">
-                  <AlertCircle className="w-5 h-5 text-foreground flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-foreground">
+                  <AlertCircle className="w-5 h-5 text-foreground flex-shrink-0 mt-0.5" aria-hidden="true" />
+                  <p id="accept-modal-description" className="text-sm text-foreground">
                     En acceptant, vous vous engagez à réaliser cette prestation aux dates convenues.
                   </p>
                 </div>
