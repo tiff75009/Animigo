@@ -86,7 +86,7 @@ export const createTicket = mutation({
     // Créer le premier message
     await ctx.db.insert("ticketMessages", {
       ticketId,
-      senderId: user._id,
+      senderId: user._id.toString(),
       senderType: "user",
       senderName: `${user.firstName} ${user.lastName}`,
       content: args.message.trim(),
@@ -252,7 +252,7 @@ export const addMessage = mutation({
     // Créer le message
     await ctx.db.insert("ticketMessages", {
       ticketId: args.ticketId,
-      senderId: user._id,
+      senderId: user._id.toString(),
       senderType: "user",
       senderName: `${user.firstName} ${user.lastName}`,
       content: args.content.trim(),
@@ -309,7 +309,7 @@ export const closeTicket = mutation({
     // Ajouter un message système
     await ctx.db.insert("ticketMessages", {
       ticketId: args.ticketId,
-      senderId: user._id,
+      senderId: user._id.toString(),
       senderType: "user",
       senderName: "Système",
       content: "L'utilisateur a fermé ce ticket.",
@@ -362,7 +362,7 @@ export const reopenTicket = mutation({
     // Ajouter le message de réouverture
     await ctx.db.insert("ticketMessages", {
       ticketId: args.ticketId,
-      senderId: user._id,
+      senderId: user._id.toString(),
       senderType: "user",
       senderName: `${user.firstName} ${user.lastName}`,
       content: args.message.trim(),

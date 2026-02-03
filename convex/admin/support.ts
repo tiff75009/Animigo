@@ -276,7 +276,7 @@ export const assignTicket = mutation({
     // Ajouter une note interne
     await ctx.db.insert("ticketMessages", {
       ticketId: args.ticketId,
-      senderId: admin._id,
+      senderId: admin._id.toString(),
       senderType: "admin",
       senderName: "Système",
       content: `Ticket assigné à ${assignedAdmin.firstName} ${assignedAdmin.lastName}`,
@@ -339,7 +339,7 @@ export const updateTicketStatus = mutation({
 
     await ctx.db.insert("ticketMessages", {
       ticketId: args.ticketId,
-      senderId: admin._id,
+      senderId: admin._id.toString(),
       senderType: "admin",
       senderName: "Système",
       content: `Statut changé en "${statusLabels[args.status]}"`,
@@ -385,7 +385,7 @@ export const updateTicketPriority = mutation({
 
     await ctx.db.insert("ticketMessages", {
       ticketId: args.ticketId,
-      senderId: admin._id,
+      senderId: admin._id.toString(),
       senderType: "admin",
       senderName: "Système",
       content: `Priorité changée en "${priorityLabels[args.priority]}"`,
@@ -431,7 +431,7 @@ export const addAdminMessage = mutation({
 
     await ctx.db.insert("ticketMessages", {
       ticketId: args.ticketId,
-      senderId: admin._id,
+      senderId: admin._id.toString(),
       senderType: "admin",
       senderName: `${admin.firstName} ${admin.lastName}`,
       content: args.content.trim(),
@@ -490,7 +490,7 @@ export const resolveTicket = mutation({
     if (args.resolutionMessage?.trim()) {
       await ctx.db.insert("ticketMessages", {
         ticketId: args.ticketId,
-        senderId: admin._id,
+        senderId: admin._id.toString(),
         senderType: "admin",
         senderName: `${admin.firstName} ${admin.lastName}`,
         content: args.resolutionMessage.trim(),
@@ -502,7 +502,7 @@ export const resolveTicket = mutation({
     // Note interne de résolution
     await ctx.db.insert("ticketMessages", {
       ticketId: args.ticketId,
-      senderId: admin._id,
+      senderId: admin._id.toString(),
       senderType: "admin",
       senderName: "Système",
       content: `Ticket résolu par ${admin.firstName} ${admin.lastName}`,

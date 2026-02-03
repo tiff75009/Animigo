@@ -116,12 +116,20 @@ export function TicketForm({ sessionToken, onSuccess, className }: TicketFormPro
       setError("Veuillez entrer un sujet");
       return;
     }
+    if (subject.trim().length < 5) {
+      setError("Le sujet doit contenir au moins 5 caractères");
+      return;
+    }
     if (!category) {
       setError("Veuillez sélectionner une catégorie");
       return;
     }
     if (!message.trim()) {
       setError("Veuillez entrer un message");
+      return;
+    }
+    if (message.trim().length < 10) {
+      setError("Le message doit contenir au moins 10 caractères");
       return;
     }
 
@@ -141,7 +149,9 @@ export function TicketForm({ sessionToken, onSuccess, className }: TicketFormPro
         onSuccess(result.ticketId, result.ticketNumber);
       }
     } catch (err: any) {
-      setError(err.message || "Une erreur est survenue");
+      // Extraire le message d'erreur Convex
+      const errorMessage = err?.data?.message || err?.message || "Une erreur est survenue";
+      setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -177,10 +187,24 @@ export function TicketForm({ sessionToken, onSuccess, className }: TicketFormPro
           type="text"
           value={subject}
           onChange={(e) => setSubject(e.target.value)}
-          placeholder="Décrivez brièvement votre problème"
-          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+          placeholder="Décrivez brièvement votre problème (min. 5 caractères)"
+          className={cn(
+            "w-full px-4 py-2.5 rounded-xl border focus:ring-2 outline-none transition-all",
+            subject.trim().length > 0 && subject.trim().length < 5
+              ? "border-red-300 focus:border-red-400 focus:ring-red-100"
+              : "border-gray-200 focus:border-primary focus:ring-primary/20"
+          )}
           maxLength={100}
         />
+        <div className="flex justify-between mt-1">
+          <span className={cn(
+            "text-xs",
+            subject.trim().length > 0 && subject.trim().length < 5 ? "text-red-500" : "text-gray-400"
+          )}>
+            {subject.trim().length < 5 ? `${5 - subject.trim().length} caractères restants minimum` : ""}
+          </span>
+          <span className="text-xs text-gray-400">{subject.length}/100</span>
+        </div>
       </div>
 
       {/* Catégorie */}
@@ -416,10 +440,24 @@ export function TicketForm({ sessionToken, onSuccess, className }: TicketFormPro
         <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder="Décrivez votre problème en détail..."
+          placeholder="Décrivez votre problème en détail (min. 10 caractères)..."
           rows={5}
-          className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none"
+          className={cn(
+            "w-full px-4 py-3 rounded-xl border focus:ring-2 outline-none transition-all resize-none",
+            message.trim().length > 0 && message.trim().length < 10
+              ? "border-red-300 focus:border-red-400 focus:ring-red-100"
+              : "border-gray-200 focus:border-primary focus:ring-primary/20"
+          )}
         />
+        <div className="flex justify-between mt-1">
+          <span className={cn(
+            "text-xs",
+            message.trim().length > 0 && message.trim().length < 10 ? "text-red-500" : "text-gray-400"
+          )}>
+            {message.trim().length < 10 ? `${10 - message.trim().length} caractères restants minimum` : ""}
+          </span>
+          <span className="text-xs text-gray-400">{message.length} caractères</span>
+        </div>
       </div>
 
       {/* Bouton submit */}

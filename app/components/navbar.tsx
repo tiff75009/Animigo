@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/app/lib/utils";
+import { Tooltip } from "@/app/components/ui/tooltip";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Menu,
@@ -21,6 +22,8 @@ import {
   Home,
   Search,
   PawPrint,
+  HelpCircle,
+  Ticket,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { usePathname } from "next/navigation";
@@ -297,21 +300,47 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
             <div className="hidden lg:flex items-center gap-3">
               {!isLoading && isAuthenticated && user ? (
                 <>
+                  {/* Aide */}
+                  <Tooltip content="Centre d'aide">
+                    <Link
+                      href={isOnClientDashboard ? "/client/aide" : "/dashboard/aide"}
+                      className="relative p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      <HelpCircle className="w-5 h-5" />
+                    </Link>
+                  </Tooltip>
+
+                  {/* Tickets */}
+                  <Tooltip content="Mes tickets">
+                    <Link
+                      href={isOnClientDashboard ? "/client/tickets" : "/dashboard/tickets"}
+                      className="relative p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      <Ticket className="w-5 h-5" />
+                    </Link>
+                  </Tooltip>
+
                   {/* Messages */}
-                  <Link
-                    href={isOnClientDashboard ? "/client/messagerie" : "/dashboard/messagerie"}
-                    className="relative p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                  >
-                    <MessageCircle className="w-5 h-5" />
-                    {(unreadMessagesCount ?? 0) > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-primary text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
-                        {unreadMessagesCount! > 99 ? "99+" : unreadMessagesCount}
-                      </span>
-                    )}
-                  </Link>
+                  <Tooltip content="Messages">
+                    <Link
+                      href={isOnClientDashboard ? "/client/messagerie" : "/dashboard/messagerie"}
+                      className="relative p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      <MessageCircle className="w-5 h-5" />
+                      {(unreadMessagesCount ?? 0) > 0 && (
+                        <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-primary text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                          {unreadMessagesCount! > 99 ? "99+" : unreadMessagesCount}
+                        </span>
+                      )}
+                    </Link>
+                  </Tooltip>
 
                   {/* Notifications */}
-                  <NotificationDropdown />
+                  <Tooltip content="Notifications">
+                    <div>
+                      <NotificationDropdown />
+                    </div>
+                  </Tooltip>
 
                   {/* Profile Menu */}
                   <div className="relative" data-profile-menu>
@@ -389,21 +418,41 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
             </div>
 
             {/* Mobile: Right Side */}
-            <div className="flex lg:hidden items-center gap-1">
+            <div className="flex lg:hidden items-center gap-0.5">
               {!isLoading && isAuthenticated && user ? (
                 <>
+                  {/* Aide */}
+                  <Tooltip content="Aide" position="bottom">
+                    <Link
+                      href={isOnClientDashboard ? "/client/aide" : "/dashboard/aide"}
+                      className="relative p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      <HelpCircle className="w-5 h-5" />
+                    </Link>
+                  </Tooltip>
+                  {/* Tickets */}
+                  <Tooltip content="Tickets" position="bottom">
+                    <Link
+                      href={isOnClientDashboard ? "/client/tickets" : "/dashboard/tickets"}
+                      className="relative p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      <Ticket className="w-5 h-5" />
+                    </Link>
+                  </Tooltip>
                   {/* Messages */}
-                  <Link
-                    href={isOnClientDashboard ? "/client/messagerie" : "/dashboard/messagerie"}
-                    className="relative p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                  >
-                    <MessageCircle className="w-5 h-5" />
-                    {(unreadMessagesCount ?? 0) > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-primary text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
-                        {unreadMessagesCount! > 99 ? "99+" : unreadMessagesCount}
-                      </span>
-                    )}
-                  </Link>
+                  <Tooltip content="Messages" position="bottom">
+                    <Link
+                      href={isOnClientDashboard ? "/client/messagerie" : "/dashboard/messagerie"}
+                      className="relative p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      <MessageCircle className="w-5 h-5" />
+                      {(unreadMessagesCount ?? 0) > 0 && (
+                        <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-primary text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                          {unreadMessagesCount! > 99 ? "99+" : unreadMessagesCount}
+                        </span>
+                      )}
+                    </Link>
+                  </Tooltip>
                   {/* Notifications - dropdown */}
                   <NotificationDropdown />
                 </>
