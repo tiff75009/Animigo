@@ -209,7 +209,7 @@ export default function MissionsAVenirPage() {
 
   // Sort by start date
   const sortedMissions = [...missionsList].sort(
-    (a, b) => new Date(a.startDate || 0).getTime() - new Date(b.startDate || 0).getTime()
+    (a: MissionType, b: MissionType) => new Date(a.startDate || 0).getTime() - new Date(b.startDate || 0).getTime()
   );
 
   return (

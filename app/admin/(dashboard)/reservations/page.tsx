@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAdminAuth } from "@/app/hooks/useAdminAuth";
 import { motion, AnimatePresence } from "framer-motion";
@@ -24,6 +24,7 @@ import {
   PawPrint,
   CreditCard,
   RefreshCw,
+  Banknote,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 
@@ -250,7 +251,9 @@ export default function ReservationsPage() {
   const deleteReservation = useMutation(api.admin.reservations.deleteReservation);
   const deleteMultiple = useMutation(api.admin.reservations.deleteMultipleReservations);
   const recalculateSlotCounts = useMutation(api.admin.reservations.recalculateSlotCounts);
+  const triggerTransfer = useAction(api.admin.transfers.triggerManualTransfer);
   const [isRecalculating, setIsRecalculating] = useState(false);
+  const [transferringMissionId, setTransferringMissionId] = useState<Id<"missions"> | null>(null);
 
   const handleDeleteClick = (reservation: Reservation) => {
     setReservationToDelete(reservation);
@@ -326,6 +329,26 @@ export default function ReservationsPage() {
       alert("Erreur lors du recalcul des créneaux");
     } finally {
       setIsRecalculating(false);
+    }
+  };
+
+  const handleManualTransfer = async (missionId: Id<"missions">) => {
+    if (!token) return;
+
+    if (!confirm("Êtes-vous sûr de vouloir déclencher le transfert vers l'annonceur pour cette mission ?")) {
+      return;
+    }
+
+    setTransferringMissionId(missionId);
+    try {
+      const result = await triggerTransfer({ token, missionId });
+      alert(result.message);
+    } catch (error) {
+      console.error("Erreur lors du transfert:", error);
+      const message = error instanceof Error ? error.message : "Erreur lors du transfert";
+      alert(message);
+    } finally {
+      setTransferringMissionId(null);
     }
   };
 
@@ -586,13 +609,30 @@ export default function ReservationsPage() {
                     <StatusBadge status={reservation.status} />
                   </td>
                   <td className="px-4 py-4 text-right">
-                    <button
-                      onClick={() => handleDeleteClick(reservation)}
-                      className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"
-                      title="Supprimer"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
+                    <div className="flex items-center justify-end gap-1">
+                      {/* Bouton transfert manuel - visible si paiement client effectué */}
+                      {reservation.paymentStatus === "paid" && (
+                        <button
+                          onClick={() => handleManualTransfer(reservation._id)}
+                          disabled={transferringMissionId === reservation._id}
+                          className="p-2 hover:bg-green-500/20 text-green-400 rounded-lg transition-colors disabled:opacity-50"
+                          title="Transférer à l'annonceur"
+                        >
+                          {transferringMissionId === reservation._id ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <Banknote className="w-5 h-5" />
+                          )}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteClick(reservation)}
+                        className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"
+                        title="Supprimer"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
                   </td>
                 </motion.tr>
               ))}

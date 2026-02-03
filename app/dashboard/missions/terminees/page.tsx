@@ -61,7 +61,7 @@ export default function MissionsTermineesPage() {
 
   // Sort by end date (most recent first)
   const sortedMissions = [...missionsList].sort(
-    (a, b) => new Date(b.endDate || 0).getTime() - new Date(a.endDate || 0).getTime()
+    (a: MissionType, b: MissionType) => new Date(b.endDate || 0).getTime() - new Date(a.endDate || 0).getTime()
   );
 
   return (

@@ -1,7 +1,8 @@
-import { query, mutation } from "../_generated/server";
+import { query, mutation, action } from "../_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
-import { requireAdmin } from "./utils";
+import { requireAdmin, requireAdminAction } from "./utils";
+import { internal } from "../_generated/api";
 
 // Query: Statistiques des commissions par période
 export const getCommissionStats = query({
@@ -512,3 +513,5 @@ export const listPayouts = query({
     };
   },
 });
+
+

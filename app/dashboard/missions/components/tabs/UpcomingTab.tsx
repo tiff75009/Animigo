@@ -62,7 +62,7 @@ export function UpcomingTab({
 
   // Tri par date de début
   const sortedMissions = [...filteredMissions].sort(
-    (a, b) => new Date(a.startDate || 0).getTime() - new Date(b.startDate || 0).getTime()
+    (a: MissionType, b: MissionType) => new Date(a.startDate || 0).getTime() - new Date(b.startDate || 0).getTime()
   );
 
   const handleContact = async (missionId: string) => {

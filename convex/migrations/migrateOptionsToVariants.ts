@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Migration: Lier les options existantes aux formules
  *

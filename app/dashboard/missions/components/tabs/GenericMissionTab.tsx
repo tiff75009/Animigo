@@ -73,7 +73,7 @@ export function GenericMissionTab({
   }
 
   // Tri par date (récent en premier pour completed/refused/cancelled, proche en premier pour les autres)
-  const sortedMissions = [...filteredMissions].sort((a, b) => {
+  const sortedMissions = [...filteredMissions].sort((a: MissionType, b: MissionType) => {
     if (status === "completed" || status === "refused" || status === "cancelled") {
       return new Date(b.endDate || 0).getTime() - new Date(a.endDate || 0).getTime();
     }

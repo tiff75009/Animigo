@@ -49,7 +49,7 @@ export default function MissionsRefuseesPage() {
 
   // Sort by start date (most recent first)
   const sortedMissions = [...missionsList].sort(
-    (a, b) => new Date(b.startDate || 0).getTime() - new Date(a.startDate || 0).getTime()
+    (a: MissionType, b: MissionType) => new Date(b.startDate || 0).getTime() - new Date(a.startDate || 0).getTime()
   );
 
   return (
