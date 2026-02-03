@@ -166,6 +166,12 @@ export default function BookingCalendar({
   // State pour le flux en étapes du mode garde
   const [rangeStep, setRangeStep] = useState<RangeStep>("start_date");
 
+  // État pour la vue repliée en mode non-garde
+  const [isNonRangeCollapsed, setIsNonRangeCollapsed] = useState(false);
+
+  // Déterminer si la sélection est complète en mode non-garde
+  const isNonRangeComplete = selectedDate && selectedTime && (enableDurationBasedBlocking || selectedEndTime);
+
   // Reset rangeStep quand on change de mode ou reset les dates
   useEffect(() => {
     if (!isRangeMode) return;
@@ -181,6 +187,23 @@ export default function BookingCalendar({
       setRangeStep("complete");
     }
   }, [isRangeMode, selectedDate, selectedTime, selectedEndDate, selectedEndTime]);
+
+  // Auto-collapse quand la sélection est complète en mode non-garde
+  useEffect(() => {
+    if (!isRangeMode && isNonRangeComplete) {
+      const timer = setTimeout(() => {
+        setIsNonRangeCollapsed(true);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isRangeMode, isNonRangeComplete]);
+
+  // Reset collapsed state when selection changes
+  useEffect(() => {
+    if (!isRangeMode && !isNonRangeComplete) {
+      setIsNonRangeCollapsed(false);
+    }
+  }, [isRangeMode, isNonRangeComplete]);
 
   // Calculate end time based on variant duration
   const calculateEndTimeForDuration = (startTime: string): string => {
@@ -457,33 +480,180 @@ export default function BookingCalendar({
   // ============================================
   // RENDU POUR MODE NON-GARDE (calendrier classique)
   // ============================================
+
+  // Formater la date pour l'affichage
+  const formatDateFull = (dateStr: string): string => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("fr-FR", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    });
+  };
+
+  // Obtenir le statut de disponibilité d'un jour
+  const getDayAvailabilityStatus = (dateStr: string): "available" | "partial" | "unavailable" | "past" => {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    if (dateStr < todayStr) return "past";
+    if (!availabilityCalendar) return "unavailable";
+    const availability = availabilityCalendar.find((a) => a.date === dateStr);
+    if (!availability) return "unavailable";
+    return availability.status as "available" | "partial" | "unavailable" | "past";
+  };
+
+  // Générer les jours du calendrier avec indicateurs colorés
+  const generateCalendarDaysEnhanced = () => {
+    const firstDay = new Date(
+      calendarMonth.getFullYear(),
+      calendarMonth.getMonth(),
+      1
+    );
+    const lastDay = new Date(
+      calendarMonth.getFullYear(),
+      calendarMonth.getMonth() + 1,
+      0
+    );
+    const startPadding = (firstDay.getDay() + 6) % 7;
+    const elements = [];
+
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+    // Padding
+    for (let i = 0; i < startPadding; i++) {
+      elements.push(<div key={`pad-${i}`} />);
+    }
+
+    // Days
+    for (let d = 1; d <= lastDay.getDate(); d++) {
+      const dateStr = `${calendarMonth.getFullYear()}-${String(
+        calendarMonth.getMonth() + 1
+      ).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const isPast = dateStr < todayStr;
+      const isToday = dateStr === todayStr;
+      const availability = availabilityCalendar?.find((a) => a.date === dateStr);
+      const status = isPast ? "past" : (!availabilityCalendar || !availability) ? "unavailable" : availability.status;
+      const isSelected = selectedDate === dateStr;
+      const isDisabled = status === "past" || status === "unavailable";
+
+      // Déterminer la couleur du point indicateur
+      const getIndicatorColor = () => {
+        if (isPast) return null;
+        if (isSelected) return "bg-primary";
+        if (status === "unavailable") return "bg-red-500";
+        if (status === "partial") return "bg-amber-500";
+        return "bg-green-500";
+      };
+      const indicatorColor = getIndicatorColor();
+
+      elements.push(
+        <button
+          key={dateStr}
+          disabled={isDisabled}
+          onClick={() => handleDateClick(dateStr)}
+          className={cn(
+            "relative aspect-square flex flex-col items-center justify-center rounded-xl transition-all",
+            isPast && "opacity-40 cursor-not-allowed",
+            isToday && "ring-2 ring-primary/50",
+            !isDisabled && "hover:bg-primary/10 cursor-pointer",
+            isSelected && "bg-primary/15",
+            status === "unavailable" && !isPast && "text-gray-400 bg-gray-50 cursor-not-allowed"
+          )}
+        >
+          <span className={cn(
+            "text-sm font-medium",
+            isToday && "text-primary font-bold",
+            isSelected && "text-primary"
+          )}>
+            {d}
+          </span>
+
+          {/* Indicateur de disponibilité */}
+          {indicatorColor && !isPast && (
+            <div className={cn("w-2 h-2 rounded-full mt-0.5", indicatorColor)} />
+          )}
+        </button>
+      );
+    }
+
+    return elements;
+  };
+
   if (!isRangeMode) {
-    return (
-      <div className="bg-white rounded-2xl p-5 border border-gray-100">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-primary" />
-            Créneau
-          </h3>
-          <div className="flex items-center gap-2 text-[10px]">
-            <div className="flex items-center gap-1">
-              <div className="w-2.5 h-2.5 rounded-sm bg-gray-200" />
-              <span className="text-gray-400">Indispo</span>
+    // Vue repliée quand la sélection est complète
+    if (isNonRangeCollapsed && isNonRangeComplete) {
+      return (
+        <div className="bg-white rounded-2xl p-5 border border-gray-100">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <Check className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Créneau sélectionné</h3>
+                  <p className="text-sm text-gray-500">Réservation confirmée</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsNonRangeCollapsed(false)}
+                className="px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
+              >
+                Modifier
+              </button>
             </div>
-            <div className="flex items-center gap-1">
-              <div className="w-2.5 h-2.5 rounded-sm bg-white border border-gray-300" />
-              <span className="text-gray-400">Dispo</span>
+
+            <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-xl text-sm">
+              <Calendar className="w-4 h-4 text-green-600" />
+              <span className="font-medium text-gray-900 capitalize">
+                {formatDateFull(selectedDate!)}
+              </span>
+              <span className="text-gray-500">
+                {selectedTime} - {enableDurationBasedBlocking ? calculatedEndTime : selectedEndTime}
+              </span>
             </div>
           </div>
         </div>
+      );
+    }
 
-        {/* Calendar */}
-        <div className="mb-4">
+    return (
+      <div className="bg-white rounded-2xl p-5 border border-gray-100">
+        {/* Header */}
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <span className="p-2 bg-primary/10 rounded-lg">
+                <Calendar className="w-5 h-5 text-primary" />
+              </span>
+              Choisissez votre créneau
+            </h3>
+            <p className="text-sm text-gray-500 mt-1">
+              Sélectionnez une date et un horaire
+            </p>
+          </div>
+          <div
+            className={cn(
+              "px-3 py-1.5 rounded-full text-sm font-medium",
+              isNonRangeComplete
+                ? "bg-green-100 text-green-700"
+                : selectedDate
+                ? "bg-amber-100 text-amber-700"
+                : "bg-gray-100 text-gray-600"
+            )}
+          >
+            {isNonRangeComplete ? "Complet" : selectedDate ? "Choisir l'heure" : "Choisir la date"}
+          </div>
+        </div>
+
+        {/* Calendar in gray background */}
+        <div className="bg-gray-50 rounded-2xl p-4 mb-4">
+          {/* Navigation */}
           <div className="flex items-center justify-between mb-4">
             <button
               onClick={() => onMonthChange(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1))}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-2 hover:bg-white rounded-lg transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
@@ -492,39 +662,78 @@ export default function BookingCalendar({
             </span>
             <button
               onClick={() => onMonthChange(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1))}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-2 hover:bg-white rounded-lg transition-colors"
             >
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
+
+          {/* Days header */}
           <div className="grid grid-cols-7 gap-1 text-center text-xs mb-2">
             {["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"].map((d) => (
               <div key={d} className="py-2 text-gray-500 font-medium">{d}</div>
             ))}
           </div>
-          <div className="grid grid-cols-7 gap-1">{generateCalendarDays()}</div>
+
+          {/* Days grid */}
+          <div className="grid grid-cols-7 gap-1">{generateCalendarDaysEnhanced()}</div>
+
+          {/* Légende */}
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-3 mt-3 border-t border-gray-200 text-xs text-gray-500">
+            <div className="flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
+              <span>Libre</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+              <span>Partiel</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+              <span>Complet</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-primary" />
+              <span>Sélectionné</span>
+            </div>
+          </div>
         </div>
 
         {/* Time Selection for non-range mode */}
         {selectedDate && (
           <div className="space-y-4">
-            <div className="mb-4 flex items-center gap-2 text-sm">
-              <span className="text-gray-900 font-medium">{formatDateDisplay(selectedDate)}</span>
+            {/* Selected date display */}
+            <div className="flex items-center gap-2 p-3 bg-primary/5 rounded-xl">
+              <Calendar className="w-4 h-4 text-primary" />
+              <span className="text-sm font-medium text-gray-900 capitalize">{formatDateFull(selectedDate)}</span>
             </div>
 
             {bookedSlots.length > 0 && (
-              <div className="p-2 bg-gray-50 rounded-lg text-xs text-gray-600">
+              <div className="p-3 bg-gray-50 rounded-xl text-sm text-gray-600">
                 <span className="font-medium">Créneaux réservés : </span>
                 {bookedSlots.map((slot, i) => (
-                  <span key={i} className="text-red-500">
+                  <span key={i} className="text-red-500 font-medium">
                     {slot.startTime}-{slot.endTime}{i < bookedSlots.length - 1 ? ", " : ""}
                   </span>
                 ))}
               </div>
             )}
 
+            {/* Duration info */}
+            {enableDurationBasedBlocking && variantDuration && (
+              <div className="p-3 bg-blue-50 rounded-xl text-sm text-blue-700 flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                <span>Durée de la séance : {variantDuration >= 60
+                  ? `${Math.floor(variantDuration / 60)}h${variantDuration % 60 > 0 ? variantDuration % 60 : ""}`
+                  : `${variantDuration}min`}
+                </span>
+              </div>
+            )}
+
             <div>
-              <p className="text-sm font-medium text-gray-900 mb-2">Heure de début</p>
+              <p className="text-sm font-medium text-gray-900 mb-3">Heure de début</p>
+
+              {/* Mobile button */}
               <button
                 onClick={() => setShowStartTimePicker(true)}
                 className={cn(
@@ -545,20 +754,23 @@ export default function BookingCalendar({
                 </div>
                 <ChevronRight className="w-5 h-5 text-gray-400" />
               </button>
-              <div className="hidden sm:grid grid-cols-6 gap-2">
+
+              {/* Desktop grid */}
+              <div className="hidden sm:grid grid-cols-4 sm:grid-cols-6 gap-2">
                 {timeSlots.map((time) => {
                   const isAvailable = isTimeSlotAvailable(time);
+                  const isSelected = selectedTime === time;
                   return (
                     <button
                       key={time}
                       disabled={!isAvailable}
                       onClick={() => handleTimeSelect(time)}
                       className={cn(
-                        "py-2 text-sm rounded-lg border transition-colors",
-                        !isAvailable && "opacity-40 cursor-not-allowed bg-gray-100 text-gray-400",
-                        isAvailable && selectedTime === time
-                          ? "border-primary bg-primary/10 text-primary font-medium"
-                          : isAvailable && "border-gray-200 hover:border-gray-300"
+                        "py-3 text-sm rounded-xl border-2 transition-all font-medium",
+                        !isAvailable && "opacity-40 cursor-not-allowed bg-gray-100 text-gray-400 border-gray-100",
+                        isAvailable && isSelected
+                          ? "border-primary bg-primary text-white"
+                          : isAvailable && "border-gray-200 hover:border-primary hover:bg-primary/5"
                       )}
                     >
                       {time}
@@ -569,18 +781,22 @@ export default function BookingCalendar({
             </div>
 
             {selectedTime && enableDurationBasedBlocking && variantDuration ? (
-              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
-                <div className="flex items-center gap-2 text-sm">
-                  <Clock className="w-4 h-4 text-amber-600" />
-                  <span className="font-medium text-amber-800">
-                    Durée : {variantDuration >= 60 ? `${Math.floor(variantDuration / 60)}h${variantDuration % 60 > 0 ? variantDuration % 60 : ""}` : `${variantDuration}min`}
-                  </span>
+              <div className="p-4 bg-green-50 rounded-xl border border-green-200">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <Check className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-green-800">Créneau confirmé</p>
+                    <p className="text-sm text-green-600">{selectedTime} → {calculatedEndTime}</p>
+                  </div>
                 </div>
-                <p className="text-xs text-amber-600 mt-1">Créneau : {selectedTime} → {calculatedEndTime}</p>
               </div>
             ) : selectedTime ? (
               <div>
-                <p className="text-sm font-medium text-gray-900 mb-2">Heure de fin</p>
+                <p className="text-sm font-medium text-gray-900 mb-3">Heure de fin</p>
+
+                {/* Mobile button */}
                 <button
                   onClick={() => setShowEndTimePicker(true)}
                   className={cn(
@@ -601,11 +817,12 @@ export default function BookingCalendar({
                   </div>
                   <ChevronRight className="w-5 h-5 text-gray-400" />
                 </button>
-                <div className="hidden sm:grid grid-cols-6 gap-2">
+
+                {/* Desktop grid */}
+                <div className="hidden sm:grid grid-cols-4 sm:grid-cols-6 gap-2">
                   {getEndTimeSlots().map((time) => {
                     const startMinutes = parseTimeToMinutes(selectedTime);
                     const endMinutes = parseTimeToMinutes(time);
-                    // Appliquer les buffers pour une vérification correcte des conflits
                     const effectiveStart = enableDurationBasedBlocking ? startMinutes - bufferBefore : startMinutes;
                     const effectiveEnd = enableDurationBasedBlocking ? endMinutes + bufferAfter : endMinutes;
                     const hasConflict = bookedSlots.some((slot) => {
@@ -614,17 +831,18 @@ export default function BookingCalendar({
                       return effectiveStart < bookedEnd && effectiveEnd > bookedStart;
                     });
                     const isEndTimeAvailable = !hasConflict;
+                    const isSelected = selectedEndTime === time;
                     return (
                       <button
                         key={time}
                         disabled={!isEndTimeAvailable}
                         onClick={() => onEndTimeSelect(time)}
                         className={cn(
-                          "py-2 text-sm rounded-lg border transition-colors",
-                          !isEndTimeAvailable && "opacity-40 cursor-not-allowed bg-gray-100 text-gray-400",
-                          isEndTimeAvailable && selectedEndTime === time
-                            ? "border-secondary bg-secondary/10 text-secondary font-medium"
-                            : isEndTimeAvailable && "border-gray-200 hover:border-gray-300"
+                          "py-3 text-sm rounded-xl border-2 transition-all font-medium",
+                          !isEndTimeAvailable && "opacity-40 cursor-not-allowed bg-gray-100 text-gray-400 border-gray-100",
+                          isEndTimeAvailable && isSelected
+                            ? "border-secondary bg-secondary text-white"
+                            : isEndTimeAvailable && "border-gray-200 hover:border-secondary hover:bg-secondary/5"
                         )}
                       >
                         {time}
@@ -636,11 +854,17 @@ export default function BookingCalendar({
             ) : null}
 
             {selectedTime && selectedEndTime && !enableDurationBasedBlocking && (
-              <div className="p-3 bg-primary/5 rounded-xl">
-                <div className="flex items-center gap-2 text-sm text-gray-900">
-                  <Clock className="w-4 h-4 text-primary" />
-                  <span className="font-medium">Durée: {calculateDuration(selectedTime, selectedEndTime)}</span>
-                  <span className="text-gray-500">({selectedTime} → {selectedEndTime})</span>
+              <div className="p-4 bg-green-50 rounded-xl border border-green-200">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <Check className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-green-800">Créneau confirmé</p>
+                    <p className="text-sm text-green-600">
+                      {selectedTime} → {selectedEndTime} ({calculateDuration(selectedTime, selectedEndTime)})
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
