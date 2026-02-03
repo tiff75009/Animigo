@@ -3,23 +3,32 @@
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  CreditCard,
-  Euro,
+  Wallet,
   TrendingUp,
-  ArrowDownToLine,
   CheckCircle,
   Clock,
   Calendar,
   Info,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Percent,
-  Wallet,
   History,
-  AlertCircle,
-  ArrowRight,
+  CreditCard,
   X,
-  Loader2,
+  CalendarClock,
+  Banknote,
+  CircleDollarSign,
+  Sparkles,
+  Users,
+  User,
+  MapPin,
+  Home,
+  Hourglass,
+  BadgeCheck,
+  PiggyBank,
+  Coins,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { useQuery } from "convex/react";
@@ -27,7 +36,7 @@ import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/app/hooks/useAuth";
 import type { Id } from "@/convex/_generated/dataModel";
 
-// Type pour les missions en attente de paiement
+// Types
 interface PendingMission {
   id: Id<"missions">;
   clientId: Id<"users">;
@@ -40,11 +49,11 @@ interface PendingMission {
   startDate: string;
   endDate: string;
   amount: number;
+  announcerEarnings?: number;
   paymentStatus: string;
   location: string;
 }
 
-// Type pour l'historique des virements
 interface PayoutHistoryItem {
   id: Id<"announcerPayouts">;
   date: number;
@@ -54,7 +63,6 @@ interface PayoutHistoryItem {
   missionsCount: number;
 }
 
-// Type pour les paiements autorisés (en capture)
 interface AuthorizedPayment {
   id: Id<"missions">;
   clientId: Id<"users">;
@@ -70,6 +78,8 @@ interface AuthorizedPayment {
   paymentStatus: string;
   authorizedAt?: number;
   autoCaptureScheduledAt?: number;
+  sessionType?: "individual" | "collective";
+  serviceLocation?: "announcer_home" | "client_home";
 }
 
 // Commission tiers
@@ -81,160 +91,425 @@ const commissionTiers = [
   { min: 1500, max: Infinity, rate: 3, label: "1500€ et +" },
 ];
 
-// Calculate commission based on amount
-function calculateCommission(amount: number): { rate: number; fee: number; net: number } {
+function getCommissionRate(amount: number): number {
   const tier = commissionTiers.find((t) => amount >= t.min && amount <= t.max);
-  const rate = tier?.rate || 15;
-  const fee = (amount * rate) / 100;
-  const net = amount - fee;
-  return { rate, fee, net };
+  return tier?.rate || 15;
 }
 
-// Pending Payment Card
-function PendingPaymentCard({
-  mission,
-  isSelected,
-  onToggle,
-}: {
-  mission: PendingMission;
-  isSelected: boolean;
-  onToggle: () => void;
-}) {
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("fr-FR", {
+// Helpers
+function formatPrice(euros: number): string {
+  return euros.toLocaleString("fr-FR", {
+    style: "currency",
+    currency: "EUR",
+  });
+}
+
+function formatDateShort(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+  });
+}
+
+function getNextPayoutDate(): { date: Date; daysUntil: number; formatted: string } {
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  const currentDay = now.getDate();
+
+  let payoutDate: Date;
+  if (currentDay >= 25) {
+    payoutDate = new Date(currentYear, currentMonth + 1, 25);
+  } else {
+    payoutDate = new Date(currentYear, currentMonth, 25);
+  }
+
+  const diffTime = payoutDate.getTime() - now.getTime();
+  const daysUntil = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  return {
+    date: payoutDate,
+    daysUntil,
+    formatted: payoutDate.toLocaleDateString("fr-FR", {
+      weekday: "long",
       day: "numeric",
-      month: "short",
+      month: "long",
+    }),
+  };
+}
+
+function getDaysUntilMission(startDate: string): number {
+  const start = new Date(startDate);
+  const now = new Date();
+  start.setHours(0, 0, 0, 0);
+  now.setHours(0, 0, 0, 0);
+  return Math.ceil((start.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+// Mois disponibles (12 derniers mois)
+function getAvailableMonths(): { value: string; label: string }[] {
+  const months = [];
+  const now = new Date();
+
+  for (let i = 0; i < 12; i++) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({
+      value: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`,
+      label: date.toLocaleDateString("fr-FR", { month: "long", year: "numeric" }),
     });
+  }
+
+  return months;
+}
+
+function isInMonth(dateStr: string, monthValue: string): boolean {
+  const date = new Date(dateStr);
+  const [year, month] = monthValue.split("-").map(Number);
+  return date.getFullYear() === year && date.getMonth() + 1 === month;
+}
+
+// Sélecteur de mois
+function MonthSelector({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const months = getAvailableMonths();
+  const currentIndex = months.findIndex((m) => m.value === value);
+  const currentMonth = months[currentIndex] || months[0];
+
+  const goToPrevious = () => {
+    if (currentIndex < months.length - 1) {
+      onChange(months[currentIndex + 1].value);
+    }
+  };
+
+  const goToNext = () => {
+    if (currentIndex > 0) {
+      onChange(months[currentIndex - 1].value);
+    }
   };
 
   return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={goToPrevious}
+        disabled={currentIndex >= months.length - 1}
+        className="rounded-lg p-2 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+      >
+        <ChevronLeft className="h-5 w-5 text-gray-600" />
+      </button>
+      <div className="min-w-[160px] text-center">
+        <p className="font-semibold text-foreground capitalize">{currentMonth.label}</p>
+      </div>
+      <button
+        onClick={goToNext}
+        disabled={currentIndex <= 0}
+        className="rounded-lg p-2 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+      >
+        <ChevronRight className="h-5 w-5 text-gray-600" />
+      </button>
+    </div>
+  );
+}
+
+// Stat Card Component
+function StatCard({
+  icon: Icon,
+  iconBg,
+  iconColor,
+  label,
+  amount,
+  count,
+  countLabel,
+  valueColor,
+}: {
+  icon: any;
+  iconBg: string;
+  iconColor: string;
+  label: string;
+  amount: number;
+  count: number;
+  countLabel: string;
+  valueColor: string;
+}) {
+  return (
+    <div className="rounded-2xl bg-white p-4 shadow-sm">
+      <div className="mb-2 flex items-center gap-2">
+        <div className={cn("rounded-lg p-1.5", iconBg)}>
+          <Icon className={cn("h-4 w-4", iconColor)} />
+        </div>
+        <span className="text-xs font-medium text-text-light">{label}</span>
+      </div>
+      <p className={cn("text-2xl font-bold", valueColor)}>
+        {formatPrice(amount)}
+      </p>
+      <p className="mt-1 text-xs text-text-light">
+        {count} {countLabel}
+      </p>
+    </div>
+  );
+}
+
+// Bannière Prochain Virement
+function NextPayoutBanner({
+  netAmount,
+  missionsCount,
+}: {
+  netAmount: number;
+  missionsCount: number;
+}) {
+  const { formatted, daysUntil } = getNextPayoutDate();
+
+  if (netAmount === 0) return null;
+
+  return (
     <motion.div
-      className={cn(
-        "bg-white rounded-xl p-4 border-2 transition-all cursor-pointer",
-        isSelected
-          ? "border-primary bg-primary/5"
-          : "border-transparent hover:border-gray-200"
-      )}
-      onClick={onToggle}
-      whileHover={{ scale: 1.01 }}
-      whileTap={{ scale: 0.99 }}
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-primary/90 to-secondary p-5 text-white shadow-xl shadow-primary/20"
     >
-      <div className="flex items-center gap-4">
-        {/* Checkbox */}
-        <div
-          className={cn(
-            "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors",
-            isSelected
-              ? "bg-primary border-primary"
-              : "border-gray-300"
-          )}
-        >
-          {isSelected && <CheckCircle className="w-4 h-4 text-white" />}
-        </div>
+      <div className="absolute inset-0 opacity-10">
+        <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white" />
+        <div className="absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-white" />
+      </div>
 
-        {/* Mission Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-lg">{mission.animal.emoji}</span>
-            <h4 className="font-semibold text-foreground truncate">
-              {mission.service} - {mission.animal.name}
-            </h4>
+      <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-start gap-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur">
+            <CalendarClock className="h-7 w-7" />
           </div>
-          <p className="text-sm text-text-light">
-            {mission.clientName} &bull; {formatDate(mission.startDate)} - {formatDate(mission.endDate)}
-          </p>
+          <div>
+            <p className="text-sm font-medium text-white/80">Prochain virement</p>
+            <p className="text-lg font-bold capitalize">{formatted}</p>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-semibold backdrop-blur">
+                {daysUntil === 0
+                  ? "Aujourd'hui"
+                  : daysUntil === 1
+                    ? "Demain"
+                    : `Dans ${daysUntil} jours`}
+              </span>
+              <span className="text-sm text-white/70">
+                {missionsCount} mission{missionsCount > 1 ? "s" : ""}
+              </span>
+            </div>
+          </div>
         </div>
 
-        {/* Amount */}
-        <div className="text-right">
-          <p className="text-xl font-bold text-primary">{mission.amount}€</p>
-          <p className="text-xs text-text-light">À encaisser</p>
+        <div className="flex items-center gap-4">
+          <div className="text-right">
+            <p className="text-sm text-white/70">Vous recevrez</p>
+            <p className="text-3xl font-bold">{formatPrice(netAmount)}</p>
+            <p className="text-xs text-white/60">commission déjà déduite</p>
+          </div>
         </div>
       </div>
     </motion.div>
   );
 }
 
-// Commission Tier Display
-function CommissionTiers({ currentAmount }: { currentAmount: number }) {
+// Card Mission Confirmée
+function ConfirmedMissionCard({ mission }: { mission: AuthorizedPayment }) {
+  const daysUntil = getDaysUntilMission(mission.startDate);
+  const isToday = daysUntil === 0;
+  const isSoon = daysUntil > 0 && daysUntil <= 3;
+  const isInProgress = mission.status === "in_progress";
+  const isCompleted = mission.status === "completed";
+
+  const captureDate = mission.autoCaptureScheduledAt
+    ? new Date(mission.autoCaptureScheduledAt).toLocaleDateString("fr-FR", {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+
   return (
-    <div className="bg-gray-50 rounded-xl p-4">
-      <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-        <Percent className="w-4 h-4 text-primary" />
-        Grille tarifaire des commissions
-      </h4>
-      <div className="space-y-2">
-        {commissionTiers.map((tier, index) => {
-          const isCurrentTier = currentAmount >= tier.min && currentAmount <= tier.max;
-          return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={cn(
+        "group overflow-hidden rounded-2xl bg-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08)] transition-all hover:shadow-[0_8px_24px_-4px_rgba(0,0,0,0.12)]",
+        isCompleted && "ring-2 ring-green-200 ring-offset-1"
+      )}
+    >
+      {/* Bannière statut */}
+      {isCompleted ? (
+        <div className="bg-gradient-to-r from-green-500 to-emerald-500 px-4 py-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 backdrop-blur">
+                <CheckCircle className="h-3.5 w-3.5 text-white" />
+              </div>
+              <span className="text-sm font-semibold text-white">
+                Mission terminée
+              </span>
+            </div>
+            {captureDate && (
+              <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-medium text-white backdrop-blur">
+                Capture le {captureDate}
+              </span>
+            )}
+          </div>
+        </div>
+      ) : isInProgress ? (
+        <div className="bg-gradient-to-r from-blue-500 to-indigo-500 px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 backdrop-blur">
+              <Sparkles className="h-3.5 w-3.5 text-white" />
+            </div>
+            <span className="text-sm font-semibold text-white">En cours</span>
+          </div>
+        </div>
+      ) : isToday ? (
+        <div className="bg-gradient-to-r from-primary to-orange-500 px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 backdrop-blur">
+              <Clock className="h-3.5 w-3.5 text-white" />
+            </div>
+            <span className="text-sm font-semibold text-white">
+              Commence aujourd&apos;hui
+            </span>
+          </div>
+        </div>
+      ) : isSoon ? (
+        <div className="bg-gradient-to-r from-amber-500 to-orange-400 px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 backdrop-blur">
+              <Calendar className="h-3.5 w-3.5 text-white" />
+            </div>
+            <span className="text-sm font-semibold text-white">
+              J-{daysUntil}
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="p-4">
+        {/* En-tête */}
+        <div className="mb-4 flex items-start gap-4">
+          <div className="relative flex-shrink-0">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/5 to-primary/15 text-2xl ring-2 ring-white shadow-sm">
+              {mission.animal?.emoji || "🐾"}
+            </div>
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="truncate text-base font-bold text-foreground">
+                  {mission.serviceName}
+                </h3>
+                <p className="mt-0.5 text-sm text-text-light">
+                  {mission.animal?.name || "Animal"} • {mission.clientName}
+                </p>
+              </div>
+              <div className="flex-shrink-0 text-right">
+                <p className="text-xl font-bold text-green-600">
+                  +{formatPrice(mission.announcerEarnings)}
+                </p>
+                <p className="text-xs text-text-light">vous recevrez</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Ligne d'infos */}
+        <div className="-mx-1 mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-gray-50/80 px-3 py-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white shadow-sm">
+              <Calendar className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Dates</p>
+              <p className="text-sm font-semibold text-foreground">
+                {formatDateShort(mission.startDate)}
+                {mission.startDate !== mission.endDate &&
+                  ` - ${formatDateShort(mission.endDate)}`}
+              </p>
+            </div>
+          </div>
+
+          <div className="hidden h-8 w-px bg-gray-200 sm:block" />
+
+          <div className="flex items-center gap-2">
             <div
-              key={index}
               className={cn(
-                "flex items-center justify-between py-2 px-3 rounded-lg transition-colors",
-                isCurrentTier ? "bg-primary/10" : "hover:bg-gray-100"
+                "flex h-8 w-8 items-center justify-center rounded-lg shadow-sm",
+                mission.serviceLocation === "client_home"
+                  ? "bg-teal-50"
+                  : "bg-indigo-50"
               )}
             >
-              <span className={cn(
-                "text-sm",
-                isCurrentTier ? "font-semibold text-primary" : "text-text-light"
-              )}>
-                {tier.label}
-              </span>
-              <span className={cn(
-                "font-semibold",
-                isCurrentTier ? "text-primary" : "text-foreground"
-              )}>
-                {tier.rate}%
-              </span>
-              {isCurrentTier && (
-                <span className="ml-2 px-2 py-0.5 bg-primary text-white text-xs rounded-full">
-                  Actuel
-                </span>
+              {mission.serviceLocation === "client_home" ? (
+                <Home className="h-4 w-4 text-teal-600" />
+              ) : (
+                <MapPin className="h-4 w-4 text-indigo-600" />
               )}
             </div>
-          );
-        })}
+            <div>
+              <p className="text-xs text-gray-500">Lieu</p>
+              <p className="text-sm font-semibold text-foreground">
+                {mission.serviceLocation === "client_home"
+                  ? "À domicile"
+                  : "Chez vous"}
+              </p>
+            </div>
+          </div>
+
+          <div className="hidden h-8 w-px bg-gray-200 sm:block" />
+
+          <div className="flex items-center gap-2">
+            <div
+              className={cn(
+                "flex h-8 w-8 items-center justify-center rounded-lg shadow-sm",
+                mission.sessionType === "collective" ? "bg-blue-50" : "bg-amber-50"
+              )}
+            >
+              {mission.sessionType === "collective" ? (
+                <Users className="h-4 w-4 text-blue-600" />
+              ) : (
+                <User className="h-4 w-4 text-amber-600" />
+              )}
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Format</p>
+              <p className="text-sm font-semibold text-foreground">
+                {mission.sessionType === "collective" ? "Collectif" : "Individuel"}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Badge statut paiement */}
+        <div className="flex items-center justify-between">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1.5 text-xs font-semibold text-green-700">
+            <CheckCircle className="h-3.5 w-3.5" />
+            Paiement confirmé
+          </span>
+          <span className="text-xs text-text-light">
+            Montant client : {formatPrice(mission.amount)}
+          </span>
+        </div>
       </div>
-      <p className="text-xs text-text-light mt-3 flex items-start gap-1">
-        <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
-        Plus le montant encaissé est élevé, plus le taux de commission est bas.
-      </p>
-    </div>
+    </motion.div>
   );
 }
 
-// Cashout Modal
-function CashoutModal({
+// Modal Commission
+function CommissionModal({
   isOpen,
   onClose,
-  selectedMissions,
-  totalAmount,
+  currentAmount,
 }: {
   isOpen: boolean;
   onClose: () => void;
-  selectedMissions: PendingMission[];
-  totalAmount: number;
+  currentAmount: number;
 }) {
-  const [customAmount, setCustomAmount] = useState<string>(totalAmount.toString());
-  const [cashoutType, setCashoutType] = useState<"full" | "partial">("full");
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-
-  const amount = cashoutType === "full" ? totalAmount : Math.min(parseFloat(customAmount) || 0, totalAmount);
-  const { rate, fee, net } = calculateCommission(amount);
-
-  const handleCashout = () => {
-    setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
-      setIsSuccess(true);
-      setTimeout(() => {
-        onClose();
-        setIsSuccess(false);
-      }, 2000);
-    }, 1500);
-  };
-
   if (!isOpen) return null;
 
   return (
@@ -243,222 +518,114 @@ function CashoutModal({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
         onClick={onClose}
       >
         <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
+          initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.9, opacity: 0 }}
-          className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto"
+          exit={{ scale: 0.95, opacity: 0 }}
+          className="w-full max-w-md rounded-2xl bg-white p-6"
           onClick={(e) => e.stopPropagation()}
         >
-          {isSuccess ? (
-            <div className="text-center py-8">
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4"
-              >
-                <CheckCircle className="w-10 h-10 text-green-500" />
-              </motion.div>
-              <h3 className="text-xl font-bold text-foreground mb-2">
-                Demande envoyée !
-              </h3>
-              <p className="text-text-light">
-                Votre virement de {net.toFixed(2)}€ sera effectué sous 48h.
-              </p>
-            </div>
-          ) : (
-            <>
-              {/* Header */}
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-foreground">
-                  Encaisser mes gains
-                </h3>
-                <button
-                  onClick={onClose}
-                  className="p-2 hover:bg-gray-100 rounded-lg"
+          <div className="mb-6 flex items-center justify-between">
+            <h3 className="text-xl font-bold text-foreground">
+              Grille de commissions
+            </h3>
+            <button
+              onClick={onClose}
+              className="rounded-lg p-2 hover:bg-gray-100"
+            >
+              <X className="h-5 w-5 text-text-light" />
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {commissionTiers.map((tier, index) => {
+              const isCurrentTier =
+                currentAmount >= tier.min && currentAmount <= tier.max;
+              return (
+                <div
+                  key={index}
+                  className={cn(
+                    "flex items-center justify-between rounded-xl px-4 py-3 transition-colors",
+                    isCurrentTier ? "bg-primary/10 ring-2 ring-primary/20" : "bg-gray-50"
+                  )}
                 >
-                  <X className="w-5 h-5 text-text-light" />
-                </button>
-              </div>
-
-              {/* Amount Selection */}
-              <div className="mb-6">
-                <p className="text-sm font-medium text-foreground mb-3">
-                  Montant à encaisser
-                </p>
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <motion.button
+                  <span
                     className={cn(
-                      "py-3 px-4 rounded-xl font-semibold border-2 transition-all",
-                      cashoutType === "full"
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-gray-200 text-foreground hover:border-gray-300"
+                      "text-sm",
+                      isCurrentTier ? "font-semibold text-primary" : "text-text-light"
                     )}
-                    onClick={() => setCashoutType("full")}
-                    whileTap={{ scale: 0.98 }}
                   >
-                    Tout ({totalAmount}€)
-                  </motion.button>
-                  <motion.button
-                    className={cn(
-                      "py-3 px-4 rounded-xl font-semibold border-2 transition-all",
-                      cashoutType === "partial"
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-gray-200 text-foreground hover:border-gray-300"
-                    )}
-                    onClick={() => setCashoutType("partial")}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    Partiel
-                  </motion.button>
-                </div>
-
-                {cashoutType === "partial" && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                  >
-                    <div className="relative">
-                      <input
-                        type="number"
-                        value={customAmount}
-                        onChange={(e) => setCustomAmount(e.target.value)}
-                        max={totalAmount}
-                        className="w-full px-4 py-3 pr-12 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground text-lg font-semibold"
-                        placeholder="Montant"
-                      />
-                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-text-light font-semibold">
-                        €
-                      </span>
-                    </div>
-                    <p className="text-xs text-text-light mt-2">
-                      Maximum disponible : {totalAmount}€
-                    </p>
-                  </motion.div>
-                )}
-              </div>
-
-              {/* Summary */}
-              <div className="bg-gray-50 rounded-xl p-4 mb-6">
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-text-light">Montant brut</span>
-                    <span className="font-semibold text-foreground">{amount.toFixed(2)}€</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-text-light flex items-center gap-1">
-                      Commission ({rate}%)
-                      <Info className="w-3 h-3" />
-                    </span>
-                    <span className="font-semibold text-red-500">-{fee.toFixed(2)}€</span>
-                  </div>
-                  <div className="border-t border-gray-200 pt-3 flex justify-between">
-                    <span className="font-semibold text-foreground">Montant net</span>
-                    <span className="text-xl font-bold text-primary">{net.toFixed(2)}€</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Commission Tip */}
-              {amount < 1500 && (
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-6 flex items-start gap-2">
-                  <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-blue-700">
-                    <p className="font-semibold">Astuce</p>
-                    <p>
-                      En encaissant {commissionTiers.find((t) => t.min > amount)?.min || 1500}€ ou plus,
-                      vous bénéficiez d&apos;un taux réduit de {commissionTiers.find((t) => t.min > amount)?.rate || 3}%.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Missions included */}
-              <div className="mb-6">
-                <p className="text-sm font-medium text-foreground mb-2">
-                  Missions incluses ({selectedMissions.length})
-                </p>
-                <div className="max-h-32 overflow-y-auto space-y-2">
-                  {selectedMissions.map((mission) => (
-                    <div
-                      key={mission.id}
-                      className="flex items-center justify-between text-sm py-1"
+                    {tier.label}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "font-bold",
+                        isCurrentTier ? "text-primary" : "text-foreground"
+                      )}
                     >
-                      <span className="text-text-light flex items-center gap-1">
-                        {mission.animal.emoji} {mission.animal.name} - {mission.clientName}
+                      {tier.rate}%
+                    </span>
+                    {isCurrentTier && (
+                      <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-white">
+                        Actuel
                       </span>
-                      <span className="font-medium">{mission.amount}€</span>
-                    </div>
-                  ))}
+                    )}
+                  </div>
                 </div>
-              </div>
+              );
+            })}
+          </div>
 
-              {/* CTA */}
-              <motion.button
-                onClick={handleCashout}
-                disabled={isProcessing || amount <= 0}
-                className={cn(
-                  "w-full py-4 rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors",
-                  isProcessing
-                    ? "bg-gray-300 cursor-not-allowed"
-                    : "bg-primary text-white hover:bg-primary/90"
-                )}
-                whileHover={{ scale: isProcessing ? 1 : 1.01 }}
-                whileTap={{ scale: 0.99 }}
-              >
-                {isProcessing ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Traitement en cours...
-                  </>
-                ) : (
-                  <>
-                    <ArrowDownToLine className="w-5 h-5" />
-                    Encaisser {net.toFixed(2)}€
-                  </>
-                )}
-              </motion.button>
-            </>
-          )}
+          <div className="mt-6 flex items-start gap-2 rounded-xl bg-blue-50 p-4">
+            <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-600" />
+            <p className="text-sm text-blue-700">
+              Plus votre volume mensuel est élevé, plus votre taux de commission
+              diminue. Continuez à développer votre activité !
+            </p>
+          </div>
         </motion.div>
       </motion.div>
     </AnimatePresence>
   );
 }
 
-// Transaction History Item
-function TransactionItem({ transaction }: { transaction: PayoutHistoryItem }) {
+// Historique Virement Card
+function PayoutHistoryCard({ payout }: { payout: PayoutHistoryItem }) {
   const [isExpanded, setIsExpanded] = useState(false);
-
-  // Calculer la commission approximative (15% par défaut)
-  const fee = Math.round(transaction.amount * 0.15);
-  const grossAmount = transaction.amount + fee;
+  const rate = getCommissionRate(payout.amount);
+  const grossAmount = Math.round(payout.amount / (1 - rate / 100));
+  const commission = grossAmount - payout.amount;
 
   return (
-    <div className="border-b border-gray-100 last:border-0">
-      <div
-        className="flex items-center justify-between py-4 cursor-pointer hover:bg-gray-50 px-2 -mx-2 rounded-lg"
+    <div className="overflow-hidden rounded-xl border border-gray-100 bg-white">
+      <button
         onClick={() => setIsExpanded(!isExpanded)}
+        className="flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-gray-50"
       >
         <div className="flex items-center gap-3">
-          <div className={cn(
-            "w-10 h-10 rounded-full flex items-center justify-center",
-            transaction.status === "completed" ? "bg-green-100" : "bg-orange-100"
-          )}>
-            <ArrowDownToLine className={cn(
-              "w-5 h-5",
-              transaction.status === "completed" ? "text-green-600" : "text-orange-600"
-            )} />
+          <div
+            className={cn(
+              "flex h-10 w-10 items-center justify-center rounded-full",
+              payout.status === "completed" ? "bg-green-100" : "bg-amber-100"
+            )}
+          >
+            <Banknote
+              className={cn(
+                "h-5 w-5",
+                payout.status === "completed" ? "text-green-600" : "text-amber-600"
+              )}
+            />
           </div>
           <div>
             <p className="font-semibold text-foreground">
-              {transaction.status === "completed" ? "Virement reçu" : "Virement en cours"}
+              {payout.status === "completed" ? "Virement reçu" : "Virement en cours"}
             </p>
             <p className="text-sm text-text-light">
-              {new Date(transaction.date).toLocaleDateString("fr-FR", {
+              {new Date(payout.date).toLocaleDateString("fr-FR", {
                 day: "numeric",
                 month: "long",
                 year: "numeric",
@@ -466,56 +633,50 @@ function TransactionItem({ transaction }: { transaction: PayoutHistoryItem }) {
             </p>
           </div>
         </div>
+
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <p className={cn(
-              "font-bold",
-              transaction.status === "completed" ? "text-green-600" : "text-orange-600"
-            )}>
-              +{transaction.amount}€
+            <p
+              className={cn(
+                "text-lg font-bold",
+                payout.status === "completed" ? "text-green-600" : "text-amber-600"
+              )}
+            >
+              +{formatPrice(payout.amount)}
             </p>
-            <p className="text-xs text-text-light">Net reçu</p>
+            <p className="text-xs text-text-light">
+              {payout.missionsCount} mission{payout.missionsCount > 1 ? "s" : ""}
+            </p>
           </div>
           {isExpanded ? (
-            <ChevronUp className="w-5 h-5 text-text-light" />
+            <ChevronUp className="h-5 w-5 text-text-light" />
           ) : (
-            <ChevronDown className="w-5 h-5 text-text-light" />
+            <ChevronDown className="h-5 w-5 text-text-light" />
           )}
         </div>
-      </div>
+      </button>
 
       <AnimatePresence>
         {isExpanded && (
           <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="pb-4 px-2"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="border-t border-gray-100 bg-gray-50/50 px-4 py-3"
           >
-            <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
+            <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-text-light">Montant brut</span>
-                <span className="text-foreground">{grossAmount}€</span>
+                <span className="text-foreground">{formatPrice(grossAmount)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-text-light">Commission</span>
-                <span className="text-red-500">-{fee}€</span>
+                <span className="text-text-light">Commission ({rate}%)</span>
+                <span className="text-red-500">-{formatPrice(commission)}</span>
               </div>
-              <div className="flex justify-between font-semibold pt-2 border-t border-gray-200">
-                <span className="text-foreground">Montant net</span>
-                <span className="text-green-600">{transaction.amount}€</span>
+              <div className="flex justify-between border-t border-gray-200 pt-2 font-semibold">
+                <span className="text-foreground">Net reçu</span>
+                <span className="text-green-600">{formatPrice(payout.amount)}</span>
               </div>
-              {transaction.missions.length > 0 && (
-                <div className="pt-2 border-t border-gray-200">
-                  <p className="text-text-light mb-1">Missions concernées ({transaction.missionsCount}) :</p>
-                  {transaction.missions.slice(0, 3).map((mission, i) => (
-                    <p key={i} className="text-foreground">&bull; {mission}</p>
-                  ))}
-                  {transaction.missions.length > 3 && (
-                    <p className="text-text-light">... et {transaction.missions.length - 3} autres</p>
-                  )}
-                </div>
-              )}
             </div>
           </motion.div>
         )}
@@ -527,41 +688,34 @@ function TransactionItem({ transaction }: { transaction: PayoutHistoryItem }) {
 // Loading skeleton
 function LoadingSkeleton() {
   return (
-    <div className="space-y-6 max-w-5xl mx-auto animate-pulse">
-      <div className="h-20 bg-gray-200 rounded-2xl" />
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="h-32 bg-gray-200 rounded-2xl" />
-        <div className="h-32 bg-gray-200 rounded-2xl" />
-        <div className="h-32 bg-gray-200 rounded-2xl" />
+    <div className="animate-pulse space-y-6">
+      <div className="h-32 rounded-2xl bg-gray-200" />
+      <div className="h-12 w-48 mx-auto rounded-xl bg-gray-200" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="h-24 rounded-2xl bg-gray-200" />
+        <div className="h-24 rounded-2xl bg-gray-200" />
+        <div className="h-24 rounded-2xl bg-gray-200" />
+        <div className="h-24 rounded-2xl bg-gray-200" />
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 h-96 bg-gray-200 rounded-2xl" />
-        <div className="h-96 bg-gray-200 rounded-2xl" />
-      </div>
+      <div className="h-64 rounded-2xl bg-gray-200" />
     </div>
   );
 }
 
+// Page principale
 export default function PaiementsPage() {
-  const [selectedMissionIds, setSelectedMissionIds] = useState<string[]>([]);
-  const [showCashoutModal, setShowCashoutModal] = useState(false);
+  const [showCommissionModal, setShowCommissionModal] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
 
   const { token, isLoading: authLoading } = useAuth();
 
-  // Queries Convex
-  const pendingPayments = useQuery(
-    api.dashboard.payments.getAnnouncerPendingPayments,
-    token ? { sessionToken: token } : "skip"
-  );
-
+  // Queries
   const stats = useQuery(
     api.dashboard.payments.getAnnouncerPaymentStats,
     token ? { sessionToken: token } : "skip"
-  );
-
-  const payoutHistory = useQuery(
-    api.dashboard.payments.getAnnouncerPayoutHistory,
-    token ? { sessionToken: token, limit: 10 } : "skip"
   );
 
   const authorizedPayments = useQuery(
@@ -569,404 +723,268 @@ export default function PaiementsPage() {
     token ? { sessionToken: token } : "skip"
   );
 
-  // Loading state
-  const isLoading = authLoading || pendingPayments === undefined || stats === undefined;
+  const pendingPayments = useQuery(
+    api.dashboard.payments.getAnnouncerPendingPayments,
+    token ? { sessionToken: token } : "skip"
+  );
+
+  const payoutHistory = useQuery(
+    api.dashboard.payments.getAnnouncerPayoutHistory,
+    token ? { sessionToken: token, limit: 12 } : "skip"
+  );
+
+  const isLoading = authLoading || stats === undefined;
+
+  // Calculs avec filtre par mois
+  const monthlyData = useMemo(() => {
+    const authorizedList = (authorizedPayments || []) as AuthorizedPayment[];
+    const pendingList = (pendingPayments || []) as PendingMission[];
+    const historyList = (payoutHistory || []) as PayoutHistoryItem[];
+
+    // Filtrer par mois sélectionné
+    const filteredAuthorized = authorizedList.filter((m) =>
+      isInMonth(m.startDate, selectedMonth)
+    );
+    const filteredPending = pendingList.filter((m) =>
+      isInMonth(m.startDate, selectedMonth)
+    );
+    const filteredHistory = historyList.filter((p) =>
+      isInMonth(new Date(p.date).toISOString(), selectedMonth)
+    );
+
+    // Calculs des 4 catégories (workflow paiement)
+    // 1. En attente = missions où le client n'a pas encore payé (pending_acceptance, pending_confirmation)
+    //    Note: Ces missions ne sont pas dans authorizedPayments ni pendingPayments
+    //    Pour l'instant on affiche 0, à implémenter si besoin
+    const pendingPayment = 0;
+    const pendingPaymentCount = 0;
+
+    // 2. Confirmé = Client A PAYÉ, mission à venir ou en cours (upcoming, in_progress)
+    const confirmed = filteredAuthorized.filter(
+      (m) => m.status === "upcoming" || m.status === "in_progress"
+    );
+    const totalConfirmed = confirmed.reduce(
+      (sum, m) => sum + m.announcerEarnings,
+      0
+    );
+
+    // 3. À encaisser = Mission TERMINÉE, paiement capturé, en attente de virement
+    const toCollect = filteredPending.filter((m) => m.paymentStatus === "pending");
+    const totalToCollect = toCollect.reduce(
+      (sum, m) => sum + (m.announcerEarnings || m.amount * 0.85),
+      0
+    );
+
+    // 4. Encaissé = Virements effectués ce mois
+    const totalCollected = filteredHistory.reduce((sum, p) => sum + p.amount, 0);
+
+    return {
+      // Stats
+      pendingPayment,
+      pendingPaymentCount,
+      confirmed: totalConfirmed,
+      confirmedCount: confirmed.length,
+      toCollect: totalToCollect,
+      toCollectCount: toCollect.length,
+      collected: totalCollected,
+      collectedCount: filteredHistory.length,
+      // Listes
+      authorizedList: filteredAuthorized,
+      pendingList: filteredPending,
+      historyList: filteredHistory,
+      // Totaux globaux (non filtrés)
+      totalAvailable: (authorizedPayments || []).reduce(
+        (sum: number, m: AuthorizedPayment) => sum + m.announcerEarnings,
+        0
+      ) + (stats?.totalPending || 0),
+      totalMissionsCount:
+        (authorizedPayments || []).length + (pendingPayments || []).length,
+    };
+  }, [authorizedPayments, pendingPayments, payoutHistory, stats, selectedMonth]);
 
   if (isLoading) {
     return <LoadingSkeleton />;
   }
 
-  // Data
-  const pendingPaymentMissions = (pendingPayments || []) as PendingMission[];
-  const payoutHistoryData = (payoutHistory || []) as PayoutHistoryItem[];
-  const authorizedPaymentsList = (authorizedPayments || []) as AuthorizedPayment[];
-  const totalPending = stats?.totalPending || 0;
-  const totalCollected = stats?.totalCollected || 0;
-  const totalEarned = stats?.totalEarned || 0;
-  const totalAuthorized = authorizedPaymentsList.reduce((sum: number, p) => sum + p.announcerEarnings, 0);
-
-  const selectedMissions = pendingPaymentMissions.filter((m) =>
-    selectedMissionIds.includes(m.id)
+  const sortedMissions = [...monthlyData.authorizedList].sort(
+    (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
   );
-  const selectedAmount = selectedMissions.reduce((sum, m) => sum + m.amount, 0);
-
-  const toggleMission = (missionId: string) => {
-    setSelectedMissionIds((prev) =>
-      prev.includes(missionId)
-        ? prev.filter((id) => id !== missionId)
-        : [...prev, missionId]
-    );
-  };
-
-  const selectAll = () => {
-    if (selectedMissionIds.length === pendingPaymentMissions.length) {
-      setSelectedMissionIds([]);
-    } else {
-      setSelectedMissionIds(pendingPaymentMissions.map((m) => m.id));
-    }
-  };
-
-  const { rate, fee, net } = calculateCommission(selectedAmount);
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="mx-auto max-w-4xl space-y-6 pb-8">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
+        className="flex items-center justify-between"
       >
-        <div className="flex items-center gap-3 mb-2">
-          <div className="p-3 bg-primary/10 rounded-2xl">
-            <CreditCard className="w-6 h-6 text-primary" />
+        <div className="flex items-center gap-3">
+          <div className="rounded-2xl bg-primary/10 p-3">
+            <Wallet className="h-6 w-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-              Paiements
+            <h1 className="text-2xl font-bold text-foreground md:text-3xl">
+              Mes revenus
             </h1>
             <p className="text-text-light">
-              Gérez vos encaissements et consultez votre historique
+              Suivez vos paiements et virements
             </p>
           </div>
         </div>
+        <button
+          onClick={() => setShowCommissionModal(true)}
+          className="flex items-center gap-2 rounded-xl bg-gray-100 px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-gray-200"
+        >
+          <Percent className="h-4 w-4" />
+          <span className="hidden sm:inline">Voir les frais</span>
+        </button>
       </motion.div>
 
-      {/* Stats Cards */}
+      {/* Bannière Prochain Virement */}
+      <NextPayoutBanner
+        netAmount={monthlyData.totalAvailable}
+        missionsCount={monthlyData.totalMissionsCount}
+      />
+
+      {/* Sélecteur de mois */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05 }}
+        className="flex justify-center"
+      >
+        <div className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-sm">
+          <Calendar className="h-5 w-5 text-primary" />
+          <MonthSelector value={selectedMonth} onChange={setSelectedMonth} />
+        </div>
+      </motion.div>
+
+      {/* Stats Cards - 4 catégories du workflow paiement */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
         className="grid grid-cols-2 md:grid-cols-4 gap-4"
       >
-        <div
-          className="bg-white rounded-2xl p-5 shadow-lg cursor-help group relative"
-          title="Paiements confirmés par les clients, en attente de capture automatique après la mission"
-        >
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-blue-100 rounded-xl">
-              <CreditCard className="w-5 h-5 text-blue-600" />
-            </div>
-            <span className="text-sm text-text-light flex items-center gap-1">
-              Confirmé
-              <Info className="w-3 h-3 opacity-50" />
-            </span>
-          </div>
-          <p className="text-3xl font-bold text-blue-600">{totalAuthorized}€</p>
-          <p className="text-sm text-text-light mt-1">
-            {authorizedPaymentsList.length} mission{authorizedPaymentsList.length > 1 ? "s" : ""}
-          </p>
-          {/* Tooltip */}
-          <div className="absolute hidden group-hover:block bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-10">
-            <p className="font-semibold mb-1">Paiement confirmé</p>
-            <p>Le client a validé le paiement. La capture sera effectuée automatiquement 48h après la fin de la mission.</p>
-            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-gray-900" />
-          </div>
-        </div>
-
-        <div
-          className="bg-white rounded-2xl p-5 shadow-lg cursor-help group relative"
-          title="Missions terminées avec paiement capturé, virement automatique le 1er du mois"
-        >
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-orange-100 rounded-xl">
-              <Clock className="w-5 h-5 text-orange-600" />
-            </div>
-            <span className="text-sm text-text-light flex items-center gap-1">
-              À encaisser
-              <Info className="w-3 h-3 opacity-50" />
-            </span>
-          </div>
-          <p className="text-3xl font-bold text-orange-600">{totalPending}€</p>
-          <p className="text-sm text-text-light mt-1">
-            {pendingPaymentMissions.length} mission{pendingPaymentMissions.length > 1 ? "s" : ""}
-          </p>
-          {/* Tooltip */}
-          <div className="absolute hidden group-hover:block bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-10">
-            <p className="font-semibold mb-1">À encaisser</p>
-            <p>Missions terminées dont le paiement a été capturé. Le virement est effectué automatiquement le 1er de chaque mois.</p>
-            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-gray-900" />
-          </div>
-        </div>
-
-        <div
-          className="bg-white rounded-2xl p-5 shadow-lg cursor-help group relative"
-          title="Montant total déjà viré sur votre compte bancaire"
-        >
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-green-100 rounded-xl">
-              <CheckCircle className="w-5 h-5 text-green-600" />
-            </div>
-            <span className="text-sm text-text-light flex items-center gap-1">
-              Encaissé
-              <Info className="w-3 h-3 opacity-50" />
-            </span>
-          </div>
-          <p className="text-3xl font-bold text-green-600">{totalCollected}€</p>
-          <p className="text-sm text-text-light mt-1">Total reçu</p>
-          {/* Tooltip */}
-          <div className="absolute hidden group-hover:block bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-10">
-            <p className="font-semibold mb-1">Encaissé</p>
-            <p>Montant total des virements effectués sur votre compte bancaire.</p>
-            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-gray-900" />
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-r from-primary to-secondary rounded-2xl p-5 shadow-lg text-white">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-white/20 rounded-xl">
-              <TrendingUp className="w-5 h-5" />
-            </div>
-            <span className="text-sm text-white/80">Total gagné</span>
-          </div>
-          <p className="text-3xl font-bold">{totalEarned}€</p>
-          <p className="text-sm text-white/80 mt-1">Brut cumulé</p>
-        </div>
+        <StatCard
+          icon={Hourglass}
+          iconBg="bg-amber-100"
+          iconColor="text-amber-600"
+          label="En attente"
+          amount={monthlyData.pendingPayment}
+          count={monthlyData.pendingPaymentCount}
+          countLabel={monthlyData.pendingPaymentCount > 1 ? "missions" : "mission"}
+          valueColor="text-amber-600"
+        />
+        <StatCard
+          icon={BadgeCheck}
+          iconBg="bg-blue-100"
+          iconColor="text-blue-600"
+          label="Confirmé"
+          amount={monthlyData.confirmed}
+          count={monthlyData.confirmedCount}
+          countLabel={monthlyData.confirmedCount > 1 ? "missions" : "mission"}
+          valueColor="text-blue-600"
+        />
+        <StatCard
+          icon={PiggyBank}
+          iconBg="bg-purple-100"
+          iconColor="text-purple-600"
+          label="À encaisser"
+          amount={monthlyData.toCollect}
+          count={monthlyData.toCollectCount}
+          countLabel={monthlyData.toCollectCount > 1 ? "missions" : "mission"}
+          valueColor="text-purple-600"
+        />
+        <StatCard
+          icon={Coins}
+          iconBg="bg-green-100"
+          iconColor="text-green-600"
+          label="Encaissé"
+          amount={monthlyData.collected}
+          count={monthlyData.collectedCount}
+          countLabel={monthlyData.collectedCount > 1 ? "virements" : "virement"}
+          valueColor="text-green-600"
+        />
       </motion.div>
 
-      {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Pending Payments */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="lg:col-span-2 bg-white rounded-2xl shadow-lg p-6"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-              <Wallet className="w-5 h-5 text-primary" />
-              Paiements en attente
-            </h2>
-            {pendingPaymentMissions.length > 0 && (
-              <button
-                onClick={selectAll}
-                className="text-sm text-primary font-medium hover:underline"
-              >
-                {selectedMissionIds.length === pendingPaymentMissions.length
-                  ? "Tout désélectionner"
-                  : "Tout sélectionner"}
-              </button>
-            )}
-          </div>
-
-          {pendingPaymentMissions.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <CheckCircle className="w-8 h-8 text-gray-400" />
-              </div>
-              <h3 className="font-semibold text-foreground mb-2">
-                Tout est encaissé !
-              </h3>
-              <p className="text-text-light">
-                Vous n&apos;avez aucun paiement en attente.
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="space-y-3 mb-6">
-                {pendingPaymentMissions.map((mission) => (
-                  <PendingPaymentCard
-                    key={mission.id}
-                    mission={mission}
-                    isSelected={selectedMissionIds.includes(mission.id)}
-                    onToggle={() => toggleMission(mission.id)}
-                  />
-                ))}
-              </div>
-
-              {/* Selection Summary */}
-              <AnimatePresence>
-                {selectedMissionIds.length > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 20 }}
-                    className="bg-primary/5 border border-primary/20 rounded-xl p-4"
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-foreground">
-                        {selectedMissionIds.length} mission{selectedMissionIds.length > 1 ? "s" : ""} sélectionnée{selectedMissionIds.length > 1 ? "s" : ""}
-                      </span>
-                      <span className="text-xl font-bold text-primary">
-                        {selectedAmount}€
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-sm text-text-light mb-4">
-                      <span>Commission ({rate}%)</span>
-                      <span>-{fee.toFixed(2)}€</span>
-                    </div>
-
-                    <div className="flex items-center justify-between mb-4 pt-3 border-t border-primary/20">
-                      <span className="font-semibold text-foreground">Vous recevrez</span>
-                      <span className="text-2xl font-bold text-green-600">{net.toFixed(2)}€</span>
-                    </div>
-
-                    <motion.button
-                      onClick={() => setShowCashoutModal(true)}
-                      className="w-full py-3 bg-primary text-white rounded-xl font-semibold flex items-center justify-center gap-2"
-                      whileHover={{ scale: 1.01 }}
-                      whileTap={{ scale: 0.99 }}
-                    >
-                      <ArrowDownToLine className="w-5 h-5" />
-                      Encaisser maintenant
-                    </motion.button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </>
-          )}
-        </motion.div>
-
-        {/* Sidebar */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="space-y-6"
-        >
-          {/* Commission Tiers */}
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <CommissionTiers currentAmount={selectedAmount || totalPending} />
-          </div>
-
-          {/* Bank Info */}
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-              <CreditCard className="w-4 h-4 text-primary" />
-              Compte de réception
-            </h3>
-            <div className="bg-gray-50 rounded-xl p-3">
-              <p className="text-sm text-text-light">IBAN</p>
-              <p className="font-mono text-foreground text-sm">FR76 &bull;&bull;&bull;&bull; &bull;&bull;&bull;&bull; 847</p>
-            </div>
-            <p className="text-xs text-text-light mt-2 flex items-center gap-1">
-              <Info className="w-3 h-3" />
-              Virements sous 48h ouvrées
-            </p>
-          </div>
-        </motion.div>
-      </div>
-
-      {/* Authorized Payments (Confirmés) */}
-      {authorizedPaymentsList.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.35 }}
-          className="bg-white rounded-2xl shadow-lg p-6"
-        >
-          <h2 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-            <CreditCard className="w-5 h-5 text-blue-600" />
-            Paiements confirmés
-            <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
-              {authorizedPaymentsList.length}
-            </span>
-          </h2>
-
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4 flex items-start gap-2">
-            <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-blue-700">
-              <p className="font-semibold">Paiements confirmés par les clients</p>
-              <p>
-                Ces paiements ont été validés par les clients et seront automatiquement capturés 48h après la fin de la mission.
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {authorizedPaymentsList.map((payment) => {
-              const formatDate = (dateStr: string) => {
-                return new Date(dateStr).toLocaleDateString("fr-FR", {
-                  day: "numeric",
-                  month: "short",
-                });
-              };
-
-              const captureDate = payment.autoCaptureScheduledAt
-                ? new Date(payment.autoCaptureScheduledAt).toLocaleDateString("fr-FR", {
-                    day: "numeric",
-                    month: "short",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                : "À planifier";
-
-              return (
-                <div
-                  key={payment.id}
-                  className="bg-gray-50 rounded-xl p-4 border border-gray-100"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl">{payment.animal.emoji}</span>
-                      <div>
-                        <h4 className="font-semibold text-foreground">
-                          {payment.serviceName} - {payment.animal.name}
-                        </h4>
-                        <p className="text-sm text-text-light">
-                          {payment.clientName} &bull; {formatDate(payment.startDate)} - {formatDate(payment.endDate)}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xl font-bold text-blue-600">{payment.announcerEarnings}€</p>
-                      <p className="text-xs text-text-light">Vous recevrez</p>
-                    </div>
-                  </div>
-                  <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className={cn(
-                        "px-2 py-0.5 text-xs font-medium rounded-full",
-                        payment.status === "upcoming"
-                          ? "bg-purple-100 text-purple-700"
-                          : "bg-blue-100 text-blue-700"
-                      )}>
-                        {payment.status === "upcoming" ? "À venir" : "En cours"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1 text-sm text-text-light">
-                      <Calendar className="w-4 h-4" />
-                      <span>Capture prévue: {captureDate}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </motion.div>
-      )}
-
-      {/* Transaction History */}
+      {/* Missions du mois */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="bg-white rounded-2xl shadow-lg p-6"
+        transition={{ delay: 0.2 }}
       >
-        <h2 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-          <History className="w-5 h-5 text-primary" />
-          Historique des virements
-        </h2>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-lg font-bold text-foreground">
+            <CreditCard className="h-5 w-5 text-primary" />
+            Missions du mois
+            {sortedMissions.length > 0 && (
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-sm font-semibold text-primary">
+                {sortedMissions.length}
+              </span>
+            )}
+          </h2>
+        </div>
 
-        {payoutHistoryData.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-text-light">Aucun virement effectué</p>
+        {sortedMissions.length === 0 ? (
+          <div className="rounded-2xl bg-white p-10 text-center shadow-sm">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100">
+              <Calendar className="h-8 w-8 text-gray-400" />
+            </div>
+            <h3 className="font-semibold text-foreground">
+              Aucune mission ce mois
+            </h3>
+            <p className="mt-1 text-sm text-text-light">
+              Sélectionnez un autre mois ou attendez de nouvelles réservations
+            </p>
           </div>
         ) : (
-          <div>
-            {payoutHistoryData.map((transaction) => (
-              <TransactionItem key={transaction.id} transaction={transaction} />
+          <div className="space-y-4">
+            {sortedMissions.map((mission, index) => (
+              <motion.div
+                key={mission.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 + index * 0.05 }}
+              >
+                <ConfirmedMissionCard mission={mission} />
+              </motion.div>
             ))}
           </div>
         )}
       </motion.div>
 
-      {/* Cashout Modal */}
-      <CashoutModal
-        isOpen={showCashoutModal}
-        onClose={() => setShowCashoutModal(false)}
-        selectedMissions={selectedMissions}
-        totalAmount={selectedAmount}
+      {/* Historique des virements du mois */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+      >
+        <div className="mb-4 flex items-center gap-2">
+          <History className="h-5 w-5 text-primary" />
+          <h2 className="text-lg font-bold text-foreground">
+            Virements du mois
+          </h2>
+        </div>
+
+        {monthlyData.historyList.length === 0 ? (
+          <div className="rounded-2xl bg-white p-8 text-center shadow-sm">
+            <p className="text-text-light">Aucun virement ce mois</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {monthlyData.historyList.map((payout) => (
+              <PayoutHistoryCard key={payout.id} payout={payout} />
+            ))}
+          </div>
+        )}
+      </motion.div>
+
+      {/* Modal Commission */}
+      <CommissionModal
+        isOpen={showCommissionModal}
+        onClose={() => setShowCommissionModal(false)}
+        currentAmount={stats?.totalEarned || 0}
       />
     </div>
   );

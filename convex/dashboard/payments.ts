@@ -74,6 +74,9 @@ export const getAnnouncerPendingPayments = query({
         const service = m.serviceId ? await ctx.db.get(m.serviceId) : null;
         const animal = m.animalId ? await ctx.db.get(m.animalId) : null;
 
+        // Montant net (ce que l'annonceur reçoit après commission)
+        const announcerEarnings = m.announcerEarnings || Math.round((m.amount || 0) * 0.85);
+
         return {
           id: m._id,
           clientId: m.clientId,
@@ -91,7 +94,8 @@ export const getAnnouncerPendingPayments = query({
           serviceCategory: m.serviceCategory,
           startDate: m.startDate,
           endDate: m.endDate,
-          amount: Math.round((m.amount || 0) / 100), // Convertir centimes en euros
+          amount: Math.round((m.amount || 0) / 100), // Montant brut client en euros
+          announcerEarnings: Math.round(announcerEarnings / 100), // Montant net annonceur en euros
           paymentStatus: m.paymentStatus,
           location: m.location || "",
         };
@@ -117,14 +121,21 @@ export const getAnnouncerPaymentStats = query({
     const pending = completed.filter((m) => m.paymentStatus === "pending");
     const paid = completed.filter((m) => m.paymentStatus === "paid");
 
+    // Helper pour obtenir le montant net de l'annonceur (après commission)
+    const getNetAmount = (m: any) => m.announcerEarnings || Math.round((m.amount || 0) * 0.85);
+
     return {
-      // Montants en euros (conversion depuis centimes)
-      totalPending: Math.round(pending.reduce((sum, m) => sum + (m.amount || 0), 0) / 100),
-      totalCollected: Math.round(paid.reduce((sum, m) => sum + (m.amount || 0), 0) / 100),
+      // Montants NETS en euros (ce que l'annonceur reçoit après commission)
+      totalPending: Math.round(pending.reduce((sum, m) => sum + getNetAmount(m), 0) / 100),
+      totalCollected: Math.round(paid.reduce((sum, m) => sum + getNetAmount(m), 0) / 100),
       pendingCount: pending.length,
       paidCount: paid.length,
-      // Total brut cumulé
+      // Total net cumulé (revenus réels de l'annonceur)
       totalEarned: Math.round(
+        completed.reduce((sum, m) => sum + getNetAmount(m), 0) / 100
+      ),
+      // Total brut pour référence (ce que les clients ont payé)
+      totalGross: Math.round(
         completed.reduce((sum, m) => sum + (m.amount || 0), 0) / 100
       ),
     };
