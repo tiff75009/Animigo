@@ -2,6 +2,8 @@ import { mutation, query } from "../_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { parseLocationString } from "../utils/location";
+import { calculateGeoGrid } from "../lib/geoUtils";
+import { getRedisConfig, geoAddProfile, geoRemoveProfile } from "../lib/redis";
 
 // Récupérer le profil d'un utilisateur
 export const getProfile = query({
@@ -208,6 +210,13 @@ export const upsertProfile = mutation({
         addIfDefined(profileData, "region", args.region);
         addIfDefined(profileData, "coordinates", args.coordinates);
         addIfDefined(profileData, "googlePlaceId", args.googlePlaceId);
+
+        // Calculer la grille géographique pour le pré-filtrage (Phase 1 optimisation)
+        if (args.coordinates) {
+          const { latGrid, lngGrid } = calculateGeoGrid(args.coordinates.lat, args.coordinates.lng);
+          profileData.latGrid = latGrid;
+          profileData.lngGrid = lngGrid;
+        }
       } else if (args.location) {
         // Fallback: parser la localisation texte
         const locationData = parseLocationString(args.location);
@@ -218,6 +227,9 @@ export const upsertProfile = mutation({
         profileData.region = locationData.region || undefined;
         profileData.coordinates = undefined;
         profileData.googlePlaceId = undefined;
+        // Effacer la grille géo si pas de coordonnées
+        profileData.latGrid = undefined;
+        profileData.lngGrid = undefined;
       } else if (args.location === null) {
         // Effacer toute la localisation
         profileData.location = undefined;
@@ -227,12 +239,34 @@ export const upsertProfile = mutation({
         profileData.region = undefined;
         profileData.coordinates = undefined;
         profileData.googlePlaceId = undefined;
+        profileData.latGrid = undefined;
+        profileData.lngGrid = undefined;
       }
     }
 
     if (existingProfile) {
       // Update: seulement les champs fournis
       await ctx.db.patch(existingProfile._id, profileData);
+
+      // Phase 3: Synchroniser avec Redis GEO si coordonnées modifiées
+      if (args.coordinates !== undefined) {
+        const redisConfig = await getRedisConfig(ctx);
+        if (redisConfig) {
+          if (args.coordinates) {
+            // Ajouter/mettre à jour dans Redis GEO
+            await geoAddProfile(
+              redisConfig,
+              existingProfile._id,
+              args.coordinates.lat,
+              args.coordinates.lng
+            );
+          } else {
+            // Supprimer de Redis GEO si coordonnées effacées
+            await geoRemoveProfile(redisConfig, existingProfile._id);
+          }
+        }
+      }
+
       return { success: true, profileId: existingProfile._id };
     } else {
       // Create: construire un objet complet avec les valeurs par défaut
@@ -343,6 +377,20 @@ export const upsertProfile = mutation({
       }> | undefined;
 
       const profileId = await ctx.db.insert("profiles", newProfile);
+
+      // Phase 3: Synchroniser avec Redis GEO si coordonnées fournies
+      if (args.coordinates) {
+        const redisConfig = await getRedisConfig(ctx);
+        if (redisConfig) {
+          await geoAddProfile(
+            redisConfig,
+            profileId,
+            args.coordinates.lat,
+            args.coordinates.lng
+          );
+        }
+      }
+
       return { success: true, profileId };
     }
   },

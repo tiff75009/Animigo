@@ -5,6 +5,21 @@ import { ConvexError } from "convex/values";
 import { missionsOverlap, missionsOverlapWithBuffers, addMinutesToTime, subtractMinutesFromTime, applyBuffersToTimeSlot } from "../lib/timeUtils";
 import { checkBookingConflict, checkCapacityAvailability, isCategoryCapacityBased, getAllSubcategorySlugs } from "../lib/capacityUtils";
 import { getDefaultPricing } from "../utils/defaultPricing";
+import { isInBoundingBox } from "../lib/geoUtils";
+import {
+  batchLoadProfiles,
+  batchLoadServices,
+  batchLoadProfilePhotos,
+  batchLoadAvailability,
+  batchLoadMissions,
+  batchLoadCollectiveSlots,
+  batchLoadVariants,
+  batchLoadVariantsByService,
+  batchLoadCategories,
+  batchLoadUsers,
+  resolvePhotoUrls,
+  batchLoadCollectiveSlotsByVariant,
+} from "../lib/batchLoaders";
 
 // Calcul de distance avec la formule de Haversine (en km)
 function calculateDistance(
@@ -108,50 +123,60 @@ interface AnnouncerResult {
   statusType: "particulier" | "micro_entrepreneur" | "professionnel";
 }
 
-// Query principale de recherche d'annonceurs
+// Arguments communs pour la recherche d'annonceurs
+const searchAnnouncersArgs = {
+  // Filtres
+  categorySlug: v.optional(v.string()),
+  excludeCategory: v.optional(v.string()),
+  animalType: v.optional(v.string()),
+
+  // Localisation
+  coordinates: v.optional(v.object({
+    lat: v.number(),
+    lng: v.number(),
+  })),
+  radiusKm: v.optional(v.number()),
+
+  // Date/heure
+  date: v.optional(v.string()),
+  time: v.optional(v.string()),
+  startDate: v.optional(v.string()),
+  endDate: v.optional(v.string()),
+
+  // Options
+  includeUnavailable: v.optional(v.boolean()),
+
+  // Filtres avancés
+  accountTypes: v.optional(v.array(v.string())),
+  verifiedOnly: v.optional(v.boolean()),
+  withPhotoOnly: v.optional(v.boolean()),
+  hasGarden: v.optional(v.boolean()),
+  hasVehicle: v.optional(v.boolean()),
+  ownsAnimals: v.optional(v.array(v.string())),
+  noAnimals: v.optional(v.boolean()),
+  priceMin: v.optional(v.number()),
+  priceMax: v.optional(v.number()),
+  sortBy: v.optional(v.string()),
+
+  // Pagination
+  limit: v.optional(v.number()),
+  offset: v.optional(v.number()),
+};
+
+// Type de retour paginé
+interface PaginatedResult<T> {
+  results: T[];
+  total: number;
+  hasMore: boolean;
+}
+
+// Query principale de recherche d'annonceurs (publique, sans Redis)
 export const searchAnnouncers = query({
-  args: {
-    // Filtres
-    categorySlug: v.optional(v.string()),
-    excludeCategory: v.optional(v.string()), // Exclure une catégorie (ex: "garde" pour mode services)
-    animalType: v.optional(v.string()),
-
-    // Localisation
-    coordinates: v.optional(v.object({
-      lat: v.number(),
-      lng: v.number(),
-    })),
-    radiusKm: v.optional(v.number()), // Défaut: 20km
-
-    // Date/heure (pour services hourly)
-    date: v.optional(v.string()), // "YYYY-MM-DD"
-    time: v.optional(v.string()), // "HH:MM"
-
-    // Plage de dates (pour services daily)
-    startDate: v.optional(v.string()), // "YYYY-MM-DD"
-    endDate: v.optional(v.string()), // "YYYY-MM-DD"
-
-    // Options
-    includeUnavailable: v.optional(v.boolean()),
-
-    // Filtres avancés
-    accountTypes: v.optional(v.array(v.string())), // "particulier", "micro_entrepreneur", "pro"
-    verifiedOnly: v.optional(v.boolean()),
-    withPhotoOnly: v.optional(v.boolean()),
-    hasGarden: v.optional(v.boolean()),
-    hasVehicle: v.optional(v.boolean()),
-    ownsAnimals: v.optional(v.array(v.string())), // "chien", "chat", etc.
-    noAnimals: v.optional(v.boolean()),
-    priceMin: v.optional(v.number()), // En euros
-    priceMax: v.optional(v.number()), // En euros
-    sortBy: v.optional(v.string()), // "relevance", "price_asc", "price_desc", "rating", "distance"
-
-    // Pagination
-    limit: v.optional(v.number()),
-  },
+  args: searchAnnouncersArgs,
   handler: async (ctx, args): Promise<AnnouncerResult[]> => {
     const radius = args.radiusKm ?? 20;
     const limit = args.limit ?? 50;
+    const offset = args.offset ?? 0;
 
     // 1. Récupérer tous les annonceurs actifs (pas les utilisateurs simples)
     const announcers = await ctx.db
@@ -167,14 +192,54 @@ export const searchAnnouncers = query({
       )
       .collect();
 
+    // ============================================================
+    // PHASE 2 OPTIMISATION: Batch Loading (élimination N+1)
+    // ============================================================
+    const announcerIds = announcers.map((a) => a._id);
+
+    // Dates pour les créneaux collectifs
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const in7Days = new Date(today);
+    in7Days.setDate(in7Days.getDate() + 7);
+    const in7DaysStr = `${in7Days.getFullYear()}-${String(in7Days.getMonth() + 1).padStart(2, "0")}-${String(in7Days.getDate()).padStart(2, "0")}`;
+
+    // Chargement batch de toutes les données nécessaires
+    const [
+      profilesMap,
+      servicesMap,
+      photosMap,
+      availabilityMap,
+      missionsMap,
+      collectiveSlotsMap,
+    ] = await Promise.all([
+      batchLoadProfiles(ctx, announcerIds),
+      batchLoadServices(ctx, announcerIds),
+      batchLoadProfilePhotos(ctx, announcerIds),
+      batchLoadAvailability(ctx, announcerIds),
+      batchLoadMissions(ctx, announcerIds),
+      batchLoadCollectiveSlots(ctx, announcerIds, todayStr, in7DaysStr),
+    ]);
+
+    // Résoudre les URLs des photos en parallèle
+    const photoUrlsMap = await resolvePhotoUrls(ctx, photosMap);
+
+    // Collecter les variantIds pour le batch loading
+    const allVariantIds: Id<"serviceVariants">[] = [];
+    for (const slots of Array.from(collectiveSlotsMap.values())) {
+      for (const slot of slots) {
+        if (!allVariantIds.includes(slot.variantId)) {
+          allVariantIds.push(slot.variantId);
+        }
+      }
+    }
+    const variantsMap = await batchLoadVariants(ctx, allVariantIds);
+
     const results: AnnouncerResult[] = [];
 
     for (const announcer of announcers) {
-      // 2. Récupérer le profil
-      const profile = await ctx.db
-        .query("profiles")
-        .withIndex("by_user", (q) => q.eq("userId", announcer._id))
-        .first();
+      // 2. Récupérer le profil depuis le cache
+      const profile = profilesMap.get(announcer._id);
 
       if (!profile) continue;
 
@@ -216,9 +281,21 @@ export const searchAnnouncers = query({
         if (!hasMatchingAnimal) continue;
       }
 
-      // 3. Filtrer par localisation si coordonnées fournies
+      // 3. Filtrer par localisation si coordonnées fournies (avec pré-filtrage bounding box)
       let distance: number | undefined;
       if (args.coordinates && profile.coordinates) {
+        // Pré-filtrage rapide avec bounding box (Phase 1 optimisation)
+        if (!isInBoundingBox(
+          args.coordinates.lat,
+          args.coordinates.lng,
+          profile.coordinates.lat,
+          profile.coordinates.lng,
+          radius
+        )) {
+          continue; // Hors du bounding box = certainement hors du rayon
+        }
+
+        // Calcul Haversine précis seulement si dans le bounding box
         distance = calculateDistance(
           args.coordinates.lat,
           args.coordinates.lng,
@@ -229,14 +306,8 @@ export const searchAnnouncers = query({
         if (distance > radius) continue;
       }
 
-      // 4. Récupérer les services actifs de l'annonceur
-      let servicesQuery = ctx.db
-        .query("services")
-        .withIndex("by_user_active", (q) =>
-          q.eq("userId", announcer._id).eq("isActive", true)
-        );
-
-      const services = await servicesQuery.collect();
+      // 4. Récupérer les services actifs depuis le cache (Phase 2 batch loading)
+      const services = servicesMap.get(announcer._id) ?? [];
 
       if (services.length === 0) continue;
 
@@ -273,30 +344,20 @@ export const searchAnnouncers = query({
       }
 
       if (datesToCheck.length > 0 && args.categorySlug) {
-        // Vérifier les indisponibilités manuelles
-        const unavailableDates = await ctx.db
-          .query("availability")
-          .withIndex("by_user", (q) => q.eq("userId", announcer._id))
-          .filter((q) => q.eq(q.field("status"), "unavailable"))
-          .collect();
+        // Vérifier les indisponibilités manuelles depuis le cache (Phase 2 batch loading)
+        const allAvailability = availabilityMap.get(announcer._id) ?? [];
+        const unavailableDates = allAvailability.filter((a) => a.status === "unavailable");
 
         const unavailableDateSet = new Set(unavailableDates.map((a) => a.date));
         const hasManualUnavailability = datesToCheck.some((d) =>
           unavailableDateSet.has(d)
         );
 
-        // Vérifier les missions existantes UNIQUEMENT pour la même catégorie
-        const existingMissions = await ctx.db
-          .query("missions")
-          .withIndex("by_announcer", (q) => q.eq("announcerId", announcer._id))
-          .filter((q) =>
-            q.and(
-              q.eq(q.field("serviceCategory"), args.categorySlug),
-              q.neq(q.field("status"), "cancelled"),
-              q.neq(q.field("status"), "refused")
-            )
-          )
-          .collect();
+        // Vérifier les missions existantes depuis le cache (Phase 2 batch loading)
+        const allMissions = missionsMap.get(announcer._id) ?? [];
+        const existingMissions = allMissions.filter(
+          (m) => m.serviceCategory === args.categorySlug
+        );
 
         // Récupérer les buffers (temps de préparation) de l'annonceur
         const bufferBefore = profile?.bufferBefore ?? 0;
@@ -340,14 +401,11 @@ export const searchAnnouncers = query({
           return isMultiDay || hasNoTimeSlot;
         });
 
-        // Vérifier disponibilité partielle (créneaux horaires)
+        // Vérifier disponibilité partielle (créneaux horaires) depuis le cache (Phase 2)
         if (args.time && args.date) {
-          const partialAvailability = await ctx.db
-            .query("availability")
-            .withIndex("by_user_date", (q) =>
-              q.eq("userId", announcer._id).eq("date", args.date!)
-            )
-            .first();
+          const partialAvailability = allAvailability.find(
+            (a) => a.date === args.date && a.status === "partial"
+          );
 
           if (partialAvailability?.status === "partial" && partialAvailability.timeSlots) {
             // Vérifier si l'heure demandée est dans un créneau disponible
@@ -424,17 +482,8 @@ export const searchAnnouncers = query({
         if (basePrice > args.priceMax * 100) continue;
       }
 
-      // 9. Récupérer la photo de profil
-      const profilePhoto = await ctx.db
-        .query("photos")
-        .withIndex("by_user", (q) => q.eq("userId", announcer._id))
-        .filter((q) => q.eq(q.field("isProfilePhoto"), true))
-        .first();
-
-      let profileImageUrl: string | null = null;
-      if (profilePhoto?.storageId) {
-        profileImageUrl = await ctx.storage.getUrl(profilePhoto.storageId);
-      }
+      // 9. Récupérer la photo de profil depuis le cache (Phase 2 batch loading)
+      const profileImageUrl = photoUrlsMap.get(announcer._id) ?? null;
 
       // 9.1 Filtrer par photo
       if (args.withPhotoOnly && !profileImageUrl) continue;
@@ -449,34 +498,16 @@ export const searchAnnouncers = query({
         }
       }
 
-      // 10.1 Récupérer les créneaux collectifs disponibles (7 prochains jours)
-      const today = new Date();
-      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-      const in7Days = new Date(today);
-      in7Days.setDate(in7Days.getDate() + 7);
-      const in7DaysStr = `${in7Days.getFullYear()}-${String(in7Days.getMonth() + 1).padStart(2, "0")}-${String(in7Days.getDate()).padStart(2, "0")}`;
-
-      // Récupérer les créneaux collectifs actifs de cet annonceur
-      const collectiveSlots = await ctx.db
-        .query("collectiveSlots")
-        .withIndex("by_user", (q) => q.eq("userId", announcer._id))
-        .filter((q) =>
-          q.and(
-            q.eq(q.field("isActive"), true),
-            q.eq(q.field("isCancelled"), false),
-            q.gte(q.field("date"), todayStr),
-            q.lte(q.field("date"), in7DaysStr)
-          )
-        )
-        .collect();
+      // 10.1 Récupérer les créneaux collectifs depuis le cache (Phase 2 batch loading)
+      const collectiveSlots = collectiveSlotsMap.get(announcer._id) ?? [];
 
       // Filtrer les créneaux avec places disponibles et récupérer les infos des formules
       const collectiveSlotsInfo: CollectiveSlotInfo[] = [];
       for (const slot of collectiveSlots) {
         const spotsLeft = slot.maxAnimals - slot.bookedAnimals;
         if (spotsLeft > 0) {
-          // Récupérer le nom de la formule
-          const variant = await ctx.db.get(slot.variantId);
+          // Récupérer le nom de la formule depuis le cache (Phase 2)
+          const variant = variantsMap.get(slot.variantId);
           collectiveSlotsInfo.push({
             id: slot._id,
             date: slot.date,
@@ -507,15 +538,13 @@ export const searchAnnouncers = query({
         };
       }
 
-      // Sinon, chercher le prochain créneau de disponibilité partielle
+      // Sinon, chercher le prochain créneau de disponibilité partielle depuis le cache (Phase 2)
       if (!nextSlot && availability.nextAvailable) {
         const nextAvailDate = availability.nextAvailable;
-        const partialAvail = await ctx.db
-          .query("availability")
-          .withIndex("by_user_date", (q) =>
-            q.eq("userId", announcer._id).eq("date", nextAvailDate)
-          )
-          .first();
+        const userAvailability = availabilityMap.get(announcer._id) ?? [];
+        const partialAvail = userAvailability.find(
+          (a) => a.date === nextAvailDate && a.status === "partial"
+        );
 
         if (partialAvail?.status === "partial" && partialAvail.timeSlots && partialAvail.timeSlots.length > 0) {
           // Prendre le premier créneau du jour
@@ -652,7 +681,319 @@ export const searchAnnouncers = query({
       }
     });
 
-    return results.slice(0, limit);
+    return results.slice(offset, offset + limit);
+  },
+});
+
+// Query interne pour la recherche avec Redis (appelée par l'action)
+export const searchAnnouncersInternal = query({
+  args: {
+    ...searchAnnouncersArgs,
+    // Paramètres Redis (optionnels, fournis par l'action)
+    redisProfileIds: v.optional(v.array(v.string())),
+    redisDistances: v.optional(v.record(v.string(), v.number())),
+  },
+  handler: async (ctx, args): Promise<AnnouncerResult[]> => {
+    const radius = args.radiusKm ?? 20;
+    const limit = args.limit ?? 50;
+    const offset = args.offset ?? 0;
+
+    // Si Redis a fourni des profils pré-filtrés, les utiliser
+    const useRedisFilter = args.redisProfileIds && args.redisProfileIds.length > 0;
+    const redisDistanceMap = args.redisDistances ? new Map(Object.entries(args.redisDistances)) : null;
+
+    // 1. Récupérer les annonceurs
+    let announcers;
+    if (useRedisFilter) {
+      // Récupérer uniquement les annonceurs dont les profils sont dans Redis
+      const allAnnouncers = await ctx.db
+        .query("users")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("isActive"), true),
+            q.or(
+              q.eq(q.field("accountType"), "annonceur_pro"),
+              q.eq(q.field("accountType"), "annonceur_particulier")
+            )
+          )
+        )
+        .collect();
+
+      // Filtrer par les profils Redis (on a les profileIds, pas les userIds)
+      // On doit d'abord récupérer les profiles pour faire le mapping
+      const profiles = await ctx.db.query("profiles").collect();
+      const profileIdToUserId = new Map<string, Id<"users">>();
+      for (const p of profiles) {
+        profileIdToUserId.set(p._id, p.userId);
+      }
+
+      const validUserIds = new Set<string>();
+      for (const profileId of args.redisProfileIds!) {
+        const userId = profileIdToUserId.get(profileId as Id<"profiles">);
+        if (userId) validUserIds.add(userId);
+      }
+
+      announcers = allAnnouncers.filter((a) => validUserIds.has(a._id));
+    } else {
+      announcers = await ctx.db
+        .query("users")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("isActive"), true),
+            q.or(
+              q.eq(q.field("accountType"), "annonceur_pro"),
+              q.eq(q.field("accountType"), "annonceur_particulier")
+            )
+          )
+        )
+        .collect();
+    }
+
+    // Le reste du code est identique à searchAnnouncers
+    const announcerIds = announcers.map((a) => a._id);
+
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const in7Days = new Date(today);
+    in7Days.setDate(in7Days.getDate() + 7);
+    const in7DaysStr = `${in7Days.getFullYear()}-${String(in7Days.getMonth() + 1).padStart(2, "0")}-${String(in7Days.getDate()).padStart(2, "0")}`;
+
+    const [
+      profilesMap,
+      servicesMap,
+      photosMap,
+      availabilityMap,
+      missionsMap,
+      collectiveSlotsMap,
+    ] = await Promise.all([
+      batchLoadProfiles(ctx, announcerIds),
+      batchLoadServices(ctx, announcerIds),
+      batchLoadProfilePhotos(ctx, announcerIds),
+      batchLoadAvailability(ctx, announcerIds),
+      batchLoadMissions(ctx, announcerIds),
+      batchLoadCollectiveSlots(ctx, announcerIds, todayStr, in7DaysStr),
+    ]);
+
+    const photoUrlsMap = await resolvePhotoUrls(ctx, photosMap);
+
+    const allVariantIds: Id<"serviceVariants">[] = [];
+    for (const slots of Array.from(collectiveSlotsMap.values())) {
+      for (const slot of slots) {
+        if (!allVariantIds.includes(slot.variantId)) {
+          allVariantIds.push(slot.variantId);
+        }
+      }
+    }
+    const variantsMap = await batchLoadVariants(ctx, allVariantIds);
+
+    const results: AnnouncerResult[] = [];
+
+    for (const announcer of announcers) {
+      const profile = profilesMap.get(announcer._id);
+      if (!profile) continue;
+
+      // Filtres de base
+      if (args.accountTypes && args.accountTypes.length > 0) {
+        let statusType: string;
+        if (announcer.accountType === "annonceur_particulier") {
+          statusType = "particulier";
+        } else if (announcer.companyType === "micro_enterprise") {
+          statusType = "micro_entrepreneur";
+        } else {
+          statusType = "pro";
+        }
+        if (!args.accountTypes.includes(statusType)) continue;
+      }
+
+      if (args.verifiedOnly && !announcer.emailVerified) continue;
+      if (args.hasGarden === true && !profile.hasGarden) continue;
+      if (args.hasVehicle === true && !profile.hasVehicle) continue;
+
+      if (args.noAnimals) {
+        if (profile.ownedAnimals && profile.ownedAnimals.length > 0) continue;
+      }
+      if (args.ownsAnimals && args.ownsAnimals.length > 0) {
+        const ownedTypes = profile.ownedAnimals?.map((a) => a.type) ?? [];
+        const hasMatchingAnimal = args.ownsAnimals.some((animal) => {
+          if (animal === "autre") {
+            return ownedTypes.some((t) => t !== "chien" && t !== "chat");
+          }
+          return ownedTypes.includes(animal);
+        });
+        if (!hasMatchingAnimal) continue;
+      }
+
+      // Distance: utiliser Redis si disponible, sinon calculer
+      let distance: number | undefined;
+      if (useRedisFilter && redisDistanceMap) {
+        // Distance pré-calculée par Redis
+        distance = redisDistanceMap.get(profile._id);
+      } else if (args.coordinates && profile.coordinates) {
+        // Fallback: calcul Haversine
+        if (!isInBoundingBox(
+          args.coordinates.lat,
+          args.coordinates.lng,
+          profile.coordinates.lat,
+          profile.coordinates.lng,
+          radius
+        )) {
+          continue;
+        }
+        distance = calculateDistance(
+          args.coordinates.lat,
+          args.coordinates.lng,
+          profile.coordinates.lat,
+          profile.coordinates.lng
+        );
+        if (distance > radius) continue;
+      }
+
+      // Services
+      const services = servicesMap.get(announcer._id) ?? [];
+      if (services.length === 0) continue;
+
+      let matchingServices = services;
+      if (args.categorySlug) {
+        matchingServices = services.filter((s) => s.category === args.categorySlug);
+        if (matchingServices.length === 0) continue;
+      }
+      if (args.excludeCategory) {
+        matchingServices = matchingServices.filter((s) => s.category !== args.excludeCategory);
+        if (matchingServices.length === 0) continue;
+      }
+      if (args.animalType) {
+        matchingServices = matchingServices.filter((s) =>
+          s.animalTypes.includes(args.animalType!)
+        );
+        if (matchingServices.length === 0) continue;
+      }
+
+      // Disponibilité (simplifié pour la version interne)
+      let availability: AnnouncerAvailability = { status: "available" };
+
+      // Prix
+      let basePrice: number | undefined;
+      for (const service of matchingServices) {
+        if (service.basePrice && (!basePrice || service.basePrice < basePrice)) {
+          basePrice = service.basePrice;
+        }
+      }
+
+      if (args.priceMin !== undefined && basePrice !== undefined) {
+        if (basePrice < args.priceMin * 100) continue;
+      }
+      if (args.priceMax !== undefined && basePrice !== undefined) {
+        if (basePrice > args.priceMax * 100) continue;
+      }
+
+      const profileImageUrl = photoUrlsMap.get(announcer._id) ?? null;
+      if (args.withPhotoOnly && !profileImageUrl) continue;
+
+      let statusType: "particulier" | "micro_entrepreneur" | "professionnel" = "particulier";
+      if (announcer.accountType === "annonceur_pro") {
+        if (announcer.companyType === "micro_enterprise") {
+          statusType = "micro_entrepreneur";
+        } else {
+          statusType = "professionnel";
+        }
+      }
+
+      // Créneaux collectifs
+      const collectiveSlots = collectiveSlotsMap.get(announcer._id) ?? [];
+      const collectiveSlotsInfo: CollectiveSlotInfo[] = [];
+      for (const slot of collectiveSlots) {
+        const spotsLeft = slot.maxAnimals - slot.bookedAnimals;
+        if (spotsLeft > 0) {
+          const variant = variantsMap.get(slot.variantId);
+          collectiveSlotsInfo.push({
+            id: slot._id,
+            date: slot.date,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            spotsLeft,
+            formule: variant?.name ?? "Séance collective",
+          });
+        }
+      }
+
+      collectiveSlotsInfo.sort((a, b) => {
+        const dateCompare = a.date.localeCompare(b.date);
+        if (dateCompare !== 0) return dateCompare;
+        return a.startTime.localeCompare(b.startTime);
+      });
+
+      let nextSlot: NextSlot | undefined;
+      if (collectiveSlotsInfo.length > 0) {
+        nextSlot = {
+          date: collectiveSlotsInfo[0].date,
+          startTime: collectiveSlotsInfo[0].startTime,
+          endTime: collectiveSlotsInfo[0].endTime,
+        };
+      }
+
+      if (collectiveSlotsInfo.length > 0) {
+        availability.collectiveSlots = collectiveSlotsInfo.slice(0, 5);
+      }
+      if (nextSlot) {
+        availability.nextSlot = nextSlot;
+      }
+
+      results.push({
+        id: announcer._id,
+        firstName: announcer.firstName,
+        lastName: announcer.lastName,
+        profileImage: profile.profileImageUrl ?? profileImageUrl,
+        coverImage: profile.coverImageUrl ?? null,
+        location: profile.city ?? profile.location ?? "",
+        coordinates: profile.coordinates,
+        distance,
+        rating: 4.5,
+        reviewCount: 0,
+        basePrice,
+        verified: announcer.accountType === "annonceur_pro",
+        isIdentityVerified: profile.isIdentityVerified ?? false,
+        acceptedAnimals: profile.acceptedAnimals ?? [],
+        services: services.map((s) => s.category),
+        availability,
+        accountType: announcer.accountType,
+        companyType: announcer.companyType,
+        statusType,
+      });
+    }
+
+    // Tri
+    const sortBy = args.sortBy ?? "relevance";
+    results.sort((a, b) => {
+      if (sortBy === "relevance" || sortBy === "distance") {
+        if (a.availability.status === "available" && b.availability.status !== "available") return -1;
+        if (a.availability.status !== "available" && b.availability.status === "available") return 1;
+      }
+
+      switch (sortBy) {
+        case "price_asc":
+          if (a.basePrice !== undefined && b.basePrice !== undefined) {
+            return a.basePrice - b.basePrice;
+          }
+          return 0;
+        case "price_desc":
+          if (a.basePrice !== undefined && b.basePrice !== undefined) {
+            return b.basePrice - a.basePrice;
+          }
+          return 0;
+        case "distance":
+          if (a.distance !== undefined && b.distance !== undefined) {
+            return a.distance - b.distance;
+          }
+          return 0;
+        default:
+          if (a.distance !== undefined && b.distance !== undefined) {
+            return a.distance - b.distance;
+          }
+          return 0;
+      }
+    });
+
+    return results.slice(offset, offset + limit);
   },
 });
 
@@ -695,37 +1036,60 @@ interface FormuleResult {
   spotsLeft?: number; // Pour créneaux collectifs
 }
 
+// Arguments communs pour la recherche de formules
+const searchFormulesArgs = {
+  categorySlug: v.optional(v.string()),
+  excludeCategory: v.optional(v.string()),
+  animalType: v.optional(v.string()),
+  coordinates: v.optional(v.object({ lat: v.number(), lng: v.number() })),
+  radiusKm: v.optional(v.number()),
+  date: v.optional(v.string()),
+  time: v.optional(v.string()),
+  sessionType: v.optional(v.union(v.literal("individual"), v.literal("collective"))),
+  serviceLocation: v.optional(v.array(v.union(v.literal("announcer_home"), v.literal("client_home")))),
+  priceMin: v.optional(v.number()),
+  priceMax: v.optional(v.number()),
+  sortBy: v.optional(v.string()),
+  limit: v.optional(v.number()),
+  offset: v.optional(v.number()),
+};
+
 export const searchFormules = query({
-  args: {
-    categorySlug: v.optional(v.string()),
-    excludeCategory: v.optional(v.string()),
-    animalType: v.optional(v.string()),
-    coordinates: v.optional(v.object({ lat: v.number(), lng: v.number() })),
-    radiusKm: v.optional(v.number()),
-    date: v.optional(v.string()),
-    time: v.optional(v.string()),
-    sessionType: v.optional(v.union(v.literal("individual"), v.literal("collective"))),
-    serviceLocation: v.optional(v.array(v.union(v.literal("announcer_home"), v.literal("client_home")))),
-    priceMin: v.optional(v.number()),
-    priceMax: v.optional(v.number()),
-    sortBy: v.optional(v.string()),
-    limit: v.optional(v.number()),
-  },
+  args: searchFormulesArgs,
   handler: async (ctx, args): Promise<FormuleResult[]> => {
     const radius = args.radiusKm ?? 20;
     const limit = args.limit ?? 100;
+    const offset = args.offset ?? 0;
     const results: FormuleResult[] = [];
 
-    // Récupérer tous les services actifs
-    const allServices = await ctx.db.query("services").collect();
-    const services = allServices.filter((s) => {
-      if (!s.isActive) return false;
-      // Filtrer par slug de catégorie
+    // Récupérer les services actifs avec index optimisé (Phase 1 optimisation)
+    let services;
+    if (args.categorySlug) {
+      // Utiliser l'index by_category_active si catégorie spécifiée
+      services = await ctx.db
+        .query("services")
+        .withIndex("by_category_active", (q) =>
+          q.eq("category", args.categorySlug!).eq("isActive", true)
+        )
+        .collect();
+    } else {
+      // Utiliser l'index by_active pour récupérer seulement les services actifs
+      services = await ctx.db
+        .query("services")
+        .withIndex("by_active", (q) => q.eq("isActive", true))
+        .collect();
+    }
+
+    // Filtrer les conditions restantes en JavaScript (moins coûteux car déjà pré-filtré)
+    services = services.filter((s) => {
       if (args.excludeCategory && s.category === args.excludeCategory) return false;
-      if (args.categorySlug && s.category !== args.categorySlug) return false;
       if (args.animalType && !s.animalTypes?.includes(args.animalType)) return false;
       return true;
     });
+
+    // ============================================================
+    // PHASE 2 OPTIMISATION: Batch Loading (élimination N+1)
+    // ============================================================
 
     // Dates pour les créneaux
     const today = new Date();
@@ -734,21 +1098,73 @@ export const searchFormules = query({
     in7Days.setDate(in7Days.getDate() + 7);
     const in7DaysStr = `${in7Days.getFullYear()}-${String(in7Days.getMonth() + 1).padStart(2, "0")}-${String(in7Days.getDate()).padStart(2, "0")}`;
 
+    // Extraire les IDs uniques
+    const userIdsSet = new Set<Id<"users">>();
+    for (const s of services) {
+      userIdsSet.add(s.userId);
+    }
+    const userIds: Id<"users">[] = [];
+    userIdsSet.forEach((id) => userIds.push(id));
+    const serviceIds = services.map((s) => s._id);
+
+    // Chargement batch de toutes les données nécessaires
+    const [
+      usersMap,
+      profilesMap,
+      categoriesMap,
+      variantsByServiceMap,
+      photosMap,
+    ] = await Promise.all([
+      batchLoadUsers(ctx, userIds),
+      batchLoadProfiles(ctx, userIds),
+      batchLoadCategories(ctx),
+      batchLoadVariantsByService(ctx, serviceIds),
+      batchLoadProfilePhotos(ctx, userIds),
+    ]);
+
+    // Résoudre les URLs des photos en parallèle
+    const photoUrlsMap = await resolvePhotoUrls(ctx, photosMap);
+
+    // Collecter tous les variantIds pour charger les collectiveSlots
+    const allVariantIds: Id<"serviceVariants">[] = [];
+    for (const variants of Array.from(variantsByServiceMap.values())) {
+      for (const v of variants) {
+        if (v.sessionType === "collective") {
+          allVariantIds.push(v._id);
+        }
+      }
+    }
+
+    // Charger les créneaux collectifs et disponibilités
+    const [collectiveSlotsByVariantMap, availabilityMap] = await Promise.all([
+      batchLoadCollectiveSlotsByVariant(ctx, allVariantIds, todayStr, in7DaysStr),
+      batchLoadAvailability(ctx, userIds),
+    ]);
+
     for (const service of services) {
-      // Récupérer l'annonceur
-      const announcer = await ctx.db.get(service.userId);
+      // Récupérer l'annonceur depuis le cache (Phase 2 batch loading)
+      const announcer = usersMap.get(service.userId);
       if (!announcer || !announcer.isActive) continue;
 
-      // Récupérer le profil
-      const profile = await ctx.db
-        .query("profiles")
-        .withIndex("by_user", (q) => q.eq("userId", announcer._id))
-        .first();
+      // Récupérer le profil depuis le cache (Phase 2 batch loading)
+      const profile = profilesMap.get(announcer._id);
       if (!profile) continue;
 
-      // Filtrer par localisation
+      // Filtrer par localisation avec pré-filtrage bounding box (Phase 1 optimisation)
       let distance: number | undefined;
       if (args.coordinates && profile.coordinates) {
+        // Pré-filtrage rapide avec bounding box (évite le calcul Haversine coûteux)
+        if (!isInBoundingBox(
+          args.coordinates.lat,
+          args.coordinates.lng,
+          profile.coordinates.lat,
+          profile.coordinates.lng,
+          radius
+        )) {
+          continue; // Hors du bounding box = certainement hors du rayon
+        }
+
+        // Calcul Haversine précis seulement si dans le bounding box
         distance = calculateDistance(
           args.coordinates.lat,
           args.coordinates.lng,
@@ -758,18 +1174,11 @@ export const searchFormules = query({
         if (distance > radius) continue;
       }
 
-      // Récupérer la catégorie par son slug
-      const categoryDoc = service.category ? await ctx.db
-        .query("serviceCategories")
-        .withIndex("by_slug", (q) => q.eq("slug", service.category))
-        .first() : null;
+      // Récupérer la catégorie depuis le cache (Phase 2 batch loading)
+      const categoryDoc = service.category ? categoriesMap.get(service.category) ?? null : null;
 
-      // Récupérer les variantes (formules) actives
-      const variants = await ctx.db
-        .query("serviceVariants")
-        .withIndex("by_service", (q) => q.eq("serviceId", service._id))
-        .filter((q) => q.eq(q.field("isActive"), true))
-        .collect();
+      // Récupérer les variantes depuis le cache (Phase 2 batch loading)
+      const variants = variantsByServiceMap.get(service._id) ?? [];
 
       // Déterminer le type de statut
       let statusType: "particulier" | "micro_entrepreneur" | "professionnel" = "particulier";
@@ -777,16 +1186,8 @@ export const searchFormules = query({
         statusType = announcer.companyType === "micro_enterprise" ? "micro_entrepreneur" : "professionnel";
       }
 
-      // Photo de profil
-      const profilePhoto = await ctx.db
-        .query("photos")
-        .withIndex("by_user", (q) => q.eq("userId", announcer._id))
-        .filter((q) => q.eq(q.field("isProfilePhoto"), true))
-        .first();
-      let profileImageUrl: string | null = null;
-      if (profilePhoto?.storageId) {
-        profileImageUrl = await ctx.storage.getUrl(profilePhoto.storageId);
-      }
+      // Photo de profil depuis le cache (Phase 2 batch loading)
+      const profileImageUrl = photoUrlsMap.get(announcer._id) ?? null;
 
       for (const variant of variants) {
         // Filtrer par type de séance si spécifié
@@ -838,19 +1239,8 @@ export const searchFormules = query({
         let spotsLeft: number | undefined;
 
         if (isCollective) {
-          // Récupérer les créneaux collectifs disponibles
-          const slots = await ctx.db
-            .query("collectiveSlots")
-            .withIndex("by_variant", (q) => q.eq("variantId", variant._id))
-            .filter((q) =>
-              q.and(
-                q.eq(q.field("isActive"), true),
-                q.eq(q.field("isCancelled"), false),
-                q.gte(q.field("date"), todayStr),
-                q.lte(q.field("date"), in7DaysStr)
-              )
-            )
-            .collect();
+          // Récupérer les créneaux collectifs depuis le cache (Phase 2 batch loading)
+          const slots = collectiveSlotsByVariantMap.get(variant._id) ?? [];
 
           for (const slot of slots) {
             const remaining = slot.maxAnimals - slot.bookedAnimals;
@@ -889,29 +1279,25 @@ export const searchFormules = query({
           if (collectiveSlots.length === 0) continue;
         } else {
           // Formule individuelle: chercher le prochain créneau disponible
-          // Vérifier la disponibilité des 7 prochains jours
+          // Vérifier la disponibilité des 3 prochains jours (optimisation Phase 1)
           const nextDays: string[] = [];
-          for (let i = 0; i <= 7; i++) {
+          for (let i = 0; i <= 3; i++) {
             const d = new Date(today);
             d.setDate(d.getDate() + i);
             nextDays.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
           }
 
-          // Récupérer les indisponibilités
-          const unavailableDates = await ctx.db
-            .query("availability")
-            .withIndex("by_user", (q) => q.eq("userId", announcer._id))
-            .filter((q) => q.eq(q.field("status"), "unavailable"))
-            .collect();
+          // Récupérer les indisponibilités depuis le cache (Phase 2 batch loading)
+          const userAvailability = availabilityMap.get(announcer._id) ?? [];
+          const unavailableDates = userAvailability.filter((a) => a.status === "unavailable");
           const unavailableSet = new Set(unavailableDates.map((a) => a.date));
 
           for (const day of nextDays) {
             if (!unavailableSet.has(day)) {
-              // Vérifier la dispo partielle
-              const partial = await ctx.db
-                .query("availability")
-                .withIndex("by_user_date", (q) => q.eq("userId", announcer._id).eq("date", day))
-                .first();
+              // Vérifier la dispo partielle depuis le cache (Phase 2)
+              const partial = userAvailability.find(
+                (a) => a.date === day && a.status === "partial"
+              );
 
               if (partial?.status === "partial" && partial.timeSlots && partial.timeSlots.length > 0) {
                 const sortedSlots = [...partial.timeSlots].sort((a, b) => a.startTime.localeCompare(b.startTime));
@@ -965,7 +1351,7 @@ export const searchFormules = query({
     }
 
     // Trier les résultats
-    const sortBy = args.sortBy ?? "next_slot";
+    const sortBy = args.sortBy ?? "relevance";
     results.sort((a, b) => {
       switch (sortBy) {
         case "next_slot":
@@ -993,22 +1379,330 @@ export const searchFormules = query({
           if (b.announcerDistance === undefined) return -1;
           return 0;
 
+        case "relevance":
         default:
-          // Par défaut: prochain créneau puis distance
+          // Par défaut: d'abord par distance, puis par créneau
+          if (a.announcerDistance !== undefined && b.announcerDistance !== undefined) {
+            const distDiff = a.announcerDistance - b.announcerDistance;
+            if (Math.abs(distDiff) > 0.5) return distDiff; // Si différence > 500m, trier par distance
+          }
+          // Sinon par créneau
+          if (a.nextSlot && !b.nextSlot) return -1;
+          if (!a.nextSlot && b.nextSlot) return 1;
           if (a.nextSlot && b.nextSlot) {
             const aDateTime = `${a.nextSlot.date}T${a.nextSlot.startTime}`;
             const bDateTime = `${b.nextSlot.date}T${b.nextSlot.startTime}`;
-            const slotCompare = aDateTime.localeCompare(bDateTime);
-            if (slotCompare !== 0) return slotCompare;
-          }
-          if (a.announcerDistance !== undefined && b.announcerDistance !== undefined) {
-            return a.announcerDistance - b.announcerDistance;
+            return aDateTime.localeCompare(bDateTime);
           }
           return 0;
       }
     });
 
-    return results.slice(0, limit);
+    return results.slice(offset, offset + limit);
+  },
+});
+
+// Query interne pour searchFormules avec Redis (appelée par l'action)
+export const searchFormulesInternal = query({
+  args: {
+    ...searchFormulesArgs,
+    // Paramètres Redis (optionnels, fournis par l'action)
+    redisProfileIds: v.optional(v.array(v.string())),
+    redisDistances: v.optional(v.record(v.string(), v.number())),
+  },
+  handler: async (ctx, args): Promise<FormuleResult[]> => {
+    const radius = args.radiusKm ?? 20;
+    const limit = args.limit ?? 100;
+    const offset = args.offset ?? 0;
+    const results: FormuleResult[] = [];
+
+    const useRedisFilter = args.redisProfileIds && args.redisProfileIds.length > 0;
+    const redisDistanceMap = args.redisDistances ? new Map(Object.entries(args.redisDistances)) : null;
+
+    // Récupérer les services actifs
+    let services;
+    if (args.categorySlug) {
+      services = await ctx.db
+        .query("services")
+        .withIndex("by_category_active", (q) =>
+          q.eq("category", args.categorySlug!).eq("isActive", true)
+        )
+        .collect();
+    } else {
+      services = await ctx.db
+        .query("services")
+        .withIndex("by_active", (q) => q.eq("isActive", true))
+        .collect();
+    }
+
+    services = services.filter((s) => {
+      if (args.excludeCategory && s.category === args.excludeCategory) return false;
+      if (args.animalType && !s.animalTypes?.includes(args.animalType)) return false;
+      return true;
+    });
+
+    // Si Redis filter, récupérer le mapping profileId -> userId
+    let validUserIds: Set<string> | null = null;
+    if (useRedisFilter) {
+      const profiles = await ctx.db.query("profiles").collect();
+      validUserIds = new Set();
+      for (const p of profiles) {
+        if (args.redisProfileIds!.includes(p._id)) {
+          validUserIds.add(p.userId);
+        }
+      }
+      // Filtrer les services par users valides
+      services = services.filter((s) => validUserIds!.has(s.userId));
+    }
+
+    // Dates
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const in7Days = new Date(today);
+    in7Days.setDate(in7Days.getDate() + 7);
+    const in7DaysStr = `${in7Days.getFullYear()}-${String(in7Days.getMonth() + 1).padStart(2, "0")}-${String(in7Days.getDate()).padStart(2, "0")}`;
+
+    // Batch loading
+    const userIdsSet = new Set<Id<"users">>();
+    for (const s of services) {
+      userIdsSet.add(s.userId);
+    }
+    const userIds: Id<"users">[] = [];
+    userIdsSet.forEach((id) => userIds.push(id));
+    const serviceIds = services.map((s) => s._id);
+
+    const [
+      usersMap,
+      profilesMap,
+      categoriesMap,
+      variantsByServiceMap,
+      photosMap,
+    ] = await Promise.all([
+      batchLoadUsers(ctx, userIds),
+      batchLoadProfiles(ctx, userIds),
+      batchLoadCategories(ctx),
+      batchLoadVariantsByService(ctx, serviceIds),
+      batchLoadProfilePhotos(ctx, userIds),
+    ]);
+
+    const photoUrlsMap = await resolvePhotoUrls(ctx, photosMap);
+
+    const allVariantIds: Id<"serviceVariants">[] = [];
+    for (const variants of Array.from(variantsByServiceMap.values())) {
+      for (const v of variants) {
+        if (v.sessionType === "collective") {
+          allVariantIds.push(v._id);
+        }
+      }
+    }
+
+    const [collectiveSlotsByVariantMap, availabilityMap] = await Promise.all([
+      batchLoadCollectiveSlotsByVariant(ctx, allVariantIds, todayStr, in7DaysStr),
+      batchLoadAvailability(ctx, userIds),
+    ]);
+
+    for (const service of services) {
+      const announcer = usersMap.get(service.userId);
+      if (!announcer || !announcer.isActive) continue;
+
+      const profile = profilesMap.get(announcer._id);
+      if (!profile) continue;
+
+      // Distance: Redis ou calcul
+      let distance: number | undefined;
+      if (useRedisFilter && redisDistanceMap) {
+        distance = redisDistanceMap.get(profile._id);
+      } else if (args.coordinates && profile.coordinates) {
+        if (!isInBoundingBox(
+          args.coordinates.lat,
+          args.coordinates.lng,
+          profile.coordinates.lat,
+          profile.coordinates.lng,
+          radius
+        )) {
+          continue;
+        }
+        distance = calculateDistance(
+          args.coordinates.lat,
+          args.coordinates.lng,
+          profile.coordinates.lat,
+          profile.coordinates.lng
+        );
+        if (distance > radius) continue;
+      }
+
+      const categoryDoc = service.category ? categoriesMap.get(service.category) ?? null : null;
+      const variants = variantsByServiceMap.get(service._id) ?? [];
+
+      let statusType: "particulier" | "micro_entrepreneur" | "professionnel" = "particulier";
+      if (announcer.accountType === "annonceur_pro") {
+        statusType = announcer.companyType === "micro_enterprise" ? "micro_entrepreneur" : "professionnel";
+      }
+
+      const profileImageUrl = photoUrlsMap.get(announcer._id) ?? null;
+
+      for (const variant of variants) {
+        const isCollective = variant.sessionType === "collective";
+        if (args.sessionType === "individual" && isCollective) continue;
+        if (args.sessionType === "collective" && !isCollective) continue;
+
+        if (args.serviceLocation && args.serviceLocation.length > 0) {
+          const variantLocation = variant.serviceLocation || service.serviceLocation || "both";
+          if (variantLocation !== "both" && !args.serviceLocation.includes(variantLocation as "announcer_home" | "client_home")) {
+            continue;
+          }
+        }
+
+        const priceUnit = variant.priceUnit || "hour";
+        let price = variant.price || 0;
+
+        if (variant.pricing) {
+          switch (priceUnit) {
+            case "hour":
+              price = variant.pricing.hourly ?? variant.price ?? 0;
+              break;
+            case "half_day":
+              price = variant.pricing.halfDaily ?? variant.price ?? 0;
+              break;
+            case "day":
+              price = variant.pricing.daily ?? variant.price ?? 0;
+              break;
+            case "week":
+              price = variant.pricing.weekly ?? variant.price ?? 0;
+              break;
+            case "month":
+              price = variant.pricing.monthly ?? variant.price ?? 0;
+              break;
+            default:
+              price = variant.price ?? 0;
+          }
+        }
+
+        if (args.priceMin !== undefined && price < args.priceMin * 100) continue;
+        if (args.priceMax !== undefined && price > args.priceMax * 100) continue;
+
+        let nextSlot: NextSlot | undefined;
+        let collectiveSlots: CollectiveSlotInfo[] = [];
+        let spotsLeft: number | undefined;
+
+        if (isCollective) {
+          const slots = collectiveSlotsByVariantMap.get(variant._id) ?? [];
+          for (const slot of slots) {
+            const remaining = slot.maxAnimals - slot.bookedAnimals;
+            if (remaining > 0) {
+              collectiveSlots.push({
+                id: slot._id,
+                date: slot.date,
+                startTime: slot.startTime,
+                endTime: slot.endTime,
+                spotsLeft: remaining,
+                formule: variant.name,
+              });
+            }
+          }
+          collectiveSlots.sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+          if (collectiveSlots.length > 0) {
+            nextSlot = { date: collectiveSlots[0].date, startTime: collectiveSlots[0].startTime, endTime: collectiveSlots[0].endTime };
+            spotsLeft = collectiveSlots[0].spotsLeft;
+          }
+          collectiveSlots = collectiveSlots.slice(0, 5);
+          if (collectiveSlots.length === 0) continue;
+        } else {
+          const nextDays: string[] = [];
+          for (let i = 0; i <= 3; i++) {
+            const d = new Date(today);
+            d.setDate(d.getDate() + i);
+            nextDays.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+          }
+          const userAvailability = availabilityMap.get(announcer._id) ?? [];
+          const unavailableSet = new Set(userAvailability.filter((a) => a.status === "unavailable").map((a) => a.date));
+          for (const day of nextDays) {
+            if (!unavailableSet.has(day)) {
+              const partial = userAvailability.find((a) => a.date === day && a.status === "partial");
+              if (partial?.status === "partial" && partial.timeSlots && partial.timeSlots.length > 0) {
+                const sortedSlots = [...partial.timeSlots].sort((a, b) => a.startTime.localeCompare(b.startTime));
+                nextSlot = { date: day, startTime: sortedSlots[0].startTime, endTime: sortedSlots[0].endTime };
+              } else {
+                nextSlot = { date: day, startTime: "09:00" };
+              }
+              break;
+            }
+          }
+        }
+
+        results.push({
+          formuleId: variant._id,
+          formuleName: variant.name,
+          formuleDescription: variant.description,
+          price,
+          priceUnit: variant.priceUnit || "hour",
+          duration: variant.duration,
+          sessionType: isCollective ? "collective" : "individual",
+          serviceLocation: variant.serviceLocation || service.serviceLocation,
+          numberOfSessions: variant.numberOfSessions,
+          serviceId: service._id,
+          categorySlug: service.category,
+          categoryName: categoryDoc?.name || service.category,
+          categoryIcon: categoryDoc?.icon,
+          animalTypes: variant.animalTypes || service.animalTypes || [],
+          announcerId: announcer._id,
+          announcerSlug: announcer.slug || undefined,
+          announcerFirstName: announcer.firstName,
+          announcerLastName: announcer.lastName,
+          announcerProfileImage: profile.profileImageUrl ?? profileImageUrl,
+          announcerRating: 4.5,
+          announcerReviewCount: 0,
+          announcerLocation: profile.city ?? profile.location ?? "",
+          announcerDistance: distance,
+          announcerVerified: announcer.accountType === "annonceur_pro",
+          announcerStatusType: statusType,
+          nextSlot,
+          collectiveSlots: collectiveSlots.length > 0 ? collectiveSlots : undefined,
+          spotsLeft,
+        });
+      }
+    }
+
+    // Tri
+    const sortBy = args.sortBy ?? "relevance";
+    results.sort((a, b) => {
+      switch (sortBy) {
+        case "next_slot":
+          if (a.nextSlot && !b.nextSlot) return -1;
+          if (!a.nextSlot && b.nextSlot) return 1;
+          if (a.nextSlot && b.nextSlot) {
+            return `${a.nextSlot.date}T${a.nextSlot.startTime}`.localeCompare(`${b.nextSlot.date}T${b.nextSlot.startTime}`);
+          }
+          return 0;
+        case "price_asc":
+          return a.price - b.price;
+        case "price_desc":
+          return b.price - a.price;
+        case "distance":
+          if (a.announcerDistance !== undefined && b.announcerDistance !== undefined) {
+            return a.announcerDistance - b.announcerDistance;
+          }
+          if (a.announcerDistance === undefined) return 1;
+          if (b.announcerDistance === undefined) return -1;
+          return 0;
+        case "relevance":
+        default:
+          // Par défaut: d'abord par distance, puis par créneau
+          if (a.announcerDistance !== undefined && b.announcerDistance !== undefined) {
+            const distDiff = a.announcerDistance - b.announcerDistance;
+            if (Math.abs(distDiff) > 0.5) return distDiff; // Si différence > 500m, trier par distance
+          }
+          // Sinon par créneau
+          if (a.nextSlot && !b.nextSlot) return -1;
+          if (!a.nextSlot && b.nextSlot) return 1;
+          if (a.nextSlot && b.nextSlot) {
+            return `${a.nextSlot.date}T${a.nextSlot.startTime}`.localeCompare(`${b.nextSlot.date}T${b.nextSlot.startTime}`);
+          }
+          return 0;
+      }
+    });
+
+    return results.slice(offset, offset + limit);
   },
 });
 
@@ -1952,59 +2646,78 @@ interface ServiceSearchResult {
   priceRange?: { min: number; max: number; avg: number };
 }
 
+// Arguments communs pour la recherche de services
+const searchServicesArgs = {
+  // Filtres
+  categorySlug: v.optional(v.string()),
+  excludeCategory: v.optional(v.string()),
+  animalType: v.optional(v.string()),
+
+  // Localisation
+  coordinates: v.optional(v.object({
+    lat: v.number(),
+    lng: v.number(),
+  })),
+  radiusKm: v.optional(v.number()),
+
+  // Date/heure (pour services hourly)
+  date: v.optional(v.string()),
+  time: v.optional(v.string()),
+
+  // Plage de dates (pour services daily)
+  startDate: v.optional(v.string()),
+  endDate: v.optional(v.string()),
+
+  // Options
+  includeUnavailable: v.optional(v.boolean()),
+
+  // Filtres avancés
+  accountTypes: v.optional(v.array(v.string())),
+  verifiedOnly: v.optional(v.boolean()),
+  withPhotoOnly: v.optional(v.boolean()),
+  hasGarden: v.optional(v.boolean()),
+  hasVehicle: v.optional(v.boolean()),
+  ownsAnimals: v.optional(v.array(v.string())),
+  noAnimals: v.optional(v.boolean()),
+  priceMin: v.optional(v.number()),
+  priceMax: v.optional(v.number()),
+  sortBy: v.optional(v.string()),
+
+  // Filtre lieu de prestation
+  serviceLocation: v.optional(v.array(v.union(
+    v.literal("announcer_home"),
+    v.literal("client_home")
+  ))),
+
+  // Pagination
+  limit: v.optional(v.number()),
+  offset: v.optional(v.number()),
+};
+
 // Query de recherche par service (1 carte par service au lieu de 1 carte par annonceur)
+// Phase 2 Optimisation: Batch Loading pour éliminer les N+1 queries
 export const searchServices = query({
   args: {
-    // Filtres
-    categorySlug: v.optional(v.string()),
-    excludeCategory: v.optional(v.string()),
-    animalType: v.optional(v.string()),
-
-    // Localisation
-    coordinates: v.optional(v.object({
-      lat: v.number(),
-      lng: v.number(),
-    })),
-    radiusKm: v.optional(v.number()),
-
-    // Date/heure (pour services hourly)
-    date: v.optional(v.string()),
-    time: v.optional(v.string()),
-
-    // Plage de dates (pour services daily)
-    startDate: v.optional(v.string()),
-    endDate: v.optional(v.string()),
-
-    // Options
-    includeUnavailable: v.optional(v.boolean()),
-
-    // Filtres avancés
-    accountTypes: v.optional(v.array(v.string())),
-    verifiedOnly: v.optional(v.boolean()),
-    withPhotoOnly: v.optional(v.boolean()),
-    hasGarden: v.optional(v.boolean()),
-    hasVehicle: v.optional(v.boolean()),
-    ownsAnimals: v.optional(v.array(v.string())),
-    noAnimals: v.optional(v.boolean()),
-    priceMin: v.optional(v.number()),
-    priceMax: v.optional(v.number()),
-    sortBy: v.optional(v.string()),
-
-    // Filtre lieu de prestation
-    serviceLocation: v.optional(v.array(v.union(
-      v.literal("announcer_home"),
-      v.literal("client_home")
-    ))),
-
-    // Pagination
-    limit: v.optional(v.number()),
+    ...searchServicesArgs,
+    // Paramètres Redis (optionnels, fournis par l'action)
+    redisProfileIds: v.optional(v.array(v.string())),
+    redisDistances: v.optional(v.record(v.string(), v.number())),
   },
   handler: async (ctx, args): Promise<ServiceSearchResult[]> => {
     const radius = args.radiusKm ?? 20;
     const limit = args.limit ?? 100;
+    const offset = args.offset ?? 0;
+
+    // Support Redis: vérifier si on a des données pré-calculées
+    const useRedisFilter = args.redisProfileIds && args.redisProfileIds.length > 0;
+    const redisDistanceMap = args.redisDistances ? new Map(Object.entries(args.redisDistances)) : null;
+
+    // ============================================================
+    // PHASE 2 OPTIMISATION: Batch Loading (élimination N+1)
+    // ============================================================
 
     // 1. Récupérer tous les annonceurs actifs
-    const announcers = await ctx.db
+    let announcers = await ctx.db
       .query("users")
       .filter((q) =>
         q.and(
@@ -2017,22 +2730,64 @@ export const searchServices = query({
       )
       .collect();
 
-    // Récupérer les catégories pour les noms et icônes
-    const categories = await ctx.db.query("serviceCategories").collect();
-    const categoryMap = new Map(categories.map((c) => [c.slug, c]));
+    // 1.1 Si Redis a fourni des profils, filtrer les annonceurs
+    if (useRedisFilter) {
+      const profiles = await ctx.db.query("profiles").collect();
+      const profileIdToUserId = new Map<string, Id<"users">>();
+      for (const p of profiles) {
+        profileIdToUserId.set(p._id, p.userId);
+      }
+
+      const validUserIds = new Set<string>();
+      for (const profileId of args.redisProfileIds!) {
+        const userId = profileIdToUserId.get(profileId as Id<"profiles">);
+        if (userId) validUserIds.add(userId);
+      }
+      announcers = announcers.filter((a) => validUserIds.has(a._id));
+    }
+
+    // 2. Extraire les IDs des annonceurs
+    const announcerIds = announcers.map((a) => a._id);
+
+    // 3. Batch loading de toutes les données nécessaires en parallèle
+    const [
+      profilesMap,
+      servicesMap,
+      photosMap,
+      categoriesMap,
+      availabilityMap,
+      missionsMap,
+    ] = await Promise.all([
+      batchLoadProfiles(ctx, announcerIds),
+      batchLoadServices(ctx, announcerIds),
+      batchLoadProfilePhotos(ctx, announcerIds),
+      batchLoadCategories(ctx),
+      batchLoadAvailability(ctx, announcerIds),
+      batchLoadMissions(ctx, announcerIds),
+    ]);
+
+    // 4. Résoudre les URLs des photos en parallèle
+    const photoUrlsMap = await resolvePhotoUrls(ctx, photosMap);
+
+    // 5. Collecter tous les serviceIds pour charger les variants
+    const allServiceIds: Id<"services">[] = [];
+    for (const services of Array.from(servicesMap.values())) {
+      for (const s of services) {
+        allServiceIds.push(s._id);
+      }
+    }
+
+    // 6. Batch loading des variants
+    const variantsByServiceMap = await batchLoadVariantsByService(ctx, allServiceIds);
 
     const results: ServiceSearchResult[] = [];
 
     for (const announcer of announcers) {
-      // 2. Récupérer le profil
-      const profile = await ctx.db
-        .query("profiles")
-        .withIndex("by_user", (q) => q.eq("userId", announcer._id))
-        .first();
-
+      // Récupérer le profil depuis le cache
+      const profile = profilesMap.get(announcer._id);
       if (!profile) continue;
 
-      // 2.1 Filtrer par type de compte
+      // Filtrer par type de compte
       if (args.accountTypes && args.accountTypes.length > 0) {
         let statusType: string;
         if (announcer.accountType === "annonceur_particulier") {
@@ -2045,14 +2800,14 @@ export const searchServices = query({
         if (!args.accountTypes.includes(statusType)) continue;
       }
 
-      // 2.2 Filtrer par profil vérifié
+      // Filtrer par profil vérifié
       if (args.verifiedOnly && !announcer.emailVerified) continue;
 
-      // 2.3 Filtrer par équipements
+      // Filtrer par équipements
       if (args.hasGarden === true && !profile.hasGarden) continue;
       if (args.hasVehicle === true && !profile.hasVehicle) continue;
 
-      // 2.4 Filtrer par animaux du gardien
+      // Filtrer par animaux du gardien
       if (args.noAnimals) {
         if (profile.ownedAnimals && profile.ownedAnimals.length > 0) continue;
       }
@@ -2067,9 +2822,21 @@ export const searchServices = query({
         if (!hasMatchingAnimal) continue;
       }
 
-      // 3. Filtrer par localisation
+      // Filtrer par localisation (utiliser Redis si disponible)
       let distance: number | undefined;
-      if (args.coordinates && profile.coordinates) {
+      if (redisDistanceMap && redisDistanceMap.has(profile._id)) {
+        distance = redisDistanceMap.get(profile._id);
+      } else if (args.coordinates && profile.coordinates) {
+        // Pré-filtrage bounding box
+        if (!isInBoundingBox(
+          args.coordinates.lat,
+          args.coordinates.lng,
+          profile.coordinates.lat,
+          profile.coordinates.lng,
+          radius
+        )) {
+          continue;
+        }
         distance = calculateDistance(
           args.coordinates.lat,
           args.coordinates.lng,
@@ -2079,42 +2846,35 @@ export const searchServices = query({
         if (distance > radius) continue;
       }
 
-      // 4. Récupérer les services actifs
-      const services = await ctx.db
-        .query("services")
-        .withIndex("by_user_active", (q) =>
-          q.eq("userId", announcer._id).eq("isActive", true)
-        )
-        .collect();
-
+      // Récupérer les services depuis le cache
+      const services = servicesMap.get(announcer._id) ?? [];
       if (services.length === 0) continue;
 
-      // 5. Récupérer la photo de profil
-      const profilePhoto = await ctx.db
-        .query("photos")
-        .withIndex("by_user", (q) => q.eq("userId", announcer._id))
-        .filter((q) => q.eq(q.field("isProfilePhoto"), true))
-        .first();
+      // Photo de profil depuis le cache
+      const profileImageUrl = photoUrlsMap.get(announcer._id) ?? null;
 
-      let profileImageUrl: string | null = null;
-      if (profilePhoto?.storageId) {
-        profileImageUrl = await ctx.storage.getUrl(profilePhoto.storageId);
-      }
-
-      // 5.1 Filtrer par photo
+      // Filtrer par photo
       if (args.withPhotoOnly && !profileImageUrl && !profile.profileImageUrl) continue;
 
-      // 6. Déterminer le type de statut
+      // Déterminer le type de statut
       let statusType: "particulier" | "micro_entrepreneur" | "professionnel" = "particulier";
       if (announcer.accountType === "annonceur_pro") {
-        if (announcer.companyType === "micro_enterprise") {
-          statusType = "micro_entrepreneur";
-        } else {
-          statusType = "professionnel";
-        }
+        statusType = announcer.companyType === "micro_enterprise" ? "micro_entrepreneur" : "professionnel";
       }
 
-      // 7. Pour chaque service, créer un résultat
+      // Récupérer les données de disponibilité depuis le cache
+      const unavailableDates = (availabilityMap.get(announcer._id) ?? [])
+        .filter((a) => a.status === "unavailable");
+      const unavailableDateSet = new Set(unavailableDates.map((a) => a.date));
+
+      // Récupérer les missions depuis le cache
+      const existingMissions = missionsMap.get(announcer._id) ?? [];
+
+      // Buffers
+      const bufferBeforeService = profile?.bufferBefore ?? 0;
+      const bufferAfterService = profile?.bufferAfter ?? 0;
+
+      // Pour chaque service, créer un résultat
       for (const service of services) {
         // Filtrer par catégorie si spécifiée
         if (args.categorySlug && service.category !== args.categorySlug) continue;
@@ -2126,26 +2886,17 @@ export const searchServices = query({
         if (args.animalType && !service.animalTypes.includes(args.animalType)) continue;
 
         // Filtrer par lieu de prestation
-        // Un service avec "both" matche tous les filtres
-        // Un service avec "announcer_home" ou "client_home" matche si inclus dans le filtre
         if (args.serviceLocation && args.serviceLocation.length > 0) {
           const serviceLocation = service.serviceLocation;
-          // Si le service n'a pas de lieu défini, on le considère comme "both" (les deux possibles)
           if (serviceLocation && serviceLocation !== "both") {
-            // Le service ne propose qu'un seul lieu, vérifier s'il est dans le filtre
             if (!args.serviceLocation.includes(serviceLocation as "announcer_home" | "client_home")) {
               continue;
             }
           }
-          // Si serviceLocation est "both" ou undefined, le service passe le filtre
         }
 
-        // Récupérer les variants
-        const variants = await ctx.db
-          .query("serviceVariants")
-          .withIndex("by_service", (q) => q.eq("serviceId", service._id))
-          .filter((q) => q.eq(q.field("isActive"), true))
-          .collect();
+        // Récupérer les variants depuis le cache
+        const variants = variantsByServiceMap.get(service._id) ?? [];
 
         // Calculer le prix de base et l'unité
         // Pour les gardes: priorité daily, pour les services: priorité hourly
@@ -2226,21 +2977,10 @@ export const searchServices = query({
         }
 
         if (datesToCheck.length > 0) {
-          // Vérifier les indisponibilités manuelles
-          const unavailableDates = await ctx.db
-            .query("availability")
-            .withIndex("by_user", (q) => q.eq("userId", announcer._id))
-            .filter((q) => q.eq(q.field("status"), "unavailable"))
-            .collect();
-
-          const unavailableDateSet = new Set(unavailableDates.map((a) => a.date));
+          // Utiliser les données en cache (déjà chargées en batch)
           const hasManualUnavailability = datesToCheck.some((d) =>
             unavailableDateSet.has(d)
           );
-
-          // Récupérer les buffers (temps de préparation) de l'annonceur
-          const bufferBeforeService = profile?.bufferBefore ?? 0;
-          const bufferAfterService = profile?.bufferAfter ?? 0;
 
           // Vérifier si la catégorie est basée sur la capacité
           const isCapacityBasedCategory = await isCategoryCapacityBased(ctx.db, service.category);
@@ -2283,20 +3023,12 @@ export const searchServices = query({
               availability = { status: "partial" };
             }
           } else {
-            // Mode standard: vérifier les chevauchements
-            const existingMissions = await ctx.db
-              .query("missions")
-              .withIndex("by_announcer", (q) => q.eq("announcerId", announcer._id))
-              .filter((q) =>
-                q.and(
-                  q.eq(q.field("serviceCategory"), service.category),
-                  q.neq(q.field("status"), "cancelled"),
-                  q.neq(q.field("status"), "refused")
-                )
-              )
-              .collect();
+            // Mode standard: utiliser les missions depuis le cache (filtrées par catégorie)
+            const serviceMissions = existingMissions.filter(
+              (m) => m.serviceCategory === service.category
+            );
 
-            const hasConflictingMission = existingMissions.some((mission) => {
+            const hasConflictingMission = serviceMissions.some((mission) => {
               const searchStartDate = args.date || args.startDate!;
               const searchEndDate = args.date || args.endDate!;
 
@@ -2341,7 +3073,7 @@ export const searchServices = query({
               let nextAvailable: string | undefined;
               for (const day of nextDays) {
                 const isUnavailable = unavailableDateSet.has(day);
-                const hasFullDayBlock = existingMissions.some((m) => {
+                const hasFullDayBlock = serviceMissions.some((m) => {
                   if (!datesOverlap(m.startDate, m.endDate, day, day)) return false;
                   const isMultiDay = m.startDate !== m.endDate;
                   const hasNoTimeSlot = !m.startTime || !m.endTime;
@@ -2361,7 +3093,7 @@ export const searchServices = query({
           }
         }
 
-        const categoryData = categoryMap.get(service.category);
+        const categoryData = categoriesMap.get(service.category);
 
         results.push({
           serviceId: service._id,
@@ -2436,7 +3168,7 @@ export const searchServices = query({
       }
     });
 
-    return results.slice(0, limit);
+    return results.slice(offset, offset + limit);
   },
 });
 

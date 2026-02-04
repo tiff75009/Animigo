@@ -90,7 +90,7 @@ export default function ClientAidePage() {
           </div>
         ) : categories && categories.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {categories.map((category) => (
+            {categories.map((category: (typeof categories)[number]) => (
               <FaqCategoryCard
                 key={category._id}
                 category={category}
@@ -116,7 +116,7 @@ export default function ClientAidePage() {
             Articles populaires
           </h2>
           <div className="space-y-2">
-            {popularArticles.map((article) => (
+            {popularArticles.map((article: (typeof popularArticles)[number]) => (
               <FaqArticleCard
                 key={article._id}
                 article={article}

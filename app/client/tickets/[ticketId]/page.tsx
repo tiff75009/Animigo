@@ -218,7 +218,7 @@ export default function ClientTicketDetailPage() {
             </div>
 
             <div className="p-4 space-y-4 max-h-[500px] overflow-y-auto">
-              {messages.map((message) => (
+              {messages.map((message: (typeof messages)[number]) => (
                 <TicketMessageBubble
                   key={message._id}
                   message={message}

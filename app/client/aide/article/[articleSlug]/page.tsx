@@ -131,7 +131,7 @@ export default function ClientFaqArticlePage() {
                 Articles connexes
               </h2>
               <div className="space-y-2">
-                {relatedArticles.map((related) => (
+                {relatedArticles.map((related: (typeof relatedArticles)[number]) => (
                   <FaqArticleCard
                     key={related._id}
                     article={related}

@@ -121,6 +121,11 @@ export default defineSchema({
       lat: v.number(),
       lng: v.number(),
     })),
+    // Grille géographique pour pré-filtrage (bounding box optimization)
+    // latGrid = Math.floor(lat * 10) => grille de ~11km (0.1° latitude)
+    // lngGrid = Math.floor(lng * 10) => grille variable selon latitude
+    latGrid: v.optional(v.number()),
+    lngGrid: v.optional(v.number()),
     googlePlaceId: v.optional(v.string()), // ID Google Maps pour référence
     acceptedAnimals: v.optional(v.array(v.string())), // ["chien", "chat", "rongeur", etc.]
 
@@ -192,7 +197,9 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_department", ["department"])
     .index("by_postal_code", ["postalCode"])
-    .index("by_verified", ["isIdentityVerified"]),
+    .index("by_verified", ["isIdentityVerified"])
+    .index("by_lat_grid", ["latGrid"]) // Pré-filtrage géographique
+    .index("by_lng_grid", ["lngGrid"]), // Pré-filtrage géographique
 
   // Profil client (propriétaires d'animaux)
   clientProfiles: defineTable({
@@ -297,6 +304,7 @@ export default defineSchema({
     .index("by_user_active", ["userId", "isActive"])
     .index("by_category", ["category"])
     .index("by_category_active", ["category", "isActive"])
+    .index("by_active", ["isActive"]) // Pour filtrer tous les services actifs
     .index("by_moderation_status", ["moderationStatus"]),
 
   // Variantes de service (formules/tarifs)
@@ -362,7 +370,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_service", ["serviceId"])
-    .index("by_service_active", ["serviceId", "isActive"]),
+    .index("by_service_active", ["serviceId", "isActive"])
+    .index("by_active", ["isActive"]), // Pour récupérer tous les variants actifs (batching)
 
   // Options additionnelles pour les services
   serviceOptions: defineTable({

@@ -96,6 +96,9 @@ export default function RecherchePage() {
     advancedFilters,
     results,
     isLoading,
+    isLoadingMore,
+    hasMore,
+    loadMore,
     setLocation,
     setSearchMode: setHookSearchMode,
     setAnimalType: setHookAnimalType,
@@ -203,6 +206,43 @@ export default function RecherchePage() {
   const viewMode = urlParams.view;
 
   const categoriesData = useQuery(api.admin.serviceCategories.getActiveCategories) as CategoriesData | undefined;
+
+  // Sync category from URL with hook (after categoriesData is declared)
+  useEffect(() => {
+    if (!categoriesData) return;
+
+    if (!urlParams.category) {
+      setHookCategory(null);
+      return;
+    }
+
+    // Find category in subcategories
+    for (const parent of categoriesData.parentCategories) {
+      const found = parent.subcategories.find((sub) => sub.slug === urlParams.category);
+      if (found) {
+        setHookCategory({
+          id: found.id,
+          slug: found.slug,
+          name: found.name,
+          icon: found.icon || "📋",
+          billingType: found.billingType as "hourly" | "daily" | "flexible" | undefined,
+        });
+        return;
+      }
+    }
+
+    // Check in root categories
+    const rootFound = categoriesData.rootCategories.find((cat) => cat.slug === urlParams.category);
+    if (rootFound) {
+      setHookCategory({
+        id: rootFound.id,
+        slug: rootFound.slug,
+        name: rootFound.name,
+        icon: rootFound.icon || "📋",
+        billingType: rootFound.billingType as "hourly" | "daily" | "flexible" | undefined,
+      });
+    }
+  }, [urlParams.category, categoriesData, setHookCategory]);
 
   // Favoris
   const favoriteIds = useQuery(
@@ -754,16 +794,41 @@ export default function RecherchePage() {
             </motion.div>
           )}
 
-          {/* Load more hint */}
-          {!isLoading && results.length >= 8 && (
+          {/* Load more button */}
+          {!isLoading && hasMore && results.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-              className="text-center mt-12"
+              transition={{ delay: 0.3 }}
+              className="text-center mt-8"
+            >
+              <button
+                onClick={loadMore}
+                disabled={isLoadingMore}
+                className="inline-flex items-center gap-2 px-8 py-3 bg-primary hover:bg-primary/90 text-white font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoadingMore ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Chargement...
+                  </>
+                ) : (
+                  "Voir plus de résultats"
+                )}
+              </button>
+            </motion.div>
+          )}
+
+          {/* No more results hint */}
+          {!isLoading && !hasMore && results.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="text-center mt-8"
             >
               <p className="text-sm text-gray-500 mb-4">
-                Vous ne trouvez pas votre bonheur ?
+                Vous avez vu tous les résultats
               </p>
               <button
                 onClick={() => setShowFilters(true)}

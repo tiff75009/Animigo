@@ -96,7 +96,7 @@ export function FaqSearch({
       {isOpen && searchResults && searchResults.length > 0 && (
         <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden z-50">
           <ul className="divide-y divide-gray-100">
-            {searchResults.map((result) => (
+            {searchResults.map((result: (typeof searchResults)[number]) => (
               <li key={result._id}>
                 <Link
                   href={`${basePath}/article/${result.slug}`}

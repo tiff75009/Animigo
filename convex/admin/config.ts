@@ -4,7 +4,7 @@ import { v } from "convex/values";
 import { requireAdmin, requireAdminAction } from "./utils";
 import { internal } from "../_generated/api";
 
-// Query: Lire une configuration
+// Query: Lire une configuration (avec auth admin)
 export const getConfig = query({
   args: {
     token: v.string(),
@@ -19,6 +19,22 @@ export const getConfig = query({
       .first();
 
     return config;
+  },
+});
+
+// Query: Lire une valeur de configuration (pour usage interne/actions)
+// Retourne uniquement la valeur, pas l'objet complet
+export const getConfigValue = query({
+  args: {
+    key: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const config = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", args.key))
+      .first();
+
+    return config?.value ?? null;
   },
 });
 
@@ -222,6 +238,74 @@ export const testQStashConnection = action({
         success: true,
         message: "Connexion QStash OK",
         messageId: data.messageId,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Erreur inconnue",
+      };
+    }
+  },
+});
+
+// Action: Tester la connexion Redis
+export const testRedisConnection = action({
+  args: {
+    token: v.string(),
+    redisUrl: v.string(),
+    redisToken: v.string(),
+  },
+  handler: async (ctx, args): Promise<{
+    success: boolean;
+    message?: string;
+    profileCount?: number;
+    error?: string;
+  }> => {
+    await requireAdminAction(ctx, args.token);
+
+    try {
+      // Test PING
+      const pingResponse = await fetch(args.redisUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${args.redisToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(["PING"]),
+      });
+
+      if (!pingResponse.ok) {
+        const errorText = await pingResponse.text();
+        return {
+          success: false,
+          error: `Erreur API (${pingResponse.status}): ${errorText}`,
+        };
+      }
+
+      const pingData = await pingResponse.json();
+      if (pingData.result !== "PONG") {
+        return {
+          success: false,
+          error: "Réponse PING invalide",
+        };
+      }
+
+      // Compter les profils dans geo:profiles
+      const countResponse = await fetch(args.redisUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${args.redisToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(["ZCARD", "geo:profiles"]),
+      });
+
+      const countData = await countResponse.json();
+
+      return {
+        success: true,
+        message: "Connexion Redis OK",
+        profileCount: countData.result || 0,
       };
     } catch (error) {
       return {

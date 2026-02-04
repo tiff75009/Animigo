@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense, useMemo, useCallback } from "react";
+import { useState, useEffect, Suspense, useMemo, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery } from "convex/react";
@@ -217,9 +217,13 @@ function MissionsPageContent() {
     return { garde, service, individual, collective, byAnimal, byMonth };
   }, [currentMissions]);
 
+  // Ref pour conserver les counts précédents (évite le "repli" des tabs pendant le chargement)
+  const previousCountsRef = useRef<Partial<Record<MissionTab, number>>>({});
+
   // Préparer les compteurs pour les badges des onglets
-  const counts: Partial<Record<MissionTab, number>> = stats
-    ? {
+  const counts: Partial<Record<MissionTab, number>> = useMemo(() => {
+    if (stats) {
+      const newCounts = {
         pending_acceptance: stats.pending_acceptance ?? 0,
         pending_confirmation: stats.pending_confirmation ?? 0,
         upcoming: stats.upcoming ?? 0,
@@ -227,8 +231,13 @@ function MissionsPageContent() {
         completed: stats.completed ?? 0,
         refused: stats.refused ?? 0,
         cancelled: stats.cancelled ?? 0,
-      }
-    : {};
+      };
+      previousCountsRef.current = newCounts;
+      return newCounts;
+    }
+    // Pendant le chargement, garder les counts précédents
+    return previousCountsRef.current;
+  }, [stats]);
 
   // Vérifier si des filtres sont actifs
   const hasActiveFilters = serviceType !== "all" || sessionType !== "all" || animalType !== "all" || month !== "all";

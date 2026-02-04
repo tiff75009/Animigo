@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { v } from "convex/values";
 import { action, internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";

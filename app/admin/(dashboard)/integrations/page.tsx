@@ -304,6 +304,30 @@ const integrations: IntegrationSection[] = [
       },
     ],
   },
+  {
+    id: "upstash_redis",
+    name: "Upstash Redis",
+    description: "Cache Redis serverless pour optimiser les performances (calculs géographiques, sessions, etc.)",
+    icon: Database,
+    color: "bg-red-500",
+    docsUrl: "https://console.upstash.com/redis",
+    fields: [
+      {
+        key: "upstash_redis_rest_url",
+        label: "REST URL",
+        description: "URL de l'API REST Redis (UPSTASH_REDIS_REST_URL)",
+        isSecret: false,
+        placeholder: "https://xxx.upstash.io",
+      },
+      {
+        key: "upstash_redis_rest_token",
+        label: "REST Token",
+        description: "Token d'authentification REST (UPSTASH_REDIS_REST_TOKEN)",
+        isSecret: true,
+        placeholder: "AXxxxxxxxxxxxx...",
+      },
+    ],
+  },
 ];
 
 export default function IntegrationsPage() {
@@ -330,6 +354,13 @@ export default function IntegrationsPage() {
     messageId?: string;
     error?: string;
   } | null>(null);
+  const [testingRedis, setTestingRedis] = useState(false);
+  const [redisTestResult, setRedisTestResult] = useState<{
+    success: boolean;
+    message?: string;
+    profileCount?: number;
+    error?: string;
+  } | null>(null);
 
   const configs = useQuery(
     api.admin.config.getAllConfigs,
@@ -339,6 +370,7 @@ export default function IntegrationsPage() {
   const updateConfig = useMutation(api.admin.config.updateConfig);
   const testStripeConnection = useAction(api.admin.config.testStripeConnection);
   const testQStashConnection = useAction(api.admin.config.testQStashConnection);
+  const testRedisConnection = useAction(api.admin.config.testRedisConnection);
 
   const getConfigValue = (key: string) => {
     if (values[key] !== undefined) return values[key];
@@ -419,6 +451,36 @@ export default function IntegrationsPage() {
       });
     } finally {
       setTestingQStash(false);
+    }
+  };
+
+  const handleTestRedis = async () => {
+    if (!token) return;
+
+    const redisUrl = getConfigValue("upstash_redis_rest_url");
+    const redisToken = getConfigValue("upstash_redis_rest_token");
+
+    if (!redisUrl || !redisToken) {
+      setRedisTestResult({
+        success: false,
+        error: "Veuillez d'abord entrer et sauvegarder l'URL et le token Redis.",
+      });
+      return;
+    }
+
+    setTestingRedis(true);
+    setRedisTestResult(null);
+
+    try {
+      const result = await testRedisConnection({ token, redisUrl, redisToken });
+      setRedisTestResult(result);
+    } catch (error) {
+      setRedisTestResult({
+        success: false,
+        error: error instanceof Error ? error.message : "Erreur inconnue",
+      });
+    } finally {
+      setTestingRedis(false);
     }
   };
 
@@ -725,6 +787,86 @@ export default function IntegrationsPage() {
                         <li>Copiez le &quot;QSTASH_TOKEN&quot; et collez-le ci-dessus</li>
                         <li>Dans l&apos;onglet &quot;Signing Keys&quot;, copiez les 2 cles de signature</li>
                         <li>Ces cles permettent de valider les webhooks entrants</li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Test Connection Section - Redis */}
+            {integration.id === "upstash_redis" && (
+              <div className="p-6 border-t border-slate-800">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-red-400" />
+                    <h3 className="text-lg font-semibold text-white">Tester la connexion</h3>
+                  </div>
+                  <button
+                    onClick={handleTestRedis}
+                    disabled={testingRedis}
+                    className="px-4 py-2 rounded-lg font-medium flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white transition-colors disabled:opacity-50"
+                  >
+                    {testingRedis ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Test en cours...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4" />
+                        Tester l&apos;API
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {redisTestResult && (
+                  <div className={`mt-4 p-4 rounded-lg border ${
+                    redisTestResult.success
+                      ? "bg-green-500/10 border-green-500/30"
+                      : "bg-red-500/10 border-red-500/30"
+                  }`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      {redisTestResult.success ? (
+                        <>
+                          <CheckCircle className="w-5 h-5 text-green-400" />
+                          <span className="text-green-400 font-medium">Connexion réussie</span>
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="w-5 h-5 text-red-400" />
+                          <span className="text-red-400 font-medium">Erreur de connexion</span>
+                        </>
+                      )}
+                    </div>
+                    {redisTestResult.success ? (
+                      <div className="text-sm text-slate-300 space-y-1">
+                        <p><strong>Statut :</strong> {redisTestResult.message}</p>
+                        <p><strong>Profils dans geo:profiles :</strong> {redisTestResult.profileCount}</p>
+                        {redisTestResult.profileCount === 0 && (
+                          <p className="text-yellow-400 text-xs mt-2">
+                            Aucun profil synchronise. Executez la migration pour pousser les profils existants.
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-red-300">{redisTestResult.error}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Info box */}
+                <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <Info className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm">
+                      <p className="text-red-300 font-medium mb-2">Utilisation :</p>
+                      <ol className="text-red-300/80 space-y-1 list-decimal list-inside">
+                        <li>Allez sur <a href="https://console.upstash.com/redis" target="_blank" rel="noopener noreferrer" className="underline hover:text-red-200">Upstash Console → Redis</a></li>
+                        <li>Créez une base de données ou selectionnez-en une existante</li>
+                        <li>Copiez &quot;UPSTASH_REDIS_REST_URL&quot; et &quot;UPSTASH_REDIS_REST_TOKEN&quot;</li>
+                        <li>Executez la migration : <code className="bg-slate-800 px-1 rounded">npx convex run migrations/migrateProfilesToRedis:migrate</code></li>
                       </ol>
                     </div>
                   </div>

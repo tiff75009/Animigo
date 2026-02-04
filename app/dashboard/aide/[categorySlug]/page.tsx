@@ -82,7 +82,7 @@ export default function DashboardFaqCategoryPage() {
           >
             {articles.length > 0 ? (
               <div className="space-y-2">
-                {articles.map((article, index) => (
+                {articles.map((article: (typeof articles)[number], index: number) => (
                   <motion.div
                     key={article._id}
                     initial={{ opacity: 0, y: 10 }}

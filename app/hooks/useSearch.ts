@@ -1,13 +1,18 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
-import { useQuery } from "convex/react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useQuery, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import {
   AdvancedFilters,
   defaultAdvancedFilters,
 } from "@/app/components/search/FilterSidebar";
+import {
+  generateCacheKey,
+  getFromCache,
+  setInCache,
+} from "./useSearchCache";
 
 // Type pour les résultats de recherche par service
 export interface ServiceResult {
@@ -187,9 +192,21 @@ const initialFilters: SearchFilters = {
   searchMode: "garde", // Par défaut en mode garde
 };
 
+// Taille de page commune pour tous les hooks
+const PAGE_SIZE = 20;
+
 export function useSearch() {
   const [filters, setFilters] = useState<SearchFilters>(initialFilters);
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>(defaultAdvancedFilters);
+  const [results, setResults] = useState<AnnouncerResult[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [offset, setOffset] = useState(0);
+
+  // Action Redis pour la recherche
+  const searchAction = useAction(api.public.searchWithRedis.searchAnnouncersAction);
+  const lastArgsRef = useRef<string>("");
 
   // Préparer les arguments pour la query
   const queryArgs = useMemo(() => {
@@ -215,7 +232,6 @@ export function useSearch() {
       priceMin?: number;
       priceMax?: number;
       sortBy?: string;
-      serviceLocation?: ("announcer_home" | "client_home")[];
     } = {};
 
     // Appliquer le mode de recherche
@@ -290,15 +306,86 @@ export function useSearch() {
     if (advancedFilters.sortBy !== "relevance") {
       args.sortBy = advancedFilters.sortBy;
     }
-    if (advancedFilters.serviceLocation && advancedFilters.serviceLocation.length > 0) {
-      args.serviceLocation = advancedFilters.serviceLocation;
-    }
 
     return args;
   }, [filters, advancedFilters]);
 
-  // Query Convex
-  const results = useQuery(api.public.search.searchAnnouncers, queryArgs);
+  // Exécuter l'action quand les args changent (reset pagination)
+  useEffect(() => {
+    const argsKey = JSON.stringify(queryArgs);
+    if (argsKey === lastArgsRef.current) return;
+    lastArgsRef.current = argsKey;
+
+    // Reset pagination when filters change
+    setOffset(0);
+    setHasMore(true);
+
+    // Vérifier le cache d'abord
+    const cacheKey = generateCacheKey("announcers", { ...queryArgs, offset: 0 });
+    const cached = getFromCache<AnnouncerResult[]>(cacheKey);
+
+    if (cached) {
+      setResults(cached);
+      setHasMore(cached.length === PAGE_SIZE);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+
+    searchAction({ ...queryArgs, limit: PAGE_SIZE, offset: 0 })
+      .then((data) => {
+        const newResults = data as AnnouncerResult[];
+        setResults(newResults);
+        setHasMore(newResults.length === PAGE_SIZE);
+        // Mettre en cache
+        setInCache(cacheKey, newResults);
+      })
+      .catch((err) => {
+        console.error("[useSearch] Action error:", err);
+        setResults([]);
+        setHasMore(false);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, [queryArgs, searchAction]);
+
+  // Charger plus de résultats
+  const loadMore = useCallback(() => {
+    if (isLoadingMore || !hasMore) return;
+
+    const newOffset = offset + PAGE_SIZE;
+
+    // Vérifier le cache d'abord
+    const cacheKey = generateCacheKey("announcers", { ...queryArgs, offset: newOffset });
+    const cached = getFromCache<AnnouncerResult[]>(cacheKey);
+
+    if (cached) {
+      setResults((prev) => [...prev, ...cached]);
+      setOffset(newOffset);
+      setHasMore(cached.length === PAGE_SIZE);
+      return;
+    }
+
+    setIsLoadingMore(true);
+
+    searchAction({ ...queryArgs, limit: PAGE_SIZE, offset: newOffset })
+      .then((data) => {
+        const newResults = data as AnnouncerResult[];
+        setResults((prev) => [...prev, ...newResults]);
+        setOffset(newOffset);
+        setHasMore(newResults.length === PAGE_SIZE);
+        // Mettre en cache
+        setInCache(cacheKey, newResults);
+      })
+      .catch((err) => {
+        console.error("[useSearch] LoadMore error:", err);
+      })
+      .finally(() => {
+        setIsLoadingMore(false);
+      });
+  }, [queryArgs, searchAction, offset, isLoadingMore, hasMore]);
 
   // Actions
   const setCategory = useCallback((category: ServiceCategory | null) => {
@@ -380,8 +467,11 @@ export function useSearch() {
     // State
     filters,
     advancedFilters,
-    results: results ?? [],
-    isLoading: results === undefined,
+    results,
+    isLoading,
+    isLoadingMore,
+    hasMore,
+    loadMore,
 
     // Actions basiques
     setCategory,
@@ -407,6 +497,15 @@ export function useSearch() {
 export function useServiceSearch(token?: string | null) {
   const [filters, setFilters] = useState<SearchFilters>(initialFilters);
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>(defaultAdvancedFilters);
+  const [results, setResults] = useState<ServiceResult[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [offset, setOffset] = useState(0);
+
+  // Action Redis pour la recherche
+  const searchAction = useAction(api.public.searchWithRedis.searchServicesAction);
+  const lastArgsRef = useRef<string>("");
 
   // Récupérer les coordonnées du profil client (si connecté)
   const clientLocation = useQuery(
@@ -519,8 +618,82 @@ export function useServiceSearch(token?: string | null) {
     return args;
   }, [filters, advancedFilters, clientLocation]);
 
-  // Query Convex - utiliser searchServices au lieu de searchAnnouncers
-  const results = useQuery(api.public.search.searchServices, queryArgs);
+  // Exécuter l'action quand les args changent (reset pagination)
+  useEffect(() => {
+    const argsKey = JSON.stringify(queryArgs);
+    if (argsKey === lastArgsRef.current) return;
+    lastArgsRef.current = argsKey;
+
+    // Reset pagination when filters change
+    setOffset(0);
+    setHasMore(true);
+
+    // Vérifier le cache d'abord
+    const cacheKey = generateCacheKey("services", { ...queryArgs, offset: 0 });
+    const cached = getFromCache<ServiceResult[]>(cacheKey);
+
+    if (cached) {
+      setResults(cached);
+      setHasMore(cached.length === PAGE_SIZE);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+
+    searchAction({ ...queryArgs, limit: PAGE_SIZE, offset: 0 })
+      .then((data) => {
+        const newResults = data as ServiceResult[];
+        setResults(newResults);
+        setHasMore(newResults.length === PAGE_SIZE);
+        // Mettre en cache
+        setInCache(cacheKey, newResults);
+      })
+      .catch((err) => {
+        console.error("[useServiceSearch] Action error:", err);
+        setResults([]);
+        setHasMore(false);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, [queryArgs, searchAction]);
+
+  // Charger plus de résultats
+  const loadMore = useCallback(() => {
+    if (isLoadingMore || !hasMore) return;
+
+    const newOffset = offset + PAGE_SIZE;
+
+    // Vérifier le cache d'abord
+    const cacheKey = generateCacheKey("services", { ...queryArgs, offset: newOffset });
+    const cached = getFromCache<ServiceResult[]>(cacheKey);
+
+    if (cached) {
+      setResults((prev) => [...prev, ...cached]);
+      setOffset(newOffset);
+      setHasMore(cached.length === PAGE_SIZE);
+      return;
+    }
+
+    setIsLoadingMore(true);
+
+    searchAction({ ...queryArgs, limit: PAGE_SIZE, offset: newOffset })
+      .then((data) => {
+        const newResults = data as ServiceResult[];
+        setResults((prev) => [...prev, ...newResults]);
+        setOffset(newOffset);
+        setHasMore(newResults.length === PAGE_SIZE);
+        // Mettre en cache
+        setInCache(cacheKey, newResults);
+      })
+      .catch((err) => {
+        console.error("[useServiceSearch] LoadMore error:", err);
+      })
+      .finally(() => {
+        setIsLoadingMore(false);
+      });
+  }, [queryArgs, searchAction, offset, isLoadingMore, hasMore]);
 
   // Actions
   const setCategory = useCallback((category: ServiceCategory | null) => {
@@ -610,8 +783,11 @@ export function useServiceSearch(token?: string | null) {
   return {
     filters,
     advancedFilters,
-    results: (results ?? []) as ServiceResult[],
-    isLoading: results === undefined,
+    results,
+    isLoading,
+    isLoadingMore,
+    hasMore,
+    loadMore,
     // Coordonnées client (pour afficher l'adresse par défaut)
     clientLocation: clientLocation ?? null,
     setCategory,
@@ -646,6 +822,15 @@ export interface UrlSearchParams {
 export function useServiceSearchWithParams(token: string | null | undefined, urlParams: UrlSearchParams) {
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>(defaultAdvancedFilters);
   const [location, setLocationState] = useState<LocationData>({ text: "" });
+  const [results, setResults] = useState<ServiceResult[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [offset, setOffset] = useState(0);
+
+  // Action Redis pour la recherche
+  const searchAction = useAction(api.public.searchWithRedis.searchServicesAction);
+  const lastArgsRef = useRef<string>("");
 
   // Récupérer les coordonnées du profil client (si connecté)
   const clientLocation = useQuery(
@@ -805,8 +990,82 @@ export function useServiceSearchWithParams(token: string | null | undefined, url
     return args;
   }, [urlParams, location, clientLocation, advancedFilters]);
 
-  // Query Convex
-  const results = useQuery(api.public.search.searchServices, queryArgs);
+  // Exécuter l'action quand les args changent (reset pagination)
+  useEffect(() => {
+    const argsKey = JSON.stringify(queryArgs);
+    if (argsKey === lastArgsRef.current) return;
+    lastArgsRef.current = argsKey;
+
+    // Reset pagination when filters change
+    setOffset(0);
+    setHasMore(true);
+
+    // Vérifier le cache d'abord
+    const cacheKey = generateCacheKey("servicesWithParams", { ...queryArgs, offset: 0 });
+    const cached = getFromCache<ServiceResult[]>(cacheKey);
+
+    if (cached) {
+      setResults(cached);
+      setHasMore(cached.length === PAGE_SIZE);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+
+    searchAction({ ...queryArgs, limit: PAGE_SIZE, offset: 0 })
+      .then((data) => {
+        const newResults = data as ServiceResult[];
+        setResults(newResults);
+        setHasMore(newResults.length === PAGE_SIZE);
+        // Mettre en cache
+        setInCache(cacheKey, newResults);
+      })
+      .catch((err) => {
+        console.error("[useServiceSearchWithParams] Action error:", err);
+        setResults([]);
+        setHasMore(false);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, [queryArgs, searchAction]);
+
+  // Charger plus de résultats
+  const loadMore = useCallback(() => {
+    if (isLoadingMore || !hasMore) return;
+
+    const newOffset = offset + PAGE_SIZE;
+
+    // Vérifier le cache d'abord
+    const cacheKey = generateCacheKey("servicesWithParams", { ...queryArgs, offset: newOffset });
+    const cached = getFromCache<ServiceResult[]>(cacheKey);
+
+    if (cached) {
+      setResults((prev) => [...prev, ...cached]);
+      setOffset(newOffset);
+      setHasMore(cached.length === PAGE_SIZE);
+      return;
+    }
+
+    setIsLoadingMore(true);
+
+    searchAction({ ...queryArgs, limit: PAGE_SIZE, offset: newOffset })
+      .then((data) => {
+        const newResults = data as ServiceResult[];
+        setResults((prev) => [...prev, ...newResults]);
+        setOffset(newOffset);
+        setHasMore(newResults.length === PAGE_SIZE);
+        // Mettre en cache
+        setInCache(cacheKey, newResults);
+      })
+      .catch((err) => {
+        console.error("[useServiceSearchWithParams] LoadMore error:", err);
+      })
+      .finally(() => {
+        setIsLoadingMore(false);
+      });
+  }, [queryArgs, searchAction, offset, isLoadingMore, hasMore]);
 
   // Actions
   const setLocation = useCallback((loc: LocationData) => {
@@ -824,8 +1083,11 @@ export function useServiceSearchWithParams(token: string | null | undefined, url
   return {
     filters,
     advancedFilters,
-    results: (results ?? []) as ServiceResult[],
-    isLoading: results === undefined,
+    results,
+    isLoading,
+    isLoadingMore,
+    hasMore,
+    loadMore,
     clientLocation: clientLocation ?? null,
     setLocation,
     updateAdvancedFilters,
@@ -837,6 +1099,15 @@ export function useServiceSearchWithParams(token: string | null | undefined, url
 export function useFormuleSearch() {
   const [filters, setFilters] = useState<SearchFilters>(initialFilters);
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>(defaultAdvancedFilters);
+  const [results, setResults] = useState<FormuleResult[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [offset, setOffset] = useState(0);
+
+  // Action Redis pour la recherche
+  const searchAction = useAction(api.public.searchWithRedis.searchFormulesAction);
+  const lastArgsRef = useRef<string>("");
 
   // Préparer les arguments pour la query
   const queryArgs = useMemo(() => {
@@ -901,8 +1172,82 @@ export function useFormuleSearch() {
     return args;
   }, [filters, advancedFilters]);
 
-  // Query Convex - utiliser searchFormules
-  const results = useQuery(api.public.search.searchFormules, queryArgs);
+  // Exécuter l'action quand les args changent (reset pagination)
+  useEffect(() => {
+    const argsKey = JSON.stringify(queryArgs);
+    if (argsKey === lastArgsRef.current) return;
+    lastArgsRef.current = argsKey;
+
+    // Reset pagination when filters change
+    setOffset(0);
+    setHasMore(true);
+
+    // Vérifier le cache d'abord
+    const cacheKey = generateCacheKey("formules", { ...queryArgs, offset: 0 });
+    const cached = getFromCache<FormuleResult[]>(cacheKey);
+
+    if (cached) {
+      setResults(cached);
+      setHasMore(cached.length === PAGE_SIZE);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+
+    searchAction({ ...queryArgs, limit: PAGE_SIZE, offset: 0 })
+      .then((data) => {
+        const newResults = data as FormuleResult[];
+        setResults(newResults);
+        setHasMore(newResults.length === PAGE_SIZE);
+        // Mettre en cache
+        setInCache(cacheKey, newResults);
+      })
+      .catch((err) => {
+        console.error("[useFormuleSearch] Action error:", err);
+        setResults([]);
+        setHasMore(false);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, [queryArgs, searchAction]);
+
+  // Charger plus de résultats
+  const loadMore = useCallback(() => {
+    if (isLoadingMore || !hasMore) return;
+
+    const newOffset = offset + PAGE_SIZE;
+
+    // Vérifier le cache d'abord
+    const cacheKey = generateCacheKey("formules", { ...queryArgs, offset: newOffset });
+    const cached = getFromCache<FormuleResult[]>(cacheKey);
+
+    if (cached) {
+      setResults((prev) => [...prev, ...cached]);
+      setOffset(newOffset);
+      setHasMore(cached.length === PAGE_SIZE);
+      return;
+    }
+
+    setIsLoadingMore(true);
+
+    searchAction({ ...queryArgs, limit: PAGE_SIZE, offset: newOffset })
+      .then((data) => {
+        const newResults = data as FormuleResult[];
+        setResults((prev) => [...prev, ...newResults]);
+        setOffset(newOffset);
+        setHasMore(newResults.length === PAGE_SIZE);
+        // Mettre en cache
+        setInCache(cacheKey, newResults);
+      })
+      .catch((err) => {
+        console.error("[useFormuleSearch] LoadMore error:", err);
+      })
+      .finally(() => {
+        setIsLoadingMore(false);
+      });
+  }, [queryArgs, searchAction, offset, isLoadingMore, hasMore]);
 
   // Actions
   const setCategory = useCallback((category: ServiceCategory | null) => {
@@ -965,8 +1310,11 @@ export function useFormuleSearch() {
   return {
     filters,
     advancedFilters,
-    results: (results ?? []) as FormuleResult[],
-    isLoading: results === undefined,
+    results,
+    isLoading,
+    isLoadingMore,
+    hasMore,
+    loadMore,
     setCategory,
     setAnimalType,
     setLocation,
@@ -983,3 +1331,10 @@ export function useFormuleSearch() {
 
 // Re-export des types pour faciliter l'utilisation
 export type { AdvancedFilters };
+
+// Re-export des utilitaires de cache pour permettre l'invalidation manuelle
+export {
+  clearCache as clearSearchCache,
+  invalidateCacheByPrefix,
+  getCacheStats,
+} from "./useSearchCache";

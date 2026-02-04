@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -43,14 +43,25 @@ export default function DashboardTicketsPage() {
     token ? { sessionToken: token } : "skip"
   );
 
-  const statusCounts = allTickets?.reduce(
-    (acc, ticket) => {
-      acc[ticket.status] = (acc[ticket.status] || 0) + 1;
-      acc.all = (acc.all || 0) + 1;
-      return acc;
-    },
-    {} as Record<string, number>
-  );
+  // Ref pour conserver les counts précédents (évite le "repli" des tabs pendant le chargement)
+  const previousCountsRef = useRef<Record<string, number>>({});
+
+  const statusCounts = useMemo(() => {
+    if (allTickets) {
+      const newCounts = allTickets.reduce(
+        (acc: Record<string, number>, ticket: (typeof allTickets)[number]) => {
+          acc[ticket.status] = (acc[ticket.status] || 0) + 1;
+          acc.all = (acc.all || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>
+      );
+      previousCountsRef.current = newCounts;
+      return newCounts;
+    }
+    // Pendant le chargement, garder les counts précédents
+    return previousCountsRef.current;
+  }, [allTickets]);
 
   return (
     <div className="space-y-6">
@@ -131,7 +142,7 @@ export default function DashboardTicketsPage() {
           </div>
         ) : tickets && tickets.length > 0 ? (
           <div className="space-y-3">
-            {tickets.map((ticket, index) => (
+            {tickets.map((ticket: (typeof tickets)[number], index: number) => (
               <motion.div
                 key={ticket._id}
                 initial={{ opacity: 0, y: 10 }}
