@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Dog,
@@ -104,11 +104,18 @@ export default function GuestDogVerification({
   // Référence pour tracker le premier montage
   const isFirstMount = useRef(true);
 
-  // Synchroniser avec initialData au montage et quand il change (ex: retour sur l'étape)
+  // Refs stables pour les callbacks (évite les boucles infinies de re-render)
+  const onDogDataChangeRef = useRef(onDogDataChange);
+  const onValidationChangeRef = useRef(onValidationChange);
+  useEffect(() => { onDogDataChangeRef.current = onDogDataChange; }, [onDogDataChange]);
+  useEffect(() => { onValidationChangeRef.current = onValidationChange; }, [onValidationChange]);
+
+  // Synchroniser avec initialData uniquement au montage (ex: retour sur l'étape)
+  // Les useState ont déjà initialisé les valeurs depuis initialData
+  // On ne dépend PAS de initialData pour éviter une boucle infinie
+  // (le parent passe dogData comme initialData, et le child met à jour dogData via onDogDataChange)
   useEffect(() => {
-    // Au premier montage, les useState ont déjà initialisé les valeurs
-    // Mais on force quand même la synchro pour être sûr
-    if (initialData) {
+    if (isFirstMount.current && initialData) {
       setIsMixedBreed(initialData.isMixedBreed);
       setBreedSearch(initialData.breed || "");
       setDominantBreedSearch(initialData.dominantBreed || "");
@@ -130,7 +137,8 @@ export default function GuestDogVerification({
       }
     }
     isFirstMount.current = false;
-  }, [initialData]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Filtrer les races pour l'autocomplete
   const filteredBreeds = useMemo(() => {
@@ -209,8 +217,8 @@ export default function GuestDogVerification({
     if (!hasBreedInfo || !dogSize) {
       setValidationError(null);
       setIsAccepted(null);
-      onDogDataChange(null);
-      onValidationChange(false);
+      onDogDataChangeRef.current(null);
+      onValidationChangeRef.current(false);
       return;
     }
 
@@ -244,8 +252,8 @@ export default function GuestDogVerification({
       isCategorized: categoryResult?.isCategorized ?? false,
     };
 
-    onDogDataChange(dogData);
-    onValidationChange(acceptanceResult.accepted, acceptanceResult.reason);
+    onDogDataChangeRef.current(dogData);
+    onValidationChangeRef.current(acceptanceResult.accepted, acceptanceResult.reason);
   }, [
     isMixedBreed,
     selectedBreed,
@@ -258,8 +266,6 @@ export default function GuestDogVerification({
     categoryResult,
     acceptedDogSizes,
     dogCategoryAcceptance,
-    onDogDataChange,
-    onValidationChange,
   ]);
 
   // Sélectionner une race

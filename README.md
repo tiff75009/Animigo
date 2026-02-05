@@ -124,6 +124,7 @@ bun run build
 - **Parametres** (`/admin/parametres`)
   - Activation/desactivation de la moderation globale
   - Configuration systeme
+  - **Section annulation** : periode de comptage, pourcentage 2eme annulation, templates email
 
 ### Dashboard Annonceur (`/dashboard`)
 
@@ -202,6 +203,10 @@ bun run build
     - Mode de facturation (arrondi ou exact)
     - Temps de preparation avant/apres services (buffers)
     - Exemple visuel du temps bloque
+  - **Onglet Politique d'annulation** (`/dashboard/parametres/politique-annulation`)
+    - Mode de remboursement configurable : par seance ou pourcentage restant
+    - Commission annonceur parametrable (0-100%)
+    - Apercu dynamique des conditions avec exemple chiffre
 
 ### Systeme de Paiement Stripe
 
@@ -232,6 +237,34 @@ Integration complete de Stripe avec pre-autorisation (empreinte bancaire) :
 - **Cron jobs automatiques**
   - Auto-capture des paiements (toutes les heures)
   - Nettoyage des sessions expirees (toutes les 6h)
+
+### Systeme d'Annulation
+
+Politique d'annulation progressive avec 3 paliers :
+
+- **1ere annulation** : remboursement total (hors commission plateforme)
+- **2eme annulation** : l'annonceur conserve X% de ses gains (configurable)
+- **3eme annulation+** : aucun remboursement
+
+**Regles communes** :
+- Remboursement integral dans les 24h apres paiement
+- Plus de 48h avant le debut : remboursement total - commission plateforme
+- Moins de 48h : palier progressif selon l'historique du client
+
+**Formules multi-seances / collectives** :
+- Mode "par seance" : seances restantes integralement remboursees
+- Mode "pourcentage restant" : l'annonceur conserve X% du montant des seances restantes
+- Seances deja effectuees non remboursables
+
+**Configuration** :
+- Admin : periode de comptage, pourcentage 2eme annulation, templates email
+- Annonceur : mode de remboursement (par seance / pourcentage restant), commission
+
+**Composants** :
+- `CancellationPolicyModal` : modal responsive (bottom sheet mobile / modal desktop)
+- Affichage dynamique de la situation du client (historique, prochain palier)
+- Exemples chiffres calcules avec les vrais montants de la reservation
+- Checkbox d'acceptation obligatoire avant confirmation de reservation
 
 ### Integrations API
 
@@ -339,6 +372,8 @@ convex/
   planning/            # Planning et missions
     missions.ts
     availability.ts
+    cancellation.ts       # Politique d'annulation (queries publiques + client)
+    cancellationActions.ts # Actions d'annulation (mutations)
   services/            # Gestion des services
     services.ts           # CRUD services
     variants.ts           # Gestion des formules
@@ -367,6 +402,7 @@ convex/
 - `photos` - Photos des annonceurs
 - `missions` - Reservations de services
 - `availability` - Disponibilites des annonceurs
+- `cancellationPolicies` - Politiques d'annulation par annonceur (mode remboursement, commission)
 - `userPreferences` - Preferences utilisateur (notifications, facturation)
 - `stripePayments` - Paiements Stripe (sessions, pre-autorisations, captures)
 - `passwordResetTokens` - Tokens de reinitialisation de mot de passe
@@ -438,6 +474,58 @@ Utilisation de Framer Motion avec des variants predefinies :
 ---
 
 ## Changelog recent
+
+### v0.22.0 - Systeme d'Annulation et Refactorisation Page Reservation
+
+- **Systeme d'annulation complet**
+  - Nouvelle table `cancellationPolicies` (mode remboursement, commission annonceur)
+  - 3 paliers progressifs : 1ere annulation gratuite, 2eme partielle, 3eme+ non remboursable
+  - Regles temporelles : 24h grace period, seuil 48h avant prestation
+  - Support formules multi-seances : mode "par seance" ou "pourcentage restant"
+  - Queries publiques (`getPublicAnnouncerCancellationPolicy`) et authentifiees (`getClientCancellationInfo`)
+
+- **Modal politique d'annulation** (`CancellationPolicyModal`)
+  - Bottom sheet mobile / modal centree desktop avec portal (z-index fix)
+  - Encadre "Votre situation" avec historique reel du client (vert/orange/rouge)
+  - Conditions dynamiques adaptees au palier du client
+  - Section multi-seances avec calcul d'exemple chiffre
+  - Politique de l'annonceur (per_session vs percentage_remaining)
+
+- **Configuration admin** (`/admin/parametres`)
+  - Periode de comptage des annulations (mois)
+  - Pourcentage 2eme annulation pour l'annonceur
+  - Templates email : annulation confirmee, annulation refusee
+
+- **Page annonceur - politique d'annulation** (`/dashboard/parametres/politique-annulation`)
+  - Mode de remboursement configurable (par seance / pourcentage restant)
+  - Commission parametrable (0-100%)
+  - Apercu dynamique des conditions avec exemples chiffres
+
+- **Integration dans le parcours de reservation**
+  - Bouton "Politique d'annulation" dans le recapitulatif sidebar (`BookingSummary`)
+  - Checkbox "J'accepte la politique d'annulation" obligatoire avant confirmation
+  - Conditions dynamiques dans la modale de confirmation (`ConfirmationModal`)
+  - Donnees client reelles (historique annulations, prochain palier)
+
+- **Page detail reservation client** (`/client/reservations/[missionId]`)
+  - Bouton d'annulation avec modal de confirmation
+  - Affichage du montant rembourse estime
+
+- **Refactorisation de `/reservation/[bookingId]`** (2373 → 810 lignes, -66%)
+  - `types.ts` : interfaces TypeScript partagees (149 lignes)
+  - `utils.ts` : fonctions utilitaires prix/dates/formatage (323 lignes)
+  - `AuthSection.tsx` : formulaire login/inscription invite (275 lignes)
+  - `AnimalSection.tsx` : selection d'animal connecte/invite (118 lignes)
+  - `OptionsSection.tsx` : options supplementaires (87 lignes)
+  - `ReservationSummary.tsx` : sidebar recapitulatif complet (824 lignes)
+  - Sub-components internes : CollectiveSlotsDisplay, MultiSessionDisplay, SingleSessionDisplay, GuestAnimalDisplay, UniSessionPriceDetail
+
+- **Backend Convex**
+  - `convex/planning/cancellation.ts` : queries politique annonceur + historique client
+  - `convex/planning/cancellationActions.ts` : mutations annulation
+  - `convex/admin/config.ts` : config admin annulation
+  - `convex/admin/emailTemplates.ts` : templates email annulation
+  - `convex/schema.ts` : table `cancellationPolicies`
 
 ### v0.21.1 - Corrections Systeme de Disponibilites
 

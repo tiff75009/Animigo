@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import { cn } from "@/app/lib/utils";
 import type { FormuleData } from "../types";
 import { formatPriceWithCommission, getFormuleBestPrice } from "./pricing";
-
 interface SelectableFormuleCardProps {
   formule: FormuleData;
   isSelected: boolean;
@@ -331,6 +330,7 @@ export default function SelectableFormuleCard({
           )}
         </div>
       </div>
+
     </motion.button>
   );
 }

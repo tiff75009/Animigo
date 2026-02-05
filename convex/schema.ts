@@ -642,6 +642,11 @@ export default defineSchema({
     clientNotes: v.optional(v.string()),
     announcerNotes: v.optional(v.string()),
     cancellationReason: v.optional(v.string()),
+    cancelledBy: v.optional(v.union(v.literal("client"), v.literal("announcer"), v.literal("system"))),
+    cancelledAt: v.optional(v.number()),
+    refundAmount: v.optional(v.number()),
+    announcerRetainedAmount: v.optional(v.number()),
+    refundStripeId: v.optional(v.string()),
 
     // Stripe - Paiement
     stripePaymentId: v.optional(v.id("stripePayments")), // Référence au paiement Stripe
@@ -1774,4 +1779,14 @@ export default defineSchema({
   })
     .index("by_ticket", ["ticketId"])
     .index("by_ticket_created", ["ticketId", "createdAt"]),
+
+  // Politiques d'annulation annonceurs
+  cancellationPolicies: defineTable({
+    userId: v.id("users"),
+    defaultCommissionPercent: v.number(),
+    refundMode: v.optional(v.union(v.literal("per_session"), v.literal("percentage_remaining"))),
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
 });

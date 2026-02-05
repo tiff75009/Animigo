@@ -18,11 +18,16 @@ import {
   CalendarCheck,
   Info,
   AlertTriangle,
+  ShieldCheck,
 } from "lucide-react";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/app/lib/utils";
 import type { ServiceData, FormuleData, OptionData } from "../types";
 import type { BookingSelection, PriceBreakdown, ClientAddress } from "./types";
 import { formatPrice, formatDateDisplay } from "./pricing";
+import CancellationPolicyModal from "./CancellationPolicyModal";
 
 interface CollectiveSlotInfo {
   _id: string;
@@ -63,6 +68,8 @@ interface BookingSummaryProps {
   requiresAnimalVerification?: boolean;
   guestAnimalValid?: boolean;
   guestAnimalError?: string;
+  announcerId?: string;
+  isGarde?: boolean;
   onBook?: () => void;
   onFinalize?: () => void; // Aller directement à la page de finalisation
   className?: string;
@@ -89,10 +96,19 @@ export default function BookingSummary({
   requiresAnimalVerification = false,
   guestAnimalValid = false,
   guestAnimalError,
+  announcerId,
+  isGarde = false,
   onBook,
   onFinalize,
   className,
 }: BookingSummaryProps) {
+  const [showCancellationPolicy, setShowCancellationPolicy] = useState(false);
+
+  // Query politique annonceur
+  const cancellationPolicy = useQuery(
+    api.planning.cancellation.getPublicAnnouncerCancellationPolicy,
+    announcerId ? { announcerId: announcerId as Id<"users"> } : "skip"
+  );
   // Déterminer si c'est une formule collective
   const isCollectiveFormule = variant?.sessionType === "collective";
   const numberOfSessions = variant?.numberOfSessions || 1;
@@ -1058,14 +1074,48 @@ export default function BookingSummary({
         )}
       </div>
 
-      {/* Footer - only for full mode */}
+      {/* Footer - politique d'annulation */}
       {!compact && (
         <div className="px-5 py-3 bg-gray-50 border-t border-gray-100">
-          <p className="text-xs text-center text-gray-500">
-            Annulation gratuite jusqu&apos;à 48h avant
-          </p>
+          <button
+            onClick={() => setShowCancellationPolicy(true)}
+            className="w-full flex items-center justify-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            Politique d&apos;annulation
+          </button>
         </div>
       )}
+
+      {/* Modal politique d'annulation */}
+      <CancellationPolicyModal
+        isOpen={showCancellationPolicy}
+        onClose={() => setShowCancellationPolicy(false)}
+        serviceType={
+          isGarde
+            ? "garde"
+            : isCollectiveFormule
+              ? "collectif"
+              : isMultiSessionIndividual
+                ? "multi_seance"
+                : "uni_seance"
+        }
+        numberOfSessions={numberOfSessions}
+        totalPrice={(() => {
+          if (isCollectiveFormule && variant) {
+            return variant.price * numberOfSessions * animalCount;
+          } else if (isMultiSessionIndividual && variant) {
+            return variant.price * numberOfSessions * animalCount;
+          } else if (priceBreakdown) {
+            const baseWithAnimals = priceBreakdown.baseAmount * animalCount;
+            const nightsWithAnimals = (priceBreakdown.nightsAmount || 0) * animalCount;
+            const optionsAmount = priceBreakdown.optionsAmount || 0;
+            return baseWithAnimals + nightsWithAnimals + optionsAmount;
+          }
+          return 0;
+        })()}
+        announcerPolicy={cancellationPolicy ?? null}
+      />
     </div>
   );
 }

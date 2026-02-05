@@ -73,6 +73,8 @@ import type * as notifications_mutations from "../notifications/mutations.js";
 import type * as notifications_queries from "../notifications/queries.js";
 import type * as planning_acceptanceDeadline from "../planning/acceptanceDeadline.js";
 import type * as planning_availability from "../planning/availability.js";
+import type * as planning_cancellation from "../planning/cancellation.js";
+import type * as planning_cancellationActions from "../planning/cancellationActions.js";
 import type * as planning_collectiveSlots from "../planning/collectiveSlots.js";
 import type * as planning_missions from "../planning/missions.js";
 import type * as planning_paymentDeadline from "../planning/paymentDeadline.js";
@@ -176,6 +178,8 @@ declare const fullApi: ApiFromModules<{
   "notifications/queries": typeof notifications_queries;
   "planning/acceptanceDeadline": typeof planning_acceptanceDeadline;
   "planning/availability": typeof planning_availability;
+  "planning/cancellation": typeof planning_cancellation;
+  "planning/cancellationActions": typeof planning_cancellationActions;
   "planning/collectiveSlots": typeof planning_collectiveSlots;
   "planning/missions": typeof planning_missions;
   "planning/paymentDeadline": typeof planning_paymentDeadline;

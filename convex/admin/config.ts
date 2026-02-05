@@ -747,3 +747,86 @@ export const updatePayoutSettings = mutation({
     };
   },
 });
+
+// ==========================================
+// POLITIQUE D'ANNULATION CLIENT
+// ==========================================
+
+export const getCancellationSettings = query({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx, args.token);
+
+    const configs = await ctx.db.query("systemConfig").collect();
+    const configMap = new Map(configs.map((c) => [c.key, c.value]));
+
+    return {
+      gracePeriodHours: parseInt(configMap.get("cancellation_grace_period_hours") || "") || 24,
+      thresholdHours: parseInt(configMap.get("cancellation_threshold_hours") || "") || 48,
+      secondCancellationAnnouncerPercent: parseInt(configMap.get("cancellation_2nd_announcer_percent") || "") || 50,
+      thirdCancellationAnnouncerPercent: parseInt(configMap.get("cancellation_3rd_announcer_percent") || "") || 100,
+      counterPeriodMonths: parseInt(configMap.get("cancellation_counter_period_months") || "") || 12,
+    };
+  },
+});
+
+export const updateCancellationSettings = mutation({
+  args: {
+    token: v.string(),
+    gracePeriodHours: v.number(),
+    thresholdHours: v.number(),
+    secondCancellationAnnouncerPercent: v.number(),
+    thirdCancellationAnnouncerPercent: v.number(),
+    counterPeriodMonths: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireAdmin(ctx, args.token);
+
+    const gracePeriodHours = Math.min(72, Math.max(1, args.gracePeriodHours));
+    const thresholdHours = Math.min(168, Math.max(1, args.thresholdHours));
+    const secondPercent = Math.min(100, Math.max(0, args.secondCancellationAnnouncerPercent));
+    const thirdPercent = Math.min(100, Math.max(0, args.thirdCancellationAnnouncerPercent));
+    const counterPeriodMonths = Math.min(24, Math.max(1, args.counterPeriodMonths));
+
+    const configsToUpdate = [
+      { key: "cancellation_grace_period_hours", value: gracePeriodHours.toString() },
+      { key: "cancellation_threshold_hours", value: thresholdHours.toString() },
+      { key: "cancellation_2nd_announcer_percent", value: secondPercent.toString() },
+      { key: "cancellation_3rd_announcer_percent", value: thirdPercent.toString() },
+      { key: "cancellation_counter_period_months", value: counterPeriodMonths.toString() },
+    ];
+
+    for (const config of configsToUpdate) {
+      const existing = await ctx.db
+        .query("systemConfig")
+        .withIndex("by_key", (q) => q.eq("key", config.key))
+        .first();
+
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          value: config.value,
+          updatedAt: Date.now(),
+          updatedBy: user._id,
+        });
+      } else {
+        await ctx.db.insert("systemConfig", {
+          key: config.key,
+          value: config.value,
+          isSecret: false,
+          environment: "production",
+          updatedAt: Date.now(),
+          updatedBy: user._id,
+        });
+      }
+    }
+
+    return {
+      success: true,
+      gracePeriodHours,
+      thresholdHours,
+      secondCancellationAnnouncerPercent: secondPercent,
+      thirdCancellationAnnouncerPercent: thirdPercent,
+      counterPeriodMonths,
+    };
+  },
+});

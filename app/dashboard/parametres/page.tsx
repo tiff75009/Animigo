@@ -31,7 +31,9 @@ import {
   MapPin,
   CalendarIcon,
   Info,
+  Ban,
 } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/app/lib/utils";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -1699,6 +1701,23 @@ function PlanningTab() {
             </div>
           </div>
         </div>
+      </SectionCard>
+
+      {/* Politique d'annulation */}
+      <SectionCard icon={Ban} title="Politique d'annulation">
+        <p className="text-sm text-gray-500 mb-4">
+          Configurez le montant conservé en cas d&apos;annulation client sur vos services multi-séance et collectifs
+        </p>
+        <Link
+          href="/dashboard/parametres/politique-annulation"
+          className="flex items-center justify-between w-full px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors group"
+        >
+          <div className="flex items-center gap-3">
+            <Ban className="w-5 h-5 text-red-500" />
+            <span className="font-medium text-gray-700">Gérer ma politique d&apos;annulation</span>
+          </div>
+          <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-gray-600 transition-colors" />
+        </Link>
       </SectionCard>
 
       {/* Error Message */}

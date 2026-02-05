@@ -18,6 +18,20 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
+interface CancellationPolicyInfo {
+  serviceType: "uni_seance" | "garde" | "collectif" | "multi_seance";
+  numberOfSessions?: number;
+  totalPrice?: number;
+  announcerPolicy?: {
+    refundMode: "per_session" | "percentage_remaining";
+    commissionPercent: number;
+  } | null;
+  clientInfo?: {
+    cancellationCount: number;
+    secondAnnouncerPercent: number;
+  } | null;
+}
+
 interface ConfirmationModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -25,6 +39,7 @@ interface ConfirmationModalProps {
   isSubmitting: boolean;
   isGuest: boolean; // Si l'utilisateur crée un compte
   userEmail?: string;
+  cancellationPolicy?: CancellationPolicyInfo;
 }
 
 export default function ConfirmationModal({
@@ -34,6 +49,7 @@ export default function ConfirmationModal({
   isSubmitting,
   isGuest,
   userEmail,
+  cancellationPolicy: cpInfo,
 }: ConfirmationModalProps) {
   const [acceptCGV, setAcceptCGV] = useState(false);
   const [acceptPrivacy, setAcceptPrivacy] = useState(false);
@@ -183,34 +199,81 @@ export default function ConfirmationModal({
                         className="overflow-hidden"
                       >
                         <div className="px-4 pb-4 text-xs text-text-light space-y-2 border-t border-gray-100 pt-3">
-                          <p className="font-medium text-foreground">
-                            Annulation gratuite :
-                          </p>
-                          <ul className="list-disc list-inside space-y-1 ml-2">
-                            <li>
-                              <span className="font-medium text-green-600">100% remboursé</span> si annulation
-                              plus de 7 jours avant la prestation
+                          <ul className="space-y-1.5">
+                            <li className="flex items-start gap-2">
+                              <span className="text-green-600 mt-0.5">✓</span>
+                              <span>Remboursement intégral dans les <span className="font-medium text-foreground">24h après paiement</span></span>
                             </li>
-                            <li>
-                              <span className="font-medium text-amber-600">50% remboursé</span> si annulation
-                              entre 3 et 7 jours avant la prestation
+                            <li className="flex items-start gap-2">
+                              <span className="text-green-600 mt-0.5">✓</span>
+                              <span>Plus de <span className="font-medium text-foreground">48h avant le début</span> : remboursement total - commission plateforme</span>
                             </li>
-                            <li>
-                              <span className="font-medium text-red-600">Non remboursable</span> si annulation
-                              moins de 3 jours avant la prestation
-                            </li>
+                            {/* Palier moins de 48h - basé sur l'historique réel */}
+                            {cpInfo?.clientInfo ? (
+                              cpInfo.clientInfo.cancellationCount === 0 ? (
+                                <li className="flex items-start gap-2">
+                                  <span className="text-green-600 mt-0.5">✓</span>
+                                  <span>Moins de <span className="font-medium text-foreground">48h avant le début</span> : remboursement total - commission plateforme <span className="text-green-600 font-medium">(1ère annulation)</span></span>
+                                </li>
+                              ) : cpInfo.clientInfo.cancellationCount === 1 ? (
+                                <li className="flex items-start gap-2">
+                                  <span className="text-amber-600 mt-0.5">!</span>
+                                  <span>Moins de <span className="font-medium text-foreground">48h avant le début</span> : l&apos;annonceur conserve {cpInfo.clientInfo.secondAnnouncerPercent}% de ses gains <span className="text-amber-600 font-medium">(2ème annulation)</span></span>
+                                </li>
+                              ) : (
+                                <li className="flex items-start gap-2">
+                                  <span className="text-red-500 mt-0.5">✗</span>
+                                  <span>Moins de <span className="font-medium text-foreground">48h avant le début</span> : <span className="text-red-600 font-medium">aucun remboursement</span> ({cpInfo.clientInfo.cancellationCount + 1}ème annulation)</span>
+                                </li>
+                              )
+                            ) : (
+                              <li className="flex items-start gap-2">
+                                <span className="text-green-600 mt-0.5">✓</span>
+                                <span>Moins de <span className="font-medium text-foreground">48h avant le début</span> : remboursement total - commission plateforme <span className="text-green-600 font-medium">(1ère annulation)</span></span>
+                              </li>
+                            )}
+                            {cpInfo && (cpInfo.serviceType === "uni_seance" || cpInfo.serviceType === "garde") && (
+                              <li className="flex items-start gap-2">
+                                <span className="text-red-500 mt-0.5">✗</span>
+                                <span>Non annulable une fois la prestation <span className="font-medium text-foreground">en cours</span></span>
+                              </li>
+                            )}
                           </ul>
+
+                          {/* Règles multi-séance / collectif */}
+                          {cpInfo && (cpInfo.serviceType === "collectif" || cpInfo.serviceType === "multi_seance") && (
+                            <div className="mt-2 pt-2 border-t border-gray-100">
+                              <p className="font-medium text-foreground mb-1.5">En cours de prestation :</p>
+                              {cpInfo.announcerPolicy?.refundMode === "percentage_remaining" ? (
+                                <ul className="space-y-1">
+                                  <li className="flex items-start gap-2">
+                                    <span className="text-blue-600 mt-0.5">•</span>
+                                    <span>L&apos;annonceur conserve <span className="font-medium text-foreground">{cpInfo.announcerPolicy.commissionPercent}%</span> du montant des séances restantes</span>
+                                  </li>
+                                  <li className="flex items-start gap-2">
+                                    <span className="text-blue-600 mt-0.5">•</span>
+                                    <span>Les séances déjà effectuées <span className="font-medium text-foreground">ne sont pas remboursables</span></span>
+                                  </li>
+                                </ul>
+                              ) : (
+                                <ul className="space-y-1">
+                                  <li className="flex items-start gap-2">
+                                    <span className="text-blue-600 mt-0.5">•</span>
+                                    <span>Les <span className="font-medium text-foreground">séances restantes</span> sont intégralement remboursées</span>
+                                  </li>
+                                  <li className="flex items-start gap-2">
+                                    <span className="text-blue-600 mt-0.5">•</span>
+                                    <span>Les séances déjà effectuées <span className="font-medium text-foreground">ne sont pas remboursables</span></span>
+                                  </li>
+                                </ul>
+                              )}
+                            </div>
+                          )}
+
                           <p className="mt-2 text-text-light">
                             En cas d&apos;annulation par l&apos;annonceur, vous serez intégralement
                             remboursé quelle que soit la date.
                           </p>
-                          <Link
-                            href="/conditions-annulation"
-                            className="inline-flex items-center gap-1 text-primary hover:underline mt-2"
-                          >
-                            <FileText className="w-3 h-3" />
-                            Voir les conditions complètes
-                          </Link>
                         </div>
                       </motion.div>
                     )}

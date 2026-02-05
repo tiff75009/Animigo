@@ -5,527 +5,24 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
-  CheckCircle,
   MapPin,
-  Calendar,
-  CalendarCheck,
-  Clock,
-  User,
-  Users,
-  Mail,
-  Phone,
-  Lock,
+  FileText,
   Loader2,
   AlertCircle,
-  PawPrint,
-  CreditCard,
-  FileText,
-  Sparkles,
-  Plus,
-  Check,
-  Percent,
-  Info,
-  Moon,
-  Sun,
-  Package,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
-import { AnimalSelector, GuestAnimalForm, type GuestAnimalData } from "@/app/components/animals";
-import AddressAutocomplete from "@/app/components/ui/AddressAutocomplete";
+import { type GuestAnimalData } from "@/app/components/animals";
 import ConfirmationModal from "@/app/components/ui/ConfirmationModal";
 import AddressSectionBooking from "./components/AddressSectionBooking";
-import CollectiveAnimalSelector from "./components/CollectiveAnimalSelector";
-
-// Types
-interface ServiceOption {
-  id: string;
-  name: string;
-  description?: string;
-  price: number;
-  priceUnit?: string;
-}
-
-// Type pour les séances multi-sessions
-interface SessionData {
-  date: string;
-  startTime: string;
-  endTime: string;
-}
-
-// Type pour les créneaux collectifs
-interface CollectiveSlotData {
-  _id: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  availableSpots: number;
-}
-
-interface PendingBookingData {
-  id: Id<"pendingBookings">;
-  announcer: {
-    id: Id<"users">;
-    slug?: string | null;
-    firstName: string;
-    lastName: string;
-    profileImage: string | null;
-    location: string;
-    city?: string | null;
-    postalCode?: string | null;
-    coordinates?: { lat: number; lng: number };
-    verified: boolean;
-    accountType: string;
-    companyType?: string;
-    statusType: "particulier" | "micro_entrepreneur" | "professionnel";
-  };
-  service: {
-    id: Id<"services">;
-    category: string;
-    categoryName: string;
-    categoryIcon?: string;
-    // Overnight settings from service
-    allowOvernightStay?: boolean;
-    dayStartTime?: string;
-    dayEndTime?: string;
-    overnightPrice?: number;
-    // Duration-based blocking
-    enableDurationBasedBlocking?: boolean;
-    // Mode de facturation client
-    clientBillingMode?: "exact_hourly" | "round_half_day" | "round_full_day";
-  };
-  variant: {
-    id: string;
-    name: string;
-    price: number;
-    priceUnit: string;
-    duration?: number;
-    pricing?: {
-      hourly?: number;
-      daily?: number;
-      weekly?: number;
-      monthly?: number;
-      nightly?: number;
-    };
-    // Support formules collectives/multi-séances
-    numberOfSessions?: number;
-    sessionInterval?: number;
-    sessionType?: "individual" | "collective";
-    animalTypes?: string[];
-  } | null;
-  options: Array<{ id: string; name: string; price: number }>;
-  availableOptions: ServiceOption[];
-  dates: {
-    startDate: string;
-    endDate: string;
-    startTime?: string;
-    endTime?: string;
-  };
-  amount: number;
-  // Overnight booking data
-  overnight?: {
-    includeOvernightStay?: boolean;
-    overnightNights?: number;
-    overnightAmount?: number;
-  };
-  serviceLocation?: "announcer_home" | "client_home";
-  // Adresse guest (pour utilisateurs non connectés)
-  guestAddress?: {
-    address: string;
-    city?: string;
-    postalCode?: string;
-    coordinates?: { lat: number; lng: number };
-  };
-  // Support formules collectives
-  collectiveSlotIds?: Id<"collectiveSlots">[];
-  collectiveSlots?: CollectiveSlotData[];
-  animalCount?: number;
-  selectedAnimalType?: string;
-  // Animaux sélectionnés par l'utilisateur
-  selectedAnimalIds?: string[];
-  // Support formules multi-séances
-  sessions?: SessionData[];
-  userId?: Id<"users">;
-  expiresAt: number;
-}
-
-interface GuestData {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  password: string;
-  confirmPassword: string;
-}
-
-// Smart price calculation result interface
-interface PriceCalculationResult {
-  firstDayAmount: number;
-  firstDayHours: number;
-  firstDayIsFullDay: boolean;
-  firstDayIsHalfDay: boolean;
-  fullDays: number;
-  fullDaysAmount: number;
-  lastDayAmount: number;
-  lastDayHours: number;
-  lastDayIsFullDay: boolean;
-  lastDayIsHalfDay: boolean;
-  nightsAmount: number;
-  nights: number;
-  optionsAmount: number;
-  totalAmount: number;
-  hourlyRate: number;
-  halfDailyRate: number;
-  dailyRate: number;
-  nightlyRate: number;
-  billingUnit: "hour" | "half_day" | "day" | "fixed";
-}
-
-// Helper: Parse time to minutes
-function parseTimeToMinutes(time: string): number {
-  const [hours, minutes] = time.split(":").map(Number);
-  return hours * 60 + minutes;
-}
-
-// Helper: Calculate distance between two coordinates (Haversine formula)
-function calculateDistance(
-  lat1: number,
-  lng1: number,
-  lat2: number,
-  lng2: number
-): number {
-  const R = 6371; // Rayon de la Terre en km
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-// Helper: Format distance for display
-function formatDistance(distance: number): string {
-  if (distance < 1) {
-    return "moins d'1 km";
-  }
-  return `${Math.round(distance)} km`;
-}
-
-// Helper: Calculate hours between two times
-function calculateHoursBetween(startTime: string, endTime: string): number {
-  const startMinutes = parseTimeToMinutes(startTime);
-  const endMinutes = parseTimeToMinutes(endTime);
-  const diff = endMinutes - startMinutes;
-  return Math.max(0, diff / 60);
-}
-
-// Helper: Calculate days between two dates
-function daysBetweenDates(startDate: string, endDate: string): number {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const diffTime = end.getTime() - start.getTime();
-  return Math.floor(diffTime / (1000 * 60 * 60 * 24));
-}
-
-// Calculate smart pricing with partial day support and billing mode
-function calculateSmartPrice(params: {
-  startDate: string;
-  endDate: string | null;
-  startTime: string | null;
-  endTime: string | null;
-  includeOvernightStay: boolean;
-  dayStartTime: string;
-  dayEndTime: string;
-  workdayHours: number;
-  halfDayHours?: number;
-  pricing: {
-    hourly?: number;
-    halfDaily?: number;
-    daily?: number;
-    nightly?: number;
-  };
-  optionsTotal: number;
-  // For duration-based blocking: use fixed price instead of hourly calculation
-  fixedServicePrice?: number;
-  serviceDurationMinutes?: number;
-  // Client billing mode from category settings
-  clientBillingMode?: "exact_hourly" | "round_half_day" | "round_full_day";
-}): PriceCalculationResult {
-  const {
-    startDate,
-    endDate,
-    startTime,
-    endTime,
-    includeOvernightStay,
-    dayStartTime,
-    dayEndTime,
-    workdayHours,
-    halfDayHours: customHalfDayHours,
-    pricing,
-    optionsTotal,
-    fixedServicePrice,
-    serviceDurationMinutes,
-    clientBillingMode,
-  } = params;
-
-  // Calculate half-day hours (default to workdayHours / 2)
-  const halfDayHours = customHalfDayHours || workdayHours / 2;
-
-  // Determine rates (derive missing rates from available ones)
-  const hourlyRate = pricing.hourly || (pricing.daily ? Math.round(pricing.daily / workdayHours) : 0);
-  const halfDailyRate = pricing.halfDaily || (pricing.daily ? Math.round(pricing.daily / 2) : (hourlyRate ? hourlyRate * halfDayHours : 0));
-  const dailyRate = pricing.daily || (hourlyRate ? hourlyRate * workdayHours : 0);
-  const nightlyRate = pricing.nightly || 0;
-
-  // Helper: Calculate amount for a partial day based on billing mode
-  const calculatePartialDayAmount = (hours: number): { amount: number; isFullDay: boolean; isHalfDay: boolean } => {
-    // Si le nombre d'heures dépasse la journée de travail, c'est une journée complète
-    if (hours >= workdayHours) {
-      return { amount: dailyRate, isFullDay: true, isHalfDay: false };
-    }
-
-    // Mode arrondi à la demi-journée
-    if (clientBillingMode === "round_half_day") {
-      if (hours <= halfDayHours) {
-        return { amount: halfDailyRate, isFullDay: false, isHalfDay: true };
-      }
-      return { amount: dailyRate, isFullDay: true, isHalfDay: false };
-    }
-
-    // Mode arrondi à la journée
-    if (clientBillingMode === "round_full_day") {
-      return { amount: dailyRate, isFullDay: true, isHalfDay: false };
-    }
-
-    // Mode horaire exact (par défaut)
-    if (hourlyRate > 0) {
-      const hourlyAmount = Math.round(hourlyRate * hours);
-      const cappedAmount = dailyRate > 0 ? Math.min(hourlyAmount, dailyRate) : hourlyAmount;
-      return { amount: cappedAmount, isFullDay: cappedAmount >= dailyRate, isHalfDay: false };
-    }
-
-    return { amount: dailyRate, isFullDay: true, isHalfDay: false };
-  };
-
-  // Calculate total days
-  const effectiveEndDate = endDate || startDate;
-  const totalDays = daysBetweenDates(startDate, effectiveEndDate) + 1;
-
-  // Single day booking
-  if (totalDays === 1) {
-    let firstDayHours: number;
-    let firstDayAmount: number;
-    let firstDayIsFullDay = false;
-    let firstDayIsHalfDay = false;
-
-    // Duration-based blocking: use fixed price
-    if (fixedServicePrice !== undefined && serviceDurationMinutes !== undefined) {
-      firstDayHours = serviceDurationMinutes / 60;
-      firstDayAmount = fixedServicePrice;
-
-      return {
-        firstDayAmount,
-        firstDayHours,
-        firstDayIsFullDay: false,
-        firstDayIsHalfDay: false,
-        fullDays: 0,
-        fullDaysAmount: 0,
-        lastDayAmount: 0,
-        lastDayHours: 0,
-        lastDayIsFullDay: false,
-        lastDayIsHalfDay: false,
-        nightsAmount: 0,
-        nights: 0,
-        optionsAmount: optionsTotal,
-        totalAmount: firstDayAmount + optionsTotal,
-        hourlyRate: 0,
-        halfDailyRate: 0,
-        dailyRate: 0,
-        nightlyRate,
-        billingUnit: "fixed",
-      };
-    }
-
-    if (startTime && endTime) {
-      firstDayHours = calculateHoursBetween(startTime, endTime);
-      const partialDayResult = calculatePartialDayAmount(firstDayHours);
-      firstDayAmount = partialDayResult.amount;
-      firstDayIsFullDay = partialDayResult.isFullDay;
-      firstDayIsHalfDay = partialDayResult.isHalfDay;
-    } else {
-      firstDayHours = workdayHours;
-      firstDayAmount = dailyRate || (hourlyRate * workdayHours);
-      firstDayIsFullDay = true;
-    }
-
-    // Determine billing unit for display
-    let billingUnit: "hour" | "half_day" | "day" | "fixed" = "hour";
-    if (firstDayIsFullDay) billingUnit = "day";
-    else if (firstDayIsHalfDay) billingUnit = "half_day";
-
-    return {
-      firstDayAmount,
-      firstDayHours,
-      firstDayIsFullDay,
-      firstDayIsHalfDay,
-      fullDays: 0,
-      fullDaysAmount: 0,
-      lastDayAmount: 0,
-      lastDayHours: 0,
-      lastDayIsFullDay: false,
-      lastDayIsHalfDay: false,
-      nightsAmount: 0,
-      nights: 0,
-      optionsAmount: optionsTotal,
-      totalAmount: firstDayAmount + optionsTotal,
-      hourlyRate,
-      halfDailyRate,
-      dailyRate,
-      nightlyRate,
-      billingUnit,
-    };
-  }
-
-  // Multi-day booking
-  const effectiveStartTime = startTime || dayStartTime;
-  const firstDayEndTime = dayEndTime;
-  const firstDayHours = calculateHoursBetween(effectiveStartTime, firstDayEndTime);
-
-  const firstDayResult = calculatePartialDayAmount(firstDayHours);
-  const firstDayAmount = firstDayResult.amount;
-  const firstDayIsFullDay = firstDayResult.isFullDay;
-  const firstDayIsHalfDay = firstDayResult.isHalfDay;
-
-  const lastDayStartTime = dayStartTime;
-  const effectiveEndTime = endTime || dayEndTime;
-  const lastDayHours = calculateHoursBetween(lastDayStartTime, effectiveEndTime);
-
-  const lastDayResult = calculatePartialDayAmount(lastDayHours);
-  const lastDayAmount = lastDayResult.amount;
-  const lastDayIsFullDay = lastDayResult.isFullDay;
-  const lastDayIsHalfDay = lastDayResult.isHalfDay;
-
-  // Full days in between (excluding first and last)
-  const fullDays = Math.max(0, totalDays - 2);
-  const fullDaysAmount = fullDays * dailyRate;
-
-  // Nights
-  const nights = includeOvernightStay ? totalDays - 1 : 0;
-  const nightsAmount = nights * nightlyRate;
-
-  const totalAmount = firstDayAmount + fullDaysAmount + lastDayAmount + nightsAmount + optionsTotal;
-
-  // Determine primary billing unit for display
-  let billingUnit: "hour" | "half_day" | "day" | "fixed" = "day";
-  if (!firstDayIsFullDay && !firstDayIsHalfDay && !lastDayIsFullDay && !lastDayIsHalfDay) {
-    billingUnit = "hour";
-  } else if ((firstDayIsHalfDay || lastDayIsHalfDay) && fullDays === 0) {
-    billingUnit = "half_day";
-  }
-
-  return {
-    firstDayAmount,
-    firstDayHours,
-    firstDayIsFullDay,
-    firstDayIsHalfDay,
-    fullDays,
-    fullDaysAmount,
-    lastDayAmount,
-    lastDayHours,
-    lastDayIsFullDay,
-    lastDayIsHalfDay,
-    nightsAmount,
-    nights,
-    optionsAmount: optionsTotal,
-    totalAmount,
-    hourlyRate,
-    halfDailyRate,
-    dailyRate,
-    nightlyRate,
-    billingUnit,
-  };
-}
-
-// Format hours for display
-function formatHoursDisplay(hours: number): string {
-  if (hours === Math.floor(hours)) {
-    return `${hours}h`;
-  }
-  const wholeHours = Math.floor(hours);
-  const minutes = Math.round((hours - wholeHours) * 60);
-  return `${wholeHours}h${minutes.toString().padStart(2, "0")}`;
-}
-
-
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("fr-FR", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
-
-function formatShortDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("fr-FR", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
-}
-
-function formatTime(time: string): string {
-  const [hours, minutes] = time.split(":");
-  return minutes === "00" ? `${parseInt(hours)}h` : `${parseInt(hours)}h${minutes}`;
-}
-
-function formatPrice(cents: number): string {
-  return (cents / 100).toFixed(2).replace(".", ",") + " €";
-}
-
-// Formater la durée en heures/minutes
-function formatDuration(minutes: number): string {
-  if (minutes < 60) return `${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  return mins > 0 ? `${hours}h${mins}` : `${hours}h`;
-}
-
-// Calculer l'heure de fin à partir de l'heure de début et de la durée
-function calculateEndTime(startTime: string, durationMinutes: number): string {
-  const [hours, minutes] = startTime.split(":").map(Number);
-  const totalMinutes = hours * 60 + minutes + durationMinutes;
-  const endHours = Math.floor(totalMinutes / 60) % 24;
-  const endMinutes = totalMinutes % 60;
-  return `${endHours.toString().padStart(2, "0")}:${endMinutes.toString().padStart(2, "0")}`;
-}
-
-// Calculer le prix du service basé sur le taux horaire et la durée
-function calculateServicePrice(hourlyRateCents: number, durationMinutes: number): number {
-  // Prix = taux horaire × (durée en heures)
-  return Math.round((hourlyRateCents * durationMinutes) / 60);
-}
-
-function extractCity(location: string): string {
-  // Location formats: "Paris 11e", "75011 Paris", "Rue X, Paris 11e", etc.
-  const parts = location.split(",").map((p) => p.trim());
-  const lastPart = parts[parts.length - 1];
-  // If it starts with a number (zip code), try to get just the city name
-  if (/^\d/.test(lastPart)) {
-    const cityMatch = lastPart.match(/\d+\s+(.+)/);
-    return cityMatch ? cityMatch[1] : lastPart;
-  }
-  return lastPart;
-}
+import AuthSection from "./components/AuthSection";
+import AnimalSection from "./components/AnimalSection";
+import OptionsSection from "./components/OptionsSection";
+import ReservationSummary from "./components/ReservationSummary";
+import { calculateSmartPrice } from "./utils";
+import type { GuestData, ServiceOption, PriceCalculationResult, BillingInfo } from "./types";
 
 export default function ReservationPage({
   params,
@@ -539,7 +36,7 @@ export default function ReservationPage({
   const [token, setToken] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [selectedAnimalId, setSelectedAnimalId] = useState<Id<"animals"> | null>(null);
-  const [selectedAnimalIds, setSelectedAnimalIds] = useState<Id<"animals">[]>([]); // Pour formules collectives
+  const [selectedAnimalIds, setSelectedAnimalIds] = useState<Id<"animals">[]>([]);
   const [address, setAddress] = useState("");
   const [city, setCity] = useState<string | null>(null);
   const [postalCode, setPostalCode] = useState<string | null>(null);
@@ -549,6 +46,7 @@ export default function ReservationPage({
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const [acceptedCancellationPolicy, setAcceptedCancellationPolicy] = useState(false);
 
   // Guest data
   const [guestData, setGuestData] = useState<GuestData>({
@@ -603,7 +101,7 @@ export default function ReservationPage({
     { bookingId: bookingId as Id<"pendingBookings"> }
   );
 
-  // Récupérer la config pricing (commission, TVA, frais Stripe) basé sur le type d'annonceur
+  // Récupérer la config pricing
   const pricingConfig = useQuery(
     api.admin.commissions.getPricingConfig,
     bookingData?.announcer?.statusType
@@ -611,7 +109,7 @@ export default function ReservationPage({
       : "skip"
   );
 
-  // Workday config from admin settings
+  // Workday config
   const workdayConfig = useQuery(api.admin.config.getWorkdayConfig);
   const workdayHours = workdayConfig?.workdayHours ?? 8;
 
@@ -623,6 +121,19 @@ export default function ReservationPage({
       : "skip"
   );
 
+  // Politique d'annulation
+  const cancellationPolicy = useQuery(
+    api.planning.cancellation.getPublicAnnouncerCancellationPolicy,
+    bookingData?.announcer?.id
+      ? { announcerId: bookingData.announcer.id }
+      : "skip"
+  );
+
+  const clientCancellationInfo = useQuery(
+    api.planning.cancellation.getClientCancellationInfo,
+    token ? { token } : "skip"
+  );
+
   // Mutations
   const finalizeBooking = useMutation(api.public.booking.finalizeBooking);
   const finalizeAsGuest = useMutation(api.public.booking.finalizeBookingAsGuest);
@@ -631,14 +142,14 @@ export default function ReservationPage({
   // Vérifier si la réservation est expirée
   const isExpired = bookingData && bookingData.expiresAt < Date.now();
 
-  // Initialiser les options sélectionnées depuis les données de réservation
+  // Initialiser les options sélectionnées
   useEffect(() => {
     if (bookingData?.options) {
       setSelectedOptionIds(bookingData.options.map((opt: ServiceOption) => opt.id));
     }
   }, [bookingData?.options]);
 
-  // Pré-sélectionner l'animal depuis les données de réservation
+  // Pré-sélectionner l'animal
   useEffect(() => {
     if (
       bookingData?.selectedAnimalIds &&
@@ -646,12 +157,11 @@ export default function ReservationPage({
       !selectedAnimalId &&
       isLoggedIn
     ) {
-      // Sélectionner le premier animal de la liste
       setSelectedAnimalId(bookingData.selectedAnimalIds[0] as Id<"animals">);
     }
   }, [bookingData?.selectedAnimalIds, selectedAnimalId, isLoggedIn]);
 
-  // Pré-remplir l'adresse depuis le profil utilisateur si réservation à domicile
+  // Pré-remplir l'adresse depuis le profil
   useEffect(() => {
     if (
       sessionData?.user?.location &&
@@ -663,7 +173,7 @@ export default function ReservationPage({
     }
   }, [sessionData?.user?.location, bookingData?.serviceLocation, addressPreFilled]);
 
-  // Pré-remplir l'adresse depuis guestAddress (saisie dans la page annonceur) pour les guests
+  // Pré-remplir l'adresse guest
   useEffect(() => {
     if (
       bookingData?.guestAddress?.address &&
@@ -682,7 +192,7 @@ export default function ReservationPage({
     }
   }, [bookingData?.guestAddress, bookingData?.serviceLocation, addressPreFilled, isLoggedIn]);
 
-  // Pré-remplir les données de l'animal invité si disponibles
+  // Pré-remplir l'animal invité
   useEffect(() => {
     if (
       bookingData?.guestAnimalPreFill &&
@@ -711,53 +221,49 @@ export default function ReservationPage({
   const numberOfSessions = bookingData?.variant?.numberOfSessions || 1;
   const effectiveAnimalCount = bookingData?.animalCount || 1;
 
-  // Calculer le nombre de jours/séances selon le type de formule
-  const calculateDays = () => {
+  // Type de service pour la politique d'annulation
+  const isGardeService_flag = bookingData?.service?.category?.toLowerCase().includes("garde") || false;
+  const cancellationServiceType = isGardeService_flag
+    ? "garde" as const
+    : isCollectiveFormula
+      ? "collectif" as const
+      : isMultiSessionFormula
+        ? "multi_seance" as const
+        : "uni_seance" as const;
+
+  // Calculer le nombre de jours/séances
+  const daysCount = (() => {
     if (!bookingData) return 1;
-    // Formule collective: nombre de créneaux
     if (isCollectiveFormula && bookingData.collectiveSlots) {
       return bookingData.collectiveSlots.length || numberOfSessions;
     }
-    // Formule multi-séances: nombre de séances
     if (isMultiSessionFormula && bookingData.sessions) {
       return bookingData.sessions.length || numberOfSessions;
     }
-    // Formule uni-séance: calcul classique
     const start = new Date(bookingData.dates.startDate);
     const end = new Date(bookingData.dates.endDate);
     return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-  };
+  })();
 
-  const daysCount = calculateDays();
-
-  // Calculer le total des options sélectionnées
+  // Total des options sélectionnées
   const optionsTotal = selectedOptionIds.reduce((sum, optId) => {
     const option = bookingData?.availableOptions?.find((o: ServiceOption) => o.id === optId);
     return sum + (option?.price || 0);
   }, 0);
 
-  // Smart price calculation (seulement pour les formules uni-séance classiques)
+  // Smart price calculation (uni-séance uniquement)
   const priceCalculation: PriceCalculationResult | null = (() => {
     if (!bookingData?.variant) return null;
-    // Ne pas utiliser le calcul smart pour les formules collectives/multi-séances
     if (isCollectiveFormula || isMultiSessionFormula) return null;
 
     const pricing = bookingData.variant.pricing;
-
-    // Get announcer working hours
     const dayStartTime = bookingData.service.dayStartTime ||
                          announcerPreferences?.acceptReservationsFrom || "08:00";
     const dayEndTime = bookingData.service.dayEndTime ||
                        announcerPreferences?.acceptReservationsTo || "18:00";
-
-    // For duration-based blocking, use the variant's fixed price
     const useDurationBasedPricing = bookingData.service.enableDurationBasedBlocking && bookingData.variant.duration;
-
-    // Déterminer si c'est un service de garde (prix journalier) ou un service ponctuel (prix horaire)
     const isGardeService = bookingData.service.category?.toLowerCase().includes("garde") || false;
 
-    // Pour les gardes, variant.price est le prix JOURNALIER, pas horaire
-    // Pour les services, variant.price est généralement le prix HORAIRE
     const dailyRate = pricing?.daily || (isGardeService ? bookingData.variant.price : 0);
     const hourlyRate = pricing?.hourly || (isGardeService && dailyRate ? Math.round(dailyRate / workdayHours) : bookingData.variant.price);
     const halfDailyRate = dailyRate ? Math.round(dailyRate / 2) : 0;
@@ -778,78 +284,51 @@ export default function ReservationPage({
         nightly: pricing?.nightly || bookingData.service.overnightPrice,
       },
       optionsTotal,
-      // Pass fixed price and duration for duration-based blocking
       fixedServicePrice: useDurationBasedPricing ? bookingData.variant.price : undefined,
       serviceDurationMinutes: useDurationBasedPricing ? bookingData.variant.duration : undefined,
-      // Mode de facturation client (arrondi demi-journée, journée, ou horaire exact)
       clientBillingMode: bookingData.service.clientBillingMode,
     });
   })();
 
-  // Extract values from price calculation
-  const serviceBasePrice = priceCalculation
-    ? priceCalculation.firstDayAmount + priceCalculation.fullDaysAmount + priceCalculation.lastDayAmount
-    : 0;
-  const overnightAmount = priceCalculation?.nightsAmount ?? 0;
-
-  // Calculer le montant total selon le type de formule
+  // Montant total selon le type de formule
   const totalAmount = (() => {
     if (!bookingData?.variant) return 0;
-    // Formule collective: prix × séances × animaux + options
     if (isCollectiveFormula) {
-      const basePrice = bookingData.variant.price * numberOfSessions * effectiveAnimalCount;
-      return basePrice + optionsTotal;
+      return bookingData.variant.price * numberOfSessions * effectiveAnimalCount + optionsTotal;
     }
-    // Formule multi-séances: prix × séances + options
     if (isMultiSessionFormula) {
-      const basePrice = bookingData.variant.price * numberOfSessions;
-      return basePrice + optionsTotal;
+      return bookingData.variant.price * numberOfSessions + optionsTotal;
     }
-    // Formule uni-séance: utiliser le calcul smart
     return priceCalculation?.totalAmount ?? 0;
   })();
 
   const isMultiDay = bookingData?.dates.endDate !== bookingData?.dates.startDate;
 
-  // Calculer les infos de facturation (jours/demi-journées) en utilisant les résultats de priceCalculation
-  const billingInfo = (() => {
+  // Billing info
+  const billingInfo: BillingInfo | null = (() => {
     if (!bookingData?.dates || !priceCalculation) return null;
 
     const dayStartTime = bookingData.service.dayStartTime || announcerPreferences?.acceptReservationsFrom || "08:00";
     const dayEndTime = bookingData.service.dayEndTime || announcerPreferences?.acceptReservationsTo || "18:00";
 
-    // Utiliser les valeurs déjà calculées par calculateSmartPrice (qui respecte clientBillingMode)
     const firstDayIsHalfDay = priceCalculation.firstDayIsHalfDay;
     const lastDayIsHalfDay = priceCalculation.lastDayIsHalfDay;
 
-    // Calculer le nombre de journées complètes et demi-journées
     let fullDays = 0;
     let halfDays = 0;
 
     if (daysCount === 1) {
-      // Un seul jour
       if (firstDayIsHalfDay) {
         halfDays = 1;
       } else if (priceCalculation.firstDayIsFullDay) {
         fullDays = 1;
       }
     } else if (daysCount > 1) {
-      // Multi-jours: jours intermédiaires
       fullDays = priceCalculation.fullDays;
-
-      // Premier jour
-      if (firstDayIsHalfDay) {
-        halfDays++;
-      } else if (priceCalculation.firstDayIsFullDay) {
-        fullDays++;
-      }
-
-      // Dernier jour
-      if (lastDayIsHalfDay) {
-        halfDays++;
-      } else if (priceCalculation.lastDayIsFullDay) {
-        fullDays++;
-      }
+      if (firstDayIsHalfDay) halfDays++;
+      else if (priceCalculation.firstDayIsFullDay) fullDays++;
+      if (lastDayIsHalfDay) halfDays++;
+      else if (priceCalculation.lastDayIsFullDay) fullDays++;
     }
 
     return {
@@ -863,23 +342,17 @@ export default function ReservationPage({
     };
   })();
 
-  // Calculer les frais (commission plateforme + frais de paiement)
+  // Frais
   const commissionRate = pricingConfig?.commissionRate ?? 15;
   const stripeFeeRate = pricingConfig?.stripeFeeRate ?? 3;
   const announcerStatusType = bookingData?.announcer?.statusType ?? "particulier";
-
-  // Prix HT (ce que reçoit l'annonceur)
   const baseAmountHT = totalAmount;
-  // Commission plateforme
   const platformCommission = Math.round((baseAmountHT * commissionRate) / 100);
-  // Total avant frais de paiement
   const totalBeforePaymentFees = baseAmountHT + platformCommission;
-  // Frais de gestion de paiement
   const paymentFees = Math.round((totalBeforePaymentFees * stripeFeeRate) / 100);
-  // Total final TTC
   const totalWithCommission = totalBeforePaymentFees + paymentFees;
 
-  // Toggle option selection
+  // Toggle option
   const toggleOption = (optionId: string) => {
     setSelectedOptionIds((prev) =>
       prev.includes(optionId)
@@ -888,16 +361,15 @@ export default function ReservationPage({
     );
   };
 
+  // Login
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-
     try {
       const result = await login({
         email: loginEmail,
         password: loginPassword,
       });
-
       if (result.success && result.token) {
         localStorage.setItem("auth_token", result.token);
         setToken(result.token);
@@ -911,54 +383,35 @@ export default function ReservationPage({
     }
   };
 
-  // Validation côté client
+  // Validation
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
 
     if (isLoggedIn) {
-      // Validation utilisateur connecté
       if (isCollectiveFormula) {
-        // Pour les formules collectives, au moins un animal doit être sélectionné
         if (selectedAnimalIds.length === 0) {
           errors.animal = "Veuillez selectionner au moins un animal";
         }
       } else {
-        // Pour les autres formules, un seul animal
         if (!selectedAnimalId) {
           errors.animal = "Veuillez selectionner un animal";
         }
       }
     } else {
-      // Validation invité
-      if (!guestData.firstName.trim()) {
-        errors.firstName = "Le prénom est requis";
-      }
-      if (!guestData.lastName.trim()) {
-        errors.lastName = "Le nom est requis";
-      }
+      if (!guestData.firstName.trim()) errors.firstName = "Le prénom est requis";
+      if (!guestData.lastName.trim()) errors.lastName = "Le nom est requis";
       if (!guestData.email.trim()) {
         errors.email = "L'email est requis";
       } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestData.email)) {
         errors.email = "L'email n'est pas valide";
       }
-      if (!guestData.phone.trim()) {
-        errors.phone = "Le téléphone est requis";
-      }
-      if (guestData.password.length < 6) {
-        errors.password = "Le mot de passe doit contenir au moins 6 caractères";
-      }
-      if (guestData.password !== guestData.confirmPassword) {
-        errors.confirmPassword = "Les mots de passe ne correspondent pas";
-      }
-      if (!guestAnimalData.name.trim()) {
-        errors.animalName = "Le nom de l'animal est requis";
-      }
-      if (!guestAnimalData.type) {
-        errors.animalType = "Le type d'animal est requis";
-      }
+      if (!guestData.phone.trim()) errors.phone = "Le téléphone est requis";
+      if (guestData.password.length < 6) errors.password = "Le mot de passe doit contenir au moins 6 caractères";
+      if (guestData.password !== guestData.confirmPassword) errors.confirmPassword = "Les mots de passe ne correspondent pas";
+      if (!guestAnimalData.name.trim()) errors.animalName = "Le nom de l'animal est requis";
+      if (!guestAnimalData.type) errors.animalType = "Le type d'animal est requis";
     }
 
-    // Validation adresse - seulement si prestation à domicile du client (pas pour les formules collectives)
     const needsClientAddress = bookingData?.serviceLocation === "client_home" && !isCollectiveFormula;
     if (needsClientAddress && !address.trim()) {
       errors.address = "L'adresse est requise";
@@ -968,68 +421,41 @@ export default function ReservationPage({
     return Object.keys(errors).length === 0;
   };
 
-  // Extraire le message d'erreur d'une ConvexError
   const extractErrorMessage = (err: unknown): string => {
     if (err && typeof err === "object") {
-      // ConvexError stocke le message dans data
-      if ("data" in err && typeof err.data === "string") {
-        return err.data;
-      }
-      // Erreur standard avec message
-      if ("message" in err && typeof err.message === "string") {
-        return err.message;
-      }
+      if ("data" in err && typeof err.data === "string") return err.data;
+      if ("message" in err && typeof err.message === "string") return err.message;
     }
     return "Une erreur est survenue. Veuillez réessayer.";
   };
 
-  // Ouvrir la modale de confirmation après validation
+  // Ouvrir la modale de confirmation
   const handleOpenConfirmation = () => {
     if (!bookingData) return;
-
-    // Validation côté client
     if (!validateForm()) {
       setError("Veuillez corriger les erreurs dans le formulaire");
       return;
     }
-
     setError(null);
     setFieldErrors({});
     setShowConfirmationModal(true);
   };
 
-  // Soumettre la réservation après confirmation dans la modale
+  // Soumettre la réservation
   const handleSubmit = async () => {
     if (!bookingData) return;
-
     setIsSubmitting(true);
     setError(null);
 
     try {
-      // Déterminer l'adresse à utiliser selon le lieu de prestation
-      // Pour les formules collectives ou chez l'annonceur, utiliser l'adresse de l'annonceur
       const useAnnouncerLocation = bookingData.serviceLocation === "announcer_home" || isCollectiveFormula;
-      const effectiveLocation = useAnnouncerLocation
-        ? bookingData.announcer.location
-        : address;
-      const effectiveCity = useAnnouncerLocation
-        ? null // La ville est incluse dans la localisation de l'annonceur
-        : city;
-      const effectivePostalCode = useAnnouncerLocation
-        ? null
-        : postalCode;
-      const effectiveCoordinates = useAnnouncerLocation
-        ? null
-        : coordinates;
-
-      // Déterminer l'animal à utiliser
-      // Priorité: selectedAnimalIds (formules collectives) > selectedAnimalId (formules standard)
-      const effectiveAnimalId = selectedAnimalIds.length > 0
-        ? selectedAnimalIds[0]
-        : selectedAnimalId;
+      const effectiveLocation = useAnnouncerLocation ? bookingData.announcer.location : address;
+      const effectiveCity = useAnnouncerLocation ? null : city;
+      const effectivePostalCode = useAnnouncerLocation ? null : postalCode;
+      const effectiveCoordinates = useAnnouncerLocation ? null : coordinates;
+      const effectiveAnimalId = selectedAnimalIds.length > 0 ? selectedAnimalIds[0] : selectedAnimalId;
 
       if (isLoggedIn && token) {
-        // Utilisateur connecté
         if (!effectiveAnimalId) {
           setError("Veuillez sélectionner un animal");
           setShowConfirmationModal(false);
@@ -1046,7 +472,7 @@ export default function ReservationPage({
           coordinates: effectiveCoordinates || undefined,
           notes: notes || undefined,
           updatedOptionIds: selectedOptionIds,
-          updatedAmount: totalAmount, // Prix du service (sans commission) - la commission sera calculée côté backend
+          updatedAmount: totalAmount,
         });
 
         if (result.success) {
@@ -1054,7 +480,6 @@ export default function ReservationPage({
           router.push(`/dashboard?tab=missions&success=booking`);
         }
       } else if (!isLoggedIn) {
-        // Invité
         const result = await finalizeAsGuest({
           bookingId: bookingId as Id<"pendingBookings">,
           userData: {
@@ -1084,14 +509,12 @@ export default function ReservationPage({
           coordinates: effectiveCoordinates || undefined,
           notes: notes?.trim() || undefined,
           updatedOptionIds: selectedOptionIds,
-          updatedAmount: totalAmount, // Prix du service (sans commission) - la commission sera calculée côté backend
+          updatedAmount: totalAmount,
         });
 
         if (result.success && result.token) {
           localStorage.setItem("auth_token", result.token);
           setShowConfirmationModal(false);
-
-          // Si l'email doit être vérifié, rediriger vers une page de confirmation
           if (result.requiresEmailVerification) {
             router.push(`/reservation/confirmation-email?email=${encodeURIComponent(guestData.email.trim().toLowerCase())}`);
           } else {
@@ -1104,14 +527,47 @@ export default function ReservationPage({
       const errorMessage = extractErrorMessage(err);
       setError(errorMessage);
       setShowConfirmationModal(false);
-
-      // Si l'erreur concerne l'email existant, ajouter une erreur de champ
       if (errorMessage.includes("email") || errorMessage.includes("compte existe")) {
         setFieldErrors(prev => ({ ...prev, email: errorMessage }));
       }
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Fonction retour annonceur
+  const handleBack = () => {
+    if (!bookingData) return;
+    const announcerSlug = bookingData.announcer.slug;
+    if (!announcerSlug) {
+      router.back();
+      return;
+    }
+
+    const params = new URLSearchParams();
+    if (bookingData.service?.category) params.set("service", bookingData.service.category);
+    if (bookingData.variant?.id) params.set("formule", bookingData.variant.id);
+    if (bookingData.dates?.startDate) params.set("date", bookingData.dates.startDate);
+    if (bookingData.dates?.endDate) params.set("endDate", bookingData.dates.endDate);
+    if (bookingData.dates?.startTime) params.set("startTime", bookingData.dates.startTime);
+    if (bookingData.dates?.endTime) params.set("endTime", bookingData.dates.endTime);
+    if (bookingData.serviceLocation) params.set("location", bookingData.serviceLocation);
+    if (bookingData.options && bookingData.options.length > 0) {
+      params.set("options", bookingData.options.map((o: { id: string; name: string; price: number }) => o.id).join(","));
+    }
+    if (bookingData.collectiveSlotIds && bookingData.collectiveSlotIds.length > 0) {
+      params.set("slotIds", bookingData.collectiveSlotIds.join(","));
+    }
+    if (bookingData.sessions && bookingData.sessions.length > 0) {
+      params.set("sessions", JSON.stringify(bookingData.sessions));
+    }
+    if (bookingData.animalCount) params.set("animalCount", String(bookingData.animalCount));
+    if (bookingData.selectedAnimalType) params.set("animalType", bookingData.selectedAnimalType);
+    if (bookingData.selectedAnimalIds && bookingData.selectedAnimalIds.length > 0) {
+      params.set("animalIds", bookingData.selectedAnimalIds.join(","));
+    }
+
+    router.push(`/annonceur/${announcerSlug}?${params.toString()}`);
   };
 
   // Loading state
@@ -1165,56 +621,7 @@ export default function ReservationPage({
         <div className="container max-w-5xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <button
-              onClick={() => {
-                // Retourner à la page annonceur avec tous les paramètres de réservation
-                const announcerSlug = bookingData.announcer.slug;
-                if (!announcerSlug) {
-                  // Fallback: retour simple
-                  router.back();
-                  return;
-                }
-
-                // Construire l'URL de retour vers /annonceur/[slug] avec tous les paramètres
-                const params = new URLSearchParams();
-
-                // Service et formule
-                if (bookingData.service?.category) params.set("service", bookingData.service.category);
-                if (bookingData.variant?.id) params.set("formule", bookingData.variant.id);
-
-                // Dates et heures
-                if (bookingData.dates?.startDate) params.set("date", bookingData.dates.startDate);
-                if (bookingData.dates?.endDate) params.set("endDate", bookingData.dates.endDate);
-                if (bookingData.dates?.startTime) params.set("startTime", bookingData.dates.startTime);
-                if (bookingData.dates?.endTime) params.set("endTime", bookingData.dates.endTime);
-
-                // Lieu de prestation
-                if (bookingData.serviceLocation) params.set("location", bookingData.serviceLocation);
-
-                // Options sélectionnées
-                if (bookingData.options && bookingData.options.length > 0) {
-                  params.set("options", bookingData.options.map((o: { id: string; name: string; price: number }) => o.id).join(","));
-                }
-
-                // Créneaux collectifs
-                if (bookingData.collectiveSlotIds && bookingData.collectiveSlotIds.length > 0) {
-                  params.set("slotIds", bookingData.collectiveSlotIds.join(","));
-                }
-
-                // Sessions multi-séances
-                if (bookingData.sessions && bookingData.sessions.length > 0) {
-                  params.set("sessions", JSON.stringify(bookingData.sessions));
-                }
-
-                // Animaux
-                if (bookingData.animalCount) params.set("animalCount", String(bookingData.animalCount));
-                if (bookingData.selectedAnimalType) params.set("animalType", bookingData.selectedAnimalType);
-                if (bookingData.selectedAnimalIds && bookingData.selectedAnimalIds.length > 0) {
-                  params.set("animalIds", bookingData.selectedAnimalIds.join(","));
-                }
-
-                const returnUrl = `/annonceur/${announcerSlug}?${params.toString()}`;
-                router.push(returnUrl);
-              }}
+              onClick={handleBack}
               className="flex items-center gap-2 text-text-light hover:text-foreground transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />
@@ -1232,385 +639,45 @@ export default function ReservationPage({
         <div className="grid lg:grid-cols-5 gap-6">
           {/* Colonne principale */}
           <div className="lg:col-span-3 space-y-6">
-            {/* Section Authentification (si non connecté) */}
-            {!isLoggedIn && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-2xl shadow-sm overflow-hidden"
-              >
-                <div className="bg-gradient-to-r from-primary to-primary/80 px-6 py-4">
-                  <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                    <User className="w-5 h-5" />
-                    Vos informations
-                  </h2>
-                </div>
-                <div className="p-6">
-                  {showLoginForm ? (
-                    <form onSubmit={handleLogin} className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-foreground mb-2">
-                          Email
-                        </label>
-                        <div className="relative">
-                          <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                          <input
-                            type="email"
-                            value={loginEmail}
-                            onChange={(e) => setLoginEmail(e.target.value)}
-                            className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                            placeholder="votre@email.com"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-foreground mb-2">
-                          Mot de passe
-                        </label>
-                        <div className="relative">
-                          <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                          <input
-                            type="password"
-                            value={loginPassword}
-                            onChange={(e) => setLoginPassword(e.target.value)}
-                            className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                            placeholder="••••••••"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex gap-3 pt-2">
-                        <button
-                          type="button"
-                          onClick={() => setShowLoginForm(false)}
-                          className="flex-1 py-3 border border-gray-200 text-foreground font-medium rounded-xl hover:bg-gray-50 transition-colors"
-                        >
-                          Annuler
-                        </button>
-                        <button
-                          type="submit"
-                          className="flex-1 py-3 bg-primary text-white font-medium rounded-xl hover:bg-primary/90 transition-colors"
-                        >
-                          Se connecter
-                        </button>
-                      </div>
-                    </form>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => setShowLoginForm(true)}
-                        className="w-full py-3 border-2 border-primary text-primary font-semibold rounded-xl hover:bg-primary/5 transition-colors mb-6"
-                      >
-                        J&apos;ai déjà un compte
-                      </button>
-
-                      <div className="relative mb-6">
-                        <div className="absolute inset-0 flex items-center">
-                          <div className="w-full border-t border-gray-200" />
-                        </div>
-                        <div className="relative flex justify-center">
-                          <span className="bg-white px-4 text-sm text-text-light">
-                            ou créez un compte
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-foreground mb-2">
-                              Prénom <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              value={guestData.firstName}
-                              onChange={(e) =>
-                                setGuestData({ ...guestData, firstName: e.target.value })
-                              }
-                              className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all ${
-                                fieldErrors.firstName ? "border-red-500 bg-red-50" : "border-gray-200"
-                              }`}
-                              placeholder="Jean"
-                            />
-                            {fieldErrors.firstName && (
-                              <p className="mt-1 text-sm text-red-500">{fieldErrors.firstName}</p>
-                            )}
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-foreground mb-2">
-                              Nom <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              value={guestData.lastName}
-                              onChange={(e) =>
-                                setGuestData({ ...guestData, lastName: e.target.value })
-                              }
-                              className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all ${
-                                fieldErrors.lastName ? "border-red-500 bg-red-50" : "border-gray-200"
-                              }`}
-                              placeholder="Dupont"
-                            />
-                            {fieldErrors.lastName && (
-                              <p className="mt-1 text-sm text-red-500">{fieldErrors.lastName}</p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-foreground mb-2">
-                            Email <span className="text-red-500">*</span>
-                          </label>
-                          <div className="relative">
-                            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                            <input
-                              type="email"
-                              value={guestData.email}
-                              onChange={(e) =>
-                                setGuestData({ ...guestData, email: e.target.value })
-                              }
-                              className={`w-full pl-12 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all ${
-                                fieldErrors.email ? "border-red-500 bg-red-50" : "border-gray-200"
-                              }`}
-                              placeholder="votre@email.com"
-                            />
-                          </div>
-                          {fieldErrors.email && (
-                            <p className="mt-1 text-sm text-red-500">{fieldErrors.email}</p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-foreground mb-2">
-                            Téléphone <span className="text-red-500">*</span>
-                          </label>
-                          <div className="relative">
-                            <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                            <input
-                              type="tel"
-                              value={guestData.phone}
-                              onChange={(e) =>
-                                setGuestData({ ...guestData, phone: e.target.value })
-                              }
-                              className={`w-full pl-12 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all ${
-                                fieldErrors.phone ? "border-red-500 bg-red-50" : "border-gray-200"
-                              }`}
-                              placeholder="06 12 34 56 78"
-                            />
-                          </div>
-                          {fieldErrors.phone && (
-                            <p className="mt-1 text-sm text-red-500">{fieldErrors.phone}</p>
-                          )}
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-foreground mb-2">
-                              Mot de passe <span className="text-red-500">*</span>
-                            </label>
-                            <div className="relative">
-                              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                              <input
-                                type="password"
-                                value={guestData.password}
-                                onChange={(e) =>
-                                  setGuestData({ ...guestData, password: e.target.value })
-                                }
-                                className={`w-full pl-12 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all ${
-                                  fieldErrors.password ? "border-red-500 bg-red-50" : "border-gray-200"
-                                }`}
-                                placeholder="••••••••"
-                              />
-                            </div>
-                            {fieldErrors.password && (
-                              <p className="mt-1 text-sm text-red-500">{fieldErrors.password}</p>
-                            )}
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-foreground mb-2">
-                              Confirmer <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="password"
-                              value={guestData.confirmPassword}
-                              onChange={(e) =>
-                                setGuestData({ ...guestData, confirmPassword: e.target.value })
-                              }
-                              className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all ${
-                                fieldErrors.confirmPassword ||
-                                (guestData.confirmPassword &&
-                                guestData.password !== guestData.confirmPassword)
-                                  ? "border-red-500 bg-red-50"
-                                  : "border-gray-200"
-                              }`}
-                              placeholder="••••••••"
-                            />
-                            {fieldErrors.confirmPassword && (
-                              <p className="mt-1 text-sm text-red-500">{fieldErrors.confirmPassword}</p>
-                            )}
-                          </div>
-                        </div>
-                        {guestData.password.length > 0 && guestData.password.length < 6 && !fieldErrors.password && (
-                          <p className="text-sm text-amber-600 flex items-center gap-1">
-                            <AlertCircle className="w-4 h-4" />
-                            Le mot de passe doit contenir au moins 6 caractères
-                          </p>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
-              </motion.div>
-            )}
+            {/* Section Authentification */}
+            <AuthSection
+              isLoggedIn={isLoggedIn}
+              token={token}
+              showLoginForm={showLoginForm}
+              setShowLoginForm={setShowLoginForm}
+              loginEmail={loginEmail}
+              setLoginEmail={setLoginEmail}
+              loginPassword={loginPassword}
+              setLoginPassword={setLoginPassword}
+              handleLogin={handleLogin}
+              guestData={guestData}
+              setGuestData={setGuestData}
+              fieldErrors={fieldErrors}
+            />
 
             {/* Section Animal */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="bg-white rounded-2xl shadow-sm overflow-hidden"
-            >
-              <div className="bg-gradient-to-r from-secondary to-secondary/80 px-6 py-4">
-                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                  <PawPrint className="w-5 h-5" />
-                  {isCollectiveFormula ? "Vos animaux" : "Votre animal"}
-                </h2>
-              </div>
-              <div className="p-6">
-                {isLoggedIn && token ? (
-                  <>
-                    {isCollectiveFormula && bookingData.collectiveSlots ? (
-                      <CollectiveAnimalSelector
-                        token={token}
-                        preSelectedAnimalIds={bookingData.selectedAnimalIds || []}
-                        acceptedAnimalTypes={bookingData.variant?.animalTypes || []}
-                        collectiveSlots={bookingData.collectiveSlots}
-                        maxAnimalsPerSlot={10}
-                        onSelectionChange={(ids) => {
-                          setSelectedAnimalIds(ids);
-                          // Aussi mettre à jour le premier ID pour la compatibilité
-                          setSelectedAnimalId(ids.length > 0 ? ids[0] : null);
-                        }}
-                        error={fieldErrors.animal}
-                      />
-                    ) : (
-                      <>
-                        <AnimalSelector
-                          token={token}
-                          selectedAnimalId={selectedAnimalId}
-                          onSelect={setSelectedAnimalId}
-                          compact
-                        />
-                        {fieldErrors.animal && (
-                          <p className="mt-3 text-sm text-red-500 flex items-center gap-1">
-                            <AlertCircle className="w-4 h-4" />
-                            {fieldErrors.animal}
-                          </p>
-                        )}
-                      </>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    {/* Message pour utilisateurs non connectés */}
-                    <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                      <p className="text-sm text-amber-800 flex items-start gap-2">
-                        <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                        <span>
-                          En tant que nouvel utilisateur, vous pouvez inscrire <strong>un seul animal</strong> pour cette réservation.
-                          {isCollectiveFormula && (
-                            <span className="block mt-1 text-amber-700">
-                              Pour inscrire plusieurs animaux aux séances collectives, veuillez d&apos;abord créer un compte et vous connecter.
-                            </span>
-                          )}
-                        </span>
-                      </p>
-                    </div>
-                    <GuestAnimalForm
-                      data={guestAnimalData}
-                      onChange={setGuestAnimalData}
-                      acceptedAnimalTypes={bookingData.variant?.animalTypes}
-                    />
-                    {(fieldErrors.animalName || fieldErrors.animalType) && (
-                      <p className="mt-3 text-sm text-red-500 flex items-center gap-1">
-                        <AlertCircle className="w-4 h-4" />
-                        {fieldErrors.animalName || fieldErrors.animalType}
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
-            </motion.div>
+            <AnimalSection
+              isLoggedIn={isLoggedIn}
+              token={token}
+              isCollectiveFormula={!!isCollectiveFormula}
+              selectedAnimalId={selectedAnimalId}
+              setSelectedAnimalId={setSelectedAnimalId}
+              selectedAnimalIds={selectedAnimalIds}
+              setSelectedAnimalIds={setSelectedAnimalIds}
+              preSelectedAnimalIds={bookingData.selectedAnimalIds || []}
+              acceptedAnimalTypes={bookingData.variant?.animalTypes || []}
+              collectiveSlots={bookingData.collectiveSlots}
+              guestAnimalData={guestAnimalData}
+              setGuestAnimalData={setGuestAnimalData}
+              fieldErrors={fieldErrors}
+            />
 
             {/* Section Options */}
-            {bookingData.availableOptions && bookingData.availableOptions.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15 }}
-                className="bg-white rounded-2xl shadow-sm overflow-hidden"
-              >
-                <div className="px-6 py-4 border-b border-gray-100">
-                  <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                    <Plus className="w-5 h-5 text-primary" />
-                    Options supplémentaires
-                  </h2>
-                  <p className="text-sm text-text-light mt-1">
-                    Personnalisez votre prestation avec des services additionnels
-                  </p>
-                </div>
-                <div className="p-6">
-                  <div className="space-y-3">
-                    {bookingData.availableOptions.map((option: ServiceOption) => {
-                      const isSelected = selectedOptionIds.includes(option.id);
-                      return (
-                        <div
-                          key={option.id}
-                          onClick={() => toggleOption(option.id)}
-                          className={`flex items-start gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                            isSelected
-                              ? "border-primary bg-primary/5"
-                              : "border-gray-200 hover:border-gray-300"
-                          }`}
-                        >
-                          {/* Checkbox */}
-                          <div
-                            className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
-                              isSelected
-                                ? "bg-primary text-white"
-                                : "border-2 border-gray-300"
-                            }`}
-                          >
-                            {isSelected && <Check className="w-4 h-4" />}
-                          </div>
-
-                          {/* Contenu */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2">
-                              <h4 className="font-medium text-foreground">
-                                {option.name}
-                              </h4>
-                              <span className="text-primary font-semibold whitespace-nowrap">
-                                +{formatPrice(option.price)}
-                                {option.priceUnit && (
-                                  <span className="text-xs text-text-light font-normal">
-                                    /{option.priceUnit}
-                                  </span>
-                                )}
-                              </span>
-                            </div>
-                            {option.description && (
-                              <p className="text-sm text-text-light mt-1">
-                                {option.description}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </motion.div>
-            )}
+            <OptionsSection
+              availableOptions={bookingData.availableOptions || []}
+              selectedOptionIds={selectedOptionIds}
+              toggleOption={toggleOption}
+            />
 
             {/* Section Adresse */}
             <motion.div
@@ -1677,591 +744,43 @@ export default function ReservationPage({
 
           {/* Colonne récapitulatif (sticky sur desktop) */}
           <div className="lg:col-span-2">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-white rounded-2xl shadow-sm overflow-hidden lg:sticky lg:top-24"
-            >
-              <div className="bg-gradient-to-r from-primary to-primary/80 px-6 py-4">
-                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                  <CreditCard className="w-5 h-5" />
-                  Récapitulatif
-                </h2>
-              </div>
-              <div className="p-6">
-                {/* Annonceur */}
-                <div className="flex items-center gap-4 pb-4 border-b border-gray-100">
-                  <div className="relative w-14 h-14 rounded-full overflow-hidden bg-gray-100 flex-shrink-0">
-                    {bookingData.announcer.profileImage ? (
-                      <Image
-                        src={bookingData.announcer.profileImage}
-                        alt={bookingData.announcer.firstName}
-                        fill
-                        className="object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-2xl bg-primary/10">
-                        👤
-                      </div>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-foreground flex items-center gap-1 truncate">
-                      {bookingData.announcer.firstName} {bookingData.announcer.lastName.charAt(0)}.
-                      {bookingData.announcer.verified && (
-                        <CheckCircle className="w-4 h-4 text-secondary flex-shrink-0" />
-                      )}
-                    </p>
-                    <p className="text-sm text-text-light flex items-center gap-1 truncate">
-                      <MapPin className="w-3 h-3 flex-shrink-0" />
-                      {bookingData.announcer.city && bookingData.announcer.postalCode
-                        ? `${bookingData.announcer.postalCode} ${bookingData.announcer.city}`
-                        : bookingData.announcer.city || extractCity(bookingData.announcer.location)}
-                    </p>
-                    {/* Badge statut */}
-                    <span
-                      className={`inline-flex items-center mt-1.5 px-2 py-0.5 text-xs font-medium rounded-full ${
-                        bookingData.announcer.statusType === "professionnel"
-                          ? "bg-blue-100 text-blue-700"
-                          : bookingData.announcer.statusType === "micro_entrepreneur"
-                          ? "bg-purple-100 text-purple-700"
-                          : "bg-gray-100 text-gray-700"
-                      }`}
-                    >
-                      {bookingData.announcer.statusType === "professionnel"
-                        ? "Professionnel"
-                        : bookingData.announcer.statusType === "micro_entrepreneur"
-                        ? "Micro-entrepreneur"
-                        : "Particulier"}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Service */}
-                <div className="py-4 border-b border-gray-100">
-                  <div className="flex items-start gap-3">
-                    <span className="text-2xl">{bookingData.service.categoryIcon || "✨"}</span>
-                    <div>
-                      <p className="font-semibold text-foreground">
-                        {bookingData.service.categoryName}
-                      </p>
-                      {bookingData.variant && (
-                        <p className="text-sm text-text-light">{bookingData.variant.name}</p>
-                      )}
-                      {/* Badge type de formule et lieu */}
-                      <div className="flex flex-wrap items-center gap-2 mt-1">
-                        {isCollectiveFormula && (
-                          <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full flex items-center gap-1">
-                            <Users className="w-3 h-3" />
-                            Collective
-                          </span>
-                        )}
-                        {isMultiSessionFormula && !isCollectiveFormula && (
-                          <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
-                            {numberOfSessions} séances
-                          </span>
-                        )}
-                        {bookingData.serviceLocation === "client_home" && (
-                          <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full flex items-center gap-1">
-                            <MapPin className="w-3 h-3" />
-                            À domicile
-                          </span>
-                        )}
-                        {bookingData.serviceLocation === "announcer_home" && (
-                          <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full flex items-center gap-1">
-                            <MapPin className="w-3 h-3" />
-                            Chez le prestataire
-                          </span>
-                        )}
-                      </div>
-                      {/* Adresse de prestation pour services à domicile */}
-                      {bookingData.serviceLocation === "client_home" && address && (
-                        <div className="mt-2 p-2 bg-blue-50 rounded-lg">
-                          <p className="text-sm text-blue-800 font-medium">{address}</p>
-                          {(city || bookingData.guestAddress?.postalCode) && (
-                            <p className="text-xs text-blue-600">
-                              {[bookingData.guestAddress?.postalCode, city].filter(Boolean).join(" ")}
-                            </p>
-                          )}
-                          {/* Distance entre le pet-sitter et le client */}
-                          {coordinates && bookingData.announcer.coordinates && (
-                            <p className="text-xs text-blue-500 mt-1 flex items-center gap-1">
-                              <MapPin className="w-3 h-3" />
-                              {formatDistance(
-                                calculateDistance(
-                                  bookingData.announcer.coordinates.lat,
-                                  bookingData.announcer.coordinates.lng,
-                                  coordinates.lat,
-                                  coordinates.lng
-                                )
-                              )} du pet-sitter
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Dates et horaires - adapté selon le type de formule */}
-                <div className="py-4 border-b border-gray-100">
-                  {isCollectiveFormula && bookingData.collectiveSlots && bookingData.collectiveSlots.length > 0 ? (
-                    // Formule collective: liste numérotée des créneaux
-                    <div className="p-3 bg-purple-50 rounded-xl">
-                      <div className="flex items-center gap-2 mb-2">
-                        <CalendarCheck className="w-4 h-4 text-purple-600" />
-                        <span className="text-sm font-medium text-purple-800">
-                          Créneaux sélectionnés ({bookingData.collectiveSlots.length}/{numberOfSessions})
-                        </span>
-                      </div>
-                      <div className="space-y-1.5">
-                        {bookingData.collectiveSlots.map((slot: CollectiveSlotData, index: number) => (
-                          <div
-                            key={slot._id}
-                            className="flex items-center gap-2 text-sm"
-                          >
-                            <span className="w-5 h-5 rounded-full bg-purple-200 text-purple-700 text-xs flex items-center justify-center font-semibold">
-                              {index + 1}
-                            </span>
-                            <span className="text-gray-700 capitalize">
-                              {formatShortDate(slot.date)}
-                            </span>
-                            <span className="text-gray-500">•</span>
-                            <span className="text-purple-700 font-medium">
-                              {slot.startTime} - {slot.endTime}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                      {effectiveAnimalCount > 1 && (
-                        <div className="mt-2 pt-2 border-t border-purple-200 flex items-center gap-2">
-                          <Users className="w-4 h-4 text-purple-600" />
-                          <span className="text-sm text-purple-700">
-                            {effectiveAnimalCount} animal{effectiveAnimalCount > 1 ? "aux" : ""}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  ) : isMultiSessionFormula && bookingData.sessions && bookingData.sessions.length > 0 ? (
-                    // Formule multi-séances: liste numérotée des séances
-                    <div className="p-3 bg-primary/5 rounded-xl">
-                      <div className="flex items-center gap-2 mb-2">
-                        <CalendarCheck className="w-4 h-4 text-primary" />
-                        <span className="text-sm font-medium text-foreground">
-                          Séances planifiées ({bookingData.sessions.length}/{numberOfSessions})
-                        </span>
-                      </div>
-                      <div className="space-y-1.5">
-                        {bookingData.sessions.map((session: SessionData, index: number) => (
-                          <div
-                            key={`${session.date}-${session.startTime}`}
-                            className="flex items-center gap-2 text-sm"
-                          >
-                            <span className="w-5 h-5 rounded-full bg-primary/20 text-primary text-xs flex items-center justify-center font-semibold">
-                              {index + 1}
-                            </span>
-                            <span className="text-gray-700 capitalize">
-                              {formatShortDate(session.date)}
-                            </span>
-                            <span className="text-gray-500">•</span>
-                            <span className="text-primary font-medium">
-                              {session.startTime} - {session.endTime}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    // Formule uni-séance: affichage classique
-                    <>
-                      <p className="text-xs font-medium text-text-light uppercase mb-2">Date et horaire</p>
-                      <div className="flex items-start gap-3">
-                        <Calendar className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                        <div className="text-sm text-foreground">
-                          {isMultiDay && bookingData.dates.startTime && bookingData.dates.endTime ? (
-                            // Multi-jours avec heures
-                            <span>
-                              Du {formatShortDate(bookingData.dates.startDate)} à {formatTime(bookingData.dates.startTime)} jusqu&apos;au {formatShortDate(bookingData.dates.endDate)} à {formatTime(bookingData.dates.endTime)}
-                            </span>
-                          ) : bookingData.dates.startTime && bookingData.dates.endTime ? (
-                            // Même jour avec plage horaire
-                            <span>
-                              {formatShortDate(bookingData.dates.startDate)} de {formatTime(bookingData.dates.startTime)} à {formatTime(bookingData.dates.endTime)}
-                            </span>
-                          ) : bookingData.dates.startTime ? (
-                            // Même jour avec heure de début et durée
-                            <span>
-                              {formatShortDate(bookingData.dates.startDate)} à {formatTime(bookingData.dates.startTime)}
-                              {bookingData.variant?.duration && (
-                                <span className="text-text-light">
-                                  {" → "}{formatTime(calculateEndTime(bookingData.dates.startTime, bookingData.variant.duration))}
-                                  {" "}({formatDuration(bookingData.variant.duration)})
-                                </span>
-                              )}
-                            </span>
-                          ) : isMultiDay ? (
-                            // Multi-jours sans heures
-                            <span>
-                              Du {formatShortDate(bookingData.dates.startDate)} au {formatShortDate(bookingData.dates.endDate)}
-                            </span>
-                          ) : (
-                            // Date simple
-                            <span>{formatShortDate(bookingData.dates.startDate)}</span>
-                          )}
-
-                          {/* Durée - affichage jours/demi-journées */}
-                          {priceCalculation && (daysCount >= 1 || priceCalculation.firstDayHours > 0) && (
-                            <div className="flex items-center gap-1 mt-1.5 text-xs text-text-light">
-                              <Clock className="w-3 h-3" />
-                              <span>
-                                {billingInfo && (billingInfo.fullDays > 0 || billingInfo.halfDays > 0) ? (
-                                  <>
-                                    {billingInfo.fullDays > 0 && `${billingInfo.fullDays} journée${billingInfo.fullDays > 1 ? "s" : ""}`}
-                                    {billingInfo.fullDays > 0 && billingInfo.halfDays > 0 && " + "}
-                                    {billingInfo.halfDays > 0 && `${billingInfo.halfDays} demi-journée${billingInfo.halfDays > 1 ? "s" : ""}`}
-                                    {priceCalculation.nights > 0 && ` • ${priceCalculation.nights} nuit${priceCalculation.nights > 1 ? "s" : ""}`}
-                                  </>
-                                ) : daysCount > 1 ? (
-                                  <>
-                                    {daysCount} jour{daysCount > 1 ? "s" : ""}
-                                    {priceCalculation.nights > 0 && ` • ${priceCalculation.nights} nuit${priceCalculation.nights > 1 ? "s" : ""}`}
-                                  </>
-                                ) : priceCalculation.firstDayHours > 0 ? (
-                                  `Durée : ${formatHoursDisplay(priceCalculation.firstDayHours)}`
-                                ) : null}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* Section Votre animal - pour utilisateurs invités */}
-                {!isLoggedIn && guestAnimalData.name && guestAnimalData.type && (
-                  <div className="py-4 border-b border-gray-100">
-                    <div className="flex items-center gap-2 mb-2">
-                      <PawPrint className="w-4 h-4 text-amber-600" />
-                      <span className="text-sm font-medium text-amber-800">
-                        {guestAnimalData.type === "chien" ? "Votre chien" : guestAnimalData.type === "chat" ? "Votre chat" : "Votre animal"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-amber-200 flex items-center justify-center text-amber-700 text-lg">
-                        {guestAnimalData.type === "chien" ? "🐕" : guestAnimalData.type === "chat" ? "🐱" : guestAnimalData.type === "nac" ? "🐹" : "🐾"}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-foreground">
-                          {guestAnimalData.name}
-                        </p>
-                        <p className="text-xs text-text-light">
-                          {/* Affichage de la race selon le type */}
-                          {guestAnimalData.type === "chien" ? (
-                            guestAnimalData.isMixedBreed ? (
-                              guestAnimalData.primaryBreed && guestAnimalData.secondaryBreed
-                                ? `${guestAnimalData.primaryBreed} x ${guestAnimalData.secondaryBreed}`
-                                : guestAnimalData.primaryBreed
-                                  ? `Croisé ${guestAnimalData.primaryBreed}`
-                                  : "Croisé"
-                            ) : (
-                              guestAnimalData.breed || "Race non spécifiée"
-                            )
-                          ) : (
-                            // Chat ou NAC
-                            <>
-                              {guestAnimalData.type === "chat" ? "Chat" : guestAnimalData.type === "nac" ? "NAC" : guestAnimalData.type}
-                              {guestAnimalData.breed && ` - ${guestAnimalData.breed}`}
-                            </>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Prix - Détail adapté selon le type de formule */}
-                <div className="pt-4">
-                  {/* Formule collective ou multi-séances - Prix HT */}
-                  {(isCollectiveFormula || isMultiSessionFormula) && bookingData.variant && (() => {
-                    const basePrice = isCollectiveFormula
-                      ? bookingData.variant.price * numberOfSessions * effectiveAnimalCount
-                      : bookingData.variant.price * numberOfSessions;
-
-                    return (
-                      <div className={`rounded-xl p-4 space-y-3 mb-3 ${isCollectiveFormula ? "bg-purple-50" : "bg-primary/5"}`}>
-                        {/* Ligne formule */}
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Package className={`w-4 h-4 ${isCollectiveFormula ? "text-purple-600" : "text-primary"}`} />
-                              <span className="font-medium text-foreground">
-                                Formule : {bookingData.variant.name}
-                              </span>
-                            </div>
-                            <p className="text-xs text-gray-500 ml-6">
-                              └ {formatPrice(bookingData.variant.price)} × {numberOfSessions} séance{numberOfSessions > 1 ? "s" : ""}
-                              {isCollectiveFormula && effectiveAnimalCount > 1 && ` × ${effectiveAnimalCount} animaux`}
-                            </p>
-                          </div>
-                          <span className={`font-bold text-lg ${isCollectiveFormula ? "text-purple-700" : "text-primary"}`}>
-                            {formatPrice(basePrice)}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Formule uni-séance - Prix HT avec détail jours/demi-journées */}
-                  {priceCalculation && !isCollectiveFormula && !isMultiSessionFormula && (() => {
-                    const dailyRate = priceCalculation.dailyRate;
-                    const halfDayRate = Math.round(dailyRate / 2);
-                    const dayStartDisplay = billingInfo?.dayStartTime?.replace(":", "h") || "8h00";
-                    const dayEndDisplay = billingInfo?.dayEndTime?.replace(":", "h") || "18h00";
-
-                    return (
-                    <div className="bg-gray-50 rounded-xl p-3 space-y-2 mb-3">
-                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Détail des tarifs HT</p>
-
-                      {/* Affichage avec jours/demi-journées si disponible */}
-                      {billingInfo && (billingInfo.fullDays > 0 || billingInfo.halfDays > 0) ? (
-                        <div className="space-y-1.5">
-                          {daysCount === 1 ? (
-                            // Un seul jour
-                            <div className="flex justify-between text-sm">
-                              <span className="text-text-light">
-                                └ {billingInfo.firstDayIsHalfDay ? "Demi-journée" : "Journée complète"} ({bookingData.dates.startTime ? formatTime(bookingData.dates.startTime) : dayStartDisplay} → {bookingData.dates.endTime ? formatTime(bookingData.dates.endTime) : dayEndDisplay})
-                              </span>
-                              <span className="font-medium">{formatPrice(billingInfo.firstDayIsHalfDay ? halfDayRate : dailyRate)}</span>
-                            </div>
-                          ) : (
-                            // Multi-jours
-                            <>
-                              {/* Premier jour */}
-                              <div className="flex justify-between text-sm">
-                                <span className="text-text-light">
-                                  └ 1er jour : {billingInfo.firstDayIsHalfDay ? "demi-journée" : "journée"} ({bookingData.dates.startTime ? formatTime(bookingData.dates.startTime) : dayStartDisplay} → {dayEndDisplay})
-                                </span>
-                                <span className="font-medium">{formatPrice(billingInfo.firstDayIsHalfDay ? halfDayRate : dailyRate)}</span>
-                              </div>
-
-                              {/* Jours intermédiaires */}
-                              {daysCount > 2 && (
-                                <div className="flex justify-between text-sm">
-                                  <span className="text-text-light">
-                                    └ {daysCount - 2} jour{daysCount - 2 > 1 ? "s" : ""} complet{daysCount - 2 > 1 ? "s" : ""} ({dayStartDisplay} → {dayEndDisplay})
-                                  </span>
-                                  <span className="font-medium">{formatPrice(dailyRate * (daysCount - 2))}</span>
-                                </div>
-                              )}
-
-                              {/* Dernier jour */}
-                              <div className="flex justify-between text-sm">
-                                <span className="text-text-light">
-                                  └ Dernier jour : {billingInfo.lastDayIsHalfDay ? "demi-journée" : "journée"} ({dayStartDisplay} → {bookingData.dates.endTime ? formatTime(bookingData.dates.endTime) : dayEndDisplay})
-                                </span>
-                                <span className="font-medium">{formatPrice(billingInfo.lastDayIsHalfDay ? halfDayRate : dailyRate)}</span>
-                              </div>
-                            </>
-                          )}
-
-                          {/* Ligne récap tarifs */}
-                          <div className="flex justify-between pt-1 border-t border-gray-200/50 mt-1 text-xs text-gray-500">
-                            <span>
-                              {billingInfo.fullDays > 0 && `${billingInfo.fullDays} journée${billingInfo.fullDays > 1 ? "s" : ""} × ${formatPrice(dailyRate)}`}
-                              {billingInfo.fullDays > 0 && billingInfo.halfDays > 0 && " + "}
-                              {billingInfo.halfDays > 0 && `${billingInfo.halfDays} demi-journée${billingInfo.halfDays > 1 ? "s" : ""} × ${formatPrice(halfDayRate)}`}
-                            </span>
-                          </div>
-                        </div>
-                      ) : isMultiDay ? (
-                        // Affichage standard multi-jours (fallback)
-                        <>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-text-light flex items-center gap-2">
-                              <Sun className="w-4 h-4 text-amber-500" />
-                              <span>
-                                {formatShortDate(bookingData.dates.startDate)}
-                                <span className="text-gray-400 ml-1">
-                                  ({bookingData.dates.startTime ? `${formatTime(bookingData.dates.startTime)} → ${dayEndDisplay}` : ""})
-                                </span>
-                              </span>
-                            </span>
-                            <span className="font-medium">{formatPrice(priceCalculation.firstDayAmount)}</span>
-                          </div>
-
-                          {priceCalculation.fullDays > 0 && (
-                            <div className="flex justify-between text-sm">
-                              <span className="text-text-light flex items-center gap-2">
-                                <Sun className="w-4 h-4 text-amber-500" />
-                                <span>
-                                  {priceCalculation.fullDays} jour{priceCalculation.fullDays > 1 ? "s" : ""} complet{priceCalculation.fullDays > 1 ? "s" : ""}
-                                  <span className="text-gray-400 ml-1">({formatPrice(dailyRate)}/jour)</span>
-                                </span>
-                              </span>
-                              <span className="font-medium">{formatPrice(priceCalculation.fullDaysAmount)}</span>
-                            </div>
-                          )}
-
-                          {priceCalculation.lastDayHours > 0 && (
-                            <div className="flex justify-between text-sm">
-                              <span className="text-text-light flex items-center gap-2">
-                                <Sun className="w-4 h-4 text-amber-500" />
-                                <span>
-                                  {formatShortDate(bookingData.dates.endDate)}
-                                  <span className="text-gray-400 ml-1">
-                                    ({dayStartDisplay} → {bookingData.dates.endTime ? formatTime(bookingData.dates.endTime) : ""})
-                                  </span>
-                                </span>
-                              </span>
-                              <span className="font-medium">{formatPrice(priceCalculation.lastDayAmount)}</span>
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        // Même jour (fallback)
-                        priceCalculation.firstDayHours > 0 && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-text-light flex items-center gap-2">
-                              <Clock className="w-4 h-4 text-blue-500" />
-                              <span>
-                                {bookingData.dates.startTime && bookingData.dates.endTime ? (
-                                  <>
-                                    {formatTime(bookingData.dates.startTime)} → {formatTime(bookingData.dates.endTime)}
-                                    <span className="text-gray-400 ml-1">
-                                      ({formatHoursDisplay(priceCalculation.firstDayHours)}
-                                      {priceCalculation.hourlyRate > 0 && ` · ${formatPrice(priceCalculation.hourlyRate)}/h`})
-                                    </span>
-                                  </>
-                                ) : (
-                                  <>{formatHoursDisplay(priceCalculation.firstDayHours)} de prestation</>
-                                )}
-                              </span>
-                            </span>
-                            <span className="font-medium">{formatPrice(priceCalculation.firstDayAmount)}</span>
-                          </div>
-                        )
-                      )}
-
-                      {/* Nuits - prix HT */}
-                      {bookingData.overnight?.includeOvernightStay && priceCalculation.nights > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-indigo-700 flex items-center gap-2">
-                            <Moon className="w-4 h-4" />
-                            <span>
-                              {priceCalculation.nights} nuit{priceCalculation.nights > 1 ? "s" : ""}
-                              {priceCalculation.nightlyRate > 0 && (
-                                <span className="text-indigo-400 ml-1">
-                                  ({formatPrice(priceCalculation.nightlyRate)}/nuit)
-                                </span>
-                              )}
-                            </span>
-                          </span>
-                          <span className="font-medium text-indigo-700">+{formatPrice(priceCalculation.nightsAmount)}</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                  })()}
-
-                  {/* Options - prix HT */}
-                  {selectedOptionIds.length > 0 && (
-                    <div className="space-y-2 mb-3">
-                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Options</p>
-                      {selectedOptionIds.map((optId) => {
-                        const opt = bookingData.availableOptions?.find(
-                          (o: ServiceOption) => o.id === optId
-                        );
-                        if (!opt) return null;
-                        return (
-                          <div
-                            key={optId}
-                            className="flex justify-between text-sm text-secondary"
-                          >
-                            <span className="flex items-center gap-2">
-                              <span className="w-4 h-4 flex items-center justify-center text-xs">✓</span>
-                              {opt.name}
-                            </span>
-                            <span className="font-medium">+{formatPrice(opt.price)}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Récapitulatif prix HT + Commissions + Total */}
-                  <div className="bg-gray-100 rounded-xl p-4 space-y-2">
-                    {/* Prix prestataire HT */}
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Prix prestataire HT</span>
-                      <span className="font-medium text-foreground">
-                        {formatPrice(baseAmountHT)}
-                      </span>
-                    </div>
-
-                    {/* Mention TVA pour micro-entrepreneurs */}
-                    {announcerStatusType === "micro_entrepreneur" && (
-                      <div className="text-xs text-gray-500 italic">
-                        TVA non applicable - Autoliquidation de TVA (art. 293 B du CGI)
-                      </div>
-                    )}
-
-                    {/* Commission plateforme */}
-                    <div className="flex justify-between text-sm text-gray-500">
-                      <span>Commission plateforme ({commissionRate}%)</span>
-                      <span>{formatPrice(platformCommission)}</span>
-                    </div>
-
-                    {/* Frais de gestion de paiement */}
-                    <div className="flex justify-between text-sm text-gray-500">
-                      <span>Frais de gestion paiement ({stripeFeeRate}%)</span>
-                      <span>{formatPrice(paymentFees)}</span>
-                    </div>
-
-                    {/* Ligne de séparation */}
-                    <div className="border-t-2 border-primary/20 my-2" />
-
-                    {/* Total à payer */}
-                    <div className="flex justify-between">
-                      <span className="font-bold text-lg text-foreground">Total à payer</span>
-                      <span className="font-bold text-xl text-primary">
-                        {formatPrice(totalWithCommission)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Bouton Confirmer */}
-                <button
-                  onClick={handleOpenConfirmation}
-                  disabled={isSubmitting}
-                  className="w-full mt-6 py-4 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-primary/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none transition-all flex items-center justify-center gap-2"
-                >
-                  <Sparkles className="w-5 h-5" />
-                  Confirmer la réservation
-                </button>
-
-                {/* Erreur */}
-                {error && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mt-4 bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-start gap-3"
-                  >
-                    <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5 text-red-500" />
-                    <div className="flex-1">
-                      <p className="font-medium text-sm">{error}</p>
-                      {Object.keys(fieldErrors).length > 0 && (
-                        <p className="text-xs text-red-600 mt-1">
-                          Vérifiez les champs marqués en rouge ci-dessus
-                        </p>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-
-              </div>
-            </motion.div>
+            <ReservationSummary
+              bookingData={bookingData}
+              isLoggedIn={isLoggedIn}
+              isCollectiveFormula={!!isCollectiveFormula}
+              isMultiSessionFormula={!!isMultiSessionFormula}
+              numberOfSessions={numberOfSessions}
+              effectiveAnimalCount={effectiveAnimalCount}
+              isMultiDay={isMultiDay}
+              daysCount={daysCount}
+              priceCalculation={priceCalculation}
+              billingInfo={billingInfo}
+              selectedOptionIds={selectedOptionIds}
+              address={address}
+              coordinates={coordinates}
+              city={city}
+              guestAnimalData={guestAnimalData}
+              baseAmountHT={baseAmountHT}
+              platformCommission={platformCommission}
+              commissionRate={commissionRate}
+              paymentFees={paymentFees}
+              stripeFeeRate={stripeFeeRate}
+              totalWithCommission={totalWithCommission}
+              announcerStatusType={announcerStatusType}
+              acceptedCancellationPolicy={acceptedCancellationPolicy}
+              setAcceptedCancellationPolicy={setAcceptedCancellationPolicy}
+              cancellationServiceType={cancellationServiceType}
+              totalAmount={totalAmount}
+              cancellationPolicy={cancellationPolicy ?? null}
+              clientCancellationInfo={clientCancellationInfo ? {
+                cancellationCount: clientCancellationInfo.cancellationCount,
+                secondAnnouncerPercent: clientCancellationInfo.secondAnnouncerPercent,
+              } : null}
+              isSubmitting={isSubmitting}
+              error={error}
+              fieldErrors={fieldErrors}
+              onConfirm={handleOpenConfirmation}
+            />
           </div>
         </div>
       </div>
@@ -2274,6 +793,16 @@ export default function ReservationPage({
         isSubmitting={isSubmitting}
         isGuest={!isLoggedIn}
         userEmail={isLoggedIn ? sessionData?.user?.email : guestData.email}
+        cancellationPolicy={{
+          serviceType: cancellationServiceType,
+          numberOfSessions,
+          totalPrice: totalAmount,
+          announcerPolicy: cancellationPolicy ?? null,
+          clientInfo: clientCancellationInfo ? {
+            cancellationCount: clientCancellationInfo.cancellationCount,
+            secondAnnouncerPercent: clientCancellationInfo.secondAnnouncerPercent,
+          } : null,
+        }}
       />
     </div>
   );

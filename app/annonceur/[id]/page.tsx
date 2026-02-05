@@ -1106,6 +1106,7 @@ export default function AnnouncerProfilePage() {
               animalCount={bookingSelection.animalCount}
               selectedSessions={bookingSelection.selectedSessions}
               announcerFirstName={announcer.firstName}
+              announcerId={announcerData?.id}
               // Vérification de l'animal pour les invités
               requiresAnimalVerification={requiresAnimalVerification}
               guestAnimalValid={guestAnimalValid}

@@ -25,6 +25,7 @@ import {
   UserCircle,
   PawPrint,
   Scissors,
+  Ban,
 } from "lucide-react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -32,6 +33,7 @@ import { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/app/lib/utils";
 import { useToast } from "@/app/components/ui/toast";
 import { SessionsList } from "../../components/sessions-list";
+import { CancelModal } from "./components/CancelModal";
 import { PaymentCountdown } from "../components/PaymentCountdown";
 
 const statusConfig: Record<
@@ -111,6 +113,7 @@ export default function ReservationDetailPage() {
   const token =
     typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
   const [isContacting, setIsContacting] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
   const mission = useQuery(
     api.planning.missions.getClientMissionById,
@@ -121,6 +124,10 @@ export default function ReservationDetailPage() {
 
   const getOrCreateConversation = useMutation(
     api.messaging.mutations.getOrCreateConversation
+  );
+
+  const cancelMission = useMutation(
+    api.planning.cancellation.cancelMissionByClient
   );
 
   const handleContact = async () => {
@@ -143,6 +150,23 @@ export default function ReservationDetailPage() {
       setIsContacting(false);
     }
   };
+
+  const handleCancelMission = async (reason: string) => {
+    if (!token || !missionId) return;
+    await cancelMission({
+      token,
+      missionId: missionId as Id<"missions">,
+      reason,
+    });
+  };
+
+  const canCancel = mission && (
+    ["pending_acceptance", "pending_confirmation", "upcoming"].includes(mission.status) ||
+    (mission.status === "in_progress" && (
+      (mission.sessions && mission.sessions.length > 1) ||
+      mission.sessionType === "collective"
+    ))
+  );
 
   const isPaid =
     mission &&
@@ -677,7 +701,32 @@ export default function ReservationDetailPage() {
             )}
           </button>
         )}
+        {canCancel && (
+          <button
+            onClick={() => setShowCancelModal(true)}
+            className="flex-1 py-3.5 text-center border-2 border-red-200 text-red-600 rounded-xl font-medium hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
+          >
+            <Ban className="w-5 h-5" />
+            Annuler
+          </button>
+        )}
       </motion.div>
+
+      {/* Modal d'annulation */}
+      {canCancel && token && (
+        <CancelModal
+          isOpen={showCancelModal}
+          onClose={() => setShowCancelModal(false)}
+          onConfirm={handleCancelMission}
+          missionId={missionId}
+          serviceName={mission.serviceName}
+          animalName={mission.animal?.name || "Animal"}
+          announcerName={mission.announcerName || "Annonceur"}
+          startDate={mission.startDate}
+          endDate={mission.endDate}
+          token={token}
+        />
+      )}
     </div>
   );
 }

@@ -105,6 +105,44 @@ const DEFAULT_TEMPLATES = [
     ],
     isSystem: true,
   },
+  {
+    slug: "mission_cancelled_by_client",
+    name: "Annulation par le client",
+    description: "Email envoyé à l'annonceur quand un client annule sa réservation",
+    subject: "Une réservation a été annulée - {{siteName}}",
+    availableVariables: [
+      { key: "announcerName", description: "Prénom de l'annonceur", example: "Marie" },
+      { key: "clientName", description: "Nom du client", example: "Jean D." },
+      { key: "serviceName", description: "Nom du service", example: "Garde de chien" },
+      { key: "animalName", description: "Nom de l'animal", example: "Rex" },
+      { key: "startDate", description: "Date de début", example: "15/03/2025" },
+      { key: "endDate", description: "Date de fin", example: "17/03/2025" },
+      { key: "totalAmount", description: "Montant total payé", example: "150,00 €" },
+      { key: "refundAmount", description: "Montant remboursé au client", example: "120,00 €" },
+      { key: "announcerRetained", description: "Montant conservé par l'annonceur", example: "30,00 €" },
+      { key: "cancellationReason", description: "Raison de l'annulation", example: "Changement de programme" },
+      { key: "siteName", description: "Nom du site", example: "Animigo" },
+    ],
+    isSystem: true,
+  },
+  {
+    slug: "mission_cancelled_by_client_confirmation",
+    name: "Confirmation d'annulation (client)",
+    description: "Email envoyé au client pour confirmer l'annulation de sa réservation",
+    subject: "Votre réservation a été annulée - {{siteName}}",
+    availableVariables: [
+      { key: "clientName", description: "Prénom du client", example: "Jean" },
+      { key: "serviceName", description: "Nom du service", example: "Garde de chien" },
+      { key: "animalName", description: "Nom de l'animal", example: "Rex" },
+      { key: "startDate", description: "Date de début", example: "15/03/2025" },
+      { key: "endDate", description: "Date de fin", example: "17/03/2025" },
+      { key: "totalAmount", description: "Montant total payé", example: "150,00 €" },
+      { key: "refundAmount", description: "Montant remboursé", example: "120,00 €" },
+      { key: "refundDelay", description: "Délai estimé du remboursement", example: "5-10 jours ouvrés" },
+      { key: "siteName", description: "Nom du site", example: "Animigo" },
+    ],
+    isSystem: true,
+  },
 ];
 
 // HTML par défaut pour les templates
@@ -343,6 +381,74 @@ const getDefaultHtmlContent = (slug: string): string => {
     </div>
     <div class="footer">
       <p>© 2025 {{siteName}}. Tous droits réservés.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+
+    case "mission_cancelled_by_client":
+      return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>${baseStyle}</style></head>
+<body>
+<div style="padding: 40px 20px; background-color: #f4f4f5;">
+  <div class="container">
+    <div style="background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%); padding: 40px 30px; text-align: center;">
+      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">Réservation annulée</h1>
+    </div>
+    <div class="content">
+      <h2>Bonjour {{announcerName}},</h2>
+      <p>{{clientName}} a annulé sa réservation pour "{{serviceName}}".</p>
+      <div class="info-box">
+        <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">Détails de la réservation</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Animal :</strong> {{animalName}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Montant total :</strong> {{totalAmount}}</p>
+      </div>
+      <div style="margin: 20px 0; padding: 20px; background-color: #ecfdf5; border-radius: 12px; border-left: 4px solid #10b981;">
+        <p style="margin: 0 0 10px 0; font-weight: bold; color: #065f46;">Récapitulatif financier</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Remboursement client :</strong> {{refundAmount}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Montant conservé :</strong> {{announcerRetained}}</p>
+      </div>
+      <div style="margin: 20px 0; padding: 20px; background-color: #fef3c7; border-radius: 12px; border-left: 4px solid #f59e0b;">
+        <p style="margin: 0 0 5px 0; font-weight: bold; color: #92400e;">Raison :</p>
+        <p style="margin: 0; color: #78350f;">{{cancellationReason}}</p>
+      </div>
+    </div>
+    <div class="footer">
+      <p>&copy; 2025 {{siteName}}. Tous droits réservés.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+
+    case "mission_cancelled_by_client_confirmation":
+      return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>${baseStyle}</style></head>
+<body>
+<div style="padding: 40px 20px; background-color: #f4f4f5;">
+  <div class="container">
+    <div style="background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%); padding: 40px 30px; text-align: center;">
+      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">Annulation confirmée</h1>
+    </div>
+    <div class="content">
+      <h2>Bonjour {{clientName}},</h2>
+      <p>Votre réservation pour "{{serviceName}}" a bien été annulée.</p>
+      <div class="info-box">
+        <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">Détails</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Animal :</strong> {{animalName}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Montant total :</strong> {{totalAmount}}</p>
+      </div>
+      <div style="margin: 20px 0; padding: 20px; background-color: #ecfdf5; border-radius: 12px; border-left: 4px solid #10b981;">
+        <p style="margin: 0 0 10px 0; font-weight: bold; color: #065f46;">Remboursement</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Montant remboursé :</strong> {{refundAmount}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Délai estimé :</strong> {{refundDelay}}</p>
+      </div>
+    </div>
+    <div class="footer">
+      <p>&copy; 2025 {{siteName}}. Tous droits réservés.</p>
     </div>
   </div>
 </div>

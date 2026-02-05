@@ -219,14 +219,28 @@ export default function EmailTemplatesPage() {
   return (
     <div className="p-8">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-          <Mail className="w-8 h-8 text-primary" />
-          Templates Email
-        </h1>
-        <p className="text-slate-400 mt-1">
-          Personnalisez les emails envoyés par la plateforme
-        </p>
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+            <Mail className="w-8 h-8 text-primary" />
+            Templates Email
+          </h1>
+          <p className="text-slate-400 mt-1">
+            Personnalisez les emails envoyés par la plateforme
+          </p>
+        </div>
+        <button
+          onClick={handleSeedDefaults}
+          disabled={seeding}
+          className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition-colors disabled:opacity-50 text-sm"
+        >
+          {seeding ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Sparkles className="w-4 h-4" />
+          )}
+          {seeding ? "Synchronisation..." : "Synchroniser les templates"}
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">

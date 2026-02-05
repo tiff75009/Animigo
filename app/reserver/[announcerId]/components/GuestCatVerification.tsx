@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Cat,
@@ -88,9 +88,16 @@ export default function GuestCatVerification({
   // Poids (pour croisés ou saisie manuelle)
   const [weight, setWeight] = useState<string>(initialData?.weight?.toString() ?? "");
 
-  // Synchroniser avec initialData
+  // Refs stables pour les callbacks (évite les boucles infinies de re-render)
+  const onCatDataChangeRef = useRef(onCatDataChange);
+  const onValidationChangeRef = useRef(onValidationChange);
+  useEffect(() => { onCatDataChangeRef.current = onCatDataChange; }, [onCatDataChange]);
+  useEffect(() => { onValidationChangeRef.current = onValidationChange; }, [onValidationChange]);
+
+  // Synchroniser avec initialData uniquement au montage
+  const isFirstMount = useRef(true);
   useEffect(() => {
-    if (initialData) {
+    if (isFirstMount.current && initialData) {
       setIsMixedBreed(initialData.isMixedBreed);
       setIsManualEntry(!!initialData.manualBreedEntry);
       setBreedSearch(initialData.breed || "");
@@ -112,7 +119,9 @@ export default function GuestCatVerification({
         setSelectedSecondaryBreed(breed || null);
       }
     }
-  }, [initialData]);
+    isFirstMount.current = false;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Filtrer les races pour l'autocomplete
   const filteredBreeds = useMemo(() => {
@@ -182,8 +191,8 @@ export default function GuestCatVerification({
     }
 
     if (!hasBreedInfo || !catSize) {
-      onCatDataChange(null);
-      onValidationChange(false);
+      onCatDataChangeRef.current(null);
+      onValidationChangeRef.current(false);
       return;
     }
 
@@ -205,8 +214,8 @@ export default function GuestCatVerification({
       manualBreedEntry: isManualEntry ? manualBreedEntry : undefined,
     };
 
-    onCatDataChange(catData);
-    onValidationChange(true);
+    onCatDataChangeRef.current(catData);
+    onValidationChangeRef.current(true);
   }, [
     isManualEntry,
     isMixedBreed,
@@ -219,8 +228,6 @@ export default function GuestCatVerification({
     manualBreedEntry,
     weight,
     catSize,
-    onCatDataChange,
-    onValidationChange,
   ]);
 
   // Sélectionner une race

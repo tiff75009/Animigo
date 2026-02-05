@@ -35,6 +35,7 @@ import {
   Banknote,
   Calendar,
   Zap,
+  Ban,
 } from "lucide-react";
 import { Id, Doc } from "@/convex/_generated/dataModel";
 import { uploadToCloudinary } from "@/app/lib/cloudinary";
@@ -120,6 +121,13 @@ export default function ParametresPage() {
   const [payoutPerMissionFeePercent, setPayoutPerMissionFeePercent] = useState(2);
   const [missionConfirmationHours, setMissionConfirmationHours] = useState(48);
 
+  // États pour la politique d'annulation
+  const [cancellationGracePeriodHours, setCancellationGracePeriodHours] = useState(24);
+  const [cancellationThresholdHours, setCancellationThresholdHours] = useState(48);
+  const [cancellation2ndAnnouncerPercent, setCancellation2ndAnnouncerPercent] = useState(50);
+  const [cancellation3rdAnnouncerPercent, setCancellation3rdAnnouncerPercent] = useState(100);
+  const [cancellationCounterPeriodMonths, setCancellationCounterPeriodMonths] = useState(12);
+
   // Query pour récupérer toutes les configs
   const allConfigs = useQuery(
     api.admin.config.getAllConfigs,
@@ -168,6 +176,12 @@ export default function ParametresPage() {
     token ? { token } : "skip"
   );
 
+  // Query pour la politique d'annulation
+  const cancellationSettings = useQuery(
+    api.admin.config.getCancellationSettings,
+    token ? { token } : "skip"
+  );
+
   // Mutations
   const toggleModeration = useMutation(api.admin.config.toggleServiceModeration);
   const updateConfig = useMutation(api.admin.config.updateConfig);
@@ -182,6 +196,7 @@ export default function ParametresPage() {
   const updateDeadlineSettings = useMutation(api.admin.config.updateAcceptanceDeadlineSettings);
   const updatePaymentDeadlineSettings = useMutation(api.admin.config.updatePaymentDeadlineSettings);
   const updatePayoutSettings = useMutation(api.admin.config.updatePayoutSettings);
+  const updateCancellationSettings = useMutation(api.admin.config.updateCancellationSettings);
 
   // Charger les configs existantes
   useEffect(() => {
@@ -275,6 +290,17 @@ export default function ParametresPage() {
       setMissionConfirmationHours(payoutSettings.confirmationHours);
     }
   }, [payoutSettings]);
+
+  // Charger les paramètres d'annulation
+  useEffect(() => {
+    if (cancellationSettings) {
+      setCancellationGracePeriodHours(cancellationSettings.gracePeriodHours);
+      setCancellationThresholdHours(cancellationSettings.thresholdHours);
+      setCancellation2ndAnnouncerPercent(cancellationSettings.secondCancellationAnnouncerPercent);
+      setCancellation3rdAnnouncerPercent(cancellationSettings.thirdCancellationAnnouncerPercent);
+      setCancellationCounterPeriodMonths(cancellationSettings.counterPeriodMonths);
+    }
+  }, [cancellationSettings]);
 
   const handleToggleModeration = async () => {
     if (!token) return;
@@ -541,6 +567,16 @@ export default function ParametresPage() {
         monthlyFeePercent: payoutMonthlyFeePercent,
         perMissionFeePercent: payoutPerMissionFeePercent,
         confirmationHours: missionConfirmationHours,
+      });
+
+      // 7. Sauvegarder les paramètres d'annulation
+      await updateCancellationSettings({
+        token,
+        gracePeriodHours: cancellationGracePeriodHours,
+        thresholdHours: cancellationThresholdHours,
+        secondCancellationAnnouncerPercent: cancellation2ndAnnouncerPercent,
+        thirdCancellationAnnouncerPercent: cancellation3rdAnnouncerPercent,
+        counterPeriodMonths: cancellationCounterPeriodMonths,
       });
 
       setSaveSuccess(true);
@@ -1880,6 +1916,138 @@ export default function ParametresPage() {
                     </>
                   )}
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Politique d'annulation client */}
+      <motion.div
+        className="mt-8 bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl overflow-hidden"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.55 }}
+      >
+        <div className="px-6 py-4 border-b border-slate-700 flex items-center gap-3">
+          <Ban className="w-5 h-5 text-red-400" />
+          <h2 className="text-lg font-semibold text-white">Politique d&apos;annulation client</h2>
+        </div>
+        <div className="p-6 space-y-6">
+          {/* Délai de grâce post-paiement */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-slate-300">
+                Délai de grâce post-paiement
+              </label>
+              <span className="text-sm font-mono text-blue-400">{cancellationGracePeriodHours}h</span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={72}
+              value={cancellationGracePeriodHours}
+              onChange={(e) => setCancellationGracePeriodHours(Number(e.target.value))}
+              className="w-full accent-blue-500"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Remboursement 100% si annulation dans les {cancellationGracePeriodHours}h suivant le paiement
+            </p>
+          </div>
+
+          {/* Seuil avant début mission */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-slate-300">
+                Seuil avant début de mission
+              </label>
+              <span className="text-sm font-mono text-blue-400">{cancellationThresholdHours}h</span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={168}
+              value={cancellationThresholdHours}
+              onChange={(e) => setCancellationThresholdHours(Number(e.target.value))}
+              className="w-full accent-blue-500"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Au-delà de {cancellationThresholdHours}h avant le début : remboursement total moins commission
+            </p>
+          </div>
+
+          {/* % annonceur 2ème annulation */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-slate-300">
+                Part annonceur - 2ème annulation
+              </label>
+              <span className="text-sm font-mono text-orange-400">{cancellation2ndAnnouncerPercent}%</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={cancellation2ndAnnouncerPercent}
+              onChange={(e) => setCancellation2ndAnnouncerPercent(Number(e.target.value))}
+              className="w-full accent-orange-500"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              L&apos;annonceur conserve {cancellation2ndAnnouncerPercent}% de ses gains lors de la 2ème annulation (&lt;{cancellationThresholdHours}h)
+            </p>
+          </div>
+
+          {/* % annonceur 3ème+ annulation */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-slate-300">
+                Part annonceur - 3ème+ annulation
+              </label>
+              <span className="text-sm font-mono text-red-400">{cancellation3rdAnnouncerPercent}%</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={cancellation3rdAnnouncerPercent}
+              onChange={(e) => setCancellation3rdAnnouncerPercent(Number(e.target.value))}
+              className="w-full accent-red-500"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              L&apos;annonceur conserve {cancellation3rdAnnouncerPercent}% de ses gains à partir de la 3ème annulation
+            </p>
+          </div>
+
+          {/* Période compteur */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-slate-300">
+                Période du compteur d&apos;annulations
+              </label>
+              <span className="text-sm font-mono text-purple-400">{cancellationCounterPeriodMonths} mois</span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={24}
+              value={cancellationCounterPeriodMonths}
+              onChange={(e) => setCancellationCounterPeriodMonths(Number(e.target.value))}
+              className="w-full accent-purple-500"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Le compteur d&apos;annulations est calculé sur {cancellationCounterPeriodMonths} mois glissants
+            </p>
+          </div>
+
+          {/* Info box exemple */}
+          <div className="bg-slate-700/50 rounded-xl p-4 border border-slate-600">
+            <div className="flex items-start gap-3">
+              <Info className="w-5 h-5 text-blue-400 mt-0.5 shrink-0" />
+              <div className="text-sm text-slate-300 space-y-1">
+                <p className="font-medium text-white">Exemple de calcul :</p>
+                <p>1ère annulation &lt;{cancellationThresholdHours}h : remboursement total moins commission plateforme</p>
+                <p>2ème annulation &lt;{cancellationThresholdHours}h : l&apos;annonceur conserve {cancellation2ndAnnouncerPercent}% de ses gains</p>
+                <p>3ème+ annulation &lt;{cancellationThresholdHours}h : l&apos;annonceur conserve {cancellation3rdAnnouncerPercent}% de ses gains</p>
               </div>
             </div>
           </div>

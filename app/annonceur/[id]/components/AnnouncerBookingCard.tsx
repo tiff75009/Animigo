@@ -51,6 +51,7 @@ interface AnnouncerBookingCardProps {
   // Props pour formules individuelles multi-séances
   selectedSessions?: SelectedSession[];
   announcerFirstName?: string; // Prénom de l'annonceur pour "Chez [prénom]"
+  announcerId?: string; // ID de l'annonceur pour la politique d'annulation
   // Vérification de l'animal pour les invités
   requiresAnimalVerification?: boolean;
   guestAnimalValid?: boolean;
@@ -98,6 +99,7 @@ export default function AnnouncerBookingCard({
   animalCount = 1,
   selectedSessions = [],
   announcerFirstName,
+  announcerId,
   requiresAnimalVerification = false,
   guestAnimalValid = false,
   guestAnimalError,
@@ -140,6 +142,8 @@ export default function AnnouncerBookingCard({
           animalCount={animalCount}
           selectedSessions={selectedSessions}
           announcerFirstName={announcerFirstName}
+          announcerId={announcerId}
+          isGarde={isRangeMode}
           requiresAnimalVerification={requiresAnimalVerification}
           guestAnimalValid={guestAnimalValid}
           guestAnimalError={guestAnimalError}
