@@ -255,6 +255,79 @@ export async function notifyReviewReceived(params: {
   });
 }
 
+/**
+ * Notifier l'annonceur que le client a validé la fin de mission
+ */
+export async function notifyMissionValidatedByClient(params: {
+  announcerId: Id<"users">;
+  clientName: string;
+  serviceName: string;
+  missionId: Id<"missions">;
+}) {
+  await queueNotification({
+    userId: params.announcerId as string,
+    type: "mission_completed",
+    title: "Service validé !",
+    message: `${params.clientName} a validé la fin du service "${params.serviceName}"`,
+    linkType: "mission",
+    linkId: params.missionId as string,
+    linkUrl: `/dashboard/missions`,
+  });
+}
+
+/**
+ * Notifier de l'auto-validation (annonceur + client)
+ */
+export async function notifyMissionAutoValidated(params: {
+  announcerId: Id<"users">;
+  clientId: Id<"users">;
+  serviceName: string;
+  missionId: Id<"missions">;
+}) {
+  // Notification annonceur
+  await queueNotification({
+    userId: params.announcerId as string,
+    type: "mission_completed",
+    title: "Service auto-validé",
+    message: `Le service "${params.serviceName}" a été auto-validé après 48h`,
+    linkType: "mission",
+    linkId: params.missionId as string,
+    linkUrl: `/dashboard/missions`,
+  });
+
+  // Notification client
+  await queueNotification({
+    userId: params.clientId as string,
+    type: "mission_completed",
+    title: "Service terminé",
+    message: `Le service "${params.serviceName}" est considéré comme terminé. Vous pouvez laisser un avis.`,
+    linkType: "mission",
+    linkId: params.missionId as string,
+    linkUrl: `/client/reservations/${params.missionId}`,
+  });
+}
+
+/**
+ * Notifier l'annonceur d'une réclamation ouverte
+ */
+export async function notifyDisputeOpened(params: {
+  announcerId: Id<"users">;
+  clientName: string;
+  serviceName: string;
+  reason: string;
+  missionId: Id<"missions">;
+}) {
+  await queueNotification({
+    userId: params.announcerId as string,
+    type: "system",
+    title: "Réclamation ouverte",
+    message: `${params.clientName} a ouvert une réclamation pour "${params.serviceName}" : ${params.reason}`,
+    linkType: "mission",
+    linkId: params.missionId as string,
+    linkUrl: `/dashboard/missions`,
+  });
+}
+
 // ============================================
 // MESSAGES
 // ============================================
@@ -318,6 +391,57 @@ export async function notifyReminder(params: {
     title: params.title,
     message: params.message,
     linkUrl: params.linkUrl,
+  });
+}
+
+/**
+ * Notifier un annonceur particulier d'une alerte de régularité
+ */
+export async function notifyRegularityAlert(params: {
+  userId: Id<"users">;
+  alertLevel: string;
+  score: number;
+  monthlyMissions: number;
+  annualRevenue: number;
+  consecutiveActiveMonths: number;
+  uniqueClients: number;
+}) {
+  const levelMessages: Record<string, { title: string; message: string }> = {
+    ok: {
+      title: "Statut professionnel activé !",
+      message: "Félicitations, votre compte est désormais professionnel. Vous pouvez continuer votre activité sereinement.",
+    },
+    attention: {
+      title: "Activité en hausse",
+      message: `Votre activité approche des seuils professionnels (score ${params.score}/4). Pensez à créer votre auto-entreprise.`,
+    },
+    warning: {
+      title: "⚠️ Seuils professionnels atteints",
+      message: `Votre activité dépasse les seuils légaux (score ${params.score}/4). Nous vous recommandons fortement de devenir auto-entrepreneur.`,
+    },
+    critical: {
+      title: "⚠️ Action requise - Statut professionnel",
+      message: `Votre activité nécessite un statut professionnel (score ${params.score}/4). Vous disposez de 30 jours pour régulariser votre situation.`,
+    },
+  };
+
+  const info = levelMessages[params.alertLevel] || levelMessages.attention;
+
+  await queueNotification({
+    userId: params.userId as string,
+    type: "system",
+    title: info.title,
+    message: info.message,
+    linkUrl: "/dashboard/devenir-pro",
+    metadata: {
+      regularityAlert: true,
+      alertLevel: params.alertLevel,
+      score: params.score,
+      monthlyMissions: params.monthlyMissions,
+      annualRevenue: params.annualRevenue,
+      consecutiveActiveMonths: params.consecutiveActiveMonths,
+      uniqueClients: params.uniqueClients,
+    },
   });
 }
 

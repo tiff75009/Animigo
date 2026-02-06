@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import {
   Star,
-  MessageSquare,
   Filter,
   ChevronDown,
   Send,
@@ -16,9 +15,13 @@ import {
   X,
   Reply,
   Edit3,
+  ThumbsUp,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
-import { mockReviews, type Review, mockUserProfile } from "@/app/lib/dashboard-data";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
 
 // Star Rating Component
 function StarRating({ rating, size = "md" }: { rating: number; size?: "sm" | "md" | "lg" }) {
@@ -64,18 +67,37 @@ function RatingBar({ rating, count, total }: { rating: number; count: number; to
   );
 }
 
+// Type pour les avis enrichis
+type EnrichedReview = {
+  _id: string;
+  missionId: string;
+  qualityRating: number;
+  communicationRating: number;
+  wouldRecommend: boolean;
+  overallRating: number;
+  comment?: string;
+  reply?: string;
+  repliedAt?: number;
+  createdAt: number;
+  clientName: string;
+  clientImage: string | null;
+  missionType: string;
+  animalName: string;
+  animalEmoji: string;
+};
+
 // Review Card Component
 function ReviewCard({
   review,
   onReply,
   onEditReply,
 }: {
-  review: Review;
+  review: EnrichedReview;
   onReply: (reviewId: string) => void;
   onEditReply: (reviewId: string) => void;
 }) {
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("fr-FR", {
+  const formatDate = (timestamp: number) => {
+    return new Date(timestamp).toLocaleDateString("fr-FR", {
       day: "numeric",
       month: "long",
       year: "numeric",
@@ -90,56 +112,71 @@ function ReviewCard({
     >
       {/* Header */}
       <div className="flex items-start gap-4 mb-4">
-        <div className="relative w-14 h-14 rounded-xl overflow-hidden flex-shrink-0">
-          <Image
-            src={review.clientImage}
-            alt={review.clientName}
-            fill
-            className="object-cover"
-          />
+        <div className="relative w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 bg-gray-100">
+          {review.clientImage ? (
+            <Image
+              src={review.clientImage}
+              alt={review.clientName}
+              fill
+              className="object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-2xl">
+              {review.animalEmoji}
+            </div>
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div>
               <h3 className="font-semibold text-foreground">{review.clientName}</h3>
               <p className="text-sm text-text-light flex items-center gap-2">
-                <span>{review.animal.emoji}</span>
-                {review.animal.name} • {review.missionType}
+                <span>{review.animalEmoji}</span>
+                {review.animalName} • {review.missionType}
               </p>
             </div>
             <div className="text-right flex-shrink-0">
-              <StarRating rating={review.rating} />
+              <StarRating rating={Math.round(review.overallRating)} />
               <p className="text-xs text-text-light mt-1">
-                {formatDate(review.date)}
+                {formatDate(review.createdAt)}
               </p>
             </div>
           </div>
         </div>
       </div>
 
+      {/* Détails notes */}
+      <div className="flex items-center gap-4 mb-3 text-xs text-text-light">
+        <span>Qualité: {review.qualityRating}/5</span>
+        <span>Communication: {review.communicationRating}/5</span>
+        <span className="flex items-center gap-1">
+          <ThumbsUp className={cn("w-3 h-3", review.wouldRecommend ? "text-green-500" : "text-gray-300")} />
+          {review.wouldRecommend ? "Recommande" : "Ne recommande pas"}
+        </span>
+      </div>
+
       {/* Comment */}
-      <p className="text-foreground mb-4 leading-relaxed">
-        &ldquo;{review.comment}&rdquo;
-      </p>
+      {review.comment && (
+        <p className="text-foreground mb-4 leading-relaxed">
+          &ldquo;{review.comment}&rdquo;
+        </p>
+      )}
 
       {/* Reply Section */}
       {review.reply ? (
         <div className="bg-primary/5 rounded-xl p-4 border-l-4 border-primary">
           <div className="flex items-center justify-between mb-2">
+            <span className="font-semibold text-foreground text-sm">
+              Votre réponse
+            </span>
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
-                <span className="text-sm">{mockUserProfile.avatar}</span>
-              </div>
-              <span className="font-semibold text-foreground text-sm">
-                Votre réponse
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-text-light">
-                {formatDate(review.reply.date)}
-              </span>
+              {review.repliedAt && (
+                <span className="text-xs text-text-light">
+                  {formatDate(review.repliedAt)}
+                </span>
+              )}
               <motion.button
-                onClick={() => onEditReply(review.id)}
+                onClick={() => onEditReply(review._id)}
                 className="p-1 hover:bg-primary/10 rounded-lg text-primary"
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
@@ -148,11 +185,11 @@ function ReviewCard({
               </motion.button>
             </div>
           </div>
-          <p className="text-sm text-foreground">{review.reply.content}</p>
+          <p className="text-sm text-foreground">{review.reply}</p>
         </div>
       ) : (
         <motion.button
-          onClick={() => onReply(review.id)}
+          onClick={() => onReply(review._id)}
           className="flex items-center gap-2 text-primary font-medium hover:bg-primary/10 px-4 py-2 rounded-xl transition-colors"
           whileHover={{ x: 4 }}
         >
@@ -174,22 +211,20 @@ function ReplyModal({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  review: Review | null;
+  review: EnrichedReview | null;
   existingReply?: string;
   onSubmit: (reviewId: string, content: string) => void;
 }) {
   const [replyContent, setReplyContent] = useState(existingReply || "");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (review && replyContent.trim()) {
       setIsSubmitting(true);
-      setTimeout(() => {
-        onSubmit(review.id, replyContent);
-        setIsSubmitting(false);
-        setReplyContent("");
-        onClose();
-      }, 1000);
+      await onSubmit(review._id, replyContent);
+      setIsSubmitting(false);
+      setReplyContent("");
+      onClose();
     }
   };
 
@@ -227,20 +262,28 @@ function ReplyModal({
           {/* Original Review */}
           <div className="bg-gray-50 rounded-xl p-4 mb-6">
             <div className="flex items-center gap-3 mb-3">
-              <div className="relative w-10 h-10 rounded-lg overflow-hidden">
-                <Image
-                  src={review.clientImage}
-                  alt={review.clientName}
-                  fill
-                  className="object-cover"
-                />
+              <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-gray-100">
+                {review.clientImage ? (
+                  <Image
+                    src={review.clientImage}
+                    alt={review.clientName}
+                    fill
+                    className="object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-lg">
+                    {review.animalEmoji}
+                  </div>
+                )}
               </div>
               <div>
                 <p className="font-semibold text-foreground">{review.clientName}</p>
-                <StarRating rating={review.rating} size="sm" />
+                <StarRating rating={Math.round(review.overallRating)} size="sm" />
               </div>
             </div>
-            <p className="text-sm text-text-light">&ldquo;{review.comment}&rdquo;</p>
+            {review.comment && (
+              <p className="text-sm text-text-light">&ldquo;{review.comment}&rdquo;</p>
+            )}
           </div>
 
           {/* Reply Input */}
@@ -250,7 +293,7 @@ function ReplyModal({
             </label>
             <textarea
               value={replyContent}
-              onChange={(e) => setReplyContent(e.target.value)}
+              onChange={(e) => setReplyContent(e.target.value.slice(0, 500))}
               placeholder="Écrivez votre réponse..."
               className="w-full px-4 py-3 bg-gray-100 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground min-h-[120px]"
             />
@@ -291,7 +334,7 @@ function ReplyModal({
             >
               {isSubmitting ? (
                 <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <Loader2 className="w-5 h-5 animate-spin" />
                   Envoi...
                 </>
               ) : (
@@ -313,35 +356,40 @@ export default function AvisPage() {
   const [filterStatus, setFilterStatus] = useState<"all" | "replied" | "pending">("all");
   const [showFilters, setShowFilters] = useState(false);
   const [replyModalOpen, setReplyModalOpen] = useState(false);
-  const [selectedReview, setSelectedReview] = useState<Review | null>(null);
+  const [selectedReview, setSelectedReview] = useState<EnrichedReview | null>(null);
   const [editingReply, setEditingReply] = useState(false);
 
-  // Calculate stats
-  const stats = useMemo(() => {
-    const total = mockReviews.length;
-    const avgRating = mockReviews.reduce((sum, r) => sum + r.rating, 0) / total;
-    const distribution = [5, 4, 3, 2, 1].map((rating) => ({
-      rating,
-      count: mockReviews.filter((r) => r.rating === rating).length,
-    }));
-    const replied = mockReviews.filter((r) => r.reply).length;
-    const pending = total - replied;
+  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
 
-    return { total, avgRating, distribution, replied, pending };
-  }, []);
+  const data = useQuery(
+    api.planning.reviews.getAnnouncerReviews,
+    token ? { sessionToken: token } : "skip"
+  );
+
+  const replyToReview = useMutation(api.planning.reviews.replyToReview);
+
+  const reviews = (data?.reviews || []) as EnrichedReview[];
+  const stats = data?.stats || {
+    total: 0,
+    avgRating: 0,
+    distribution: [5, 4, 3, 2, 1].map((r) => ({ rating: r, count: 0 })),
+    replied: 0,
+    pending: 0,
+    recommendRate: 0,
+  };
 
   // Filter reviews
   const filteredReviews = useMemo(() => {
-    return mockReviews.filter((review) => {
-      if (filterRating && review.rating !== filterRating) return false;
+    return reviews.filter((review) => {
+      if (filterRating && Math.round(review.overallRating) !== filterRating) return false;
       if (filterStatus === "replied" && !review.reply) return false;
       if (filterStatus === "pending" && review.reply) return false;
       return true;
     });
-  }, [filterRating, filterStatus]);
+  }, [reviews, filterRating, filterStatus]);
 
   const handleReply = (reviewId: string) => {
-    const review = mockReviews.find((r) => r.id === reviewId);
+    const review = reviews.find((r) => r._id === reviewId);
     if (review) {
       setSelectedReview(review);
       setEditingReply(false);
@@ -350,7 +398,7 @@ export default function AvisPage() {
   };
 
   const handleEditReply = (reviewId: string) => {
-    const review = mockReviews.find((r) => r.id === reviewId);
+    const review = reviews.find((r) => r._id === reviewId);
     if (review) {
       setSelectedReview(review);
       setEditingReply(true);
@@ -358,15 +406,31 @@ export default function AvisPage() {
     }
   };
 
-  const handleSubmitReply = (reviewId: string, content: string) => {
-    console.log("Reply submitted:", { reviewId, content });
-    // In a real app, this would update the backend
+  const handleSubmitReply = async (reviewId: string, content: string) => {
+    if (!token) return;
+    try {
+      await replyToReview({
+        sessionToken: token,
+        reviewId: reviewId as Id<"reviews">,
+        reply: content,
+      });
+    } catch (error) {
+      console.error("Erreur réponse avis:", error);
+    }
   };
 
   const clearFilters = () => {
     setFilterRating(null);
     setFilterStatus("all");
   };
+
+  if (!data) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -412,7 +476,7 @@ export default function AvisPage() {
         <div className="bg-white rounded-2xl p-6 shadow-lg md:col-span-2">
           <h3 className="font-semibold text-foreground mb-4">Répartition des notes</h3>
           <div className="space-y-2">
-            {stats.distribution.map(({ rating, count }) => (
+            {stats.distribution.map(({ rating, count }: { rating: number; count: number }) => (
               <RatingBar
                 key={rating}
                 rating={rating}
@@ -441,11 +505,9 @@ export default function AvisPage() {
         <div className="bg-white rounded-xl p-4 shadow-md">
           <div className="flex items-center gap-2 mb-2">
             <Award className="w-4 h-4 text-accent" />
-            <span className="text-sm text-text-light">5 étoiles</span>
+            <span className="text-sm text-text-light">Recommandation</span>
           </div>
-          <p className="text-2xl font-bold text-foreground">
-            {stats.distribution.find((d) => d.rating === 5)?.count || 0}
-          </p>
+          <p className="text-2xl font-bold text-foreground">{stats.recommendRate}%</p>
         </div>
         <div className="bg-white rounded-xl p-4 shadow-md">
           <div className="flex items-center gap-2 mb-2">
@@ -562,26 +624,30 @@ export default function AvisPage() {
       >
         {filteredReviews.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-md p-12 text-center">
-            <div className="text-5xl mb-4">🔍</div>
+            <div className="text-5xl mb-4">{stats.total === 0 ? "⭐" : "🔍"}</div>
             <h3 className="text-xl font-semibold text-foreground mb-2">
-              Aucun avis trouvé
+              {stats.total === 0 ? "Pas encore d'avis" : "Aucun avis trouvé"}
             </h3>
             <p className="text-text-light mb-4">
-              Modifiez vos filtres pour voir plus d&apos;avis.
+              {stats.total === 0
+                ? "Vos clients pourront laisser un avis après chaque service."
+                : "Modifiez vos filtres pour voir plus d'avis."}
             </p>
-            <motion.button
-              onClick={clearFilters}
-              className="px-4 py-2 bg-primary text-white rounded-xl font-medium"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              Voir tous les avis
-            </motion.button>
+            {stats.total > 0 && (
+              <motion.button
+                onClick={clearFilters}
+                className="px-4 py-2 bg-primary text-white rounded-xl font-medium"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                Voir tous les avis
+              </motion.button>
+            )}
           </div>
         ) : (
           filteredReviews.map((review, index) => (
             <motion.div
-              key={review.id}
+              key={review._id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.05 * index }}
@@ -604,7 +670,7 @@ export default function AvisPage() {
           setSelectedReview(null);
         }}
         review={selectedReview}
-        existingReply={editingReply ? selectedReview?.reply?.content : undefined}
+        existingReply={editingReply ? selectedReview?.reply : undefined}
         onSubmit={handleSubmitReply}
       />
     </div>

@@ -410,25 +410,25 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                   </div>
                 </>
               ) : (
-                /* Non connecté: Devenir PetService + Devenir PetParent + Connexion */
+                /* Non connecté: PetService + PetParent + Connexion */
                 <>
                   <Link
                     href="/pro"
-                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+                    className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-gradient-to-r from-secondary to-secondary/80 rounded-full shadow-sm shadow-secondary/20 hover:shadow-md hover:shadow-secondary/30 transition-all"
                   >
-                    <Briefcase className="w-4 h-4" />
-                    <span>Devenir PetService</span>
+                    <span>🐾</span>
+                    <span>PetService</span>
                   </Link>
                   <Link
                     href="/inscription?type=utilisateur"
-                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                    className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-primary border border-primary/25 rounded-full hover:bg-primary/5 transition-colors"
                   >
-                    <UserPlus className="w-4 h-4" />
-                    <span>Devenir PetParent</span>
+                    <PawPrint className="w-3.5 h-3.5" />
+                    <span>PetParent</span>
                   </Link>
                   <Link
                     href="/connexion"
-                    className="p-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+                    className="p-2 rounded-full text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
                   >
                     <User className="w-5 h-5" />
                   </Link>

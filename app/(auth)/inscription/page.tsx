@@ -9,7 +9,7 @@ import Link from "next/link";
 import { useToast } from "@/app/components/ui/toast";
 import { parseError } from "@/app/lib/errors";
 
-import { ShieldCheck, Eye, CalendarCheck, Zap } from "lucide-react";
+import { ShieldCheck, Eye, CalendarCheck, Zap, ArrowLeft, Search, Star, Lock, MessageCircle, Wallet, Calendar } from "lucide-react";
 import { StepIndicator } from "./components/step-indicator";
 import { AccountTypeStep } from "./components/account-type-step";
 import { CredentialsStep } from "./components/credentials-step";
@@ -17,12 +17,32 @@ import { PersonalInfoStep } from "./components/personal-info-step";
 import { ProInfoStep } from "./components/pro-info-step";
 import { CguStep } from "./components/cgu-step";
 
-const mobileAdvantages = [
-  { icon: ShieldCheck, label: "Paiement garanti" },
-  { icon: Eye, label: "Visibilité" },
-  { icon: CalendarCheck, label: "Gestion simple" },
-  { icon: Zap, label: "Sans engagement" },
-];
+const mobileAdvantagesByType: Record<string, { icon: React.ComponentType<{ className?: string }>; label: string }[]> = {
+  annonceur_pro: [
+    { icon: ShieldCheck, label: "Paiement garanti" },
+    { icon: Eye, label: "Visibilité" },
+    { icon: CalendarCheck, label: "Gestion simple" },
+    { icon: Zap, label: "Facturation auto" },
+  ],
+  annonceur_particulier: [
+    { icon: Wallet, label: "Revenus extra" },
+    { icon: Calendar, label: "Planning flexible" },
+    { icon: MessageCircle, label: "Messagerie" },
+    { icon: ShieldCheck, label: "Paiement sécurisé" },
+  ],
+  utilisateur: [
+    { icon: Search, label: "Pros vérifiés" },
+    { icon: Star, label: "Avis certifiés" },
+    { icon: Lock, label: "Paiement protégé" },
+    { icon: MessageCircle, label: "Messagerie directe" },
+  ],
+  default: [
+    { icon: ShieldCheck, label: "100% sécurisé" },
+    { icon: Star, label: "Avis certifiés" },
+    { icon: Zap, label: "Gratuit" },
+    { icon: CalendarCheck, label: "Sans engagement" },
+  ],
+};
 
 export type AccountType =
   | "annonceur_pro"
@@ -68,6 +88,7 @@ export default function InscriptionPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   // Pré-sélection du type via query param (?type=annonceur_pro)
+  const hasTypeParam = searchParams.get("type") !== null;
   useEffect(() => {
     const typeParam = searchParams.get("type") as AccountType | null;
     if (typeParam && ["annonceur_pro", "annonceur_particulier", "utilisateur"].includes(typeParam)) {
@@ -94,9 +115,12 @@ export default function InscriptionPage() {
   };
 
   const prevStep = () => {
-    if (step > 1) {
-      setStep((s) => s - 1);
+    // Étape 1 ou étape 2 avec type pré-sélectionné via URL → retour accueil
+    if (step <= 1 || (step === 2 && hasTypeParam)) {
+      router.push("/");
+      return;
     }
+    setStep((s) => s - 1);
   };
 
   const handleSubmit = async () => {
@@ -178,6 +202,7 @@ export default function InscriptionPage() {
             selectedType={data.accountType}
             onSelect={(type) => updateData({ accountType: type })}
             onNext={nextStep}
+            onBack={prevStep}
           />
         );
       case 2:
@@ -258,19 +283,28 @@ export default function InscriptionPage() {
   return (
     <div>
       {/* Header mobile */}
-      <div className="lg:hidden text-center mb-6">
-        <Link href="/" className="inline-flex items-center gap-2 mb-4">
-          <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center">
-            <span className="text-xl">🐾</span>
-          </div>
-          <span className="text-2xl font-extrabold">
-            Anim<span className="text-primary">igo</span>
-          </span>
-        </Link>
+      <div className="lg:hidden mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <Link
+            href="/"
+            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Accueil</span>
+          </Link>
+          <Link href="/" className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center">
+              <span className="text-base">🐾</span>
+            </div>
+            <span className="text-lg font-extrabold">
+              Anim<span className="text-primary">igo</span>
+            </span>
+          </Link>
+        </div>
 
-        {/* Bandeau avantages mobile */}
-        <div className="flex justify-center gap-3 mt-3">
-          {mobileAdvantages.map((adv) => (
+        {/* Bandeau avantages mobile - adapté au type de compte */}
+        <div className="flex justify-center gap-3">
+          {(mobileAdvantagesByType[data.accountType || "default"]).map((adv) => (
             <div
               key={adv.label}
               className="flex items-center gap-1 text-xs text-text-light"

@@ -689,6 +689,11 @@ export default defineSchema({
     // Prêt pour versement à l'annonceur
     readyForPayout: v.optional(v.boolean()),              // true quand confirmé (manuel ou auto)
     payoutScheduledFor: v.optional(v.string()),           // "2025-02-25" si mode scheduled
+
+    // Avis et réclamations
+    hasReview: v.optional(v.boolean()),
+    hasDispute: v.optional(v.boolean()),
+    disputeId: v.optional(v.id("disputes")),
   })
     .index("by_announcer", ["announcerId"])
     .index("by_client", ["clientId"])
@@ -1779,6 +1784,110 @@ export default defineSchema({
   })
     .index("by_ticket", ["ticketId"])
     .index("by_ticket_created", ["ticketId", "createdAt"]),
+
+  // Scores de régularité (détection activité pro pour annonceurs particuliers)
+  regularityScores: defineTable({
+    userId: v.id("users"),
+    // Métriques calculées
+    monthlyMissions: v.number(),
+    annualRevenue: v.number(),        // en centimes
+    consecutiveActiveMonths: v.number(),
+    uniqueClients: v.number(),
+    // Score et alerte
+    score: v.number(),                // 0-4
+    alertLevel: v.union(v.literal("ok"), v.literal("attention"), v.literal("warning"), v.literal("critical")),
+    // Blocage progressif
+    isBlocked: v.boolean(),
+    criticalSince: v.optional(v.number()),
+    graceDeadline: v.optional(v.number()),
+    // Suivi des notifications (anti-spam)
+    lastNotifiedLevel: v.optional(v.string()),
+    lastNotifiedAt: v.optional(v.number()),
+    lastEmailSentLevel: v.optional(v.string()),
+    lastEmailSentAt: v.optional(v.number()),
+    // Bannière
+    bannerDismissedAt: v.optional(v.number()),
+    bannerDismissedForLevel: v.optional(v.string()),
+    // Timestamps
+    lastCalculatedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_alert_level", ["alertLevel"])
+    .index("by_blocked", ["isBlocked"]),
+
+  // Avis clients sur les annonceurs
+  reviews: defineTable({
+    missionId: v.id("missions"),
+    announcerId: v.id("users"),
+    clientId: v.id("users"),
+    // 3 critères
+    qualityRating: v.number(),        // Qualité du service (1-5)
+    communicationRating: v.number(),  // Communication (1-5)
+    wouldRecommend: v.boolean(),      // Recommanderait oui/non
+    // Note globale calculée (moyenne quality + communication)
+    overallRating: v.number(),
+    comment: v.optional(v.string()),
+    // Réponse annonceur
+    reply: v.optional(v.string()),
+    repliedAt: v.optional(v.number()),
+    // Modération
+    isVisible: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_mission", ["missionId"])
+    .index("by_announcer", ["announcerId"])
+    .index("by_client", ["clientId"])
+    .index("by_announcer_visible", ["announcerId", "isVisible"]),
+
+  // Motifs de réclamation (configurable par admin)
+  disputeReasons: defineTable({
+    label: v.string(),
+    slug: v.string(),
+    description: v.optional(v.string()),
+    blocksPayment: v.boolean(),
+    isActive: v.boolean(),
+    sortOrder: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_active", ["isActive"]),
+
+  // Réclamations clients
+  disputes: defineTable({
+    missionId: v.id("missions"),
+    clientId: v.id("users"),
+    announcerId: v.id("users"),
+    reasonId: v.id("disputeReasons"),
+    reasonLabel: v.string(),
+    description: v.string(),
+    // Statut
+    status: v.union(
+      v.literal("open"),
+      v.literal("investigating"),
+      v.literal("resolved_client"),
+      v.literal("resolved_announcer"),
+      v.literal("closed")
+    ),
+    // Blocage paiement
+    paymentBlocked: v.boolean(),
+    // Résolution
+    assignedAdminId: v.optional(v.id("users")),
+    adminNotes: v.optional(v.string()),
+    resolution: v.optional(v.string()),
+    resolvedAt: v.optional(v.number()),
+    // Timestamps
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_mission", ["missionId"])
+    .index("by_client", ["clientId"])
+    .index("by_announcer", ["announcerId"])
+    .index("by_status", ["status"])
+    .index("by_assigned_admin", ["assignedAdminId"]),
 
   // Politiques d'annulation annonceurs
   cancellationPolicies: defineTable({

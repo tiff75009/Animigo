@@ -15,6 +15,7 @@ import {
   Search,
   Star,
   Lock,
+  ArrowLeft,
 } from "lucide-react";
 import type { AccountType } from "../page";
 
@@ -22,6 +23,7 @@ interface AccountTypeStepProps {
   selectedType: AccountType | null;
   onSelect: (type: AccountType) => void;
   onNext: () => void;
+  onBack: () => void;
 }
 
 const accountTypes = [
@@ -88,6 +90,7 @@ export function AccountTypeStep({
   selectedType,
   onSelect,
   onNext,
+  onBack,
 }: AccountTypeStepProps) {
   return (
     <div className="space-y-6">
@@ -167,14 +170,25 @@ export function AccountTypeStep({
         })}
       </div>
 
-      <Button
-        onClick={onNext}
-        disabled={!selectedType}
-        className="w-full mt-6"
-        size="lg"
-      >
-        Continuer
-      </Button>
+      <div className="flex gap-3 mt-6">
+        <Button
+          onClick={onBack}
+          variant="outline"
+          size="lg"
+          className="flex items-center gap-1.5"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Retour
+        </Button>
+        <Button
+          onClick={onNext}
+          disabled={!selectedType}
+          className="flex-1"
+          size="lg"
+        >
+          Continuer
+        </Button>
+      </div>
     </div>
   );
 }

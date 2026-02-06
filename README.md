@@ -120,6 +120,17 @@ bun run build
     - Seuil de confiance configurable (50%-100%)
     - Tracabilite du seuil utilise pour chaque decision
 
+- **Reclamations** (`/admin/reclamations`)
+  - Liste des reclamations avec filtres par statut
+  - Vue detail complete avec infos mission, client, annonceur, motif
+  - Actions : prendre en charge, resoudre (client/annonceur), fermer
+  - Indicateur de blocage paiement
+  - Notes admin avec historique
+
+- **Motifs de reclamation** (`/admin/reclamations/motifs`)
+  - CRUD motifs avec toggle actif/inactif et bloque paiement
+  - Reordonnement et initialisation par defaut
+
 - **Categories de services** (`/admin/services/categories`)
   - **Structure hierarchique** : Categories parentes et sous-categories (2 niveaux max)
   - CRUD complet avec formulaire modulaire
@@ -423,6 +434,9 @@ convex/
 - `missions` - Reservations de services
 - `availability` - Disponibilites des annonceurs
 - `cancellationPolicies` - Politiques d'annulation par annonceur (mode remboursement, commission)
+- `reviews` - Avis clients (3 criteres, commentaire, reponse annonceur)
+- `disputes` - Reclamations clients (statut, blocage paiement, resolution admin)
+- `disputeReasons` - Motifs de reclamation configurables par admin
 - `userPreferences` - Preferences utilisateur (notifications, facturation)
 - `stripePayments` - Paiements Stripe (sessions, pre-autorisations, captures)
 - `passwordResetTokens` - Tokens de reinitialisation de mot de passe
@@ -494,6 +508,64 @@ Utilisation de Framer Motion avec des variants predefinies :
 ---
 
 ## Changelog recent
+
+### v0.24.0 - Confirmation Mission, Notation et Reclamations
+
+- **Confirmation de fin de service par le client**
+  - Bandeau de confirmation sur la page detail reservation quand mission terminee
+  - Bouton "Confirmer la fin du service" declenche la validation
+  - Auto-confirmation apres 48h via cron existant (avec notifications)
+  - Verification des reclamations avant declenchement du paiement annonceur
+
+- **Systeme de notation (reviews)**
+  - Nouvelle table `reviews` avec 3 criteres : qualite, communication, recommandation
+  - Modal de notation apres confirmation (etoiles 1-5 + commentaire optionnel)
+  - Page avis annonceur (`/dashboard/avis`) connectee aux vraies donnees Convex
+  - Stats : moyenne, distribution, taux de recommandation, avis en attente de reponse
+  - Reponse annonceur aux avis (mutation `replyToReview`)
+
+- **Systeme de reclamations (disputes)**
+  - Nouvelle table `disputes` avec statuts : open, investigating, resolved_client, resolved_announcer, closed
+  - Nouvelle table `disputeReasons` configurable par admin (7 motifs par defaut)
+  - Modal de reclamation cote client avec motifs predéfinis et blocage paiement optionnel
+  - Si motif bloque le paiement : versement annonceur suspendu automatiquement
+  - Deblocage du paiement quand reclamation resolue en faveur de l'annonceur
+
+- **Panel admin reclamations** (`/admin/reclamations`)
+  - Liste avec filtres par statut et stats (ouvertes, investigation, resolues, paiement bloque)
+  - Vue detail complete : mission, client, annonceur, motif, avis, notes admin
+  - Actions : prendre en charge, resoudre (client/annonceur), fermer
+  - Indicateur visuel du blocage paiement + deblocage automatique
+  - Notes admin avec historique horodate
+
+- **Gestion des motifs de reclamation** (`/admin/reclamations/motifs`)
+  - CRUD complet des motifs avec toggle actif/inactif
+  - Toggle bloque paiement par motif (avec warning visuel)
+  - Reordonnement par fleches haut/bas
+  - Bouton "Initialiser par defaut" pour seed des 7 motifs
+
+- **Sidebar admin mise a jour**
+  - Lien "Reclamations" dans la section Moderation
+  - Badge compteur des reclamations ouvertes
+
+- **4 nouveaux templates email**
+  - `mission_validated_by_client` : notification annonceur validation manuelle
+  - `mission_auto_validated_announcer` : notification annonceur auto-validation 48h
+  - `mission_auto_validated_client` : notification client auto-validation 48h
+  - `dispute_opened` : notification annonceur reclamation ouverte
+
+- **3 nouvelles notifications in-app**
+  - `notifyMissionValidatedByClient` : annonceur
+  - `notifyMissionAutoValidated` : annonceur + client
+  - `notifyDisputeOpened` : annonceur
+
+- **Backend Convex**
+  - `convex/planning/reviews.ts` : submitReview, getReviewByMission, getAnnouncerReviews, replyToReview
+  - `convex/planning/disputes.ts` : getDisputeReasons, submitDispute, getDisputeByMission
+  - `convex/admin/disputes.ts` : getAllDisputes, getDisputeDetail, updateDisputeStatus, addAdminNote, getOpenDisputesCount
+  - `convex/admin/disputeReasons.ts` : getAll, create, update, reorder, seedDefaults
+  - `convex/planning/payouts.ts` : integration verification dispute dans confirmMissionEnd et autoConfirmMissions
+  - `convex/schema.ts` : 3 nouvelles tables + 3 champs sur missions
 
 ### v0.23.0 - Page Pro, Inscription Utilisateur et Connexion Sociale
 

@@ -18,6 +18,7 @@ import {
   CreditCard,
   PawPrint,
   BadgeCheck,
+  ArrowLeft,
 } from "lucide-react";
 import { AuthRedirect } from "@/app/components/auth-redirect";
 
@@ -361,7 +362,14 @@ export default function AuthLayout({
       </div>
 
       {/* Panneau droit - Formulaire */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12 relative">
+        <Link
+          href="/"
+          className="hidden lg:flex absolute top-6 left-6 items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Retour à l&apos;accueil</span>
+        </Link>
         <div className="w-full max-w-md">{children}</div>
       </div>
     </div>

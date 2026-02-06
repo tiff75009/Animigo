@@ -437,6 +437,20 @@ export const acceptMission = mutation({
       throw new ConvexError("Cette mission ne peut pas être acceptée");
     }
 
+    // Vérifier le blocage de régularité pour les annonceurs particuliers
+    const announcerForCheck = await ctx.db.get(session.userId);
+    if (announcerForCheck?.accountType === "annonceur_particulier") {
+      const regularityScore = await ctx.db
+        .query("regularityScores")
+        .withIndex("by_user", (q) => q.eq("userId", session.userId))
+        .first();
+      if (regularityScore?.isBlocked) {
+        throw new ConvexError(
+          "Votre activité nécessite un statut professionnel. Veuillez devenir auto-entrepreneur pour continuer à accepter des missions."
+        );
+      }
+    }
+
     // Récupérer les infos du client
     const client = await ctx.db.get(mission.clientId);
     if (!client) {

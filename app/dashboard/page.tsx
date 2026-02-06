@@ -23,6 +23,7 @@ import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/app/hooks/useAuth";
 import { useConversations } from "@/app/hooks/useMessaging";
+import RegularityBanner from "./components/RegularityBanner";
 
 interface ActiveMission {
   id: Id<"missions">;
@@ -39,6 +40,12 @@ export default function DashboardPage() {
   // Stats du dashboard depuis Convex
   const dashboardStats = useQuery(
     api.planning.missions.getAnnouncerDashboardStats,
+    token ? { token } : "skip"
+  );
+
+  // Score de régularité (annonceurs particuliers)
+  const regularityScore = useQuery(
+    api.planning.regularity.getMyRegularityScore,
     token ? { token } : "skip"
   );
 
@@ -69,6 +76,11 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* Bannière de régularité (annonceurs particuliers) */}
+      {regularityScore && token && (
+        <RegularityBanner data={regularityScore} token={token} />
+      )}
+
       {/* Header avec message de bienvenue */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}

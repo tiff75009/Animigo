@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
-import { Mail, Lock, Eye, EyeOff, ShieldCheck, Star, CreditCard } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ShieldCheck, Star, CreditCard, ArrowLeft } from "lucide-react";
 import { useConvexAction } from "@/app/hooks/useConvexAction";
 import { useToast } from "@/app/components/ui/toast";
 
@@ -105,15 +105,24 @@ export default function ConnexionPage() {
   return (
     <div>
       {/* Header mobile */}
-      <div className="lg:hidden text-center mb-8">
-        <Link href="/" className="inline-flex items-center gap-2 mb-4">
-          <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center">
-            <span className="text-xl">🐾</span>
-          </div>
-          <span className="text-2xl font-extrabold">
-            Anim<span className="text-primary">igo</span>
-          </span>
-        </Link>
+      <div className="lg:hidden mb-8">
+        <div className="flex items-center justify-between">
+          <Link
+            href="/"
+            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Accueil</span>
+          </Link>
+          <Link href="/" className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center">
+              <span className="text-base">🐾</span>
+            </div>
+            <span className="text-lg font-extrabold">
+              Anim<span className="text-primary">igo</span>
+            </span>
+          </Link>
+        </div>
       </div>
 
       {/* Titre */}

@@ -4,6 +4,7 @@ import { internalAction } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { ConvexError } from "convex/values";
+import { notifyMissionValidatedByClient, notifyMissionAutoValidated } from "../lib/notificationTemplates";
 
 /**
  * Gestion des versements aux annonceurs
@@ -95,16 +96,32 @@ export const confirmMissionEnd = mutation({
       payoutScheduledFor = payoutDate.toISOString().split("T")[0];
     }
 
-    // Marquer la mission comme confirmée et prête pour versement
+    // Vérifier s'il y a une dispute ouverte avec blocage paiement
+    const dispute = mission.hasDispute && mission.disputeId
+      ? await ctx.db.get(mission.disputeId)
+      : null;
+    const isPaymentBlocked = dispute?.paymentBlocked && (dispute.status === "open" || dispute.status === "investigating");
+
+    // Marquer la mission comme confirmée et prête pour versement (sauf si bloqué)
     await ctx.db.patch(args.missionId, {
       clientConfirmedAt: now,
-      readyForPayout: true,
-      payoutScheduledFor,
+      readyForPayout: !isPaymentBlocked,
+      payoutScheduledFor: isPaymentBlocked ? undefined : payoutScheduledFor,
       updatedAt: now,
     });
 
-    // Si mode instantané, déclencher le versement immédiat
-    if (payoutMode === "instant" && announcer.stripeAccountId) {
+    // Notification annonceur
+    const client = await ctx.db.get(session.userId);
+    const clientName = client ? `${client.firstName} ${client.lastName.charAt(0)}.` : "Un client";
+    await notifyMissionValidatedByClient({
+      announcerId: mission.announcerId,
+      clientName,
+      serviceName: mission.serviceName,
+      missionId: args.missionId,
+    });
+
+    // Si mode instantané et pas de blocage, déclencher le versement immédiat
+    if (payoutMode === "instant" && announcer.stripeAccountId && !isPaymentBlocked) {
       // Récupérer la clé Stripe
       const stripeSecretKeyConfig = await ctx.db
         .query("systemConfig")
@@ -203,16 +220,30 @@ export const autoConfirmMissions = internalMutation({
           payoutScheduledFor = payoutDate.toISOString().split("T")[0];
         }
 
+        // Vérifier s'il y a une dispute ouverte avec blocage paiement
+        const dispute = mission.hasDispute && mission.disputeId
+          ? await ctx.db.get(mission.disputeId)
+          : null;
+        const isPaymentBlocked = dispute?.paymentBlocked && (dispute.status === "open" || dispute.status === "investigating");
+
         // Marquer comme auto-confirmé
         await ctx.db.patch(mission._id, {
           autoConfirmedAt: now,
-          readyForPayout: true,
-          payoutScheduledFor,
+          readyForPayout: !isPaymentBlocked,
+          payoutScheduledFor: isPaymentBlocked ? undefined : payoutScheduledFor,
           updatedAt: now,
         });
 
-        // Si mode instant, planifier le versement
-        if (payoutMode === "instant" && announcer?.stripeAccountId) {
+        // Notifications auto-validation
+        await notifyMissionAutoValidated({
+          announcerId: mission.announcerId,
+          clientId: mission.clientId,
+          serviceName: mission.serviceName,
+          missionId: mission._id,
+        });
+
+        // Si mode instant et pas de blocage, planifier le versement
+        if (payoutMode === "instant" && announcer?.stripeAccountId && !isPaymentBlocked) {
           const stripeSecretKeyConfig = await ctx.db
             .query("systemConfig")
             .withIndex("by_key", (q) => q.eq("key", "stripe_secret_key"))

@@ -34,6 +34,7 @@ import {
   ListChecks,
   Ticket,
   HelpCircle,
+  AlertTriangle,
 } from "lucide-react";
 
 interface NavItem {
@@ -68,6 +69,12 @@ export function AdminSidebar() {
   const pendingVerifications = useQuery(
     api.verification.verification.countPendingVerifications,
     token ? { sessionToken: token } : "skip"
+  );
+
+  // Récupérer les réclamations ouvertes
+  const openDisputes = useQuery(
+    api.admin.disputes.getOpenDisputesCount,
+    token ? { token } : "skip"
   );
 
   const navSections: NavSection[] = [
@@ -105,6 +112,12 @@ export function AdminSidebar() {
           label: "Réservations",
           href: "/admin/reservations",
           icon: CalendarCheck,
+        },
+        {
+          label: "Réclamations",
+          href: "/admin/reclamations",
+          icon: AlertTriangle,
+          badge: openDisputes || 0,
         },
       ],
     },

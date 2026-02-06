@@ -106,6 +106,66 @@ const DEFAULT_TEMPLATES = [
     isSystem: true,
   },
   {
+    slug: "mission_validated_by_client",
+    name: "Service validé par le client",
+    description: "Email envoyé à l'annonceur quand le client valide la fin du service",
+    subject: "Le client a validé votre service - {{siteName}}",
+    availableVariables: [
+      { key: "announcerName", description: "Prénom de l'annonceur", example: "Marie" },
+      { key: "clientName", description: "Nom du client", example: "Jean D." },
+      { key: "serviceName", description: "Nom du service", example: "Garde de chien" },
+      { key: "animalName", description: "Nom de l'animal", example: "Rex" },
+      { key: "startDate", description: "Date de début", example: "15/03/2025" },
+      { key: "endDate", description: "Date de fin", example: "17/03/2025" },
+      { key: "siteName", description: "Nom du site", example: "Animigo" },
+    ],
+    isSystem: true,
+  },
+  {
+    slug: "mission_auto_validated_announcer",
+    name: "Auto-validation (annonceur)",
+    description: "Email envoyé à l'annonceur lors de l'auto-validation 48h",
+    subject: "Service considéré comme terminé - {{siteName}}",
+    availableVariables: [
+      { key: "announcerName", description: "Prénom de l'annonceur", example: "Marie" },
+      { key: "clientName", description: "Nom du client", example: "Jean D." },
+      { key: "serviceName", description: "Nom du service", example: "Garde de chien" },
+      { key: "startDate", description: "Date de début", example: "15/03/2025" },
+      { key: "siteName", description: "Nom du site", example: "Animigo" },
+      { key: "dashboardUrl", description: "Lien vers le dashboard", example: "https://..." },
+    ],
+    isSystem: true,
+  },
+  {
+    slug: "mission_auto_validated_client",
+    name: "Auto-validation (client)",
+    description: "Email envoyé au client lors de l'auto-validation 48h",
+    subject: "Votre service est considéré comme terminé - {{siteName}}",
+    availableVariables: [
+      { key: "clientName", description: "Prénom du client", example: "Jean" },
+      { key: "announcerName", description: "Nom de l'annonceur", example: "Marie D." },
+      { key: "serviceName", description: "Nom du service", example: "Garde de chien" },
+      { key: "startDate", description: "Date de début", example: "15/03/2025" },
+      { key: "siteName", description: "Nom du site", example: "Animigo" },
+      { key: "reviewUrl", description: "Lien pour laisser un avis", example: "https://..." },
+    ],
+    isSystem: true,
+  },
+  {
+    slug: "dispute_opened",
+    name: "Réclamation ouverte",
+    description: "Email envoyé à l'annonceur quand un client ouvre une réclamation",
+    subject: "Une réclamation a été ouverte - {{siteName}}",
+    availableVariables: [
+      { key: "announcerName", description: "Prénom de l'annonceur", example: "Marie" },
+      { key: "clientName", description: "Nom du client", example: "Jean D." },
+      { key: "serviceName", description: "Nom du service", example: "Garde de chien" },
+      { key: "reason", description: "Motif de la réclamation", example: "Service non réalisé" },
+      { key: "siteName", description: "Nom du site", example: "Animigo" },
+    ],
+    isSystem: true,
+  },
+  {
     slug: "mission_cancelled_by_client",
     name: "Annulation par le client",
     description: "Email envoyé à l'annonceur quand un client annule sa réservation",
@@ -381,6 +441,108 @@ const getDefaultHtmlContent = (slug: string): string => {
     </div>
     <div class="footer">
       <p>© 2025 {{siteName}}. Tous droits réservés.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+
+    case "mission_validated_by_client":
+      return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>${baseStyle} .header { background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%); }</style></head>
+<body>
+<div style="padding: 40px 20px; background-color: #f4f4f5;">
+  <div class="container">
+    <div class="header">
+      <h1>✅ Service validé !</h1>
+    </div>
+    <div class="content">
+      <h2>Bonjour {{announcerName}},</h2>
+      <p>{{clientName}} a validé la fin de votre service "{{serviceName}}" pour {{animalName}}.</p>
+      <div class="info-box">
+        <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">Détails</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
+      </div>
+      <p>Le versement sera effectué selon votre mode de paiement configuré.</p>
+    </div>
+    <div class="footer">
+      <p>&copy; 2025 {{siteName}}. Tous droits réservés.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+
+    case "mission_auto_validated_announcer":
+      return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>${baseStyle}</style></head>
+<body>
+<div style="padding: 40px 20px; background-color: #f4f4f5;">
+  <div class="container">
+    <div class="header">
+      <h1>⏰ Auto-validation</h1>
+      <p>Service considéré comme terminé</p>
+    </div>
+    <div class="content">
+      <h2>Bonjour {{announcerName}},</h2>
+      <p>Le délai de validation de 48h étant écoulé, le service "{{serviceName}}" avec {{clientName}} du {{startDate}} est considéré comme terminé et validé automatiquement.</p>
+      <p>Le versement sera effectué selon votre mode de paiement configuré.</p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="{{dashboardUrl}}" class="btn">Voir mon dashboard</a>
+      </div>
+    </div>
+    <div class="footer">
+      <p>&copy; 2025 {{siteName}}. Tous droits réservés.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+
+    case "mission_auto_validated_client":
+      return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>${baseStyle}</style></head>
+<body>
+<div style="padding: 40px 20px; background-color: #f4f4f5;">
+  <div class="container">
+    <div class="header">
+      <h1>⏰ Service terminé</h1>
+    </div>
+    <div class="content">
+      <h2>Bonjour {{clientName}},</h2>
+      <p>Le délai de validation de 48h étant écoulé, le service "{{serviceName}}" avec {{announcerName}} du {{startDate}} est considéré comme terminé.</p>
+      <p>Vous pouvez encore laisser un avis sur votre expérience :</p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="{{reviewUrl}}" class="btn">Laisser un avis</a>
+      </div>
+    </div>
+    <div class="footer">
+      <p>&copy; 2025 {{siteName}}. Tous droits réservés.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+
+    case "dispute_opened":
+      return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>${baseStyle}</style></head>
+<body>
+<div style="padding: 40px 20px; background-color: #f4f4f5;">
+  <div class="container">
+    <div style="background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%); padding: 40px 30px; text-align: center;">
+      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">Réclamation ouverte</h1>
+    </div>
+    <div class="content">
+      <h2>Bonjour {{announcerName}},</h2>
+      <p>{{clientName}} a ouvert une réclamation concernant le service "{{serviceName}}".</p>
+      <div class="warning-box">
+        <p style="margin: 0; font-weight: bold; color: #92400e;">Motif : {{reason}}</p>
+      </div>
+      <p>Notre équipe va examiner cette réclamation. Vous serez informé(e) de l'avancement.</p>
+    </div>
+    <div class="footer">
+      <p>&copy; 2025 {{siteName}}. Tous droits réservés.</p>
     </div>
   </div>
 </div>

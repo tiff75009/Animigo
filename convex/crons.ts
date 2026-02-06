@@ -82,4 +82,15 @@ crons.monthly(
   internal.planning.payouts.processScheduledPayouts
 );
 
+/**
+ * Calcul hebdomadaire des scores de régularité
+ * Exécuté chaque lundi à 6h UTC pour détecter les annonceurs
+ * particuliers dont l'activité atteint les seuils professionnels
+ */
+crons.weekly(
+  "compute-regularity-scores",
+  { dayOfWeek: "monday", hourUTC: 6, minuteUTC: 0 },
+  internal.planning.regularity.computeAllScores
+);
+
 export default crons;

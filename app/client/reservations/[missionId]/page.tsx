@@ -26,6 +26,8 @@ import {
   PawPrint,
   Scissors,
   Ban,
+  Star,
+  AlertTriangle,
 } from "lucide-react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -34,6 +36,8 @@ import { cn } from "@/app/lib/utils";
 import { useToast } from "@/app/components/ui/toast";
 import { SessionsList } from "../../components/sessions-list";
 import { CancelModal } from "./components/CancelModal";
+import { ReviewModal } from "./components/ReviewModal";
+import { DisputeModal } from "./components/DisputeModal";
 import { PaymentCountdown } from "../components/PaymentCountdown";
 
 const statusConfig: Record<
@@ -114,6 +118,9 @@ export default function ReservationDetailPage() {
     typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
   const [isContacting, setIsContacting] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [showDisputeModal, setShowDisputeModal] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
 
   const mission = useQuery(
     api.planning.missions.getClientMissionById,
@@ -128,6 +135,24 @@ export default function ReservationDetailPage() {
 
   const cancelMission = useMutation(
     api.planning.cancellation.cancelMissionByClient
+  );
+
+  const confirmMissionEnd = useMutation(
+    api.planning.payouts.confirmMissionEnd
+  );
+
+  const review = useQuery(
+    api.planning.reviews.getReviewByMission,
+    token && missionId
+      ? { sessionToken: token, missionId: missionId as Id<"missions"> }
+      : "skip"
+  );
+
+  const dispute = useQuery(
+    api.planning.disputes.getDisputeByMission,
+    token && missionId
+      ? { sessionToken: token, missionId: missionId as Id<"missions"> }
+      : "skip"
   );
 
   const handleContact = async () => {
@@ -150,6 +175,45 @@ export default function ReservationDetailPage() {
       setIsContacting(false);
     }
   };
+
+  const handleConfirmEnd = async () => {
+    if (!token || !missionId || isConfirming) return;
+    setIsConfirming(true);
+    try {
+      await confirmMissionEnd({
+        sessionToken: token,
+        missionId: missionId as Id<"missions">,
+      });
+      setShowReviewModal(true);
+    } catch (error) {
+      console.error("Erreur confirmation:", error);
+      toastError("Impossible de confirmer la fin du service");
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  // Mission terminée, payée, non encore confirmée
+  const needsConfirmation =
+    mission &&
+    mission.status === "completed" &&
+    mission.paymentStatus === "paid" &&
+    !mission.clientConfirmedAt &&
+    !mission.autoConfirmedAt;
+
+  // Mission confirmée (manuellement ou auto) mais pas encore d'avis
+  const canReview =
+    mission &&
+    mission.status === "completed" &&
+    (mission.clientConfirmedAt || mission.autoConfirmedAt) &&
+    !review;
+
+  // Peut ouvrir une réclamation
+  const canDispute =
+    mission &&
+    mission.status === "completed" &&
+    mission.paymentStatus === "paid" &&
+    !dispute;
 
   const handleCancelMission = async (reason: string) => {
     if (!token || !missionId) return;
@@ -337,6 +401,159 @@ export default function ReservationDetailPage() {
             </div>
           )}
       </motion.div>
+
+      {/* Bandeau confirmation fin de service */}
+      {needsConfirmation && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-2xl p-5 border-2 border-green-300 bg-green-50"
+        >
+          <div className="flex items-start gap-3 mb-4">
+            <div className="p-2 bg-green-100 rounded-xl">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-green-800">
+                Le service est terminé !
+              </h3>
+              <p className="text-sm text-green-600 mt-0.5">
+                Confirmez la fin du service pour déclencher le versement au prestataire.
+                Si vous ne confirmez pas sous 48h, la validation sera automatique.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={handleConfirmEnd}
+              disabled={isConfirming}
+              className="flex-1 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {isConfirming ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  <CheckCircle className="w-5 h-5" />
+                  Confirmer la fin du service
+                </>
+              )}
+            </button>
+            {canDispute && (
+              <button
+                onClick={() => setShowDisputeModal(true)}
+                className="py-3 px-4 border-2 border-red-200 text-red-600 rounded-xl font-semibold hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
+              >
+                <AlertTriangle className="w-5 h-5" />
+                Signaler
+              </button>
+            )}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Bandeau laisser un avis */}
+      {canReview && !needsConfirmation && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-2xl p-5 border border-amber-200 bg-amber-50"
+        >
+          <div className="flex items-start gap-3 mb-4">
+            <div className="p-2 bg-amber-100 rounded-xl">
+              <Star className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-amber-800">
+                Comment s&apos;est passé le service ?
+              </h3>
+              <p className="text-sm text-amber-600 mt-0.5">
+                Votre avis aide les autres propriétaires et le prestataire.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowReviewModal(true)}
+              className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-semibold hover:bg-amber-600 transition-colors flex items-center justify-center gap-2"
+            >
+              <Star className="w-5 h-5" />
+              Laisser un avis
+            </button>
+            {canDispute && (
+              <button
+                onClick={() => setShowDisputeModal(true)}
+                className="py-3 px-4 border-2 border-red-200 text-red-600 rounded-xl font-semibold hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
+              >
+                <AlertTriangle className="w-5 h-5" />
+                Signaler
+              </button>
+            )}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Avis déjà laissé */}
+      {review && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-2xl p-5 border border-green-200 bg-green-50"
+        >
+          <div className="flex items-center gap-3">
+            <CheckCircle className="w-5 h-5 text-green-600" />
+            <div>
+              <p className="font-semibold text-green-800">Avis publié</p>
+              <div className="flex items-center gap-1 mt-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Star
+                    key={star}
+                    className={cn(
+                      "w-4 h-4",
+                      star <= Math.round(review.overallRating)
+                        ? "fill-accent text-accent"
+                        : "text-gray-300"
+                    )}
+                  />
+                ))}
+                <span className="text-sm text-green-700 ml-1">
+                  {review.overallRating}/5
+                </span>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Réclamation en cours */}
+      {dispute && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-2xl p-5 border border-red-200 bg-red-50"
+        >
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-600" />
+            <div>
+              <p className="font-semibold text-red-800">
+                Réclamation en cours : {dispute.reasonLabel}
+              </p>
+              <p className="text-sm text-red-600 mt-0.5">
+                Statut :{" "}
+                {dispute.status === "open"
+                  ? "Ouverte"
+                  : dispute.status === "investigating"
+                    ? "En investigation"
+                    : dispute.status === "resolved_client"
+                      ? "Résolu en votre faveur"
+                      : dispute.status === "resolved_announcer"
+                        ? "Résolu en faveur du prestataire"
+                        : "Fermée"}
+                {dispute.paymentBlocked && " • Paiement suspendu"}
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Service & Animal */}
       <motion.div
@@ -727,6 +944,23 @@ export default function ReservationDetailPage() {
           token={token}
         />
       )}
+
+      {/* Modal de notation */}
+      <ReviewModal
+        isOpen={showReviewModal}
+        onClose={() => setShowReviewModal(false)}
+        missionId={missionId}
+        serviceName={mission.serviceName}
+        announcerName={mission.announcerName || "Annonceur"}
+      />
+
+      {/* Modal de réclamation */}
+      <DisputeModal
+        isOpen={showDisputeModal}
+        onClose={() => setShowDisputeModal(false)}
+        missionId={missionId}
+        serviceName={mission.serviceName}
+      />
     </div>
   );
 }

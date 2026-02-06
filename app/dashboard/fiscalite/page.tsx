@@ -392,7 +392,7 @@ export default function FiscalitePage() {
                 ))
               ) : (
                 <>
-                  {(fiscalData?.monthlyBreakdown ?? []).map((row) => {
+                  {(fiscalData?.monthlyBreakdown ?? []).map((row: { month: string; missions: number; earnings: number }) => {
                     if (row.missions === 0) return null;
                     return (
                       <tr key={row.month} className="hover:bg-slate-50/50 transition-colors">
