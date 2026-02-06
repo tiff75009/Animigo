@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
-import { Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ShieldCheck, Star, CreditCard } from "lucide-react";
 import { useConvexAction } from "@/app/hooks/useConvexAction";
 import { useToast } from "@/app/components/ui/toast";
 
@@ -215,12 +215,35 @@ export default function ConnexionPage() {
         </Button>
       </motion.form>
 
+      {/* Bandeau de confiance */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.15 }}
+        className="mt-6 flex items-center justify-center gap-4 text-[11px] text-text-light"
+      >
+        <span className="flex items-center gap-1">
+          <ShieldCheck className="w-3.5 h-3.5 text-secondary" />
+          Identités vérifiées
+        </span>
+        <span className="w-px h-3 bg-gray-200" />
+        <span className="flex items-center gap-1">
+          <Star className="w-3.5 h-3.5 text-yellow-400" />
+          Avis certifiés
+        </span>
+        <span className="w-px h-3 bg-gray-200" />
+        <span className="flex items-center gap-1">
+          <CreditCard className="w-3.5 h-3.5 text-primary" />
+          Paiement sécurisé
+        </span>
+      </motion.div>
+
       {/* Liens inscription */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.2 }}
-        className="mt-8 space-y-3"
+        className="mt-6 space-y-3"
       >
         <div className="text-center">
           <p className="text-text-light text-sm">

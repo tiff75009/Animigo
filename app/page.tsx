@@ -6,6 +6,7 @@ import { HowItWorks } from "./components/sections/how-it-works";
 import { Testimonials } from "./components/sections/testimonials";
 import { Stats } from "./components/sections/stats";
 import { FAQ } from "./components/sections/faq";
+import { TrustSection } from "./components/sections/trust";
 import { CTA } from "./components/sections/cta";
 import { Footer } from "./components/footer";
 
@@ -18,6 +19,7 @@ export default function Home() {
         <Services />
         <SeoServicesSection />
         <HowItWorks />
+        <TrustSection />
         <Testimonials />
         <Stats />
         <FAQ />

@@ -49,7 +49,7 @@ const panelContents: Record<Exclude<PanelVariant, "connexion">, PanelContent> = 
     title: "Développez votre activité",
     subtitle: "Rejoignez +2 000 pet-sitters qui développent leur activité grâce à Animigo",
     gradient: "from-primary via-secondary to-purple",
-    badge: "100% gratuit, sans commission cachée",
+    badge: "Conforme RGPD & CNIL \u2022 0% commission",
     advantages: [
       {
         icon: ShieldCheck,
@@ -68,8 +68,8 @@ const panelContents: Record<Exclude<PanelVariant, "connexion">, PanelContent> = 
       },
       {
         icon: Zap,
-        title: "Sans engagement",
-        description: "Inscription gratuite, sans exclusivité. Vous restez libre",
+        title: "Données protégées",
+        description: "Vos données ne sont jamais utilisées à des fins commerciales. Conforme RGPD et CNIL",
       },
     ],
     testimonial: {
@@ -82,7 +82,7 @@ const panelContents: Record<Exclude<PanelVariant, "connexion">, PanelContent> = 
     title: "Gagnez un revenu extra",
     subtitle: "Transformez votre passion pour les animaux en activité complémentaire",
     gradient: "from-secondary via-primary/80 to-purple",
-    badge: "Flexible et sans engagement",
+    badge: "Conforme RGPD & CNIL \u2022 Sans engagement",
     advantages: [
       {
         icon: Clock,
@@ -100,9 +100,9 @@ const panelContents: Record<Exclude<PanelVariant, "connexion">, PanelContent> = 
         description: "Rejoignez une communauté de passionnés d\u2019animaux près de chez vous",
       },
       {
-        icon: Zap,
-        title: "Démarrez facilement",
-        description: "Inscription en 2 minutes, sans diplôme ni SIRET nécessaire",
+        icon: ShieldCheck,
+        title: "Vie privée respectée",
+        description: "Vos données personnelles ne sont jamais partagées ni utilisées à des fins commerciales. Conforme CNIL",
       },
     ],
     testimonial: {
@@ -119,27 +119,27 @@ const panelContents: Record<Exclude<PanelVariant, "connexion">, PanelContent> = 
     advantages: [
       {
         icon: BadgeCheck,
-        title: "Gardiens vérifiés",
-        description: "Tous nos pet-sitters sont vérifiés : identité, avis et compétences validés",
+        title: "Identité vérifiée par IA",
+        description: "Chaque pet-sitter passe une vérification d\u2019identité par intelligence artificielle : CNI + reconnaissance faciale",
       },
       {
         icon: Star,
         title: "Avis certifiés",
-        description: "Consultez les avis de vrais propriétaires pour choisir en toute confiance",
+        description: "Seuls les clients ayant effectué une réservation peuvent noter. Chaque avis est lié à une mission réelle",
       },
       {
         icon: ShieldCheck,
         title: "Paiement protégé",
-        description: "Ne payez qu\u2019après la prestation. Remboursement garanti en cas de problème",
+        description: "L\u2019argent est bloqué jusqu\u2019à la fin de la prestation. Remboursement garanti en cas de problème",
       },
       {
         icon: MessageCircle,
         title: "Messagerie directe",
-        description: "Échangez avec votre pet-sitter avant, pendant et après la garde",
+        description: "Échangez avec votre pet-sitter avant, pendant et après la garde. Recevez des photos de votre animal",
       },
     ],
     testimonial: {
-      quote: "J\u2019ai trouv\u00e9 une pet-sitter formidable pour mon chat en 10 minutes. Elle m\u2019envoie des photos tous les jours, je pars en vacances l\u2019esprit tranquille !",
+      quote: "J\u2019ai trouv\u00e9 une pet-sitter formidable pour mon chat en 10 minutes. Son profil était vérifié, avec des avis de vrais clients. Je pars en vacances l\u2019esprit tranquille !",
       name: "Marie D.",
       role: "Propriétaire de Moustache, Paris",
     },
@@ -198,7 +198,7 @@ export default function AuthLayout({
   }
 
   const isConnexion = variant === "connexion";
-  const content = !isConnexion ? panelContents[variant] : null;
+  const content = !isConnexion ? panelContents[variant as Exclude<PanelVariant, "connexion">] : null;
 
   return (
     <AuthRedirect>

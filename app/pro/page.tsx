@@ -30,6 +30,8 @@ import {
   Clock,
   TrendingUp,
   Sparkles,
+  ScanFace,
+  Lock,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/app/components/ui/button";
@@ -66,6 +68,14 @@ const faqItems = [
   {
     q: "Faut-il un SIRET pour s'inscrire ?",
     a: "Non. Vous pouvez vous inscrire comme pet-sitter particulier sans SIRET. Si vous avez un statut professionnel (auto-entrepreneur, société), vous bénéficierez du badge vérifié et d'une priorité dans les recherches.",
+  },
+  {
+    q: "Comment fonctionne la vérification d'identité ?",
+    a: "C'est simple et rapide : vous soumettez votre CNI (recto/verso) et un selfie avec un code unique. Notre IA vérifie automatiquement votre identité en quelques secondes. Le badge \"Vérifié\" apparaît sur votre profil et booste votre visibilité dans les recherches.",
+  },
+  {
+    q: "Mes données personnelles sont-elles protégées ?",
+    a: "Absolument. Animigo respecte le RGPD et les directives de la CNIL. Vos données personnelles ne sont jamais utilisées à des fins commerciales ni partagées avec des tiers. Vos documents de vérification sont traités de manière sécurisée et ne servent qu'à confirmer votre identité.",
   },
   {
     q: "Quelle est la politique d'annulation ?",
@@ -243,7 +253,7 @@ function TrustBar() {
   const items = [
     { icon: ShieldCheck, text: "Paiement Stripe sécurisé" },
     { icon: Zap, text: "0% de commission" },
-    { icon: Clock, text: "Inscription en 2 min" },
+    { icon: Lock, text: "Conforme RGPD & CNIL" },
     { icon: Star, text: "4.9/5 de satisfaction" },
   ];
 
@@ -615,6 +625,138 @@ function FeaturesSection() {
   );
 }
 
+// ─── Badge vérifié ───────────────────────────────────────────
+
+function VerificationSection() {
+  const steps = [
+    {
+      num: "1",
+      title: "Soumettez votre CNI",
+      desc: "Prenez en photo le recto et le verso de votre pièce d'identité. Protégez-la avec le service gouvernemental Filigrane Facile.",
+      icon: ShieldCheck,
+      color: "primary",
+    },
+    {
+      num: "2",
+      title: "Selfie avec code unique",
+      desc: "Prenez un selfie en tenant une feuille avec votre code de vérification. Notre IA compare votre visage avec votre pièce d'identité.",
+      icon: ScanFace,
+      color: "secondary",
+    },
+    {
+      num: "3",
+      title: "Badge automatique",
+      desc: "Si tout est conforme, votre badge \"Identité vérifiée\" apparaît en quelques secondes sur votre profil. Sinon, un admin vérifie manuellement.",
+      icon: BadgeCheck,
+      color: "primary",
+    },
+  ];
+
+  return (
+    <section className="py-24 bg-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="grid lg:grid-cols-2 gap-16 items-center">
+          {/* Texte */}
+          <motion.div
+            initial={{ opacity: 0, x: -30 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true, margin: "-100px" }}
+          >
+            <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold mb-4 bg-green-50 text-green-700">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              Confiance
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
+              Obtenez votre badge{" "}
+              <span className="text-secondary">&ldquo;Vérifié&rdquo;</span>
+            </h2>
+            <p className="text-text-light leading-relaxed mb-8">
+              Les propriétaires font davantage confiance aux pet-sitters vérifiés.
+              Notre système de vérification par IA est rapide, sécurisé et gratuit.
+              Boostez votre visibilité et vos réservations.
+            </p>
+
+            {/* Avantages du badge */}
+            <div className="space-y-3">
+              {[
+                "Priorité dans les résultats de recherche",
+                "Badge visible sur votre profil et vos cartes",
+                "Confiance accrue des propriétaires",
+                "Vérification gratuite en moins de 30 secondes",
+              ].map((benefit) => (
+                <div key={benefit} className="flex items-center gap-3 text-sm text-foreground">
+                  <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
+                  {benefit}
+                </div>
+              ))}
+            </div>
+
+            {/* Mention RGPD/CNIL */}
+            <div className="mt-6 flex items-start gap-3 bg-gray-50 rounded-xl p-4 border border-gray-100">
+              <Lock className="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-text-light leading-relaxed">
+                <span className="font-semibold text-foreground">Vie privée respectée.</span>{" "}
+                Vos données personnelles ne sont jamais utilisées à des fins commerciales
+                ni partagées avec des tiers. Conforme RGPD et directives CNIL.
+              </p>
+            </div>
+          </motion.div>
+
+          {/* Étapes visuelles */}
+          <motion.div
+            initial={{ opacity: 0, x: 30 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true, margin: "-100px" }}
+            className="space-y-5"
+          >
+            {steps.map((step, i) => (
+              <motion.div
+                key={step.num}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.15 }}
+                className="flex items-start gap-4 bg-background rounded-2xl p-5 border border-gray-100"
+              >
+                <div
+                  className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                    step.color === "primary" ? "bg-primary/10" : "bg-secondary/10"
+                  }`}
+                >
+                  <step.icon
+                    className={`w-6 h-6 ${
+                      step.color === "primary" ? "text-primary" : "text-secondary"
+                    }`}
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-bold text-text-light">
+                      ÉTAPE {step.num}
+                    </span>
+                  </div>
+                  <h3 className="font-bold text-foreground mb-1">{step.title}</h3>
+                  <p className="text-sm text-text-light leading-relaxed">
+                    {step.desc}
+                  </p>
+                </div>
+              </motion.div>
+            ))}
+
+            {/* Badge mockup */}
+            <div className="flex justify-center pt-2">
+              <div className="inline-flex items-center gap-2 bg-secondary/10 text-secondary rounded-full px-5 py-2.5 font-semibold text-sm">
+                <BadgeCheck className="w-5 h-5" />
+                Identité vérifiée
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // ─── Comment ça marche ────────────────────────────────────────
 
 function HowItWorks() {
@@ -889,7 +1031,7 @@ function FinalCTA() {
             </Link>
           </div>
 
-          <div className="flex items-center justify-center gap-6 text-sm text-white/40 pt-4">
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-white/40 pt-4">
             <span className="flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-green-400" />
               Gratuit
@@ -900,7 +1042,7 @@ function FinalCTA() {
             </span>
             <span className="flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-green-400" />
-              Sans engagement
+              Conforme RGPD & CNIL
             </span>
           </div>
         </motion.div>
@@ -921,6 +1063,7 @@ export default function ProPage() {
         <ServicesSection />
         <ZeroCommissionSection />
         <FeaturesSection />
+        <VerificationSection />
         <HowItWorks />
         <Testimonials />
         <FAQ />
