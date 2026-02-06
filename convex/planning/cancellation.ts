@@ -146,7 +146,7 @@ async function calculateRefund(
     }
 
     // Mission in_progress multi-séance : calcul pro-rata
-    if (payment && payment.status === "captured") {
+    if (payment && ["captured", "authorized"].includes(payment.status)) {
       const breakdown = await countSessionBreakdown(ctx, mission);
       const { pastSessions, remainingSessions, totalSessions } = breakdown;
 
@@ -220,7 +220,8 @@ async function calculateRefund(
     }
   }
 
-  if (!payment || payment.status !== "captured") {
+  // Seuls les paiements capturés ou autorisés (pré-auth) permettent un remboursement
+  if (!payment || !["captured", "authorized"].includes(payment.status)) {
     return {
       canCancel: true,
       refundAmount: 0,
@@ -248,7 +249,7 @@ async function calculateRefund(
   );
 
   const now = Date.now();
-  const paidAt = payment.paidAt || payment.capturedAt || payment.createdAt;
+  const paidAt = payment.paidAt || payment.capturedAt || payment.authorizedAt || payment.createdAt;
   const hoursSincePaid = (now - paidAt) / (1000 * 60 * 60);
 
   const startDateTime = new Date(`${mission.startDate}T${mission.startTime || "00:00"}`).getTime();
@@ -539,54 +540,81 @@ export const cancelMissionByClient = mutation({
       updatedAt: now,
     });
 
-    // Remboursement Stripe si nécessaire
-    if (refundResult.refundAmount > 0 && payment?.paymentIntentId) {
+    // Gestion Stripe selon le statut du paiement
+    if (payment?.paymentIntentId) {
       const stripeSecretKeyConfig = await ctx.db
         .query("systemConfig")
         .withIndex("by_key", (q) => q.eq("key", "stripe_secret_key"))
         .first();
 
       if (stripeSecretKeyConfig?.value) {
-        await ctx.scheduler.runAfter(
-          0,
-          internal.planning.cancellationActions.processStripeRefund,
-          {
-            missionId: args.missionId,
-            paymentIntentId: payment.paymentIntentId,
-            refundAmount: refundResult.refundAmount,
-            stripeSecretKey: stripeSecretKeyConfig.value,
+        if (payment.status === "captured") {
+          // Paiement déjà capturé → remboursement classique
+          if (refundResult.refundAmount > 0) {
+            await ctx.scheduler.runAfter(
+              0,
+              internal.planning.cancellationActions.processStripeRefund,
+              {
+                missionId: args.missionId,
+                paymentIntentId: payment.paymentIntentId,
+                refundAmount: refundResult.refundAmount,
+                stripeSecretKey: stripeSecretKeyConfig.value,
+              }
+            );
           }
-        );
-      }
-    }
+        } else if (payment.status === "authorized") {
+          // Paiement pré-autorisé (fonds bloqués, pas encore capturés)
+          const retainedAmount = (payment.amount || 0) - refundResult.refundAmount;
 
-    // Annuler PaymentIntent en attente
-    if (
-      mission.status === "pending_confirmation" &&
-      payment?.paymentIntentId &&
-      payment.status === "pending"
-    ) {
-      const stripeSecretKeyConfig = await ctx.db
-        .query("systemConfig")
-        .withIndex("by_key", (q) => q.eq("key", "stripe_secret_key"))
-        .first();
-
-      if (stripeSecretKeyConfig?.value) {
-        await ctx.scheduler.runAfter(
-          0,
-          internal.planning.cancellationActions.cancelStripePaymentIntent,
-          {
-            paymentIntentId: payment.paymentIntentId,
-            stripeSecretKey: stripeSecretKeyConfig.value,
+          if (retainedAmount <= 0) {
+            // Remboursement total → annuler le PaymentIntent (libère le hold)
+            await ctx.scheduler.runAfter(
+              0,
+              internal.planning.cancellationActions.cancelStripePaymentIntent,
+              {
+                paymentIntentId: payment.paymentIntentId,
+                stripeSecretKey: stripeSecretKeyConfig.value,
+              }
+            );
+          } else {
+            // Remboursement partiel → capturer uniquement le montant retenu
+            await ctx.scheduler.runAfter(
+              0,
+              internal.planning.cancellationActions.capturePartialPaymentIntent,
+              {
+                missionId: args.missionId,
+                paymentIntentId: payment.paymentIntentId,
+                amountToCapture: retainedAmount,
+                stripeSecretKey: stripeSecretKeyConfig.value,
+              }
+            );
           }
-        );
-      }
 
-      await ctx.db.patch(payment._id, {
-        status: "cancelled",
-        cancelledAt: now,
-        updatedAt: now,
-      });
+          // Mettre à jour le statut du paiement
+          await ctx.db.patch(payment._id, {
+            status: retainedAmount <= 0 ? "cancelled" : "captured",
+            ...(retainedAmount <= 0 ? { cancelledAt: now } : { capturedAt: now }),
+            refundedAmount: refundResult.refundAmount,
+            updatedAt: now,
+          });
+        } else if (payment.status === "pending") {
+          // Paiement en attente → annuler le PaymentIntent
+          await ctx.scheduler.runAfter(
+            0,
+            internal.planning.cancellationActions.cancelStripePaymentIntent,
+            {
+              paymentIntentId: payment.paymentIntentId,
+              stripeSecretKey: stripeSecretKeyConfig.value,
+            }
+          );
+
+          await ctx.db.patch(payment._id, {
+            status: "cancelled",
+            cancelledAt: now,
+            updatedAt: now,
+          });
+        }
+      }
     }
 
     // Notifications

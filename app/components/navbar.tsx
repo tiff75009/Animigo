@@ -9,6 +9,7 @@ import {
   User,
   Briefcase,
   LogOut,
+  LogIn,
   LayoutDashboard,
   Bell,
   MessageCircle,
@@ -197,6 +198,16 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
   }, []);
 
   const initials = user ? `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.toUpperCase() : "";
+
+  // Bloquer le scroll du body quand le menu mobile est ouvert
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => { document.body.style.overflow = ""; };
+  }, [isMobileMenuOpen]);
 
   return (
     <>
@@ -399,21 +410,21 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                   </div>
                 </>
               ) : (
-                /* Non connecté: Devenir annonceur + S'inscrire + Connexion */
+                /* Non connecté: Devenir PetService + Devenir PetParent + Connexion */
                 <>
                   <Link
                     href="/pro"
                     className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
                   >
                     <Briefcase className="w-4 h-4" />
-                    <span>Devenir annonceur</span>
+                    <span>Devenir PetService</span>
                   </Link>
                   <Link
                     href="/inscription?type=utilisateur"
                     className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
                   >
                     <UserPlus className="w-4 h-4" />
-                    <span>S&apos;inscrire</span>
+                    <span>Devenir PetParent</span>
                   </Link>
                   <Link
                     href="/connexion"
@@ -426,27 +437,9 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
             </div>
 
             {/* Mobile: Right Side */}
-            <div className="flex lg:hidden items-center gap-0.5">
+            <div className="flex lg:hidden items-center gap-2">
               {!isLoading && isAuthenticated && user ? (
                 <>
-                  {/* Aide */}
-                  <Tooltip content="Aide" position="bottom">
-                    <Link
-                      href={isOnClientDashboard ? "/client/aide" : "/dashboard/aide"}
-                      className="relative p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                    >
-                      <HelpCircle className="w-5 h-5" />
-                    </Link>
-                  </Tooltip>
-                  {/* Tickets */}
-                  <Tooltip content="Tickets" position="bottom">
-                    <Link
-                      href={isOnClientDashboard ? "/client/tickets" : "/dashboard/tickets"}
-                      className="relative p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                    >
-                      <Ticket className="w-5 h-5" />
-                    </Link>
-                  </Tooltip>
                   {/* Messages */}
                   <Tooltip content="Messages" position="bottom">
                     <Link
@@ -466,24 +459,18 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                 </>
               ) : (
                 <>
-                  {/* Liens (mobile) - only when not logged in */}
                   <Link
                     href="/pro"
-                    className="text-xs font-bold text-secondary hover:text-secondary/80 whitespace-nowrap"
+                    className="relative flex items-center gap-1 px-2.5 py-1.5 bg-gradient-to-r from-secondary to-secondary/80 text-white text-[11px] font-bold rounded-full shadow-sm shadow-secondary/25 active:scale-95 transition-transform"
                   >
-                    Devenir annonceur
-                  </Link>
-                  <Link
-                    href="/inscription?type=utilisateur"
-                    className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors"
-                  >
-                    <UserPlus className="w-5 h-5" />
+                    <span>🐾</span>
+                    <span>PetService</span>
                   </Link>
                   <Link
                     href="/connexion"
-                    className="p-1.5 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+                    className="p-1.5 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 active:scale-95 transition-all"
                   >
-                    <User className="w-5 h-5" />
+                    <LogIn className="w-4 h-4" />
                   </Link>
                 </>
               )}
@@ -523,50 +510,23 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
       <AnimatePresence>
         {isMobileMenuOpen && (
           <>
-            {/* Backdrop */}
+            {/* Backdrop - sous la navbar */}
             <motion.div
-              className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
+              className="fixed top-[7rem] left-0 right-0 bottom-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsMobileMenuOpen(false)}
             />
 
-            {/* Slide-in Menu */}
+            {/* Slide-in Menu - sous la navbar */}
             <motion.div
-              className="fixed top-0 right-0 bottom-0 w-[85%] max-w-sm z-50 bg-white shadow-2xl lg:hidden flex flex-col"
+              className="fixed top-[7rem] right-0 bottom-0 w-[85%] max-w-sm z-50 bg-white shadow-2xl lg:hidden flex flex-col"
               initial={{ x: "100%" }}
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
             >
-              {/* Header */}
-              <div className="flex items-center justify-between p-4 border-b border-gray-100">
-                <div className="flex items-center gap-2">
-                  {siteLogo ? (
-                    <Image
-                      src={siteLogo}
-                      alt={siteName}
-                      width={28}
-                      height={28}
-                      className="w-7 h-7 object-contain"
-                      unoptimized
-                    />
-                  ) : (
-                    <span className="text-lg">🐾</span>
-                  )}
-                  <span className="text-lg font-love-taking text-gray-900">
-                    <span className="text-primary">{siteName.slice(0, 2)}</span>{siteName.slice(2)}
-                  </span>
-                </div>
-                <button
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
               {/* Scrollable Content */}
               <div className="flex-1 overflow-y-auto">
                 {isOnDashboard ? (
@@ -676,6 +636,42 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                         </div>
                       );
                     })}
+
+                    {/* Aide & Support dans le dashboard */}
+                    <div className="mx-4 h-px bg-gray-100 my-2" />
+                    <div className="px-4 py-1">
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1 px-3">
+                        Aide & Support
+                      </p>
+                      <div className="space-y-0.5">
+                        <Link
+                          href={isOnClientDashboard ? "/client/aide" : "/dashboard/aide"}
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className={cn(
+                            "flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors",
+                            pathname.endsWith("/aide")
+                              ? "bg-primary text-white"
+                              : "hover:bg-gray-50 text-gray-700"
+                          )}
+                        >
+                          <HelpCircle className="w-4 h-4" />
+                          <span className="text-sm font-medium">Centre d&apos;aide</span>
+                        </Link>
+                        <Link
+                          href={isOnClientDashboard ? "/client/tickets" : "/dashboard/tickets"}
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className={cn(
+                            "flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors",
+                            pathname.endsWith("/tickets")
+                              ? "bg-primary text-white"
+                              : "hover:bg-gray-50 text-gray-700"
+                          )}
+                        >
+                          <Ticket className="w-4 h-4" />
+                          <span className="text-sm font-medium">Mes tickets</span>
+                        </Link>
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <>
@@ -698,37 +694,6 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                     </div>
 
                     <div className="mx-4 h-px bg-gray-100" />
-
-                    {/* Other Links */}
-                    <div className="p-4">
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Liens utiles</p>
-                      <div className="space-y-1">
-                        <Link
-                          href="/pro"
-                          onClick={() => setIsMobileMenuOpen(false)}
-                          className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-                        >
-                          <Briefcase className="w-5 h-5 text-secondary" />
-                          <span className="font-medium text-gray-900">Devenir annonceur</span>
-                        </Link>
-                        <Link
-                          href="/#how-it-works"
-                          onClick={() => setIsMobileMenuOpen(false)}
-                          className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-                        >
-                          <span className="text-xl">✨</span>
-                          <span className="font-medium text-gray-900">Comment ça marche</span>
-                        </Link>
-                        <Link
-                          href="/#faq"
-                          onClick={() => setIsMobileMenuOpen(false)}
-                          className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-                        >
-                          <span className="text-xl">❓</span>
-                          <span className="font-medium text-gray-900">FAQ</span>
-                        </Link>
-                      </div>
-                    </div>
                   </>
                 )}
 
@@ -808,22 +773,52 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                     Se déconnecter
                   </button>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
+                    {/* Deux cartes côte à côte */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      {/* PetService */}
+                      <Link
+                        href="/pro"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-secondary/10 to-secondary/5 border border-secondary/20 p-3 active:scale-[0.97] transition-transform"
+                      >
+                        <div className="absolute -top-3 -right-3 w-10 h-10 bg-secondary/10 rounded-full" />
+                        <div className="relative">
+                          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-secondary to-secondary/70 text-white shadow-sm shadow-secondary/25 mb-2">
+                            <Briefcase className="w-4 h-4" />
+                          </div>
+                          <p className="font-bold text-gray-900 text-xs leading-tight">Devenir PetService</p>
+                          <p className="text-[10px] text-gray-500 mt-1 leading-snug">Proposez vos services animaliers</p>
+                        </div>
+                      </Link>
+                      {/* PetParent */}
+                      <Link
+                        href="/inscription?type=utilisateur"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 p-3 active:scale-[0.97] transition-transform"
+                      >
+                        <div className="absolute -top-3 -right-3 w-10 h-10 bg-primary/10 rounded-full" />
+                        <div className="relative">
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary/70 text-white shadow-sm shadow-primary/25">
+                              <PawPrint className="w-4 h-4" />
+                            </div>
+                            <span className="text-[9px] bg-secondary/15 text-secondary px-1.5 py-0.5 rounded-full font-bold uppercase">Gratuit</span>
+                          </div>
+                          <p className="font-bold text-gray-900 text-xs leading-tight">Devenir PetParent</p>
+                          <p className="text-[10px] text-gray-500 mt-1 leading-snug">Trouvez les meilleurs pros pour votre animal</p>
+                        </div>
+                      </Link>
+                    </div>
+                    {/* Connexion */}
                     <Link
                       href="/connexion"
                       onClick={() => setIsMobileMenuOpen(false)}
-                      className="flex items-center justify-center gap-2 w-full p-3 bg-primary text-white font-semibold rounded-xl shadow-md shadow-primary/25 hover:bg-primary/90 transition-colors"
+                      className="flex items-center justify-center gap-2 w-full py-2.5 text-sm text-gray-600 font-medium hover:text-gray-900 transition-colors"
                     >
                       <User className="w-4 h-4" />
-                      Se connecter
-                    </Link>
-                    <Link
-                      href="/inscription?type=utilisateur"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className="flex items-center justify-center gap-2 w-full p-3 text-gray-700 font-medium rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
-                    >
-                      <UserPlus className="w-4 h-4" />
-                      Créer un compte propriétaire
+                      <span>Déjà inscrit ?</span>
+                      <span className="font-semibold text-primary">Se connecter</span>
                     </Link>
                   </div>
                 )}

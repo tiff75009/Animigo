@@ -40,6 +40,34 @@ export const processStripeRefund = internalAction({
   },
 });
 
+export const capturePartialPaymentIntent = internalAction({
+  args: {
+    missionId: v.id("missions"),
+    paymentIntentId: v.string(),
+    amountToCapture: v.number(),
+    stripeSecretKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const Stripe = (await import("stripe")).default;
+      const stripe = new Stripe(args.stripeSecretKey, {
+        apiVersion: "2024-12-18.acacia",
+      });
+
+      // Capturer uniquement le montant retenu, le reste est libéré automatiquement
+      const paymentIntent = await stripe.paymentIntents.capture(
+        args.paymentIntentId,
+        { amount_to_capture: args.amountToCapture }
+      );
+
+      return { success: true, status: paymentIntent.status };
+    } catch (error) {
+      console.error("Stripe partial capture failed:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  },
+});
+
 export const cancelStripePaymentIntent = internalAction({
   args: {
     paymentIntentId: v.string(),
