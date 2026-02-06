@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { action } from "../_generated/server";
+import { action, internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 
 // Types
@@ -286,6 +286,55 @@ export const sendPaymentExpiredNotification = action({
     };
 
     return sendNotificationWithFallback(ctx, qstashConfig, announcerPayload);
+  },
+});
+
+// ============================================
+// NOTIFICATIONS DE VÉRIFICATION D'IDENTITÉ
+// ============================================
+
+/**
+ * Notification quand l'identité est vérifiée (auto ou manuelle)
+ */
+export const sendVerificationApprovedNotification = internalAction({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args): Promise<ActionResult> => {
+    const qstashConfig = await ctx.runQuery(internal.notifications.queries.getQStashConfig);
+
+    const payload: NotificationPayload = {
+      userId: args.userId,
+      type: "system",
+      title: "Identité vérifiée !",
+      message: "Votre identité a été vérifiée avec succès. Le badge vérifié est maintenant affiché sur votre profil.",
+      linkUrl: "/dashboard/verification",
+    };
+
+    return sendNotificationWithFallback(ctx, qstashConfig, payload);
+  },
+});
+
+/**
+ * Notification quand la vérification est rejetée
+ */
+export const sendVerificationRejectedNotification = internalAction({
+  args: {
+    userId: v.id("users"),
+    reason: v.string(),
+  },
+  handler: async (ctx, args): Promise<ActionResult> => {
+    const qstashConfig = await ctx.runQuery(internal.notifications.queries.getQStashConfig);
+
+    const payload: NotificationPayload = {
+      userId: args.userId,
+      type: "system",
+      title: "Vérification refusée",
+      message: `Votre demande de vérification d'identité a été refusée. Motif : ${args.reason}`,
+      linkUrl: "/dashboard/verification",
+    };
+
+    return sendNotificationWithFallback(ctx, qstashConfig, payload);
   },
 });
 

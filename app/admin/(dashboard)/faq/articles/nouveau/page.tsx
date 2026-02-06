@@ -188,7 +188,7 @@ Vous pouvez utiliser le **markdown** pour formater votre texte.
                   <option value="">Sélectionner...</option>
                   {categories.map((cat: any) => (
                     <option key={cat._id} value={cat._id}>
-                      {cat.icon} {cat.name}
+                      {cat.name}
                     </option>
                   ))}
                 </select>

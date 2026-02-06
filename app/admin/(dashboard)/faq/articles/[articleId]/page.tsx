@@ -275,7 +275,7 @@ export default function AdminEditArticlePage() {
                 >
                   {categories.map((cat: any) => (
                     <option key={cat._id} value={cat._id}>
-                      {cat.icon} {cat.name}
+                      {cat.name}
                     </option>
                   ))}
                 </select>

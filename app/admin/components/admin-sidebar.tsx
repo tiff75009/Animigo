@@ -79,6 +79,12 @@ export function AdminSidebar() {
     token ? { token } : "skip"
   );
 
+  // Récupérer les tickets ouverts
+  const openTickets = useQuery(
+    api.admin.support.getOpenTicketsCount,
+    token ? { token } : "skip"
+  );
+
   const navSections: NavSection[] = [
     {
       title: "Général",
@@ -205,6 +211,7 @@ export function AdminSidebar() {
           label: "Tickets",
           href: "/admin/support",
           icon: Ticket,
+          badge: openTickets || 0,
         },
         {
           label: "FAQ",

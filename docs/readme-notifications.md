@@ -261,6 +261,9 @@ Les notifications suivantes sont envoyees automatiquement lors des evenements du
 | Annonceur accepte | Client | `mission_accepted` | `convex/planning/missions.ts` (acceptMission) |
 | Client paie | Annonceur | `mission_confirmed` | `convex/api/stripeInternal.ts` (markPaymentAuthorized) |
 | Paiement capture | Annonceur | `payment_captured` | `convex/api/stripeInternal.ts` (markPaymentCaptured) |
+| Verification approuvee (IA) | Annonceur | `system` | `convex/verification/autoVerify.ts` (saveVerificationResult) |
+| Verification approuvee (admin) | Annonceur | `system` | `convex/verification/verification.ts` (approveVerification) |
+| Verification rejetee (admin) | Annonceur | `system` | `convex/verification/verification.ts` (rejectVerification) |
 
 ### Flux complet
 

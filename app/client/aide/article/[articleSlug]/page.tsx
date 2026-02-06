@@ -8,6 +8,7 @@ import { api } from "@/convex/_generated/api";
 import Link from "next/link";
 import { ChevronLeft, Eye, Loader2 } from "lucide-react";
 import { FaqArticleContent, FaqArticleCard, HelpfulVote } from "@/app/components/support";
+import { LucideIcon } from "@/app/components/ui/lucide-icon";
 
 export default function ClientFaqArticlePage() {
   const params = useParams();
@@ -85,7 +86,7 @@ export default function ClientFaqArticlePage() {
                 href={`/client/aide/${category.slug}`}
                 className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary/10 text-primary text-sm rounded-full mb-4 hover:bg-primary/20 transition-colors"
               >
-                <span>{category.icon}</span>
+                <LucideIcon name={category.icon} className="w-4 h-4" />
                 <span>{category.name}</span>
               </Link>
             )}

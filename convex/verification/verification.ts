@@ -358,6 +358,11 @@ export const approveVerification = mutation({
       });
     }
 
+    // Envoyer la notification de vérification approuvée
+    await ctx.scheduler.runAfter(0, internal.notifications.actions.sendVerificationApprovedNotification, {
+      userId: request.userId,
+    });
+
     return { success: true };
   },
 });
@@ -406,6 +411,12 @@ export const rejectVerification = mutation({
       rejectionReason: args.rejectionReason,
       adminNotes: args.adminNotes,
       updatedAt: now,
+    });
+
+    // Envoyer la notification de rejet
+    await ctx.scheduler.runAfter(0, internal.notifications.actions.sendVerificationRejectedNotification, {
+      userId: request.userId,
+      reason: args.rejectionReason,
     });
 
     return { success: true };

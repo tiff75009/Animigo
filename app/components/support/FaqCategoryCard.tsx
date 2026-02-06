@@ -2,6 +2,7 @@
 
 import { cn } from "@/app/lib/utils";
 import { ChevronRight } from "lucide-react";
+import { LucideIcon } from "@/app/components/ui/lucide-icon";
 import Link from "next/link";
 import { motion } from "framer-motion";
 
@@ -31,8 +32,8 @@ export function FaqCategoryCard({ category, href, className }: FaqCategoryCardPr
       >
         <div className="flex items-center gap-4">
           {/* Icône */}
-          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0">
-            {category.icon}
+          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+            <LucideIcon name={category.icon} className="w-6 h-6 text-primary" />
           </div>
 
           <div className="flex-1 min-w-0">

@@ -359,7 +359,7 @@ export const saveVerificationResult = internalMutation({
       }),
     });
 
-    // Si auto-approuvé, mettre à jour le profil
+    // Si auto-approuvé, mettre à jour le profil et notifier
     if (args.result.autoApproved) {
       const profile = await ctx.db
         .query("profiles")
@@ -372,6 +372,11 @@ export const saveVerificationResult = internalMutation({
           identityVerifiedAt: Date.now(),
         });
       }
+
+      // Envoyer la notification de vérification approuvée
+      await ctx.scheduler.runAfter(0, internal.notifications.actions.sendVerificationApprovedNotification, {
+        userId: request.userId,
+      });
     }
   },
 });

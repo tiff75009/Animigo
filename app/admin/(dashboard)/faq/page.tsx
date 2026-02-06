@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAdminAuth } from "@/app/hooks/useAdminAuth";
@@ -19,9 +19,226 @@ import {
   ThumbsDown,
   X,
   Save,
+  Search,
+  icons,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import Link from "next/link";
+import { LucideIcon as LucideIconDynamic } from "@/app/components/ui/lucide-icon";
+
+// Icônes recommandées pour la FAQ, groupées par thème
+const ICON_GROUPS: { label: string; icons: string[] }[] = [
+  {
+    label: "Général",
+    icons: [
+      "CircleQuestionMark", "MessageCircle", "Info", "BookOpen", "FileText",
+      "FolderOpen", "Search", "Star", "Heart", "House",
+      "Settings", "Bell", "Mail", "Globe", "Lightbulb",
+    ],
+  },
+  {
+    label: "Paiements",
+    icons: [
+      "CreditCard", "Wallet", "Banknote", "Receipt", "Percent",
+      "DollarSign", "Euro", "BadgeEuro", "CircleDollarSign", "PiggyBank",
+    ],
+  },
+  {
+    label: "Utilisateurs",
+    icons: [
+      "User", "Users", "UserCheck", "UserPlus", "Shield",
+      "ShieldCheck", "Lock", "Key", "FingerprintPattern", "BadgeCheck",
+    ],
+  },
+  {
+    label: "Services",
+    icons: [
+      "Briefcase", "Calendar", "CalendarCheck", "Clock", "MapPin",
+      "Navigation", "Car", "Dog", "Cat", "PawPrint",
+    ],
+  },
+  {
+    label: "Communication",
+    icons: [
+      "MessageSquare", "Phone", "Video", "Send", "Megaphone",
+      "AtSign", "Share2", "Link", "ExternalLink", "QrCode",
+    ],
+  },
+  {
+    label: "Statuts",
+    icons: [
+      "CircleCheck", "CircleX", "TriangleAlert", "CircleAlert", "Ban",
+      "ThumbsUp", "ThumbsDown", "Flag", "Bookmark", "Award",
+    ],
+  },
+  {
+    label: "Technique",
+    icons: [
+      "Code", "Terminal", "Database", "Server", "Wifi",
+      "Download", "Upload", "RefreshCw", "Zap", "Wrench",
+    ],
+  },
+];
+
+const ALL_RECOMMENDED_ICONS = ICON_GROUPS.flatMap((g) => g.icons);
+
+const iconsMap = icons as Record<string, LucideIcon>;
+
+/** Vérifie si un nom d'icône existe dans Lucide */
+function isValidIcon(name: string): boolean {
+  return name in iconsMap;
+}
+
+
+/** Picker d'icônes Lucide avec recherche */
+function IconPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (iconName: string) => void;
+}) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeGroup, setActiveGroup] = useState<string | null>(null);
+
+  // Recherche dans toutes les icônes Lucide (exclut les entrées non-composants)
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return null;
+    const q = searchQuery.toLowerCase();
+    return Object.keys(iconsMap)
+      .filter((name) => iconsMap[name] && name.toLowerCase().includes(q))
+      .slice(0, 60);
+  }, [searchQuery]);
+
+  // Filtrer pour ne garder que les icônes qui existent dans cette version de Lucide
+  const validGroups = useMemo(() => {
+    return ICON_GROUPS.map((g) => ({
+      ...g,
+      icons: g.icons.filter(isValidIcon),
+    })).filter((g) => g.icons.length > 0);
+  }, []);
+
+  const displayedGroups = activeGroup
+    ? validGroups.filter((g) => g.label === activeGroup)
+    : validGroups;
+
+  return (
+    <div className="space-y-3">
+      {/* Aperçu icône sélectionnée */}
+      <div className="flex items-center gap-3">
+        <div className="w-12 h-12 bg-slate-700 rounded-xl flex items-center justify-center">
+          <LucideIconDynamic name={value} className="w-6 h-6 text-blue-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-white font-medium">{value}</p>
+          <p className="text-xs text-slate-500">Icône sélectionnée</p>
+        </div>
+      </div>
+
+      {/* Barre de recherche */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Rechercher une icône..."
+          className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+        />
+      </div>
+
+      {/* Filtres par groupe */}
+      {!searchQuery && (
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => setActiveGroup(null)}
+            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+              activeGroup === null
+                ? "bg-blue-500 text-white"
+                : "bg-slate-800 text-slate-400 hover:text-white"
+            }`}
+          >
+            Tous
+          </button>
+          {validGroups.map((group) => (
+            <button
+              key={group.label}
+              type="button"
+              onClick={() =>
+                setActiveGroup(activeGroup === group.label ? null : group.label)
+              }
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                activeGroup === group.label
+                  ? "bg-blue-500 text-white"
+                  : "bg-slate-800 text-slate-400 hover:text-white"
+              }`}
+            >
+              {group.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Grille d'icônes */}
+      <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-700 bg-slate-800/50 p-2">
+        {searchQuery && searchResults ? (
+          searchResults.length > 0 ? (
+            <div className="grid grid-cols-8 gap-1">
+              {searchResults.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => onChange(name)}
+                  title={name}
+                  className={`p-2 rounded-lg transition-colors flex items-center justify-center ${
+                    value === name
+                      ? "bg-blue-500 text-white"
+                      : "hover:bg-slate-700 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <LucideIconDynamic name={name} className="w-5 h-5" />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-slate-500 text-sm py-4">
+              Aucune icône trouvée
+            </p>
+          )
+        ) : (
+          <div className="space-y-3">
+            {displayedGroups.map((group) => (
+              <div key={group.label}>
+                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1 px-1">
+                  {group.label}
+                </p>
+                <div className="grid grid-cols-8 gap-1">
+                  {group.icons.map((name) => (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => onChange(name)}
+                      title={name}
+                      className={`p-2 rounded-lg transition-colors flex items-center justify-center ${
+                        value === name
+                          ? "bg-blue-500 text-white"
+                          : "hover:bg-slate-700 text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      <LucideIconDynamic name={name} className="w-5 h-5" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 type Tab = "categories" | "articles";
 
@@ -41,7 +258,7 @@ function CategoryModal({
 }) {
   const [name, setName] = useState(category?.name || "");
   const [slug, setSlug] = useState(category?.slug || "");
-  const [icon, setIcon] = useState(category?.icon || "📚");
+  const [icon, setIcon] = useState(category?.icon || "CircleQuestionMark");
   const [targetAudience, setTargetAudience] = useState<"all" | "client" | "annonceur">(
     category?.targetAudience || "all"
   );
@@ -66,7 +283,7 @@ function CategoryModal({
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
-          className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full"
+          className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between mb-6">
@@ -107,15 +324,8 @@ function CategoryModal({
             </div>
 
             <div>
-              <label className="block text-sm text-slate-400 mb-2">Icône (emoji)</label>
-              <input
-                type="text"
-                value={icon}
-                onChange={(e) => setIcon(e.target.value)}
-                required
-                className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500 text-2xl text-center"
-                maxLength={2}
-              />
+              <label className="block text-sm text-slate-400 mb-2">Icône</label>
+              <IconPicker value={icon} onChange={setIcon} />
             </div>
 
             <div>
@@ -367,8 +577,8 @@ export default function AdminFaqPage() {
                   <GripVertical className="w-5 h-5" />
                 </div>
 
-                <div className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center text-2xl">
-                  {category.icon}
+                <div className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center">
+                  <LucideIconDynamic name={category.icon} className="w-6 h-6 text-blue-400" />
                 </div>
 
                 <div className="flex-1 min-w-0">
@@ -428,7 +638,7 @@ export default function AdminFaqPage() {
                 <option value="">Toutes les catégories</option>
                 {categories.map((cat: any) => (
                   <option key={cat._id} value={cat._id}>
-                    {cat.icon} {cat.name}
+                    {cat.name}
                   </option>
                 ))}
               </select>

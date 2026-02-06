@@ -6,6 +6,7 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import Link from "next/link";
 import { ChevronLeft, Loader2 } from "lucide-react";
+import { LucideIcon } from "@/app/components/ui/lucide-icon";
 import { FaqArticleCard } from "@/app/components/support";
 
 export default function DashboardFaqCategoryPage() {
@@ -60,8 +61,8 @@ export default function DashboardFaqCategoryPage() {
             className="bg-white rounded-2xl p-6 shadow-sm"
           >
             <div className="flex items-center gap-4">
-              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center text-3xl">
-                {category.icon}
+              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
+                <LucideIcon name={category.icon} className="w-7 h-7 text-primary" />
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-foreground">

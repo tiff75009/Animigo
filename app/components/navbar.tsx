@@ -26,6 +26,8 @@ import {
   HelpCircle,
   Ticket,
   UserPlus,
+  ShieldCheck,
+  Clock,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { usePathname } from "next/navigation";
@@ -162,6 +164,14 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
     announcerProfile?.profile?.profileImageUrl ||
     clientProfile?.profileImageUrl ||
     null;
+
+  // Statut de vérification d'identité (annonceur)
+  const verificationStatus = useQuery(
+    api.verification.verification.getVerificationStatus,
+    authToken ? { sessionToken: authToken } : "skip"
+  );
+  const isIdentityVerified = verificationStatus?.isIdentityVerified || false;
+  const hasPendingVerification = verificationStatus?.latestRequest?.status === "submitted";
 
   // Nom et logo dynamiques du site
   const siteName = useQuery(api.admin.config.getSiteName) ?? "Animigo";
@@ -636,6 +646,44 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                         </div>
                       );
                     })}
+
+                    {/* Vérification d'identité (annonceur) */}
+                    {isOnAnnouncerDashboard && !isIdentityVerified && (
+                      <>
+                        <div className="mx-4 h-px bg-gray-100 my-2" />
+                        <div className="px-4 py-1">
+                          <Link
+                            href="/dashboard/verification"
+                            onClick={() => setIsMobileMenuOpen(false)}
+                          >
+                            <div className={cn(
+                              "flex items-center gap-3 p-3 rounded-xl transition-colors",
+                              hasPendingVerification
+                                ? "bg-blue-50 border border-blue-200"
+                                : "bg-amber-50 border border-amber-200"
+                            )}>
+                              {hasPendingVerification ? (
+                                <>
+                                  <Clock className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-blue-700">En cours de vérification</p>
+                                    <p className="text-xs text-blue-500">Votre demande est en traitement</p>
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  <ShieldCheck className="w-5 h-5 text-amber-500 flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-amber-700">Vérifier mon profil</p>
+                                    <p className="text-xs text-amber-500">Obtenez le badge vérifié</p>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </Link>
+                        </div>
+                      </>
+                    )}
 
                     {/* Aide & Support dans le dashboard */}
                     <div className="mx-4 h-px bg-gray-100 my-2" />

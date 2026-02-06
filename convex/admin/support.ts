@@ -29,12 +29,13 @@ export const getAllTickets = query({
     }
 
     const admin = adminResult.user;
-    let tickets = await ctx.db.query("supportTickets").collect();
 
-    // Filtres
-    if (args.status) {
-      tickets = tickets.filter((t) => t.status === args.status);
-    }
+    // Utiliser l'index by_status si un filtre status est appliqué
+    let tickets = args.status
+      ? await ctx.db.query("supportTickets").withIndex("by_status", (q) => q.eq("status", args.status!)).collect()
+      : await ctx.db.query("supportTickets").collect();
+
+    // Filtres restants
     if (args.priority) {
       tickets = tickets.filter((t) => t.priority === args.priority);
     }
@@ -111,6 +112,24 @@ export const getAllTickets = query({
   },
 });
 
+// Compteur de tickets ouverts (léger, pour la sidebar)
+export const getOpenTicketsCount = query({
+  args: {
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const adminResult = await checkAdmin(ctx, args.token);
+    if (!adminResult.success) return 0;
+
+    const openTickets = await ctx.db
+      .query("supportTickets")
+      .withIndex("by_status", (q) => q.eq("status", "open"))
+      .collect();
+
+    return openTickets.length;
+  },
+});
+
 // Statistiques des tickets
 export const getTicketStats = query({
   args: {
@@ -122,31 +141,43 @@ export const getTicketStats = query({
       return { success: false, error: adminResult.error };
     }
 
-    const tickets = await ctx.db.query("supportTickets").collect();
     const now = Date.now();
     const todayStart = new Date().setHours(0, 0, 0, 0);
 
-    // Stats générales
+    // Requêtes parallèles par index au lieu d'un seul .collect()
+    const [openTickets, inProgressTickets, waitingUserTickets, resolvedTickets, closedTickets, highPriorityTickets] = await Promise.all([
+      ctx.db.query("supportTickets").withIndex("by_status", (q) => q.eq("status", "open")).collect(),
+      ctx.db.query("supportTickets").withIndex("by_status", (q) => q.eq("status", "in_progress")).collect(),
+      ctx.db.query("supportTickets").withIndex("by_status", (q) => q.eq("status", "waiting_user")).collect(),
+      ctx.db.query("supportTickets").withIndex("by_status", (q) => q.eq("status", "resolved")).collect(),
+      ctx.db.query("supportTickets").withIndex("by_status", (q) => q.eq("status", "closed")).collect(),
+      ctx.db.query("supportTickets").withIndex("by_priority", (q) => q.eq("priority", "high")).collect(),
+    ]);
+
+    const allActive = [...openTickets, ...inProgressTickets, ...waitingUserTickets];
+    const activeHighPriority = highPriorityTickets.filter((t) => t.status !== "closed" && t.status !== "resolved");
+    const allTickets = [...allActive, ...resolvedTickets, ...closedTickets];
+
     const stats = {
-      total: tickets.length,
-      open: tickets.filter((t) => t.status === "open").length,
-      inProgress: tickets.filter((t) => t.status === "in_progress").length,
-      waitingUser: tickets.filter((t) => t.status === "waiting_user").length,
-      resolved: tickets.filter((t) => t.status === "resolved").length,
-      closed: tickets.filter((t) => t.status === "closed").length,
-      highPriority: tickets.filter((t) => t.priority === "high" && t.status !== "closed" && t.status !== "resolved").length,
-      createdToday: tickets.filter((t) => t.createdAt >= todayStart).length,
-      resolvedToday: tickets.filter((t) => t.resolvedAt && t.resolvedAt >= todayStart).length,
+      total: allTickets.length,
+      open: openTickets.length,
+      inProgress: inProgressTickets.length,
+      waitingUser: waitingUserTickets.length,
+      resolved: resolvedTickets.length,
+      closed: closedTickets.length,
+      highPriority: activeHighPriority.length,
+      createdToday: allTickets.filter((t) => t.createdAt >= todayStart).length,
+      resolvedToday: resolvedTickets.filter((t) => t.resolvedAt && t.resolvedAt >= todayStart).length,
     };
 
     // Temps moyen de résolution (derniers 30 jours)
     const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
-    const resolvedTickets = tickets.filter(
+    const recentResolved = resolvedTickets.filter(
       (t) => t.resolvedAt && t.createdAt >= thirtyDaysAgo
     );
     const avgResolutionTime =
-      resolvedTickets.length > 0
-        ? resolvedTickets.reduce((acc, t) => acc + (t.resolvedAt! - t.createdAt), 0) / resolvedTickets.length
+      recentResolved.length > 0
+        ? recentResolved.reduce((acc, t) => acc + (t.resolvedAt! - t.createdAt), 0) / recentResolved.length
         : 0;
 
     return {

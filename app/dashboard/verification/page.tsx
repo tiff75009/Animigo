@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/app/hooks/useAuth";
+import { uploadToCloudinary as uploadToCloudinaryLib } from "@/app/lib/cloudinary";
 import {
   ShieldCheck,
   Upload,
@@ -23,10 +24,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import Image from "next/image";
-
-// Configuration Cloudinary
-const CLOUDINARY_CLOUD_NAME = "dpusoqz6c";
-const CLOUDINARY_UPLOAD_PRESET = "animigo_unsigned";
 
 interface UploadState {
   isUploading: boolean;
@@ -50,6 +47,9 @@ export default function VerificationPage() {
   const getOrCreateRequest = useMutation(api.verification.verification.getOrCreateVerificationRequest);
   const updateDocuments = useMutation(api.verification.verification.updateVerificationDocuments);
   const submitRequest = useMutation(api.verification.verification.submitVerificationRequest);
+
+  // Config Cloudinary dynamique depuis Convex
+  const cloudinaryConfig = useQuery(api.config.getCloudinaryConfig);
 
   // Query pour le statut
   const verificationStatus = useQuery(
@@ -97,40 +97,43 @@ export default function VerificationPage() {
     initRequest();
   }, [token, getOrCreateRequest]);
 
-  // Upload vers Cloudinary
+  // Upload vers Cloudinary via la lib partagée
   const uploadToCloudinary = useCallback(async (
     file: File,
     folder: string,
     setUploadState: React.Dispatch<React.SetStateAction<UploadState>>
   ): Promise<string | null> => {
-    setUploadState({ isUploading: true, progress: 0, url: null, error: null });
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-    formData.append("folder", `verification/${folder}`);
-
-    try {
-      const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Erreur lors de l'upload");
-      }
-
-      const data = await response.json();
-      setUploadState({ isUploading: false, progress: 100, url: data.secure_url, error: null });
-      return data.secure_url;
-    } catch (error) {
-      setUploadState({ isUploading: false, progress: 0, url: null, error: "Erreur lors de l'upload" });
+    if (!cloudinaryConfig?.cloudName || !cloudinaryConfig?.apiKey) {
+      setUploadState({ isUploading: false, progress: 0, url: null, error: "Cloudinary n'est pas configuré. Vérifiez la configuration dans l'admin." });
       return null;
     }
-  }, []);
+
+    setUploadState({ isUploading: true, progress: 0, url: null, error: null });
+
+    try {
+      const result = await uploadToCloudinaryLib(
+        file,
+        {
+          cloudName: cloudinaryConfig.cloudName,
+          apiKey: cloudinaryConfig.apiKey,
+          uploadPreset: cloudinaryConfig.uploadPreset,
+        },
+        { folder: `verification/${folder}`, maxWidth: 2000, maxHeight: 2000, quality: 95 }
+      );
+
+      if (result.success && result.url) {
+        setUploadState({ isUploading: false, progress: 100, url: result.url, error: null });
+        return result.url;
+      } else {
+        setUploadState({ isUploading: false, progress: 0, url: null, error: result.error || "Échec de l'upload" });
+        return null;
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Erreur inconnue lors de l'upload";
+      setUploadState({ isUploading: false, progress: 0, url: null, error: errorMessage });
+      return null;
+    }
+  }, [cloudinaryConfig]);
 
   // Handler pour l'upload de fichier
   const handleFileUpload = useCallback(async (
