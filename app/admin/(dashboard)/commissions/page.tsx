@@ -17,6 +17,8 @@ import {
   Calculator,
   Info,
   TrendingUp,
+  Clock,
+  CreditCard,
 } from "lucide-react";
 
 // Types de commissions
@@ -84,14 +86,40 @@ export default function CommissionsPage() {
     professionnel: 10,
   });
 
+  // États pour tarification & horaires
+  const [workdayHours, setWorkdayHours] = useState(8);
+  const [dayStartTime, setDayStartTime] = useState("07:00");
+  const [dayEndTime, setDayEndTime] = useState("21:00");
+
+  // États pour TVA et frais Stripe
+  const [vatRate, setVatRate] = useState(20);
+  const [stripeFeeRate, setStripeFeeRate] = useState(3);
+
   // Query pour récupérer les commissions actuelles
   const currentCommissions = useQuery(
     api.admin.commissions.getCommissions,
     token ? { token } : "skip"
   );
 
+  // Queries pour configs, TVA et frais Stripe
+  const allConfigs = useQuery(
+    api.admin.config.getAllConfigs,
+    token ? { token } : "skip"
+  );
+  const vatRateData = useQuery(
+    api.admin.commissions.getVatRateAdmin,
+    token ? { token } : "skip"
+  );
+  const stripeFeeRateData = useQuery(
+    api.admin.commissions.getStripeFeeRateAdmin,
+    token ? { token } : "skip"
+  );
+
   // Mutation pour sauvegarder
   const updateAllCommissions = useMutation(api.admin.commissions.updateAllCommissions);
+  const updateConfig = useMutation(api.admin.config.updateConfig);
+  const updateVatRateMutation = useMutation(api.admin.commissions.updateVatRate);
+  const updateStripeFeeRateMutation = useMutation(api.admin.commissions.updateStripeFeeRate);
 
   // Charger les commissions existantes
   useEffect(() => {
@@ -103,6 +131,38 @@ export default function CommissionsPage() {
       });
     }
   }, [currentCommissions]);
+
+  // Charger les configs tarification
+  useEffect(() => {
+    if (allConfigs) {
+      for (const config of allConfigs) {
+        switch (config.key) {
+          case "workday_hours":
+            setWorkdayHours(parseInt(config.value, 10) || 8);
+            break;
+          case "day_start_time":
+            setDayStartTime(config.value || "07:00");
+            break;
+          case "day_end_time":
+            setDayEndTime(config.value || "21:00");
+            break;
+        }
+      }
+    }
+  }, [allConfigs]);
+
+  // Charger les taux de TVA et frais Stripe
+  useEffect(() => {
+    if (vatRateData?.rate !== undefined) {
+      setVatRate(vatRateData.rate);
+    }
+  }, [vatRateData]);
+
+  useEffect(() => {
+    if (stripeFeeRateData?.rate !== undefined) {
+      setStripeFeeRate(stripeFeeRateData.rate);
+    }
+  }, [stripeFeeRateData]);
 
   const handleCommissionChange = (
     type: keyof typeof commissions,
@@ -128,6 +188,21 @@ export default function CommissionsPage() {
         token,
         commissions,
       });
+
+      // Sauvegarder tarification & horaires
+      const configsToSave = [
+        { key: "workday_hours", value: workdayHours.toString() },
+        { key: "day_start_time", value: dayStartTime },
+        { key: "day_end_time", value: dayEndTime },
+      ];
+      for (const config of configsToSave) {
+        await updateConfig({ token, key: config.key, value: config.value });
+      }
+
+      // Sauvegarder TVA et frais Stripe
+      await updateVatRateMutation({ token, rate: vatRate });
+      await updateStripeFeeRateMutation({ token, rate: stripeFeeRate });
+
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
@@ -338,6 +413,186 @@ export default function CommissionsPage() {
           </div>
         )}
       </motion.div>
+
+      {/* Tarification & Horaires */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.35 }}
+        className="bg-slate-900 rounded-xl border border-slate-800 p-6 mb-8"
+      >
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2 bg-purple-500/20 rounded-lg">
+            <Clock className="w-5 h-5 text-purple-400" />
+          </div>
+          <h3 className="text-lg font-semibold text-white">Tarification & Horaires</h3>
+        </div>
+        <div className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Durée d&apos;une journée de travail
+            </label>
+            <div className="flex items-center gap-4">
+              <input
+                type="range"
+                min={4}
+                max={10}
+                value={workdayHours}
+                onChange={(e) => setWorkdayHours(Number(e.target.value))}
+                className="flex-1 accent-purple-500"
+              />
+              <div className="w-16 px-3 py-2 bg-slate-800 rounded-lg text-center font-semibold text-purple-400">
+                {workdayHours}h
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 mt-2">
+              Demi-journée : {Math.round(workdayHours / 2)}h (calculée automatiquement)
+            </p>
+          </div>
+
+          <div className="pt-4 border-t border-slate-700">
+            <label className="block text-sm font-medium text-slate-300 mb-3">
+              Horaires de journée (garde)
+            </label>
+            <p className="text-xs text-slate-500 mb-4">
+              Définit quand commence et finit une journée pour les services de garde.
+              La période nocturne (garde de nuit) commence après l&apos;heure de fin.
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Début de journée</label>
+                <input
+                  type="time"
+                  value={dayStartTime}
+                  onChange={(e) => setDayStartTime(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Fin de journée</label>
+                <input
+                  type="time"
+                  value={dayEndTime}
+                  onChange={(e) => setDayEndTime(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-purple-500"
+                />
+              </div>
+            </div>
+            <div className="mt-3 flex items-center gap-2 text-sm text-slate-400">
+              <span className="px-2 py-1 bg-indigo-500/20 text-indigo-300 rounded">
+                Nuit : {dayEndTime} → {dayStartTime}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2 p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+            <Clock className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-purple-300">
+              Ces valeurs sont utilisées pour le calcul des tarifs de tous les annonceurs.
+              Les gardes de nuit sont facturées entre {dayEndTime} et {dayStartTime}.
+            </p>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* TVA et Frais Stripe */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        {/* TVA sur les commissions */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="bg-slate-900 rounded-xl border border-slate-800 p-6"
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-emerald-500/20 rounded-lg">
+              <Percent className="w-5 h-5 text-emerald-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-white">TVA sur les commissions</h3>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Taux de TVA applicable
+              </label>
+              <div className="flex items-center gap-4">
+                <input
+                  type="range"
+                  min={0}
+                  max={30}
+                  step={0.5}
+                  value={vatRate}
+                  onChange={(e) => setVatRate(Number(e.target.value))}
+                  className="flex-1 accent-emerald-500"
+                />
+                <div className="w-20 px-3 py-2 bg-slate-800 rounded-lg text-center font-semibold text-emerald-400">
+                  {vatRate}%
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                La TVA est appliquée sur le montant des commissions facturées aux clients.
+              </p>
+            </div>
+            <div className="flex items-start gap-2 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+              <Percent className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-emerald-300">
+                <p className="font-medium mb-1">Exemple de calcul :</p>
+                <p>Prix annonceur : 40€ | Commission 15% : 6€ | <strong>TVA {vatRate}% : {(6 * vatRate / 100).toFixed(2)}€</strong></p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Frais Stripe */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.45 }}
+          className="bg-slate-900 rounded-xl border border-slate-800 p-6"
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-indigo-500/20 rounded-lg">
+              <CreditCard className="w-5 h-5 text-indigo-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-white">Intégration Stripe</h3>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Taux de prélèvement Stripe
+              </label>
+              <div className="flex items-center gap-4">
+                <input
+                  type="range"
+                  min={0}
+                  max={10}
+                  step={0.1}
+                  value={stripeFeeRate}
+                  onChange={(e) => setStripeFeeRate(Number(e.target.value))}
+                  className="flex-1 accent-indigo-500"
+                />
+                <div className="w-20 px-3 py-2 bg-slate-800 rounded-lg text-center font-semibold text-indigo-400">
+                  {stripeFeeRate}%
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                Les frais Stripe sont calculés sur le montant HT de la réservation (hors commission, hors TVA).
+              </p>
+            </div>
+            <div className="flex items-start gap-2 p-3 bg-indigo-500/10 border border-indigo-500/30 rounded-lg">
+              <CreditCard className="w-5 h-5 text-indigo-400 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-indigo-300">
+                <p className="font-medium mb-1">Exemple de calcul complet :</p>
+                <p>Prix annonceur : 40€</p>
+                <p>+ Commission 15% : 6€</p>
+                <p>+ TVA {vatRate}% sur commission : {(6 * vatRate / 100).toFixed(2)}€</p>
+                <p>+ Frais Stripe {stripeFeeRate}% : {(40 * stripeFeeRate / 100).toFixed(2)}€</p>
+                <p className="font-bold mt-1">= Total client : {(40 + 6 + (6 * vatRate / 100) + (40 * stripeFeeRate / 100)).toFixed(2)}€</p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </div>
 
       {/* Error Message */}
       {error && (

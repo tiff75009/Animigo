@@ -53,14 +53,51 @@ export default function EmailTemplatesPage() {
   const [showVariables, setShowVariables] = useState(true);
   const [seeding, setSeeding] = useState(false);
 
+  // États pour config expéditeur
+  const [emailFrom, setEmailFrom] = useState("noreply@animigo.fr");
+  const [emailFromName, setEmailFromName] = useState("Animigo");
+  const [savingSender, setSavingSender] = useState(false);
+  const [savedSender, setSavedSender] = useState(false);
+
   const templates = useQuery(
     api.admin.emailTemplates.getAll,
+    token ? { token } : "skip"
+  );
+
+  const allConfigs = useQuery(
+    api.admin.config.getAllConfigs,
     token ? { token } : "skip"
   );
 
   const updateTemplate = useMutation(api.admin.emailTemplates.update);
   const resetTemplate = useMutation(api.admin.emailTemplates.resetToDefault);
   const seedDefaults = useMutation(api.admin.emailTemplates.seedDefaults);
+  const updateConfig = useMutation(api.admin.config.updateConfig);
+
+  // Charger les configs expéditeur
+  useEffect(() => {
+    if (allConfigs) {
+      for (const config of allConfigs) {
+        if (config.key === "email_from") setEmailFrom(config.value);
+        if (config.key === "email_from_name") setEmailFromName(config.value);
+      }
+    }
+  }, [allConfigs]);
+
+  const handleSaveSender = async () => {
+    if (!token) return;
+    setSavingSender(true);
+    try {
+      await updateConfig({ token, key: "email_from", value: emailFrom });
+      await updateConfig({ token, key: "email_from_name", value: emailFromName });
+      setSavedSender(true);
+      setTimeout(() => setSavedSender(false), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur lors de la sauvegarde");
+    } finally {
+      setSavingSender(false);
+    }
+  };
 
   const currentTemplate = templates?.find((t: EmailTemplate) => t.slug === selectedTemplate);
 
@@ -242,6 +279,57 @@ export default function EmailTemplatesPage() {
           {seeding ? "Synchronisation..." : "Synchroniser les templates"}
         </button>
       </div>
+
+      {/* Config expéditeur */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-6 p-4 bg-slate-900 border border-slate-800 rounded-xl"
+      >
+        <div className="flex items-center gap-3 mb-3">
+          <Mail className="w-5 h-5 text-green-400" />
+          <h3 className="font-semibold text-white text-sm">Configuration expéditeur</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Email expéditeur (From)</label>
+            <input
+              type="email"
+              value={emailFrom}
+              onChange={(e) => setEmailFrom(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-green-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Nom d&apos;expéditeur</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={emailFromName}
+                onChange={(e) => setEmailFromName(e.target.value)}
+                className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-green-500"
+              />
+              <button
+                onClick={handleSaveSender}
+                disabled={savingSender}
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  savedSender
+                    ? "bg-green-500 text-white"
+                    : "bg-green-500/20 hover:bg-green-500/30 text-green-400"
+                }`}
+              >
+                {savingSender ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : savedSender ? (
+                  <Check className="w-4 h-4" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Liste des templates */}

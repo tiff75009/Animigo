@@ -19,6 +19,7 @@ import {
   Clock,
   Filter,
   RefreshCw,
+  ToggleLeft,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 
@@ -30,8 +31,11 @@ export default function ServiceModerationPage() {
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const [moderationNote, setModerationNote] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isTogglingModeration, setIsTogglingModeration] = useState(false);
 
   // Queries
+  const isModerationEnabled = useQuery(api.admin.config.isServiceModerationEnabled);
+
   const moderationStats = useQuery(
     api.admin.moderation.getModerationStats,
     token ? { token } : "skip"
@@ -46,6 +50,20 @@ export default function ServiceModerationPage() {
   const approveService = useMutation(api.admin.moderation.approveService);
   const rejectService = useMutation(api.admin.moderation.rejectService);
   const resetToModeration = useMutation(api.admin.moderation.resetToModeration);
+  const toggleModeration = useMutation(api.admin.config.toggleServiceModeration);
+
+  // Toggle modération
+  const handleToggleModeration = async () => {
+    if (!token) return;
+    setIsTogglingModeration(true);
+    try {
+      await toggleModeration({ token, enabled: !isModerationEnabled });
+    } catch (error) {
+      console.error("Erreur:", error);
+    } finally {
+      setIsTogglingModeration(false);
+    }
+  };
 
   // Handle approve
   const handleApprove = async (serviceId: Id<"services">) => {
@@ -129,6 +147,37 @@ export default function ServiceModerationPage() {
             Examinez et modérez les services signalés ou en attente
           </p>
         </div>
+      </div>
+
+      {/* Toggle modération */}
+      <div className="mb-6 p-4 bg-slate-800 rounded-xl border border-slate-700 flex items-center justify-between">
+        <div className="flex-1">
+          <p className="text-slate-200 font-medium">Modération des services</p>
+          <p className="text-sm text-slate-400 mt-1">
+            {isModerationEnabled
+              ? "Activée : tous les nouveaux services et modifications doivent être approuvés avant publication."
+              : "Désactivée : les services sont publiés immédiatement sans vérification."}
+          </p>
+        </div>
+        <button
+          onClick={handleToggleModeration}
+          disabled={isTogglingModeration || isModerationEnabled === undefined}
+          className={`relative w-14 h-8 rounded-full transition-colors ${
+            isModerationEnabled ? "bg-amber-500" : "bg-slate-600"
+          } ${isTogglingModeration ? "opacity-50" : ""}`}
+        >
+          <span
+            className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow-md transition-transform flex items-center justify-center ${
+              isModerationEnabled ? "left-7" : "left-1"
+            }`}
+          >
+            {isTogglingModeration ? (
+              <Loader2 className="w-4 h-4 text-slate-600 animate-spin" />
+            ) : isModerationEnabled ? (
+              <Check className="w-4 h-4 text-amber-500" />
+            ) : null}
+          </span>
+        </button>
       </div>
 
       {/* Stats */}

@@ -22,7 +22,8 @@
       "Bash(npm run build:*)",
       "mcp__jina__read_url",
       "mcp__jina__search_images",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(git push:*)"
     ]
   }
 }

@@ -35,6 +35,8 @@ import {
   Ticket,
   HelpCircle,
   AlertTriangle,
+  CreditCard,
+  Wrench,
 } from "lucide-react";
 
 interface NavItem {
@@ -182,6 +184,21 @@ export function AdminSidebar() {
       ],
     },
     {
+      title: "Paiements",
+      items: [
+        {
+          label: "Commissions",
+          href: "/admin/commissions",
+          icon: Percent,
+        },
+        {
+          label: "Paiements & Délais",
+          href: "/admin/paiements",
+          icon: CreditCard,
+        },
+      ],
+    },
+    {
       title: "Support",
       items: [
         {
@@ -200,9 +217,9 @@ export function AdminSidebar() {
       title: "Configuration",
       items: [
         {
-          label: "Commissions",
-          href: "/admin/commissions",
-          icon: Percent,
+          label: "Paramètres",
+          href: "/admin/parametres",
+          icon: Settings,
         },
         {
           label: "Templates Email",
@@ -214,11 +231,11 @@ export function AdminSidebar() {
           href: "/admin/legal",
           icon: FileText,
         },
-        {
-          label: "Invitations Admin",
-          href: "/admin/invitations",
-          icon: UserPlus,
-        },
+      ],
+    },
+    {
+      title: "Développement",
+      items: [
         {
           label: "Clés développeur",
           href: "/admin/dev-keys",
@@ -230,9 +247,14 @@ export function AdminSidebar() {
           icon: Plug,
         },
         {
-          label: "Paramètres",
-          href: "/admin/parametres",
-          icon: Settings,
+          label: "Invitations Admin",
+          href: "/admin/invitations",
+          icon: UserPlus,
+        },
+        {
+          label: "Maintenance",
+          href: "/admin/maintenance",
+          icon: Wrench,
         },
         {
           label: "Dev Test",

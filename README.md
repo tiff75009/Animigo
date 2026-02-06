@@ -145,6 +145,18 @@ bun run build
   - Table avec expansion/collapse des sous-categories
   - Ordre d'affichage
 
+- **Commissions** (`/admin/commissions`)
+  - Taux de commission par type d'annonceur (particulier, micro-entrepreneur, professionnel)
+  - Tarification & Horaires (heures ouvrables, debut/fin de journee)
+  - TVA sur les commissions (taux configurable)
+  - Integration Stripe (frais plateforme configurable)
+
+- **Paiements & Delais** (`/admin/paiements`)
+  - Delais d'acceptation des reservations
+  - Delais de paiement
+  - Versements annonceurs (jour de versement, seuil minimum)
+  - Politique d'annulation (periode de comptage, paliers, templates email)
+
 - **Integrations API** (`/admin/integrations`)
   - Configuration API INSEE (SIRENE)
   - Configuration API Adresse (gouvernement)
@@ -152,9 +164,22 @@ bun run build
   - Test de connexion en temps reel
 
 - **Parametres** (`/admin/parametres`)
-  - Activation/desactivation de la moderation globale
-  - Configuration systeme
-  - **Section annulation** : periode de comptage, pourcentage 2eme annulation, templates email
+  - General : nom du site, email de contact, logo
+  - Notifications : nouvelles inscriptions, signalements
+  - Securite : verification email, 2FA admin
+
+- **Templates Email** (`/admin/templates-email`)
+  - Configuration expediteur (email, nom d'affichage)
+  - Templates email editables par evenement
+
+- **Cles developpeur** (`/admin/dev-keys`)
+  - Gestion des cles API developpeurs
+  - Secret API interne (generation, copie)
+  - Presence en temps reel des developpeurs
+
+- **Maintenance** (`/admin/maintenance`)
+  - Mode maintenance (toggle, gestion IPs autorisees, demandes d'acces)
+  - Regeneration des slugs
 
 ### Dashboard Annonceur (`/dashboard`)
 
@@ -509,6 +534,43 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.25.0 - Refactoring Panel Admin (Parametres)
+
+- **Eclatement de la page Parametres** (2100+ lignes → 7 fichiers de 300-650 lignes)
+  - `/admin/parametres` allege : General (nom, email, logo), Notifications, Securite
+  - Les 12 autres sections redistribuees vers des pages dediees
+
+- **Nouvelle page Paiements & Delais** (`/admin/paiements`)
+  - Delais d'acceptation des reservations (duree, action auto)
+  - Delais de paiement (echéance, rappels)
+  - Versements annonceurs (jour de versement, seuil minimum, methode)
+  - Politique d'annulation (periode comptage, paliers, pourcentages, templates)
+  - Bouton "Sauvegarder tout" unifie
+
+- **Nouvelle page Maintenance** (`/admin/maintenance`)
+  - Mode maintenance avec toggle instantane
+  - Gestion des IPs autorisees (demandes en attente, approuvees, ajout manuel)
+  - Regeneration des slugs de tous les annonceurs
+
+- **Page Commissions enrichie** (`/admin/commissions`)
+  - Ajout : Tarification & Horaires (heures ouvrables, debut/fin journee)
+  - Ajout : TVA sur les commissions (taux configurable avec calcul en direct)
+  - Ajout : Integration Stripe (frais plateforme configurable)
+
+- **Page Moderation enrichie** (`/admin/moderation/services`)
+  - Ajout : bandeau toggle activation/desactivation de la moderation globale
+
+- **Page Cles developpeur enrichie** (`/admin/dev-keys`)
+  - Ajout : section Secret API Interne (generation, copie, affichage masque)
+
+- **Page Templates Email enrichie** (`/admin/templates-email`)
+  - Ajout : configuration expediteur (email from, nom d'affichage)
+
+- **Sidebar admin reorganisee**
+  - Nouvelle section "Paiements" : Commissions + Paiements & Delais
+  - Nouvelle section "Developpement" : Cles dev, Integrations, Invitations, Maintenance, Dev Test
+  - Section "Configuration" allegee : Parametres, Templates Email, Pages legales
+
 ### v0.24.0 - Confirmation Mission, Notation et Reclamations
 
 - **Confirmation de fin de service par le client**
@@ -625,7 +687,7 @@ Utilisation de Framer Motion avec des variants predefinies :
   - Section multi-seances avec calcul d'exemple chiffre
   - Politique de l'annonceur (per_session vs percentage_remaining)
 
-- **Configuration admin** (`/admin/parametres`)
+- **Configuration admin** (`/admin/paiements`)
   - Periode de comptage des annulations (mois)
   - Pourcentage 2eme annulation pour l'annonceur
   - Templates email : annulation confirmee, annulation refusee

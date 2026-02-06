@@ -1,12 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAdminAuth } from "@/app/hooks/useAdminAuth";
 import { motion } from "framer-motion";
-import { Key, Plus, Trash2, Copy, Check, Circle, Code, Eye, EyeOff } from "lucide-react";
+import { Key, Plus, Trash2, Copy, Check, Circle, Code, Eye, EyeOff, RefreshCw, Loader2, ShieldAlert } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
+
+// Fonction pour générer un secret aléatoire
+function generateSecret(length: number = 64): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  const array = new Uint8Array(length);
+  crypto.getRandomValues(array);
+  for (let i = 0; i < length; i++) {
+    result += chars[array[i] % chars.length];
+  }
+  return result;
+}
 
 interface DevKey {
   id: Id<"devKeys">;
@@ -54,13 +66,71 @@ export default function DevKeysPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
 
+  // États pour le secret API interne
+  const [internalApiSecret, setInternalApiSecret] = useState("");
+  const [showApiSecret, setShowApiSecret] = useState(false);
+  const [secretCopied, setSecretCopied] = useState(false);
+  const [envCopied, setEnvCopied] = useState(false);
+  const [isGeneratingSecret, setIsGeneratingSecret] = useState(false);
+
   const devKeys = useQuery(
     api.admin.devPresence.getAllDevKeys,
     token ? { token } : "skip"
   );
 
+  // Query pour configs (secret API interne)
+  const allConfigs = useQuery(
+    api.admin.config.getAllConfigs,
+    token ? { token } : "skip"
+  );
+
   const createKey = useMutation(api.admin.devPresence.createDevKey);
   const revokeKey = useMutation(api.admin.devPresence.revokeDevKey);
+  const updateConfig = useMutation(api.admin.config.updateConfig);
+
+  // Charger le secret API interne
+  useEffect(() => {
+    if (allConfigs) {
+      const secretConfig = allConfigs.find((c: { key: string; value: string }) => c.key === "internal_api_secret");
+      if (secretConfig) {
+        setInternalApiSecret(secretConfig.value);
+      }
+    }
+  }, [allConfigs]);
+
+  const handleGenerateSecret = async () => {
+    if (!token) return;
+    setIsGeneratingSecret(true);
+    try {
+      const newSecret = generateSecret(64);
+      setInternalApiSecret(newSecret);
+      await updateConfig({ token, key: "internal_api_secret", value: newSecret });
+    } catch (error) {
+      console.error("Erreur lors de la génération du secret:", error);
+    } finally {
+      setIsGeneratingSecret(false);
+    }
+  };
+
+  const handleCopyApiSecret = async () => {
+    try {
+      await navigator.clipboard.writeText(internalApiSecret);
+      setSecretCopied(true);
+      setTimeout(() => setSecretCopied(false), 2000);
+    } catch (error) {
+      console.error("Erreur lors de la copie:", error);
+    }
+  };
+
+  const handleCopyEnv = async () => {
+    try {
+      await navigator.clipboard.writeText(`INTERNAL_API_SECRET=${internalApiSecret}`);
+      setEnvCopied(true);
+      setTimeout(() => setEnvCopied(false), 2000);
+    } catch (error) {
+      console.error("Erreur lors de la copie:", error);
+    }
+  };
 
   const handleCreate = async () => {
     if (!token || !newDevName.trim()) return;
@@ -379,6 +449,119 @@ export default function DevKeysPage() {
           <li>Quand il lance <code className="text-blue-400 bg-slate-800 px-1 rounded">bun dev</code>, il apparaît en ligne ici</li>
           <li>Après 2 minutes sans activité, il passe hors ligne</li>
         </ol>
+      </motion.div>
+
+      {/* Secret API Interne */}
+      <motion.div
+        className="mt-6 bg-slate-900 rounded-xl p-6 border border-slate-800"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.6 }}
+      >
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2 bg-orange-500/20 rounded-lg">
+            <Key className="w-5 h-5 text-orange-400" />
+          </div>
+          <h2 className="text-lg font-semibold text-white">Secret API Interne</h2>
+        </div>
+        <div className="space-y-4">
+          <p className="text-slate-400 text-sm">
+            Ce secret est utilisé pour sécuriser la communication entre les actions Convex et l&apos;API Next.js
+            (nécessaire pour le système de paiement Stripe sur Convex self-hosted).
+          </p>
+
+          {internalApiSecret ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="flex-1 relative">
+                  <input
+                    type={showApiSecret ? "text" : "password"}
+                    value={internalApiSecret}
+                    readOnly
+                    className="w-full px-4 py-2.5 pr-20 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono text-sm"
+                  />
+                  <button
+                    onClick={() => setShowApiSecret(!showApiSecret)}
+                    className="absolute right-12 top-1/2 -translate-y-1/2 p-1.5 hover:bg-slate-700 rounded transition-colors"
+                    title={showApiSecret ? "Masquer" : "Afficher"}
+                  >
+                    {showApiSecret ? (
+                      <EyeOff className="w-4 h-4 text-slate-400" />
+                    ) : (
+                      <Eye className="w-4 h-4 text-slate-400" />
+                    )}
+                  </button>
+                  <button
+                    onClick={handleCopyApiSecret}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 hover:bg-slate-700 rounded transition-colors"
+                    title="Copier le secret"
+                  >
+                    {secretCopied ? (
+                      <Check className="w-4 h-4 text-green-400" />
+                    ) : (
+                      <Copy className="w-4 h-4 text-slate-400" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 p-3 bg-slate-800 rounded-lg">
+                <code className="flex-1 text-orange-400 text-sm font-mono truncate">
+                  INTERNAL_API_SECRET={showApiSecret ? internalApiSecret : "••••••••••••••••"}
+                </code>
+                <button
+                  onClick={handleCopyEnv}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 rounded-lg text-sm font-medium transition-colors"
+                >
+                  {envCopied ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      Copié !
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      Copier pour .env
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <div className="flex items-start gap-2 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                <Key className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-blue-300">
+                  Copiez cette ligne dans votre fichier <code className="bg-slate-800 px-1 rounded">.env.local</code> de Next.js.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+              <ShieldAlert className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-amber-300">
+                Aucun secret configuré. Générez un secret pour activer le système de paiement intégré.
+              </p>
+            </div>
+          )}
+
+          <button
+            onClick={handleGenerateSecret}
+            disabled={isGeneratingSecret}
+            className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+          >
+            {isGeneratingSecret ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <RefreshCw className="w-5 h-5" />
+            )}
+            {internalApiSecret ? "Régénérer un nouveau secret" : "Générer un secret"}
+          </button>
+
+          {internalApiSecret && (
+            <p className="text-xs text-slate-500">
+              Attention : régénérer un secret invalidera l&apos;ancien. Vous devrez mettre à jour votre fichier .env.local.
+            </p>
+          )}
+        </div>
       </motion.div>
     </div>
   );
