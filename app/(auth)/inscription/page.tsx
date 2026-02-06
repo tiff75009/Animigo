@@ -1,20 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useToast } from "@/app/components/ui/toast";
 import { parseError } from "@/app/lib/errors";
 
+import { ShieldCheck, Eye, CalendarCheck, Zap } from "lucide-react";
 import { StepIndicator } from "./components/step-indicator";
 import { AccountTypeStep } from "./components/account-type-step";
 import { CredentialsStep } from "./components/credentials-step";
 import { PersonalInfoStep } from "./components/personal-info-step";
 import { ProInfoStep } from "./components/pro-info-step";
 import { CguStep } from "./components/cgu-step";
+
+const mobileAdvantages = [
+  { icon: ShieldCheck, label: "Paiement garanti" },
+  { icon: Eye, label: "Visibilité" },
+  { icon: CalendarCheck, label: "Gestion simple" },
+  { icon: Zap, label: "Sans engagement" },
+];
 
 export type AccountType =
   | "annonceur_pro"
@@ -53,10 +61,20 @@ const initialData: RegistrationData = {
 
 export default function InscriptionPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const toast = useToast();
   const [step, setStep] = useState(1);
   const [data, setData] = useState<RegistrationData>(initialData);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Pré-sélection du type via query param (?type=annonceur_pro)
+  useEffect(() => {
+    const typeParam = searchParams.get("type") as AccountType | null;
+    if (typeParam && ["annonceur_pro", "annonceur_particulier", "utilisateur"].includes(typeParam)) {
+      setData((prev) => ({ ...prev, accountType: typeParam }));
+      setStep(2);
+    }
+  }, [searchParams]);
 
   const registerPro = useMutation(api.auth.register.registerPro);
   const registerParticulier = useMutation(api.auth.register.registerParticulier);
@@ -240,7 +258,7 @@ export default function InscriptionPage() {
   return (
     <div>
       {/* Header mobile */}
-      <div className="lg:hidden text-center mb-8">
+      <div className="lg:hidden text-center mb-6">
         <Link href="/" className="inline-flex items-center gap-2 mb-4">
           <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center">
             <span className="text-xl">🐾</span>
@@ -249,6 +267,19 @@ export default function InscriptionPage() {
             Anim<span className="text-primary">igo</span>
           </span>
         </Link>
+
+        {/* Bandeau avantages mobile */}
+        <div className="flex justify-center gap-3 mt-3">
+          {mobileAdvantages.map((adv) => (
+            <div
+              key={adv.label}
+              className="flex items-center gap-1 text-xs text-text-light"
+            >
+              <adv.icon className="w-3.5 h-3.5 text-primary" />
+              <span>{adv.label}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Titre */}
@@ -260,7 +291,9 @@ export default function InscriptionPage() {
         <h1 className="text-2xl font-bold text-foreground mb-2">
           Créer votre compte
         </h1>
-        <p className="text-text-light">Rejoignez la communauté Animigo</p>
+        <p className="text-text-light">
+          Inscription gratuite, sans engagement
+        </p>
       </motion.div>
 
       {/* Indicateur d'étapes */}

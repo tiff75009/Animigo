@@ -24,6 +24,7 @@ import {
   PawPrint,
   HelpCircle,
   Ticket,
+  UserPlus,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { usePathname } from "next/navigation";
@@ -398,14 +399,21 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                   </div>
                 </>
               ) : (
-                /* Non connecté: Devenir annonceur + Connexion */
+                /* Non connecté: Devenir annonceur + S'inscrire + Connexion */
                 <>
                   <Link
-                    href="/inscription"
+                    href="/pro"
                     className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
                   >
                     <Briefcase className="w-4 h-4" />
                     <span>Devenir annonceur</span>
+                  </Link>
+                  <Link
+                    href="/inscription?type=utilisateur"
+                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    <span>S&apos;inscrire</span>
                   </Link>
                   <Link
                     href="/connexion"
@@ -458,16 +466,22 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                 </>
               ) : (
                 <>
-                  {/* Devenir annonceur (mobile) - only when not logged in */}
+                  {/* Liens (mobile) - only when not logged in */}
                   <Link
-                    href="/inscription"
-                    className="text-xs font-bold text-secondary hover:text-secondary/80 whitespace-nowrap mr-1"
+                    href="/pro"
+                    className="text-xs font-bold text-secondary hover:text-secondary/80 whitespace-nowrap"
                   >
                     Devenir annonceur
                   </Link>
                   <Link
+                    href="/inscription?type=utilisateur"
+                    className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors"
+                  >
+                    <UserPlus className="w-5 h-5" />
+                  </Link>
+                  <Link
                     href="/connexion"
-                    className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+                    className="p-1.5 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
                   >
                     <User className="w-5 h-5" />
                   </Link>
@@ -690,7 +704,7 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Liens utiles</p>
                       <div className="space-y-1">
                         <Link
-                          href="/inscription"
+                          href="/pro"
                           onClick={() => setIsMobileMenuOpen(false)}
                           className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
                         >
@@ -804,11 +818,12 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                       Se connecter
                     </Link>
                     <Link
-                      href="/inscription"
+                      href="/inscription?type=utilisateur"
                       onClick={() => setIsMobileMenuOpen(false)}
                       className="flex items-center justify-center gap-2 w-full p-3 text-gray-700 font-medium rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
                     >
-                      Créer un compte
+                      <UserPlus className="w-4 h-4" />
+                      Créer un compte propriétaire
                     </Link>
                   </div>
                 )}

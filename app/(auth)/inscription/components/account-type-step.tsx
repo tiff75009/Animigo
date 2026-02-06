@@ -3,7 +3,19 @@
 import { motion } from "framer-motion";
 import { cn } from "@/app/lib/utils";
 import { Button } from "@/app/components/ui/button";
-import { Check } from "lucide-react";
+import {
+  Check,
+  ShieldCheck,
+  BadgeCheck,
+  TrendingUp,
+  Receipt,
+  Calendar,
+  MessageSquare,
+  Wallet,
+  Search,
+  Star,
+  Lock,
+} from "lucide-react";
 import type { AccountType } from "../page";
 
 interface AccountTypeStepProps {
@@ -20,26 +32,37 @@ const accountTypes = [
     emoji: "💼",
     color: "primary",
     features: [
-      "Facturation pro",
-      "Badge vérifié",
-      "Priorité dans les recherches",
+      { icon: ShieldCheck, label: "Paiement garanti" },
+      { icon: BadgeCheck, label: "Badge vérifié" },
+      { icon: TrendingUp, label: "Priorité recherches" },
+      { icon: Receipt, label: "Facturation auto" },
     ],
   },
   {
     type: "annonceur_particulier" as AccountType,
     title: "Pet-sitter Particulier",
-    description: "Vous gardez des animaux occasionnellement",
+    description: "Vous gardez des animaux occasionnellement, sans engagement",
     emoji: "🏠",
     color: "secondary",
-    features: ["Profil personnalisé", "Messagerie", "Gestion des missions"],
+    features: [
+      { icon: Wallet, label: "Revenus extra" },
+      { icon: Calendar, label: "Planning flexible" },
+      { icon: MessageSquare, label: "Messagerie" },
+      { icon: ShieldCheck, label: "Paiement sécurisé" },
+    ],
   },
   {
     type: "utilisateur" as AccountType,
     title: "Propriétaire d'animaux",
-    description: "Vous recherchez un garde pour votre compagnon",
+    description: "Vous recherchez un garde de confiance pour votre compagnon",
     emoji: "🐾",
     color: "purple",
-    features: ["Recherche avancée", "Avis vérifiés", "Paiement sécurisé"],
+    features: [
+      { icon: Search, label: "Gardiens vérifiés" },
+      { icon: Star, label: "Avis certifiés" },
+      { icon: Lock, label: "Paiement protégé" },
+      { icon: MessageSquare, label: "Messagerie directe" },
+    ],
   },
 ];
 
@@ -126,13 +149,14 @@ export function AccountTypeStep({
                   <div className="flex flex-wrap gap-2 mt-3">
                     {type.features.map((feature) => (
                       <span
-                        key={feature}
+                        key={feature.label}
                         className={cn(
-                          "text-xs px-2 py-1 rounded-full",
+                          "text-xs px-2.5 py-1 rounded-full inline-flex items-center gap-1",
                           isSelected ? colors.badge : "bg-foreground/10 text-text-light"
                         )}
                       >
-                        {feature}
+                        <feature.icon className="w-3 h-3" />
+                        {feature.label}
                       </span>
                     ))}
                   </div>

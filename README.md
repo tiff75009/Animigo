@@ -55,18 +55,37 @@ bun run build
 
 ### Authentification
 
+- **Page Pro** (`/pro`)
+  - Landing page dediee pour les pet-sitters et prestataires
+  - Hero avec simulateur de revenus anime
+  - 9 categories de services avec icones et couleurs (Garde, Promenade, Toilettage, Dressage, Agilite, Transport, Pension, Visites, Soins)
+  - Section 0% commission avec comparatif plateformes
+  - Fonctionnalites cles : Planning, Dashboard, Paiements securises
+  - Timeline "Comment ca marche" en 4 etapes
+  - 3 temoignages de pet-sitters
+  - FAQ en accordeon (5 questions)
+  - CTA vers inscription pro ou particulier
+
 - **Inscription** (`/inscription`)
   - 3 types de comptes : Utilisateur, Annonceur Particulier, Annonceur Pro
+  - Pre-selection du type via query param (`?type=annonceur_pro`, `?type=utilisateur`)
   - Validation SIRET en temps reel via API INSEE pour les pros
   - Detection automatique du type d'entreprise (micro-entreprise, societe)
   - Hachage des mots de passe avec bcrypt
   - Verification de la complexite du mot de passe
+  - Panneau gauche dynamique selon le type de compte :
+    - Pro : avantages business (paiement garanti, visibilite, gestion)
+    - Particulier : avantages flexibilite (horaires, communaute, demarrage facile)
+    - Utilisateur : avantages proprietaire (gardiens verifies, avis, paiement protege)
+    - Gradient et temoignage adaptes par type
 
 - **Connexion** (`/connexion`)
   - Authentification par email/mot de passe
+  - Boutons de connexion sociale (Google, Facebook, Apple) - UI prete, backend a venir
   - Gestion des sessions avec tokens
   - Protection contre le brute force
   - Redirection automatique selon le role
+  - Liens d'inscription : Proprietaire (→ `/inscription?type=utilisateur`) et Pet-sitter (→ `/pro`)
 
 ### Panel Administration (`/admin`)
 
@@ -299,9 +318,10 @@ const result = await ctx.runQuery(api.api.location.searchAddress, { query: "10 r
 
 ```
 app/
-  (auth)/              # Pages d'authentification
+  (auth)/              # Pages d'authentification (layout dynamique par type)
     connexion/
     inscription/
+  pro/                 # Landing page pet-sitters/prestataires
   admin/               # Panel d'administration
     annonceurs/
     connexion/
@@ -474,6 +494,48 @@ Utilisation de Framer Motion avec des variants predefinies :
 ---
 
 ## Changelog recent
+
+### v0.23.0 - Page Pro, Inscription Utilisateur et Connexion Sociale
+
+- **Nouvelle page Pro** (`/pro`)
+  - Landing page complete pour attirer les pet-sitters et prestataires
+  - Hero sombre avec simulateur de revenus anime (compteur + graphique)
+  - Barre de confiance (3 stats : annonceurs, missions, note)
+  - Grille de 9 categories de services avec icones et couleurs dediees
+  - Section 0% commission avec texte geant et comparatif visuel
+  - 3 sections fonctionnalites en layout alterne (Planning, Dashboard, Paiements)
+  - Timeline "Comment ca marche" avec ligne de progression gradient
+  - 3 temoignages de pet-sitters avec notes et roles
+  - FAQ accordeon avec 5 questions frequentes
+  - CTA final avec double bouton (pro / particulier)
+  - Footer avec liens rapides
+
+- **Panneau gauche auth dynamique** (`app/(auth)/layout.tsx`)
+  - Contenu adapte selon le type de compte via `?type=` query param
+  - 4 variantes : Pro (business), Particulier (flexibilite), Utilisateur (proprietaire), Default
+  - Chaque variante : titre, sous-titre, 4 avantages, temoignage, badge, gradient unique
+  - Page connexion : stats + animaux flottants (inchange)
+
+- **Connexion sociale** (`/connexion`)
+  - Boutons Google, Facebook et Apple avec logos SVG officiels
+  - Toast "Bientot disponible" au clic (backend OAuth a implementer)
+  - Separateur "ou" entre social et formulaire email
+  - Liens d'inscription : "Proprietaire" (→ inscription utilisateur) et "Pet-sitter" (→ /pro)
+
+- **Parcours d'inscription utilisateur**
+  - Pre-selection du type de compte via query param (`?type=utilisateur`)
+  - Skip automatique de l'etape 1 (choix du type) si pre-selectionne
+  - Bandeau avantages mobile (Paiement garanti, Visibilite, Gestion simple, Sans engagement)
+
+- **Navbar mise a jour**
+  - Desktop : nouveau bouton "S'inscrire" (icone UserPlus, couleur primary) → `/inscription?type=utilisateur`
+  - Mobile : icone UserPlus entre "Devenir annonceur" et connexion
+  - Menu hamburger : "Creer un compte proprietaire" avec icone UserPlus
+  - Tous les liens "Devenir annonceur" pointent vers `/pro`
+
+- **CTA homepage** (`app/components/sections/cta.tsx`)
+  - "Je cherche un garde" → `/recherche`
+  - "Je deviens garde" → `/pro`
 
 ### v0.22.0 - Systeme d'Annulation et Refactorisation Page Reservation
 

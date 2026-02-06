@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { Button } from "../ui/button";
 import { ArrowRight, Heart } from "lucide-react";
 
@@ -52,22 +53,26 @@ export function CTA() {
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button
-                size="lg"
-                className="bg-white text-primary hover:bg-white/90 shadow-xl group"
-              >
-                Je cherche un garde
-                <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
-              </Button>
+              <Link href="/recherche">
+                <Button
+                  size="lg"
+                  className="bg-white text-primary hover:bg-white/90 shadow-xl group"
+                >
+                  Je cherche un garde
+                  <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                </Button>
+              </Link>
             </motion.div>
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-white text-white hover:bg-white hover:text-primary"
-              >
-                Je deviens garde
-              </Button>
+              <Link href="/pro">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="border-white text-white hover:bg-white hover:text-primary"
+                >
+                  Je deviens garde
+                </Button>
+              </Link>
             </motion.div>
           </div>
 
