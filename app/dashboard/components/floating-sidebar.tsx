@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   User,
   CreditCard,
+  Receipt,
   Settings,
   MessageSquare,
   LogOut,
@@ -375,6 +376,7 @@ function FloatingSidebarContent() {
     { href: "/dashboard/services", icon: <Briefcase className="w-5 h-5" />, label: "Mes services" },
     { href: "/dashboard/avis", icon: <Star className="w-5 h-5" />, label: "Mes avis" },
     { href: "/dashboard/paiements", icon: <CreditCard className="w-5 h-5" />, label: "Paiements" },
+    { href: "/dashboard/fiscalite", icon: <Receipt className="w-5 h-5" />, label: "Fiscalité" },
     { href: "/dashboard/parametres", icon: <Settings className="w-5 h-5" />, label: "Paramètres" },
   ];
 

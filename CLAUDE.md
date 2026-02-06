@@ -48,7 +48,7 @@ const session = await validateSession(ctx, args.sessionToken);
 
 ```
 app/
-├── dashboard/      # Annonceur (14 pages)
+├── dashboard/      # Annonceur (15 pages, dont fiscalité)
 ├── client/         # Client
 ├── admin/          # Admin (10+ pages)
 ├── components/ui/  # ShadCN
@@ -71,6 +71,8 @@ convex/
 **Mission** : pending_acceptance → pending_confirmation → upcoming → in_progress → completed
 
 **Paiement** : PaymentIntent → encaissement immédiat → transfert annonceur le 25 du mois
+
+**Commission** : payée par le client en sus du prix du service (l'annonceur perçoit 100% de son tarif)
 
 ## Outils MCP
 
