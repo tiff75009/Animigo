@@ -755,37 +755,38 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                   </div>
                 ) : (
                   <>
-                    {/* Services Section */}
-                    <div className="p-4">
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Nos services</p>
-                      <div className="space-y-1">
-                        {serviceCategories.map((service) => (
-                          <Link
-                            key={service.slug}
-                            href={service.href}
-                            onClick={() => setIsMobileMenuOpen(false)}
-                            className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-                          >
-                            <span className="text-xl">{service.emoji}</span>
-                            <span className="font-medium text-gray-900">{service.label}</span>
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
+                    {/* Services Section - uniquement pour les visiteurs non connectés */}
+                    {(!isAuthenticated || !user) && (
+                      <>
+                        <div className="p-4">
+                          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Nos services</p>
+                          <div className="space-y-1">
+                            {serviceCategories.map((service) => (
+                              <Link
+                                key={service.slug}
+                                href={service.href}
+                                onClick={() => setIsMobileMenuOpen(false)}
+                                className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
+                              >
+                                <span className="text-xl">{service.emoji}</span>
+                                <span className="font-medium text-gray-900">{service.label}</span>
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
 
-                    <div className="mx-4 h-px bg-gray-100" />
+                        <div className="mx-4 h-px bg-gray-100" />
+                      </>
+                    )}
                   </>
                 )}
 
                 {/* User Section (if authenticated, not on dashboard) */}
                 {!isLoading && isAuthenticated && user && !isOnDashboard && (
-                  <>
-                    <div className="mx-4 h-px bg-gray-100" />
-                    <div className="p-4">
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Mon compte</p>
-
-                      {/* User Info Card */}
-                      <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-primary/5 to-secondary/5 rounded-xl mb-3">
+                  <div className="py-2">
+                    {/* Avatar en haut */}
+                    <div className="px-4 pb-3 mb-2">
+                      <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-primary/5 to-secondary/5 rounded-xl">
                         <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-bold text-sm">
                           {avatarUrl ? (
                             <Image src={avatarUrl} alt="Avatar" fill className="object-cover" />
@@ -804,45 +805,106 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                           )}
                         </div>
                       </div>
+                    </div>
 
-                      <div className="space-y-1">
+                    {/* Sections complètes du dashboard */}
+                    {(user.accountType === "utilisateur" ? clientDashboardSections : announcerDashboardSections).map((section, idx) => (
+                      <div key={section.title}>
+                        {idx > 0 && <div className="mx-4 h-px bg-gray-100 my-2" />}
+                        <div className="px-4 py-1">
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1 px-3">
+                            {section.title}
+                          </p>
+                          <div className="space-y-0.5">
+                            {section.items.map((item) => {
+                              const Icon = item.icon;
+                              const isActive = pathname === item.href;
+                              return (
+                                <Link
+                                  key={item.href}
+                                  href={item.href}
+                                  onClick={() => setIsMobileMenuOpen(false)}
+                                  className={cn(
+                                    "flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors",
+                                    isActive
+                                      ? "bg-primary text-white"
+                                      : "hover:bg-gray-50 text-gray-700"
+                                  )}
+                                >
+                                  <Icon className="w-4 h-4" />
+                                  <span className="text-sm font-medium">{item.label}</span>
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Vérification d'identité (annonceur) */}
+                    {user.accountType !== "utilisateur" && !isIdentityVerified && (
+                      <>
+                        <div className="mx-4 h-px bg-gray-100 my-2" />
+                        <div className="px-4 py-1">
+                          <Link
+                            href="/dashboard/verification"
+                            onClick={() => setIsMobileMenuOpen(false)}
+                          >
+                            <div className={cn(
+                              "flex items-center gap-3 p-3 rounded-xl transition-colors",
+                              hasPendingVerification
+                                ? "bg-blue-50 border border-blue-200"
+                                : "bg-amber-50 border border-amber-200"
+                            )}>
+                              {hasPendingVerification ? (
+                                <>
+                                  <Clock className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-blue-700">En cours de vérification</p>
+                                    <p className="text-xs text-blue-500">Votre demande est en traitement</p>
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  <ShieldCheck className="w-5 h-5 text-amber-500 flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-amber-700">Vérifier mon profil</p>
+                                    <p className="text-xs text-amber-500">Obtenez le badge vérifié</p>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </Link>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Aide & Support */}
+                    <div className="mx-4 h-px bg-gray-100 my-2" />
+                    <div className="px-4 py-1">
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1 px-3">
+                        Aide & Support
+                      </p>
+                      <div className="space-y-0.5">
                         <Link
-                          href={isAdmin ? "/admin" : (user.accountType === "utilisateur" ? "/client" : "/dashboard")}
+                          href={user.accountType === "utilisateur" ? "/client/aide" : "/dashboard/aide"}
                           onClick={() => setIsMobileMenuOpen(false)}
-                          className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
+                          className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700 transition-colors"
                         >
-                          <LayoutDashboard className="w-5 h-5 text-primary" />
-                          <span className="font-medium text-gray-900">{isAdmin ? "Administration" : "Tableau de bord"}</span>
+                          <HelpCircle className="w-4 h-4" />
+                          <span className="text-sm font-medium">Centre d&apos;aide</span>
                         </Link>
                         <Link
-                          href={isOnClientDashboard ? "/client/messagerie" : "/dashboard/messagerie"}
+                          href={user.accountType === "utilisateur" ? "/client/tickets" : "/dashboard/tickets"}
                           onClick={() => setIsMobileMenuOpen(false)}
-                          className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors relative"
+                          className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700 transition-colors"
                         >
-                          <MessageCircle className="w-5 h-5 text-gray-500" />
-                          <span className="font-medium text-gray-900">Messages</span>
-                          {(unreadMessagesCount ?? 0) > 0 && (
-                            <span className="ml-auto px-2 py-0.5 bg-primary text-white text-xs font-bold rounded-full">
-                              {unreadMessagesCount! > 99 ? "99+" : unreadMessagesCount}
-                            </span>
-                          )}
-                        </Link>
-                        <Link
-                          href="/client/notifications"
-                          onClick={() => setIsMobileMenuOpen(false)}
-                          className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors relative"
-                        >
-                          <Bell className="w-5 h-5 text-gray-500" />
-                          <span className="font-medium text-gray-900">Notifications</span>
-                          {unreadCount > 0 && (
-                            <span className="ml-auto px-2 py-0.5 bg-primary text-white text-xs font-bold rounded-full">
-                              {unreadCount}
-                            </span>
-                          )}
+                          <Ticket className="w-4 h-4" />
+                          <span className="text-sm font-medium">Mes tickets</span>
                         </Link>
                       </div>
                     </div>
-                  </>
+                  </div>
                 )}
               </div>
 
