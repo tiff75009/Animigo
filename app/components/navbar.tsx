@@ -28,6 +28,7 @@ import {
   UserPlus,
   ShieldCheck,
   Clock,
+  Receipt,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { usePathname } from "next/navigation";
@@ -59,7 +60,7 @@ const DESKTOP_VISIBLE_COUNT = 5;
 // Menu items pour le dashboard annonceur (par sections)
 const announcerDashboardSections = [
   {
-    title: "Principal",
+    title: "Activité",
     collapsible: false,
     items: [
       { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
@@ -69,13 +70,20 @@ const announcerDashboardSections = [
     ],
   },
   {
-    title: "Compte",
+    title: "Mon profil",
     collapsible: false,
     items: [
       { href: "/dashboard/profil", label: "Ma fiche", icon: User },
       { href: "/dashboard/services", label: "Mes services", icon: Briefcase },
       { href: "/dashboard/avis", label: "Mes avis", icon: Star },
+    ],
+  },
+  {
+    title: "Finance",
+    collapsible: false,
+    items: [
       { href: "/dashboard/paiements", label: "Paiements", icon: CreditCard },
+      { href: "/dashboard/fiscalite", label: "Fiscalité", icon: Receipt },
       { href: "/dashboard/parametres", label: "Paramètres", icon: Settings },
     ],
   },
@@ -542,6 +550,30 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                 {isOnDashboard ? (
                   /* Dashboard Navigation - Compact with sections */
                   <div className="py-2">
+                    {/* Avatar en haut du menu dashboard */}
+                    {!isLoading && isAuthenticated && user && (
+                      <div className="px-4 pb-3 mb-2">
+                        <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-primary/5 to-secondary/5 rounded-xl">
+                          <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-bold text-sm">
+                            {avatarUrl ? (
+                              <Image src={avatarUrl} alt="Avatar" fill className="object-cover" />
+                            ) : (
+                              initials
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-gray-900 truncate">
+                              {user.firstName} {user.lastName}
+                            </p>
+                            {user.username ? (
+                              <p className="text-xs text-gray-500 truncate">@{user.username}</p>
+                            ) : (
+                              <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     {dashboardSections.map((section, idx) => {
                       const isExpanded = expandedSections.includes(section.title);
                       const hasActiveItem = section.items.some(item => pathname === item.href || pathname.startsWith(item.href + "/"));
@@ -745,8 +777,8 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                   </>
                 )}
 
-                {/* User Section (if authenticated) */}
-                {!isLoading && isAuthenticated && user && (
+                {/* User Section (if authenticated, not on dashboard) */}
+                {!isLoading && isAuthenticated && user && !isOnDashboard && (
                   <>
                     <div className="mx-4 h-px bg-gray-100" />
                     <div className="p-4">
@@ -765,18 +797,22 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                           <p className="font-semibold text-gray-900 truncate">
                             {user.firstName} {user.lastName}
                           </p>
-                          <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                          {user.username ? (
+                            <p className="text-xs text-gray-500 truncate">@{user.username}</p>
+                          ) : (
+                            <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                          )}
                         </div>
                       </div>
 
                       <div className="space-y-1">
                         <Link
-                          href={isAdmin ? "/admin" : "/dashboard"}
+                          href={isAdmin ? "/admin" : (user.accountType === "utilisateur" ? "/client" : "/dashboard")}
                           onClick={() => setIsMobileMenuOpen(false)}
                           className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
                         >
                           <LayoutDashboard className="w-5 h-5 text-primary" />
-                          <span className="font-medium text-gray-900">{isAdmin ? "Administration" : "Mon espace"}</span>
+                          <span className="font-medium text-gray-900">{isAdmin ? "Administration" : "Tableau de bord"}</span>
                         </Link>
                         <Link
                           href={isOnClientDashboard ? "/client/messagerie" : "/dashboard/messagerie"}

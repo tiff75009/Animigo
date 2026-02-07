@@ -48,6 +48,7 @@ import type * as api_stripeWebhook from "../api/stripeWebhook.js";
 import type * as auth_login from "../auth/login.js";
 import type * as auth_register from "../auth/register.js";
 import type * as auth_session from "../auth/session.js";
+import type * as auth_username from "../auth/username.js";
 import type * as auth_utils from "../auth/utils.js";
 import type * as client_addresses from "../client/addresses.js";
 import type * as client_favorites from "../client/favorites.js";
@@ -161,6 +162,7 @@ declare const fullApi: ApiFromModules<{
   "auth/login": typeof auth_login;
   "auth/register": typeof auth_register;
   "auth/session": typeof auth_session;
+  "auth/username": typeof auth_username;
   "auth/utils": typeof auth_utils;
   "client/addresses": typeof client_addresses;
   "client/favorites": typeof client_favorites;

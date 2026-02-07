@@ -421,6 +421,7 @@ export const getPendingBooking = query({
         slug: announcer.slug ?? null,
         firstName: announcer.firstName,
         lastName: announcer.lastName,
+        username: announcer.username ?? undefined,
         profileImage: profileImageUrl,
         location: profile?.location ?? profile?.city ?? "",
         city: profile?.city ?? null,

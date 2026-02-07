@@ -21,6 +21,7 @@ export default defineSchema({
     firstName: v.string(),
     lastName: v.string(),
     phone: v.string(),
+    username: v.optional(v.string()), // Nom d'utilisateur unique (lowercase, 3-30 chars)
 
     // Champs PRO (optionnels)
     siret: v.optional(v.string()),
@@ -70,6 +71,7 @@ export default defineSchema({
   })
     .index("by_email", ["email"])
     .index("by_slug", ["slug"])
+    .index("by_username", ["username"])
     .index("by_account_type", ["accountType"])
     .index("by_siret", ["siret"])
     .index("by_role", ["role"])

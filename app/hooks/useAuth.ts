@@ -10,6 +10,7 @@ interface User {
   email: string;
   firstName: string;
   lastName: string;
+  username?: string;
   accountType: "annonceur_pro" | "annonceur_particulier" | "utilisateur";
   phone: string;
   siret?: string;

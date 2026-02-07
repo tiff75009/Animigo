@@ -104,8 +104,90 @@ function SectionCard({
   );
 }
 
-// Information Tab (Password)
+// Information Tab (Personal Info + Password)
 function InformationTab() {
+  // Token et session
+  const [token, setToken] = useState<string | null>(null);
+  useEffect(() => {
+    setToken(localStorage.getItem("auth_token"));
+  }, []);
+
+  const sessionData = useQuery(
+    api.auth.session.getSession,
+    token ? { token } : "skip"
+  );
+
+  const updateUserInfo = useMutation(api.auth.username.updateUserInfo);
+
+  // Personal info state
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [username, setUsername] = useState("");
+  const [debouncedUsername, setDebouncedUsername] = useState("");
+  const [personalInfoSaved, setPersonalInfoSaved] = useState(false);
+  const [personalInfoSaving, setPersonalInfoSaving] = useState(false);
+  const [personalInfoError, setPersonalInfoError] = useState("");
+
+  // Sync session data
+  useEffect(() => {
+    if (sessionData?.user) {
+      setFirstName(sessionData.user.firstName);
+      setLastName(sessionData.user.lastName);
+      setPhone(sessionData.user.phone || "");
+      setUsername(sessionData.user.username || "");
+      setDebouncedUsername(sessionData.user.username || "");
+    }
+  }, [sessionData]);
+
+  // Debounce username check
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedUsername(username);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [username]);
+
+  // Username availability check
+  const usernameCheck = useQuery(
+    api.auth.username.checkUsernameAvailability,
+    debouncedUsername.trim().length >= 3 && debouncedUsername !== (sessionData?.user?.username || "")
+      ? { username: debouncedUsername.trim() }
+      : "skip"
+  );
+
+  const usernameIsOwn = debouncedUsername === (sessionData?.user?.username || "");
+  const usernameIsValid = username.trim().length >= 3 && (usernameIsOwn || usernameCheck?.available === true);
+  const usernameIsTaken = username.trim().length >= 3 && !usernameIsOwn && usernameCheck?.available === false && !usernameCheck?.error;
+
+  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 30);
+    setUsername(value);
+  };
+
+  const handleSavePersonalInfo = async () => {
+    if (!token) return;
+    setPersonalInfoSaving(true);
+    setPersonalInfoError("");
+    try {
+      await updateUserInfo({
+        sessionToken: token,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        phone: phone.replace(/\s/g, ""),
+        ...(username.trim().length >= 3 ? { username: username.trim() } : {}),
+      });
+      setPersonalInfoSaved(true);
+      setTimeout(() => setPersonalInfoSaved(false), 3000);
+    } catch (error: unknown) {
+      setPersonalInfoError(error instanceof Error ? error.message : "Erreur lors de la sauvegarde");
+      setTimeout(() => setPersonalInfoError(""), 5000);
+    } finally {
+      setPersonalInfoSaving(false);
+    }
+  };
+
+  // Password state
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -114,13 +196,23 @@ function InformationTab() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [saved, setSaved] = useState(false);
 
-  const handleSave = () => {
-    if (newPassword && newPassword === confirmPassword) {
+  const changePasswordMutation = useMutation(api.auth.session.changePassword);
+
+  const handleSave = async () => {
+    if (!token || !newPassword || newPassword !== confirmPassword) return;
+    try {
+      await changePasswordMutation({
+        token,
+        currentPassword,
+        newPassword,
+      });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
+    } catch (error: unknown) {
+      // handled silently
     }
   };
 
@@ -135,6 +227,126 @@ function InformationTab() {
 
   return (
     <div className="space-y-6">
+      {/* Informations personnelles */}
+      <SectionCard title="Informations personnelles" icon={User}>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">Prénom</label>
+              <input
+                type="text"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                className="w-full px-4 py-3 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">Nom</label>
+              <input
+                type="text"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                className="w-full px-4 py-3 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
+              />
+            </div>
+          </div>
+
+          {/* Username */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Nom d&apos;utilisateur
+            </label>
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-text-light">
+                <span className="text-sm font-medium">@</span>
+              </div>
+              <input
+                type="text"
+                value={username}
+                onChange={handleUsernameChange}
+                placeholder="jeandupont"
+                maxLength={30}
+                className={cn(
+                  "w-full pl-8 pr-10 py-3 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 text-foreground",
+                  usernameIsValid
+                    ? "ring-2 ring-green-500 focus:ring-green-500"
+                    : usernameIsTaken
+                    ? "ring-2 ring-red-500 focus:ring-red-500"
+                    : "focus:ring-primary/50"
+                )}
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                {usernameIsValid && <Check className="w-4 h-4 text-green-500" />}
+                {usernameIsTaken && <AlertCircle className="w-4 h-4 text-red-500" />}
+              </div>
+            </div>
+            {usernameIsTaken && (
+              <p className="text-xs text-red-500 mt-1">
+                Ce nom est déjà pris{usernameCheck?.suggestion ? `. Essayez : ${usernameCheck.suggestion}` : ""}
+              </p>
+            )}
+            {usernameIsValid && !usernameIsOwn && (
+              <p className="text-xs text-green-600 mt-1">Disponible</p>
+            )}
+          </div>
+
+          {/* Téléphone */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">Téléphone</label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="06 12 34 56 78"
+              className="w-full px-4 py-3 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
+            />
+          </div>
+
+          {/* Email (read-only) */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">Email</label>
+            <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 rounded-xl">
+              <Mail className="w-4 h-4 text-text-light" />
+              <span className="text-foreground">{sessionData?.user?.email}</span>
+              <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium ml-auto">
+                Vérifié
+              </span>
+            </div>
+          </div>
+
+          {personalInfoError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center gap-2">
+              <AlertCircle className="w-5 h-5" />
+              {personalInfoError}
+            </div>
+          )}
+
+          <motion.button
+            onClick={handleSavePersonalInfo}
+            disabled={personalInfoSaving}
+            className={cn(
+              "w-full py-3 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2",
+              personalInfoSaved
+                ? "bg-green-500 text-white"
+                : "bg-primary text-white hover:bg-primary/90 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            )}
+            whileHover={{ scale: personalInfoSaved ? 1 : 1.01 }}
+            whileTap={{ scale: 0.99 }}
+          >
+            {personalInfoSaved ? (
+              <>
+                <Check className="w-5 h-5" />
+                Modifications enregistrées
+              </>
+            ) : personalInfoSaving ? (
+              "Enregistrement..."
+            ) : (
+              "Enregistrer les modifications"
+            )}
+          </motion.button>
+        </div>
+      </SectionCard>
+
       <SectionCard title="Modifier le mot de passe" icon={Lock}>
         <div className="space-y-4">
           {/* Current Password */}

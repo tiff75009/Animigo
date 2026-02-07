@@ -40,6 +40,7 @@ export interface ServiceSearchResult {
   announcerSlug: string;
   firstName: string;
   lastName: string;
+  username?: string;
   profileImage: string | null;
   coverImage: string | null;
   location: string;
@@ -516,6 +517,9 @@ export function ServiceCardGrid({ service, onViewService, index, hasDateFilter =
               <h3 className="text-lg font-semibold text-gray-900 group-hover:text-primary transition-colors">
                 {service.firstName} {service.lastName.charAt(0)}.
               </h3>
+              {service.username && (
+                <span className="text-xs text-gray-400">@{service.username}</span>
+              )}
               <p className="text-sm text-gray-600 mt-0.5">{city}</p>
             </div>
 
@@ -720,6 +724,9 @@ export function ServiceCardList({ service, onViewService, index, hasDateFilter =
                   <h3 className="text-lg font-semibold text-gray-900 group-hover:text-primary transition-colors">
                     {service.firstName} {service.lastName.charAt(0)}.
                   </h3>
+                  {service.username && (
+                    <span className="text-xs text-gray-400">@{service.username}</span>
+                  )}
                   <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 rounded-full">
                     <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                     <span className="text-sm font-semibold text-gray-900">{service.rating.toFixed(1)}</span>

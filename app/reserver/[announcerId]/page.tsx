@@ -1368,6 +1368,9 @@ export default function ReserverPage({
               <p className="font-semibold text-foreground text-sm truncate">
                 Réserver avec {announcerData.firstName}
               </p>
+              {announcerData.username && (
+                <p className="text-xs text-gray-400 truncate">@{announcerData.username}</p>
+              )}
               <p className="text-xs text-text-light truncate">
                 {announcerData.location}
               </p>

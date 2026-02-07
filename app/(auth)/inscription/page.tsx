@@ -57,6 +57,7 @@ export interface RegistrationData {
   firstName: string;
   lastName: string;
   phone: string;
+  username: string;
   siret: string;
   companyName: string;
   // Classification entreprise (pour les pros)
@@ -74,6 +75,7 @@ const initialData: RegistrationData = {
   firstName: "",
   lastName: "",
   phone: "",
+  username: "",
   siret: "",
   companyName: "",
   acceptCgu: false,
@@ -136,6 +138,7 @@ export default function InscriptionPage() {
           firstName: data.firstName,
           lastName: data.lastName,
           phone: data.phone,
+          username: data.username,
           siret: data.siret,
           companyName: data.companyName,
           // Classification entreprise
@@ -151,6 +154,7 @@ export default function InscriptionPage() {
           firstName: data.firstName,
           lastName: data.lastName,
           phone: data.phone,
+          username: data.username,
           acceptCgu: data.acceptCgu,
         });
       } else {
@@ -160,6 +164,7 @@ export default function InscriptionPage() {
           firstName: data.firstName,
           lastName: data.lastName,
           phone: data.phone,
+          username: data.username,
           acceptCgu: data.acceptCgu,
         });
       }

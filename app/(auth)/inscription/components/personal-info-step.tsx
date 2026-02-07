@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
-import { User, Phone, ArrowLeft } from "lucide-react";
+import { User, Phone, ArrowLeft, AtSign, Check, X, Loader2 } from "lucide-react";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import type { RegistrationData } from "../page";
 
 interface PersonalInfoStepProps {
@@ -20,6 +22,21 @@ export function PersonalInfoStep({
   onBack,
 }: PersonalInfoStepProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [debouncedUsername, setDebouncedUsername] = useState(data.username);
+
+  // Debounce pour la vérification d'unicité du username
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedUsername(data.username);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [data.username]);
+
+  // Vérification d'unicité en temps réel
+  const usernameCheck = useQuery(
+    api.auth.username.checkUsernameAvailability,
+    debouncedUsername.trim().length >= 3 ? { username: debouncedUsername.trim() } : "skip"
+  );
 
   // Formater le numéro de téléphone
   const formatPhone = (value: string) => {
@@ -38,6 +55,12 @@ export function PersonalInfoStep({
     onChange({ phone: formatted });
   };
 
+  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Ne garder que les caractères autorisés, en lowercase
+    const value = e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 30);
+    onChange({ username: value });
+  };
+
   const validateAndContinue = () => {
     const newErrors: Record<string, string> = {};
 
@@ -47,6 +70,15 @@ export function PersonalInfoStep({
 
     if (!data.lastName.trim()) {
       newErrors.lastName = "Le nom est requis";
+    }
+
+    // Validation username
+    if (!data.username.trim()) {
+      newErrors.username = "Le nom d'utilisateur est requis";
+    } else if (data.username.trim().length < 3) {
+      newErrors.username = "3 caractères minimum";
+    } else if (usernameCheck && !usernameCheck.available) {
+      newErrors.username = usernameCheck.error || "Ce nom d'utilisateur est déjà pris";
     }
 
     // Validation téléphone français
@@ -64,9 +96,15 @@ export function PersonalInfoStep({
     }
   };
 
+  const usernameIsValid = data.username.trim().length >= 3 && usernameCheck?.available === true;
+  const usernameIsChecking = data.username.trim().length >= 3 && debouncedUsername !== data.username;
+  const usernameIsTaken = data.username.trim().length >= 3 && usernameCheck?.available === false && !usernameCheck?.error;
+
   const isValid =
     data.firstName.trim() &&
     data.lastName.trim() &&
+    data.username.trim().length >= 3 &&
+    usernameCheck?.available === true &&
     data.phone.replace(/\s/g, "").length >= 10;
 
   return (
@@ -96,6 +134,58 @@ export function PersonalInfoStep({
           label="Nom"
           error={errors.lastName}
         />
+      </div>
+
+      {/* Username */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-2">
+          Nom d&apos;utilisateur
+        </label>
+        <div className="relative">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-text-light">
+            <AtSign className="w-5 h-5" />
+          </div>
+          <input
+            type="text"
+            value={data.username}
+            onChange={handleUsernameChange}
+            placeholder="jeandupont"
+            maxLength={30}
+            className={`w-full pl-10 pr-10 py-3 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 text-foreground ${
+              errors.username
+                ? "ring-2 ring-red-500 focus:ring-red-500"
+                : usernameIsValid
+                ? "ring-2 ring-green-500 focus:ring-green-500"
+                : usernameIsTaken
+                ? "ring-2 ring-red-500 focus:ring-red-500"
+                : "focus:ring-primary/50"
+            }`}
+          />
+          {/* Indicateur de statut */}
+          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+            {usernameIsChecking ? (
+              <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+            ) : usernameIsValid ? (
+              <Check className="w-4 h-4 text-green-500" />
+            ) : usernameIsTaken ? (
+              <X className="w-4 h-4 text-red-500" />
+            ) : null}
+          </div>
+        </div>
+        {errors.username && (
+          <p className="text-xs text-red-500 mt-1">{errors.username}</p>
+        )}
+        {usernameIsTaken && !errors.username && (
+          <p className="text-xs text-red-500 mt-1">
+            Ce nom est déjà pris{usernameCheck?.suggestion ? `. Essayez : ${usernameCheck.suggestion}` : ""}
+          </p>
+        )}
+        {usernameIsValid && (
+          <p className="text-xs text-green-600 mt-1">Disponible</p>
+        )}
+        <p className="text-xs text-text-light mt-1">
+          Votre nom d&apos;utilisateur sera visible sur votre profil
+        </p>
       </div>
 
       {/* Téléphone */}

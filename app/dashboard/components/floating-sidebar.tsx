@@ -364,19 +364,25 @@ function FloatingSidebarContent() {
 
   const isCollapsed = isLgScreen ? isManuallyCollapsed : true;
 
-  const mainNavItems: NavItem[] = [
+  const activityNavItems: NavItem[] = [
     { href: "/dashboard", icon: <LayoutDashboard className="w-5 h-5" />, label: "Tableau de bord" },
     { href: "/dashboard/missions", icon: <ClipboardList className="w-5 h-5" />, label: "Missions", badge: pendingMissionsCount },
     { href: "/dashboard/planning", icon: <Calendar className="w-5 h-5" />, label: "Planning" },
     { href: "/dashboard/messagerie", icon: <MessageSquare className="w-5 h-5" />, label: "Messages", badge: unreadCount },
   ];
 
-  const accountNavItems: NavItem[] = [
+  const profileNavItems: NavItem[] = [
     { href: "/dashboard/profil", icon: <User className="w-5 h-5" />, label: "Ma fiche" },
     { href: "/dashboard/services", icon: <Briefcase className="w-5 h-5" />, label: "Mes services" },
     { href: "/dashboard/avis", icon: <Star className="w-5 h-5" />, label: "Mes avis" },
+  ];
+
+  const financeNavItems: NavItem[] = [
     { href: "/dashboard/paiements", icon: <CreditCard className="w-5 h-5" />, label: "Paiements" },
     { href: "/dashboard/fiscalite", icon: <Receipt className="w-5 h-5" />, label: "Fiscalité" },
+  ];
+
+  const settingsNavItems: NavItem[] = [
     { href: "/dashboard/parametres", icon: <Settings className="w-5 h-5" />, label: "Paramètres" },
   ];
 
@@ -450,6 +456,9 @@ function FloatingSidebarContent() {
                   <p className="font-semibold text-slate-800 text-sm whitespace-nowrap truncate">
                     {user?.firstName} {user?.lastName}
                   </p>
+                  {user?.username ? (
+                    <p className="text-xs text-slate-500 whitespace-nowrap truncate">@{user.username}</p>
+                  ) : null}
                   <p className="text-xs whitespace-nowrap flex items-center gap-1">
                     {isIdentityVerified ? (
                       <>
@@ -533,15 +542,29 @@ function FloatingSidebarContent() {
             )}
           >
             <NavSection
-              title="Principal"
-              items={mainNavItems}
+              title="Activité"
+              items={activityNavItems}
               currentPath={currentFullPath}
               isCollapsed={isCollapsed}
             />
 
             <NavSection
-              title="Compte"
-              items={accountNavItems}
+              title="Mon profil"
+              items={profileNavItems}
+              currentPath={currentFullPath}
+              isCollapsed={isCollapsed}
+            />
+
+            <NavSection
+              title="Finance"
+              items={financeNavItems}
+              currentPath={currentFullPath}
+              isCollapsed={isCollapsed}
+            />
+
+            <NavSection
+              title=""
+              items={settingsNavItems}
               currentPath={currentFullPath}
               isCollapsed={isCollapsed}
             />

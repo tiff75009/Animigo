@@ -148,6 +148,7 @@ export interface FormuleResult {
   announcerSlug?: string;
   announcerFirstName: string;
   announcerLastName: string;
+  announcerUsername?: string;
   announcerProfileImage?: string | null;
   announcerRating: number;
   announcerReviewCount: number;
@@ -332,6 +333,9 @@ export function FormuleCardGrid({
                   {formule.announcerFirstName}
                 </h4>
               </Link>
+              {formule.announcerUsername && (
+                <span className="text-xs text-gray-400 truncate">@{formule.announcerUsername}</span>
+              )}
               <div className="flex items-center gap-2 mt-1">
                 <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 rounded-full">
                   <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
@@ -529,6 +533,9 @@ export function FormuleCardList({
                 {formule.announcerFirstName}
               </span>
             </Link>
+            {formule.announcerUsername && (
+              <span className="text-xs text-gray-400 truncate">@{formule.announcerUsername}</span>
+            )}
 
             <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 rounded-full mt-1.5">
               <Star className="w-3 h-3 fill-amber-400 text-amber-400" />

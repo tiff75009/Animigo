@@ -105,6 +105,7 @@ interface AnnouncerResult {
   id: Id<"users">;
   firstName: string;
   lastName: string;
+  username?: string;
   profileImage?: string | null; // Avatar
   coverImage?: string | null; // Photo de couverture
   location: string;
@@ -576,6 +577,7 @@ export const searchAnnouncers = query({
         id: announcer._id,
         firstName: announcer.firstName,
         lastName: announcer.lastName,
+        username: announcer.username ?? undefined,
         profileImage: profile.profileImageUrl ?? profileImageUrl,
         coverImage: profile.coverImageUrl ?? null,
         location: profile.city ?? profile.location ?? "",
@@ -942,6 +944,7 @@ export const searchAnnouncersInternal = query({
         id: announcer._id,
         firstName: announcer.firstName,
         lastName: announcer.lastName,
+        username: announcer.username ?? undefined,
         profileImage: profile.profileImageUrl ?? profileImageUrl,
         coverImage: profile.coverImageUrl ?? null,
         location: profile.city ?? profile.location ?? "",
@@ -1023,6 +1026,7 @@ interface FormuleResult {
   announcerSlug?: string;
   announcerFirstName: string;
   announcerLastName: string;
+  announcerUsername?: string;
   announcerProfileImage?: string | null;
   announcerRating: number;
   announcerReviewCount: number;
@@ -1336,6 +1340,7 @@ export const searchFormules = query({
           announcerSlug: announcer.slug || undefined,
           announcerFirstName: announcer.firstName,
           announcerLastName: announcer.lastName,
+          announcerUsername: announcer.username ?? undefined,
           announcerProfileImage: profile.profileImageUrl ?? profileImageUrl,
           announcerRating: 4.5, // TODO: calculer
           announcerReviewCount: 0,
@@ -1649,6 +1654,7 @@ export const searchFormulesInternal = query({
           announcerSlug: announcer.slug || undefined,
           announcerFirstName: announcer.firstName,
           announcerLastName: announcer.lastName,
+          announcerUsername: announcer.username ?? undefined,
           announcerProfileImage: profile.profileImageUrl ?? profileImageUrl,
           announcerRating: 4.5,
           announcerReviewCount: 0,
@@ -2580,6 +2586,7 @@ export const getAnnouncerById = query({
       id: announcer._id,
       firstName: announcer.firstName,
       lastName: announcer.lastName,
+      username: announcer.username ?? undefined,
       profileImage: profileImageUrl,
       location: profile?.city ?? profile?.location ?? "",
       city: profile?.city ?? null,
@@ -2600,6 +2607,7 @@ interface ServiceSearchResult {
   // Infos annonceur
   firstName: string;
   lastName: string;
+  username?: string;
   profileImage: string | null;
   coverImage: string | null;
   location: string;
@@ -3101,6 +3109,7 @@ export const searchServices = query({
           announcerSlug: announcer.slug ?? announcer._id, // Fallback sur l'ID si pas de slug
           firstName: announcer.firstName,
           lastName: announcer.lastName,
+          username: announcer.username ?? undefined,
           profileImage: profile.profileImageUrl ?? profileImageUrl,
           coverImage: profile.coverImageUrl ?? null,
           location: profile.city ?? profile.location ?? "",

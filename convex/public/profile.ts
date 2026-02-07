@@ -159,6 +159,7 @@ export const getPublicProfileBySlug = query({
       slug: user.slug,
       firstName: user.firstName,
       lastName: user.lastName,
+      username: user.username ?? undefined,
       accountType: user.accountType,
       memberSince,
       isAnnouncer: user.accountType === "annonceur_pro" || user.accountType === "annonceur_particulier",

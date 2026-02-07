@@ -9,6 +9,7 @@ export type User = {
   email: string;
   firstName: string;
   lastName: string;
+  username?: string;
   accountType: "annonceur_pro" | "annonceur_particulier" | "utilisateur";
   phone: string;
   siret?: string;
@@ -81,6 +82,7 @@ export function useAuthState() {
         siret: sessionData.user.siret ?? undefined,
         companyName: sessionData.user.companyName ?? undefined,
         emailVerified: sessionData.user.emailVerified,
+        username: sessionData.user.username ?? undefined,
         createdAt: sessionData.user.createdAt,
         role: (sessionData.user.role as "user" | "admin") ?? "user",
       }

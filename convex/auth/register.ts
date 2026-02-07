@@ -25,6 +25,9 @@ export type RegisterResult =
       error: string;
     };
 
+// Regex de validation username
+const USERNAME_REGEX = /^[a-zA-Z0-9_-]{3,30}$/;
+
 // Arguments de base pour l'inscription
 const baseRegistrationArgs = {
   email: v.string(),
@@ -32,6 +35,7 @@ const baseRegistrationArgs = {
   firstName: v.string(),
   lastName: v.string(),
   phone: v.string(),
+  username: v.string(),
   acceptCgu: v.boolean(),
 };
 
@@ -65,6 +69,12 @@ export const registerPro = mutation({
       return { success: false, error: "Numéro de téléphone invalide" };
     }
 
+    // Validation username
+    const username = args.username.toLowerCase().trim();
+    if (!USERNAME_REGEX.test(username)) {
+      return { success: false, error: "Nom d'utilisateur invalide (3-30 caractères, lettres, chiffres, tirets et underscores)" };
+    }
+
     if (!validateSiret(args.siret)) {
       return { success: false, error: "Numéro SIRET invalide" };
     }
@@ -81,6 +91,16 @@ export const registerPro = mutation({
 
     if (existingUser) {
       return { success: false, error: "Un compte existe déjà avec cet email" };
+    }
+
+    // Vérifier unicité username
+    const existingUsername = await ctx.db
+      .query("users")
+      .withIndex("by_username", (q) => q.eq("username", username))
+      .first();
+
+    if (existingUsername) {
+      return { success: false, error: "Ce nom d'utilisateur est déjà pris" };
     }
 
     // Vérifier unicité SIRET
@@ -108,6 +128,7 @@ export const registerPro = mutation({
       firstName: args.firstName.trim(),
       lastName: args.lastName.trim(),
       phone: args.phone.replace(/\s/g, ""),
+      username,
       siret: args.siret,
       companyName: args.companyName.trim(),
       // Classification entreprise
@@ -182,6 +203,12 @@ export const registerParticulier = mutation({
       return { success: false, error: "Numéro de téléphone invalide" };
     }
 
+    // Validation username
+    const username = args.username.toLowerCase().trim();
+    if (!USERNAME_REGEX.test(username)) {
+      return { success: false, error: "Nom d'utilisateur invalide (3-30 caractères, lettres, chiffres, tirets et underscores)" };
+    }
+
     if (!args.acceptCgu) {
       return { success: false, error: "Vous devez accepter les CGU" };
     }
@@ -193,6 +220,16 @@ export const registerParticulier = mutation({
 
     if (existingUser) {
       return { success: false, error: "Un compte existe déjà avec cet email" };
+    }
+
+    // Vérifier unicité username
+    const existingUsername = await ctx.db
+      .query("users")
+      .withIndex("by_username", (q) => q.eq("username", username))
+      .first();
+
+    if (existingUsername) {
+      return { success: false, error: "Ce nom d'utilisateur est déjà pris" };
     }
 
     const now = Date.now();
@@ -209,6 +246,7 @@ export const registerParticulier = mutation({
       firstName: args.firstName.trim(),
       lastName: args.lastName.trim(),
       phone: args.phone.replace(/\s/g, ""),
+      username,
       cguAcceptedAt: now,
       createdAt: now,
       updatedAt: now,
@@ -275,6 +313,12 @@ export const registerUtilisateur = mutation({
       return { success: false, error: "Numéro de téléphone invalide" };
     }
 
+    // Validation username
+    const username = args.username.toLowerCase().trim();
+    if (!USERNAME_REGEX.test(username)) {
+      return { success: false, error: "Nom d'utilisateur invalide (3-30 caractères, lettres, chiffres, tirets et underscores)" };
+    }
+
     if (!args.acceptCgu) {
       return { success: false, error: "Vous devez accepter les CGU" };
     }
@@ -286,6 +330,16 @@ export const registerUtilisateur = mutation({
 
     if (existingUser) {
       return { success: false, error: "Un compte existe déjà avec cet email" };
+    }
+
+    // Vérifier unicité username
+    const existingUsername = await ctx.db
+      .query("users")
+      .withIndex("by_username", (q) => q.eq("username", username))
+      .first();
+
+    if (existingUsername) {
+      return { success: false, error: "Ce nom d'utilisateur est déjà pris" };
     }
 
     const now = Date.now();
@@ -302,6 +356,7 @@ export const registerUtilisateur = mutation({
       firstName: args.firstName.trim(),
       lastName: args.lastName.trim(),
       phone: args.phone.replace(/\s/g, ""),
+      username,
       cguAcceptedAt: now,
       createdAt: now,
       updatedAt: now,

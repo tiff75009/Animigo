@@ -155,6 +155,9 @@ export default function AnnouncerHero({
                     <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
                       {announcer.firstName} {announcer.lastName.charAt(0)}.
                     </h1>
+                    {announcer.username && (
+                      <span className="text-sm text-gray-400">@{announcer.username}</span>
+                    )}
                     {announcer.location && (
                       <div className="flex items-center justify-center sm:justify-start gap-1.5 mt-0.5 text-gray-500 text-sm">
                         <MapPin className="w-3.5 h-3.5 text-primary" />

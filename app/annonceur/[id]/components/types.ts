@@ -4,6 +4,7 @@ export interface AnnouncerData {
   id: Id<"users">;
   firstName: string;
   lastName: string;
+  username?: string;
   memberSince: string;
   verified: boolean;
   isIdentityVerified: boolean;
