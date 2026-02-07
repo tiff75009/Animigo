@@ -177,15 +177,12 @@ export default function InscriptionPage() {
       }
 
       // Succès
-      toast.success("Compte créé", "Bienvenue sur Animigo !");
+      toast.success("Compte créé", "Vérifiez votre email pour activer votre compte !");
       localStorage.setItem("auth_token", result.token);
 
-      // Rediriger selon le type
-      if (result.accountType === "utilisateur") {
-        router.push("/recherche");
-      } else {
-        router.push("/dashboard");
-      }
+      // Rediriger vers la page de confirmation email
+      const emailParam = encodeURIComponent(data.email);
+      router.push(`/inscription/confirmer-email?email=${emailParam}&type=${result.accountType}`);
     } catch (err: unknown) {
       // Erreur réseau ou autre
       const parsed = parseError(err);

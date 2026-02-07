@@ -28,6 +28,35 @@ export type RegisterResult =
 // Regex de validation username
 const USERNAME_REGEX = /^[a-zA-Z0-9_-]{3,30}$/;
 
+// Helper pour récupérer la config email depuis systemConfig
+async function getEmailConfig(ctx: { db: any }) {
+  const apiKeyConfig = await ctx.db
+    .query("systemConfig")
+    .withIndex("by_key", (q: any) => q.eq("key", "resend_api_key"))
+    .first();
+  const fromEmailConfig = await ctx.db
+    .query("systemConfig")
+    .withIndex("by_key", (q: any) => q.eq("key", "resend_from_email"))
+    .first();
+  const fromNameConfig = await ctx.db
+    .query("systemConfig")
+    .withIndex("by_key", (q: any) => q.eq("key", "resend_from_name"))
+    .first();
+  const appUrlConfig = await ctx.db
+    .query("systemConfig")
+    .withIndex("by_key", (q: any) => q.eq("key", "app_url"))
+    .first();
+
+  return {
+    emailConfig: apiKeyConfig?.value ? {
+      apiKey: apiKeyConfig.value,
+      fromEmail: fromEmailConfig?.value,
+      fromName: fromNameConfig?.value,
+    } : undefined,
+    appUrl: appUrlConfig?.value || undefined,
+  };
+}
+
 // Arguments de base pour l'inscription
 const baseRegistrationArgs = {
   email: v.string(),
@@ -168,12 +197,17 @@ export const registerPro = mutation({
       createdAt: now,
     });
 
+    // Récupérer la config email depuis la DB
+    const { emailConfig, appUrl } = await getEmailConfig(ctx);
+
     // Scheduler l'envoi d'email de vérification
     await ctx.scheduler.runAfter(0, internal.api.email.sendVerificationEmail, {
       userId,
       email: args.email.toLowerCase(),
       firstName: args.firstName.trim(),
       token: verificationToken,
+      emailConfig,
+      appUrl,
     });
 
     return {
@@ -279,12 +313,17 @@ export const registerParticulier = mutation({
       createdAt: now,
     });
 
+    // Récupérer la config email depuis la DB
+    const { emailConfig, appUrl } = await getEmailConfig(ctx);
+
     // Scheduler l'envoi d'email de vérification
     await ctx.scheduler.runAfter(0, internal.api.email.sendVerificationEmail, {
       userId,
       email: args.email.toLowerCase(),
       firstName: args.firstName.trim(),
       token: verificationToken,
+      emailConfig,
+      appUrl,
     });
 
     return {
@@ -389,12 +428,17 @@ export const registerUtilisateur = mutation({
       createdAt: now,
     });
 
+    // Récupérer la config email depuis la DB
+    const { emailConfig, appUrl } = await getEmailConfig(ctx);
+
     // Scheduler l'envoi d'email de vérification
     await ctx.scheduler.runAfter(0, internal.api.email.sendVerificationEmail, {
       userId,
       email: args.email.toLowerCase(),
       firstName: args.firstName.trim(),
       token: verificationToken,
+      emailConfig,
+      appUrl,
     });
 
     return {
