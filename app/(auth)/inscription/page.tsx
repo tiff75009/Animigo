@@ -81,6 +81,24 @@ const initialData: RegistrationData = {
   acceptCgu: false,
 };
 
+const STORAGE_KEY = "animigo_inscription";
+
+function getHashStep(): number | null {
+  if (typeof window === "undefined") return null;
+  const match = window.location.hash.match(/^#etape-(\d+)$/);
+  return match ? parseInt(match[1], 10) : null;
+}
+
+function getSavedData(): RegistrationData | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const saved = sessionStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved) : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function InscriptionPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -88,6 +106,33 @@ export default function InscriptionPage() {
   const [step, setStep] = useState(1);
   const [data, setData] = useState<RegistrationData>(initialData);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Restaurer étape (hash) + données (sessionStorage) au montage
+  useEffect(() => {
+    const saved = getSavedData();
+    const hashStep = getHashStep();
+
+    if (saved && saved.accountType) {
+      setData({ ...initialData, ...saved, password: "", confirmPassword: "" });
+      if (hashStep && hashStep >= 1) {
+        const maxSteps = saved.accountType === "annonceur_pro" ? 5 : 4;
+        setStep(Math.min(hashStep, maxSteps));
+      }
+    }
+  }, []);
+
+  // Synchroniser le hash URL quand l'étape change
+  useEffect(() => {
+    window.location.hash = `etape-${step}`;
+  }, [step]);
+
+  // Sauvegarder les données dans sessionStorage (sans mot de passe)
+  useEffect(() => {
+    if (data.accountType) {
+      const { password, confirmPassword, ...safeData } = data;
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(safeData));
+    }
+  }, [data]);
 
   // Pré-sélection du type via query param (?type=annonceur_pro)
   const hasTypeParam = searchParams.get("type") !== null;
@@ -119,6 +164,7 @@ export default function InscriptionPage() {
   const prevStep = () => {
     // Étape 1 ou étape 2 avec type pré-sélectionné via URL → retour accueil
     if (step <= 1 || (step === 2 && hasTypeParam)) {
+      sessionStorage.removeItem(STORAGE_KEY);
       router.push("/");
       return;
     }
@@ -176,7 +222,8 @@ export default function InscriptionPage() {
         return;
       }
 
-      // Succès
+      // Succès — nettoyer le sessionStorage
+      sessionStorage.removeItem(STORAGE_KEY);
       toast.success("Compte créé", "Vérifiez votre email pour activer votre compte !");
       localStorage.setItem("auth_token", result.token);
 

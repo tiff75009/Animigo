@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { User, Phone, ArrowLeft, AtSign, Check, X, Loader2 } from "lucide-react";
@@ -38,9 +38,26 @@ export function PersonalInfoStep({
     debouncedUsername.trim().length >= 3 ? { username: debouncedUsername.trim() } : "skip"
   );
 
-  // Formater le numéro de téléphone
+  // Formater le numéro de téléphone français
   const formatPhone = (value: string) => {
-    const digits = value.replace(/\D/g, "");
+    // Détecter si l'utilisateur tape/colle un format international
+    const trimmed = value.replace(/\s/g, "");
+    let digits: string;
+
+    if (trimmed.startsWith("+33")) {
+      // +33 6 12... → convertir en 06 12...
+      digits = "0" + trimmed.slice(3).replace(/\D/g, "");
+    } else if (trimmed.startsWith("0033")) {
+      // 0033 6 12... → convertir en 06 12...
+      digits = "0" + trimmed.slice(4).replace(/\D/g, "");
+    } else {
+      digits = value.replace(/\D/g, "");
+    }
+
+    // Limiter à 10 chiffres
+    digits = digits.slice(0, 10);
+
+    // Formatter en XX XX XX XX XX
     if (digits.length <= 2) return digits;
     if (digits.length <= 4) return `${digits.slice(0, 2)} ${digits.slice(2)}`;
     if (digits.length <= 6)
@@ -81,12 +98,14 @@ export function PersonalInfoStep({
       newErrors.username = usernameCheck.error || "Ce nom d'utilisateur est déjà pris";
     }
 
-    // Validation téléphone français
+    // Validation téléphone français (toujours normalisé en 0X par le formatter)
     const phoneDigits = data.phone.replace(/\s/g, "");
     if (!phoneDigits) {
       newErrors.phone = "Le numéro de téléphone est requis";
-    } else if (!/^(0[1-9]|(\+33|0033)[1-9])\d{8}$/.test(phoneDigits)) {
-      newErrors.phone = "Numéro de téléphone invalide";
+    } else if (phoneDigits.length < 10) {
+      newErrors.phone = `Numéro incomplet (${phoneDigits.length}/10 chiffres). Formats acceptés : 06 XX XX XX XX, 07 XX XX XX XX, +33 6 XX XX XX XX`;
+    } else if (!/^0[1-9]\d{8}$/.test(phoneDigits)) {
+      newErrors.phone = "Numéro invalide. Formats acceptés : 06 XX XX XX XX, 07 XX XX XX XX, +33 6 XX XX XX XX";
     }
 
     setErrors(newErrors);
@@ -99,13 +118,6 @@ export function PersonalInfoStep({
   const usernameIsValid = data.username.trim().length >= 3 && usernameCheck?.available === true;
   const usernameIsChecking = data.username.trim().length >= 3 && debouncedUsername !== data.username;
   const usernameIsTaken = data.username.trim().length >= 3 && usernameCheck?.available === false && !usernameCheck?.error;
-
-  const isValid =
-    data.firstName.trim() &&
-    data.lastName.trim() &&
-    data.username.trim().length >= 3 &&
-    usernameCheck?.available === true &&
-    data.phone.replace(/\s/g, "").length >= 10;
 
   return (
     <div className="space-y-6">
@@ -189,16 +201,30 @@ export function PersonalInfoStep({
       </div>
 
       {/* Téléphone */}
-      <Input
-        type="tel"
-        value={data.phone}
-        onChange={handlePhoneChange}
-        placeholder="06 12 34 56 78"
-        label="Numéro de téléphone"
-        icon={<Phone className="w-5 h-5" />}
-        error={errors.phone}
-        maxLength={14}
-      />
+      <div className="space-y-1.5">
+        <label className="block text-sm font-medium text-foreground">
+          Numéro de téléphone
+        </label>
+        <div className="flex gap-2">
+          {/* Indicateur pays */}
+          <div className="flex items-center gap-1.5 px-3 py-3 bg-gray-100 rounded-xl border-2 border-transparent text-sm text-foreground select-none shrink-0">
+            <span className="text-base leading-none">🇫🇷</span>
+            <span className="text-text-light">+33</span>
+          </div>
+          {/* Champ téléphone */}
+          <div className="flex-1">
+            <Input
+              type="tel"
+              value={data.phone}
+              onChange={handlePhoneChange}
+              placeholder="06 12 34 56 78"
+              icon={<Phone className="w-5 h-5" />}
+              error={errors.phone}
+              maxLength={14}
+            />
+          </div>
+        </div>
+      </div>
 
       <p className="text-xs text-text-light">
         Votre numéro sera utilisé uniquement pour la sécurité de votre compte et
@@ -213,7 +239,6 @@ export function PersonalInfoStep({
         </Button>
         <Button
           onClick={validateAndContinue}
-          disabled={!isValid}
           className="flex-1"
         >
           Continuer
