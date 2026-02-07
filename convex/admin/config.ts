@@ -316,6 +316,53 @@ export const testRedisConnection = action({
   },
 });
 
+// Action: Tester la connexion Infobip
+export const testInfobipConnection = action({
+  args: {
+    token: v.string(),
+    apiKey: v.string(),
+    baseUrl: v.string(),
+  },
+  handler: async (ctx, args): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+  }> => {
+    await requireAdminAction(ctx, args.token);
+
+    try {
+      const response = await fetch(`https://${args.baseUrl}/2fa/2/applications`, {
+        method: "GET",
+        headers: {
+          "Authorization": `App ${args.apiKey}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          success: false,
+          error: `Erreur API (${response.status}): ${errorText}`,
+        };
+      }
+
+      const data = await response.json();
+      const appCount = Array.isArray(data) ? data.length : 0;
+
+      return {
+        success: true,
+        message: `Connexion Infobip OK — ${appCount} application(s) 2FA trouvée(s)`,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Erreur inconnue",
+      };
+    }
+  },
+});
+
 // ==========================================
 // VERIFICATION D'IDENTITE
 // ==========================================

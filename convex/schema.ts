@@ -41,6 +41,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
     emailVerified: v.boolean(),
+    phoneVerified: v.optional(v.boolean()),
     isActive: v.boolean(),
 
     // Role (admin ou user)
@@ -1900,4 +1901,14 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
+
+  // Tentatives de vérification téléphone par SMS (Infobip 2FA)
+  phoneVerificationAttempts: defineTable({
+    phone: v.string(),
+    pinId: v.string(),
+    createdAt: v.number(),
+    verified: v.boolean(),
+  })
+    .index("by_phone", ["phone"])
+    .index("by_pinId", ["pinId"]),
 });

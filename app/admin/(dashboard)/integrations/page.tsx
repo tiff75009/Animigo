@@ -27,6 +27,7 @@ import {
   Database,
   Cloud,
   Bell,
+  MessageSquare,
 } from "lucide-react";
 
 interface ConfigItem {
@@ -236,6 +237,44 @@ const integrations: IntegrationSection[] = [
     ],
   },
   {
+    id: "infobip",
+    name: "Infobip SMS",
+    description: "Vérification des numéros de téléphone par SMS (2FA)",
+    icon: MessageSquare,
+    color: "bg-orange-500",
+    docsUrl: "https://www.infobip.com/docs/api",
+    fields: [
+      {
+        key: "infobip_api_key",
+        label: "Clé API",
+        description: "Clé API depuis le dashboard Infobip",
+        isSecret: true,
+        placeholder: "xxxxxxxx",
+      },
+      {
+        key: "infobip_base_url",
+        label: "URL de base",
+        description: "Base URL API (sans https://)",
+        isSecret: false,
+        placeholder: "xxxxx.api.infobip.com",
+      },
+      {
+        key: "infobip_app_id",
+        label: "Application ID (2FA)",
+        description: "ID de l'app 2FA créée sur Infobip",
+        isSecret: false,
+        placeholder: "XXXXXXXX",
+      },
+      {
+        key: "infobip_message_id",
+        label: "Message Template ID",
+        description: "ID du template SMS 2FA",
+        isSecret: false,
+        placeholder: "XXXXXXXX",
+      },
+    ],
+  },
+  {
     id: "cloudinary",
     name: "Cloudinary",
     description: "Hébergement et gestion des images (photos d'animaux, profils, etc.)",
@@ -361,6 +400,12 @@ export default function IntegrationsPage() {
     profileCount?: number;
     error?: string;
   } | null>(null);
+  const [testingInfobip, setTestingInfobip] = useState(false);
+  const [infobipTestResult, setInfobipTestResult] = useState<{
+    success: boolean;
+    message?: string;
+    error?: string;
+  } | null>(null);
 
   const configs = useQuery(
     api.admin.config.getAllConfigs,
@@ -371,6 +416,7 @@ export default function IntegrationsPage() {
   const testStripeConnection = useAction(api.admin.config.testStripeConnection);
   const testQStashConnection = useAction(api.admin.config.testQStashConnection);
   const testRedisConnection = useAction(api.admin.config.testRedisConnection);
+  const testInfobipConnection = useAction(api.admin.config.testInfobipConnection);
 
   const getConfigValue = (key: string) => {
     if (values[key] !== undefined) return values[key];
@@ -481,6 +527,36 @@ export default function IntegrationsPage() {
       });
     } finally {
       setTestingRedis(false);
+    }
+  };
+
+  const handleTestInfobip = async () => {
+    if (!token) return;
+
+    const apiKey = getConfigValue("infobip_api_key");
+    const baseUrl = getConfigValue("infobip_base_url");
+
+    if (!apiKey || !baseUrl) {
+      setInfobipTestResult({
+        success: false,
+        error: "Veuillez d'abord entrer et sauvegarder la clé API et l'URL de base Infobip.",
+      });
+      return;
+    }
+
+    setTestingInfobip(true);
+    setInfobipTestResult(null);
+
+    try {
+      const result = await testInfobipConnection({ token, apiKey, baseUrl });
+      setInfobipTestResult(result);
+    } catch (error) {
+      setInfobipTestResult({
+        success: false,
+        error: error instanceof Error ? error.message : "Erreur inconnue",
+      });
+    } finally {
+      setTestingInfobip(false);
     }
   };
 
@@ -867,6 +943,78 @@ export default function IntegrationsPage() {
                         <li>Créez une base de données ou selectionnez-en une existante</li>
                         <li>Copiez &quot;UPSTASH_REDIS_REST_URL&quot; et &quot;UPSTASH_REDIS_REST_TOKEN&quot;</li>
                         <li>Executez la migration : <code className="bg-slate-800 px-1 rounded">npx convex run migrations/migrateProfilesToRedis:migrate</code></li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Test Connection Section - Infobip */}
+            {integration.id === "infobip" && (
+              <div className="p-6 border-t border-slate-800">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-orange-400" />
+                    <h3 className="text-lg font-semibold text-white">Tester la connexion</h3>
+                  </div>
+                  <button
+                    onClick={handleTestInfobip}
+                    disabled={testingInfobip}
+                    className="px-4 py-2 rounded-lg font-medium flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white transition-colors disabled:opacity-50"
+                  >
+                    {testingInfobip ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Test en cours...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4" />
+                        Tester l&apos;API
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {infobipTestResult && (
+                  <div className={`mt-4 p-4 rounded-lg border ${
+                    infobipTestResult.success
+                      ? "bg-green-500/10 border-green-500/30"
+                      : "bg-red-500/10 border-red-500/30"
+                  }`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      {infobipTestResult.success ? (
+                        <>
+                          <CheckCircle className="w-5 h-5 text-green-400" />
+                          <span className="text-green-400 font-medium">Connexion réussie</span>
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="w-5 h-5 text-red-400" />
+                          <span className="text-red-400 font-medium">Erreur de connexion</span>
+                        </>
+                      )}
+                    </div>
+                    {infobipTestResult.success ? (
+                      <p className="text-sm text-slate-300">{infobipTestResult.message}</p>
+                    ) : (
+                      <p className="text-sm text-red-300">{infobipTestResult.error}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Info box */}
+                <div className="mt-4 p-4 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <Info className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm">
+                      <p className="text-orange-300 font-medium mb-2">Configuration 2FA Infobip :</p>
+                      <ol className="text-orange-300/80 space-y-1 list-decimal list-inside">
+                        <li>Créez un compte sur <a href="https://portal.infobip.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-orange-200">Infobip Portal</a></li>
+                        <li>Copiez votre API Key et Base URL depuis le dashboard</li>
+                        <li>Créez une application 2FA et un template de message SMS</li>
+                        <li>Renseignez l&apos;Application ID et le Message Template ID ci-dessus</li>
                       </ol>
                     </div>
                   </div>

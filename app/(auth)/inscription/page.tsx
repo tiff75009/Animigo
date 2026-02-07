@@ -64,6 +64,7 @@ export interface RegistrationData {
   companyType?: "micro_enterprise" | "regular_company" | "unknown";
   isVatSubject?: boolean;
   legalForm?: string;
+  phoneVerified: boolean;
   acceptCgu: boolean;
 }
 
@@ -78,6 +79,7 @@ const initialData: RegistrationData = {
   username: "",
   siret: "",
   companyName: "",
+  phoneVerified: false,
   acceptCgu: false,
 };
 
@@ -191,6 +193,7 @@ export default function InscriptionPage() {
           companyType: data.companyType,
           isVatSubject: data.isVatSubject,
           legalForm: data.legalForm,
+          phoneVerified: data.phoneVerified,
           acceptCgu: data.acceptCgu,
         });
       } else if (data.accountType === "annonceur_particulier") {
@@ -201,6 +204,7 @@ export default function InscriptionPage() {
           lastName: data.lastName,
           phone: data.phone,
           username: data.username,
+          phoneVerified: data.phoneVerified,
           acceptCgu: data.acceptCgu,
         });
       } else {
@@ -211,6 +215,7 @@ export default function InscriptionPage() {
           lastName: data.lastName,
           phone: data.phone,
           username: data.username,
+          phoneVerified: data.phoneVerified,
           acceptCgu: data.acceptCgu,
         });
       }

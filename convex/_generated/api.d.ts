@@ -38,6 +38,8 @@ import type * as animals from "../animals.js";
 import type * as api_email from "../api/email.js";
 import type * as api_emailInternal from "../api/emailInternal.js";
 import type * as api_googleMaps from "../api/googleMaps.js";
+import type * as api_sms from "../api/sms.js";
+import type * as api_smsInternal from "../api/smsInternal.js";
 import type * as api_societe from "../api/societe.js";
 import type * as api_stripe from "../api/stripe.js";
 import type * as api_stripeClient from "../api/stripeClient.js";
@@ -152,6 +154,8 @@ declare const fullApi: ApiFromModules<{
   "api/email": typeof api_email;
   "api/emailInternal": typeof api_emailInternal;
   "api/googleMaps": typeof api_googleMaps;
+  "api/sms": typeof api_sms;
+  "api/smsInternal": typeof api_smsInternal;
   "api/societe": typeof api_societe;
   "api/stripe": typeof api_stripe;
   "api/stripeClient": typeof api_stripeClient;

@@ -65,6 +65,7 @@ const baseRegistrationArgs = {
   lastName: v.string(),
   phone: v.string(),
   username: v.string(),
+  phoneVerified: v.optional(v.boolean()),
   acceptCgu: v.boolean(),
 };
 
@@ -168,6 +169,7 @@ export const registerPro = mutation({
       createdAt: now,
       updatedAt: now,
       emailVerified: false,
+      phoneVerified: args.phoneVerified ?? false,
       isActive: true,
     });
 
@@ -285,6 +287,7 @@ export const registerParticulier = mutation({
       createdAt: now,
       updatedAt: now,
       emailVerified: false,
+      phoneVerified: args.phoneVerified ?? false,
       isActive: true,
     });
 
@@ -400,6 +403,7 @@ export const registerUtilisateur = mutation({
       createdAt: now,
       updatedAt: now,
       emailVerified: false,
+      phoneVerified: args.phoneVerified ?? false,
       isActive: true,
     });
 
