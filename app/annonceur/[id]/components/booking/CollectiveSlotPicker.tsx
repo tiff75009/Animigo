@@ -260,11 +260,6 @@ export default function CollectiveSlotPicker({
       setLocalSelectedIds(newIds);
       onSlotsSelected(newIds);
     } else {
-      // Vérifier si on peut encore sélectionner
-      if (localSelectedIds.length >= numberOfSessions) {
-        return;
-      }
-
       // Vérifier l'intervalle
       if (!checkInterval(selectedDates, slot.date, sessionInterval)) {
         alert(
@@ -285,7 +280,7 @@ export default function CollectiveSlotPicker({
     setLocalSelectedIds(selectedSlotIds);
   }, [selectedSlotIds]);
 
-  const isComplete = localSelectedIds.length === numberOfSessions;
+  const isComplete = localSelectedIds.length >= 1;
 
   // Auto-collapse when all slots are selected
   useEffect(() => {
@@ -327,12 +322,13 @@ export default function CollectiveSlotPicker({
       })
       .sort((a: CollectiveSlot, b: CollectiveSlot) => a.date.localeCompare(b.date));
 
-    // Sélectionner les créneaux en respectant l'intervalle
+    // Sélectionner les créneaux en respectant l'intervalle (max 10 pour l'auto-fill)
     const result: CollectiveSlot[] = [];
     let lastDate = firstSlot.date;
+    const autoFillMax = Math.max(numberOfSessions - 1, 3); // Au moins 3 suggestions
 
     for (const slot of matchingSlots) {
-      if (result.length >= numberOfSessions - 1) break; // On a assez de créneaux
+      if (result.length >= autoFillMax) break;
 
       const daysDiff = Math.abs(
         (new Date(slot.date).getTime() - new Date(lastDate).getTime()) / (1000 * 60 * 60 * 24)
@@ -349,14 +345,13 @@ export default function CollectiveSlotPicker({
 
   // Peut-on proposer l'auto-fill ?
   const canAutoFill = localSelectedIds.length === 1 &&
-    findMatchingSlots.length >= numberOfSessions - 1 &&
-    numberOfSessions > 1;
+    findMatchingSlots.length >= 1;
 
   // Appliquer l'auto-fill
   const applyAutoFill = () => {
     if (!canAutoFill) return;
 
-    const slotsToSelect = findMatchingSlots.slice(0, numberOfSessions - 1);
+    const slotsToSelect = findMatchingSlots;
     const newIds = [...localSelectedIds, ...slotsToSelect.map((s) => s._id)];
     setLocalSelectedIds(newIds);
     onSlotsSelected(newIds);
@@ -406,7 +401,6 @@ export default function CollectiveSlotPicker({
     const daySlots = slotsByDate.get(selectedDay) || [];
     const isPast = selectedDay < today;
     const hasSelectedThisDay = hasSelectedSlotForDay(selectedDay);
-    const needsMoreSlots = localSelectedIds.length < numberOfSessions;
 
     return (
       <motion.div
@@ -449,9 +443,8 @@ export default function CollectiveSlotPicker({
               const isSelected = localSelectedIds.includes(slot._id);
               const canSelect =
                 isSelected ||
-                (localSelectedIds.length < numberOfSessions &&
-                  (checkInterval(selectedDates, slot.date, sessionInterval) ||
-                    localSelectedIds.length === 0));
+                (checkInterval(selectedDates, slot.date, sessionInterval) ||
+                  localSelectedIds.length === 0);
 
               return (
                 <button
@@ -519,7 +512,7 @@ export default function CollectiveSlotPicker({
                   Réserver les mêmes créneaux ?
                 </p>
                 <p className="text-sm text-gray-600 mb-3">
-                  Voulez-vous réserver les {numberOfSessions} séances tous les{" "}
+                  Voulez-vous ajouter {findMatchingSlots.length} séance{findMatchingSlots.length > 1 ? "s" : ""} tous les{" "}
                   <strong className="capitalize">{getDayName(firstSelectedSlot.date)}s</strong> à{" "}
                   <strong>{firstSelectedSlot.startTime}</strong> ?
                 </p>
@@ -546,8 +539,8 @@ export default function CollectiveSlotPicker({
           </motion.div>
         )}
 
-        {/* Bouton pour sélectionner le créneau suivant (quand auto-fill n'est pas disponible ou refusé) */}
-        {hasSelectedThisDay && needsMoreSlots && !showAutoFillSuggestion && (
+        {/* Bouton pour sélectionner un autre créneau */}
+        {hasSelectedThisDay && !showAutoFillSuggestion && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -558,10 +551,10 @@ export default function CollectiveSlotPicker({
               className="w-full py-3 px-4 bg-primary text-white font-semibold rounded-xl hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
             >
               <Calendar className="w-5 h-5" />
-              Sélectionner la séance {localSelectedIds.length + 1}/{numberOfSessions}
+              Ajouter un autre créneau
             </button>
             <p className="text-xs text-center text-gray-500 mt-2">
-              Choisissez un autre jour pour votre prochaine séance
+              Choisissez un autre jour pour ajouter une séance
             </p>
           </motion.div>
         )}
@@ -630,7 +623,6 @@ export default function CollectiveSlotPicker({
                 const hasSelectedSlot = daySlots.some((s) => localSelectedIds.includes(s._id));
                 const canSelectDay = hasSlots && (
                   hasSelectedSlot ||
-                  localSelectedIds.length < numberOfSessions &&
                   (checkInterval(selectedDates, dateStr, sessionInterval) || localSelectedIds.length === 0)
                 );
 
@@ -712,7 +704,7 @@ export default function CollectiveSlotPicker({
           </div>
           <div>
             <h3 className="font-semibold text-gray-900">
-              {numberOfSessions} séance{numberOfSessions > 1 ? "s" : ""} sélectionnée{numberOfSessions > 1 ? "s" : ""}
+              {localSelectedIds.length} séance{localSelectedIds.length > 1 ? "s" : ""} sélectionnée{localSelectedIds.length > 1 ? "s" : ""}
             </h3>
             <p className="text-sm text-gray-500">
               Créneaux confirmés
@@ -768,9 +760,10 @@ export default function CollectiveSlotPicker({
                 Choisissez vos créneaux
               </h3>
               <p className="text-sm text-gray-500 mt-1">
-                Sélectionnez {numberOfSessions} créneau
-                {numberOfSessions > 1 ? "x" : ""} avec au moins {sessionInterval} jour
-                {sessionInterval > 1 ? "s" : ""} d'intervalle
+                Sélectionnez un ou plusieurs créneaux
+                {sessionInterval > 1 && (
+                  <> avec au moins {sessionInterval} jour{sessionInterval > 1 ? "s" : ""} d'intervalle</>
+                )}
               </p>
             </div>
             <div
@@ -781,7 +774,7 @@ export default function CollectiveSlotPicker({
                   : "bg-amber-100 text-amber-700"
               )}
             >
-              {localSelectedIds.length}/{numberOfSessions} sélectionné
+              {localSelectedIds.length} sélectionné
               {localSelectedIds.length > 1 ? "s" : ""}
             </div>
           </div>
@@ -805,15 +798,12 @@ export default function CollectiveSlotPicker({
             </AnimatePresence>
           </div>
 
-          {/* Message si pas assez de créneaux */}
-          {availableSlots.length < numberOfSessions && (
+          {/* Message si aucun créneau disponible */}
+          {availableSlots.length === 0 && (
             <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-xl text-sm text-amber-700">
               <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
               <p>
-                Il n'y a que {availableSlots.length} créneau
-                {availableSlots.length > 1 ? "x" : ""} disponible
-                {availableSlots.length > 1 ? "s" : ""}, mais la formule en requiert{" "}
-                {numberOfSessions}. Contactez l'annonceur pour plus de créneaux.
+                Aucun créneau disponible pour le moment. Contactez l'annonceur pour plus de créneaux.
               </p>
             </div>
           )}

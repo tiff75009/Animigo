@@ -114,12 +114,16 @@ export default function BookingSummary({
   // Déterminer si c'est une formule collective
   const isCollectiveFormule = variant?.sessionType === "collective";
   const numberOfSessions = variant?.numberOfSessions || 1;
+  // Nombre réel de créneaux sélectionnés
+  const actualSlotCount = isCollectiveFormule && collectiveSlots.length > 0
+    ? collectiveSlots.length
+    : numberOfSessions;
 
   // Déterminer si c'est une formule individuelle multi-séances
   const isMultiSessionIndividual = !isCollectiveFormule && numberOfSessions > 1;
 
   const hasAllSlotsSelected = isCollectiveFormule
-    ? collectiveSlots.length >= numberOfSessions
+    ? collectiveSlots.length >= 1
     : true;
 
   const hasAllSessionsSelected = isMultiSessionIndividual
@@ -165,9 +169,8 @@ export default function BookingSummary({
   const getMissingFields = () => {
     const missing: string[] = [];
     if (isCollectiveFormule) {
-      const slotsNeeded = numberOfSessions - collectiveSlots.length;
-      if (slotsNeeded > 0) {
-        missing.push(`${slotsNeeded} créneau${slotsNeeded > 1 ? "x" : ""}`);
+      if (collectiveSlots.length === 0) {
+        missing.push("au moins 1 créneau");
       }
     } else if (isMultiSessionIndividual) {
       const sessionsNeeded = numberOfSessions - selectedSessions.length;
@@ -236,9 +239,11 @@ export default function BookingSummary({
               <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full">
                 Séance collective
               </span>
-              <span className="text-xs text-gray-500">
-                {numberOfSessions} séance{numberOfSessions > 1 ? "s" : ""}
-              </span>
+              {collectiveSlots.length > 0 && (
+                <span className="text-xs text-gray-500">
+                  {collectiveSlots.length} créneau{collectiveSlots.length > 1 ? "x" : ""}
+                </span>
+              )}
             </div>
           )}
           {isMultiSessionIndividual && (
@@ -254,7 +259,7 @@ export default function BookingSummary({
         {isCollectiveFormule && collectiveSlots.length > 0 && (
           <div className="pb-4 border-b border-gray-100 mb-4">
             <p className="text-sm text-gray-500 mb-2">
-              Créneaux sélectionnés ({collectiveSlots.length}/{numberOfSessions})
+              {collectiveSlots.length} créneau{collectiveSlots.length > 1 ? "x" : ""} sélectionné{collectiveSlots.length > 1 ? "s" : ""}
             </p>
             <div className="space-y-2">
               {collectiveSlots.map((slot, index) => (
@@ -376,7 +381,9 @@ export default function BookingSummary({
           </div>
           <p className="text-gray-500 text-sm">
             {isCollectiveFormule
-              ? `Sélectionnez ${numberOfSessions - collectiveSlots.length} créneau${(numberOfSessions - collectiveSlots.length) > 1 ? "x" : ""}`
+              ? collectiveSlots.length === 0
+                ? "Sélectionnez vos créneaux"
+                : "Ajoutez d'autres créneaux ou continuez"
               : isMultiSessionIndividual
                 ? `Sélectionnez ${numberOfSessions - selectedSessions.length} séance${(numberOfSessions - selectedSessions.length) > 1 ? "s" : ""}`
                 : "Sélectionnez une date pour voir le prix total"}
@@ -398,9 +405,9 @@ export default function BookingSummary({
               {(() => {
                 let subtotalHT = 0;
                 if (isCollectiveFormule && variant) {
-                  subtotalHT = variant.price * numberOfSessions * animalCount;
+                  subtotalHT = variant.price * actualSlotCount * animalCount;
                 } else if (isMultiSessionIndividual && variant) {
-                  subtotalHT = variant.price * numberOfSessions * animalCount;
+                  subtotalHT = variant.price * actualSlotCount * animalCount;
                 } else if (priceBreakdown) {
                   const baseWithAnimals = priceBreakdown.baseAmount * animalCount;
                   const nightsWithAnimals = (priceBreakdown.nightsAmount || 0) * animalCount;
@@ -482,7 +489,7 @@ export default function BookingSummary({
             <div className="flex items-center gap-2 mb-2">
               <CalendarCheck className="w-4 h-4 text-purple-600" />
               <span className="text-sm font-medium text-gray-900">
-                Séances sélectionnées ({collectiveSlots.length}/{numberOfSessions})
+                {collectiveSlots.length} créneau{collectiveSlots.length > 1 ? "x" : ""} sélectionné{collectiveSlots.length > 1 ? "s" : ""}
               </span>
             </div>
             <div className="space-y-1.5">
@@ -793,11 +800,11 @@ export default function BookingSummary({
                 </div>
                 <div className="flex justify-between text-xs text-gray-500 pl-4">
                   <span>
-                    └ {numberOfSessions} séance{numberOfSessions > 1 ? "s" : ""}
+                    └ {isCollectiveFormule ? actualSlotCount : numberOfSessions} {isCollectiveFormule ? "créneau" : "séance"}{(isCollectiveFormule ? actualSlotCount : numberOfSessions) > 1 ? (isCollectiveFormule ? "x" : "s") : ""}
                     {animalCount > 1 && ` × ${animalCount} animaux`}
                   </span>
                   <span className="font-medium text-gray-900">
-                    {formatPrice(variant.price * numberOfSessions * animalCount)}€
+                    {formatPrice((isCollectiveFormule ? variant.price * actualSlotCount : variant.price * numberOfSessions) * animalCount)}€
                   </span>
                 </div>
               </div>
@@ -977,9 +984,9 @@ export default function BookingSummary({
             {(() => {
               let serviceAmount = 0;
               if (isCollectiveFormule && variant) {
-                serviceAmount = variant.price * numberOfSessions * animalCount;
+                serviceAmount = variant.price * actualSlotCount * animalCount;
               } else if (isMultiSessionIndividual && variant) {
-                serviceAmount = variant.price * numberOfSessions * animalCount;
+                serviceAmount = variant.price * actualSlotCount * animalCount;
               } else if (priceBreakdown) {
                 const baseWithAnimals = priceBreakdown.baseAmount * animalCount;
                 const nightsWithAnimals = (priceBreakdown.nightsAmount || 0) * animalCount;
@@ -1074,9 +1081,9 @@ export default function BookingSummary({
               {(() => {
                 let subtotalHT = 0;
                 if (isCollectiveFormule && variant) {
-                  subtotalHT = variant.price * numberOfSessions * animalCount;
+                  subtotalHT = variant.price * actualSlotCount * animalCount;
                 } else if (isMultiSessionIndividual && variant) {
-                  subtotalHT = variant.price * numberOfSessions * animalCount;
+                  subtotalHT = variant.price * actualSlotCount * animalCount;
                 } else if (priceBreakdown) {
                   const baseWithAnimals = priceBreakdown.baseAmount * animalCount;
                   const nightsWithAnimals = (priceBreakdown.nightsAmount || 0) * animalCount;
@@ -1196,9 +1203,9 @@ export default function BookingSummary({
         numberOfSessions={numberOfSessions}
         totalPrice={(() => {
           if (isCollectiveFormule && variant) {
-            return variant.price * numberOfSessions * animalCount;
+            return variant.price * actualSlotCount * animalCount;
           } else if (isMultiSessionIndividual && variant) {
-            return variant.price * numberOfSessions * animalCount;
+            return variant.price * actualSlotCount * animalCount;
           } else if (priceBreakdown) {
             const baseWithAnimals = priceBreakdown.baseAmount * animalCount;
             const nightsWithAnimals = (priceBreakdown.nightsAmount || 0) * animalCount;

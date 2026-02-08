@@ -732,7 +732,7 @@ export default function ReserverPage({
   const calculateDays = () => {
     // Formule collective: nombre de créneaux sélectionnés
     if (isCollectiveFormula) {
-      return bookingData.selectedSlotIds.length || numberOfSessions;
+      return bookingData.selectedSlotIds.length || 1;
     }
     // Formule multi-séances: nombre de séances
     if (isMultiSessionIndividual) {
@@ -835,10 +835,12 @@ export default function ReserverPage({
     const commissionMultiplier = 1 + commissionRate / 100;
 
     if (isCollectiveFormula) {
-      // Formule collective: prix × séances × animaux
-      const nSessions = selectedVariant.numberOfSessions || 1;
-      const effectiveAnimalCount = bookingData.animalCount;
-      const basePrice = selectedVariant.price * nSessions * effectiveAnimalCount;
+      // Formule collective: prix × créneaux sélectionnés × animaux
+      const actualSlots = bookingData.selectedSlotIds.length || 1;
+      const effectiveAnimalCount = bookingData.selectedAnimalIds.length > 0
+        ? bookingData.selectedAnimalIds.length
+        : bookingData.animalCount;
+      const basePrice = selectedVariant.price * actualSlots * effectiveAnimalCount;
       return Math.round((basePrice + optionsTotal) * commissionMultiplier);
     }
 
@@ -851,7 +853,7 @@ export default function ReserverPage({
 
     // Formule uni-séance: utiliser le calcul standard
     return priceCalculation?.totalAmount ?? 0;
-  }, [selectedVariant, isCollectiveFormula, isMultiSessionIndividual, bookingData.animalCount, optionsTotal, commissionRate, priceCalculation?.totalAmount]);
+  }, [selectedVariant, isCollectiveFormula, isMultiSessionIndividual, bookingData.animalCount, bookingData.selectedSlotIds.length, bookingData.selectedAnimalIds.length, optionsTotal, commissionRate, priceCalculation?.totalAmount]);
 
   // Compute billing info for display in FormulaStep
   const billingInfo = useMemo(() => {
@@ -1097,9 +1099,9 @@ export default function ReserverPage({
         if (requiresDogVerification && !guestDogValid) return false;
         return true;
       case 2:
-        // Formule collective: vérifier que le nombre de créneaux requis est sélectionné
+        // Formule collective: au moins 1 créneau sélectionné
         if (isCollectiveFormula) {
-          return bookingData.selectedSlotIds.length >= numberOfSessions;
+          return bookingData.selectedSlotIds.length >= 1;
         }
         // Formule multi-séances individuelle: vérifier que toutes les séances sont planifiées
         if (isMultiSessionIndividual) {

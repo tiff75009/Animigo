@@ -255,7 +255,6 @@ export default function ReservationSummary({
             {isCollectiveFormula && bookingData.collectiveSlots && bookingData.collectiveSlots.length > 0 ? (
               <CollectiveSlotsDisplay
                 slots={bookingData.collectiveSlots}
-                numberOfSessions={numberOfSessions}
                 effectiveAnimalCount={effectiveAnimalCount}
               />
             ) : isMultiSessionFormula && bookingData.sessions && bookingData.sessions.length > 0 ? (
@@ -283,8 +282,12 @@ export default function ReservationSummary({
           <div className="pt-4">
             {/* Formule collective ou multi-séances */}
             {(isCollectiveFormula || isMultiSessionFormula) && bookingData.variant && (() => {
+              // Pour les formules collectives, utiliser le nombre réel de créneaux
+              const actualSlots = isCollectiveFormula && bookingData.collectiveSlots?.length
+                ? bookingData.collectiveSlots.length
+                : numberOfSessions;
               const basePrice = isCollectiveFormula
-                ? bookingData.variant.price * numberOfSessions * effectiveAnimalCount
+                ? bookingData.variant.price * actualSlots * effectiveAnimalCount
                 : bookingData.variant.price * numberOfSessions;
 
               return (
@@ -298,7 +301,7 @@ export default function ReservationSummary({
                         </span>
                       </div>
                       <p className="text-xs text-gray-500 ml-6">
-                        └ {formatPrice(bookingData.variant.price)} × {numberOfSessions} séance{numberOfSessions > 1 ? "s" : ""}
+                        └ {formatPrice(bookingData.variant.price)} × {isCollectiveFormula ? actualSlots : numberOfSessions} {isCollectiveFormula ? "créneau" : "séance"}{(isCollectiveFormula ? actualSlots : numberOfSessions) > 1 ? (isCollectiveFormula ? "x" : "s") : ""}
                         {isCollectiveFormula && effectiveAnimalCount > 1 && ` × ${effectiveAnimalCount} animaux`}
                       </p>
                     </div>
@@ -514,11 +517,9 @@ export default function ReservationSummary({
 
 function CollectiveSlotsDisplay({
   slots,
-  numberOfSessions,
   effectiveAnimalCount,
 }: {
   slots: CollectiveSlotData[];
-  numberOfSessions: number;
   effectiveAnimalCount: number;
 }) {
   return (
@@ -526,7 +527,7 @@ function CollectiveSlotsDisplay({
       <div className="flex items-center gap-2 mb-2">
         <CalendarCheck className="w-4 h-4 text-purple-600" />
         <span className="text-sm font-medium text-purple-800">
-          Créneaux sélectionnés ({slots.length}/{numberOfSessions})
+          {slots.length} créneau{slots.length > 1 ? "x" : ""} sélectionné{slots.length > 1 ? "s" : ""}
         </span>
       </div>
       <div className="space-y-1.5">

@@ -220,6 +220,10 @@ export default function ReservationPage({
     (bookingData?.sessions && bookingData.sessions.length > 1));
   const numberOfSessions = bookingData?.variant?.numberOfSessions || 1;
   const effectiveAnimalCount = bookingData?.animalCount || 1;
+  // Nombre réel de créneaux sélectionnés (pour les formules collectives)
+  const actualSlotCount = isCollectiveFormula && bookingData?.collectiveSlots?.length
+    ? bookingData.collectiveSlots.length
+    : numberOfSessions;
 
   // Type de service pour la politique d'annulation
   const isGardeService_flag = bookingData?.service?.category?.toLowerCase().includes("garde") || false;
@@ -235,7 +239,7 @@ export default function ReservationPage({
   const daysCount = (() => {
     if (!bookingData) return 1;
     if (isCollectiveFormula && bookingData.collectiveSlots) {
-      return bookingData.collectiveSlots.length || numberOfSessions;
+      return bookingData.collectiveSlots.length || 1;
     }
     if (isMultiSessionFormula && bookingData.sessions) {
       return bookingData.sessions.length || numberOfSessions;
@@ -294,7 +298,7 @@ export default function ReservationPage({
   const totalAmount = (() => {
     if (!bookingData?.variant) return 0;
     if (isCollectiveFormula) {
-      return bookingData.variant.price * numberOfSessions * effectiveAnimalCount + optionsTotal;
+      return bookingData.variant.price * actualSlotCount * effectiveAnimalCount + optionsTotal;
     }
     if (isMultiSessionFormula) {
       return bookingData.variant.price * numberOfSessions + optionsTotal;

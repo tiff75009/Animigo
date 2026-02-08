@@ -195,6 +195,8 @@ export default function SummaryStep({
   const isCollective = isCollectiveFormula || selectedVariant.sessionType === "collective";
   const isMultiSession = isMultiSessionIndividual || (!isCollective && (selectedVariant.numberOfSessions || 1) > 1);
   const numberOfSessions = selectedVariant.numberOfSessions || 1;
+  // Nombre réel de créneaux sélectionnés (pour les formules collectives)
+  const actualSlotCount = isCollective && collectiveSlots.length > 0 ? collectiveSlots.length : numberOfSessions;
 
   // Filtrer les animaux sélectionnés
   const selectedAnimals = userAnimals?.filter(animal => selectedAnimalIds.includes(animal.id)) || [];
@@ -387,8 +389,8 @@ export default function SummaryStep({
               <CalendarCheck className="w-4 h-4 text-purple-600" />
               <span className="text-sm font-medium text-purple-800">
                 {collectiveSlots.length > 0
-                  ? `Créneaux sélectionnés (${collectiveSlots.length}/${numberOfSessions})`
-                  : `${numberOfSessions} séance${numberOfSessions > 1 ? "s" : ""} collective${numberOfSessions > 1 ? "s" : ""}`
+                  ? `${collectiveSlots.length} créneau${collectiveSlots.length > 1 ? "x" : ""} sélectionné${collectiveSlots.length > 1 ? "s" : ""}`
+                  : "Séances collectives"
                 }
               </span>
             </div>
@@ -655,9 +657,9 @@ export default function SummaryStep({
 
               {/* Détail du calcul selon le type - Prix HT */}
               {isCollective ? (
-                // Formule collective: prix × séances × animaux
+                // Formule collective: prix × créneaux × animaux
                 <p className="text-xs text-gray-500 ml-6">
-                  └ {formatPrice(selectedVariant.price)} × {numberOfSessions} séance{numberOfSessions > 1 ? "s" : ""}
+                  └ {formatPrice(selectedVariant.price)} × {actualSlotCount} créneau{actualSlotCount > 1 ? "x" : ""}
                   {effectiveAnimalCount > 1 && ` × ${effectiveAnimalCount} animaux`}
                 </p>
               ) : isMultiSession ? (
@@ -808,7 +810,7 @@ export default function SummaryStep({
               isCollective ? "text-purple-700" : isMultiSession ? "text-primary" : "text-foreground"
             )}>
               {isCollective ? (
-                formatPrice(Math.round(selectedVariant.price * numberOfSessions * effectiveAnimalCount))
+                formatPrice(Math.round(selectedVariant.price * actualSlotCount * effectiveAnimalCount))
               ) : isMultiSession ? (
                 formatPrice(Math.round(selectedVariant.price * numberOfSessions))
               ) : (
@@ -872,7 +874,7 @@ export default function SummaryStep({
             }, 0);
 
             const serviceAmount = isCollective
-              ? Math.round(selectedVariant.price * numberOfSessions * effectiveAnimalCount) + optionsAmount
+              ? Math.round(selectedVariant.price * actualSlotCount * effectiveAnimalCount) + optionsAmount
               : isMultiSession
                 ? Math.round(selectedVariant.price * numberOfSessions) + optionsAmount
                 : priceBreakdown.totalAmount;

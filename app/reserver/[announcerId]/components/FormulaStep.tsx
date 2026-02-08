@@ -377,7 +377,7 @@ function SelectedFormuleDetails({
           <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
           <p>
             {isCollective
-              ? `Vous devrez sélectionner ${numberOfSessions} créneau${numberOfSessions > 1 ? "x" : ""} parmi les disponibilités du prestataire.`
+              ? "Vous pourrez sélectionner un ou plusieurs créneaux parmi les disponibilités du prestataire."
               : isMultiSession
                 ? `Vous devrez sélectionner ${numberOfSessions} dates pour vos séances${sessionInterval > 0 ? ` (minimum ${sessionInterval} jour${sessionInterval > 1 ? "s" : ""} d'intervalle)` : ""}.`
                 : "Vous pourrez choisir une date et un horaire à l'étape suivante."}
