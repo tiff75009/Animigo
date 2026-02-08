@@ -65,6 +65,8 @@ interface ReservationSummaryProps {
   commissionRate: number;
   paymentFees: number;
   stripeFeeRate: number;
+  vatRate: number;
+  vatOnCommission: number;
   totalWithCommission: number;
   announcerStatusType: string;
   // Annulation
@@ -102,6 +104,8 @@ export default function ReservationSummary({
   commissionRate,
   paymentFees,
   stripeFeeRate,
+  vatRate,
+  vatOnCommission,
   totalWithCommission,
   announcerStatusType,
   acceptedCancellationPolicy,
@@ -346,29 +350,68 @@ export default function ReservationSummary({
               </div>
             )}
 
-            {/* Récapitulatif prix HT + Commissions + Total */}
+            {/* Récapitulatif prix + Commissions + Total */}
             <div className="bg-gray-100 rounded-xl p-4 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Prix prestataire HT</span>
-                <span className="font-medium text-foreground">
-                  {formatPrice(baseAmountHT)}
-                </span>
-              </div>
+              {/* Prix prestataire avec détail HT/TTC pour professionnels */}
+              {announcerStatusType === "professionnel" ? (
+                <>
+                  {(() => {
+                    const serviceVatRate = 20;
+                    const serviceHT = Math.round(baseAmountHT / (1 + serviceVatRate / 100));
+                    const serviceTVA = baseAmountHT - serviceHT;
+                    return (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Prix prestataire HT</span>
+                          <span className="font-medium text-foreground">
+                            {formatPrice(serviceHT)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm text-gray-500">
+                          <span>TVA prestation ({serviceVatRate}%)</span>
+                          <span>{formatPrice(serviceTVA)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600 font-medium">Prix prestataire TTC</span>
+                          <span className="font-semibold text-foreground">
+                            {formatPrice(baseAmountHT)}
+                          </span>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </>
+              ) : (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Prix prestataire</span>
+                  <span className="font-medium text-foreground">
+                    {formatPrice(baseAmountHT)}
+                  </span>
+                </div>
+              )}
 
               {announcerStatusType === "micro_entrepreneur" && (
-                <div className="text-xs text-gray-500 italic">
-                  TVA non applicable - Autoliquidation de TVA (art. 293 B du CGI)
+                <p className="text-xs text-gray-500 italic">
+                  TVA non applicable (art. 293 B du CGI)
+                </p>
+              )}
+
+              <div className="flex justify-between text-sm text-gray-500">
+                <span>Commission ({commissionRate}%)</span>
+                <span>+{formatPrice(platformCommission)}</span>
+              </div>
+
+              {/* TVA sur commission — masquer si 0% */}
+              {vatRate > 0 && (
+                <div className="flex justify-between text-sm text-gray-500">
+                  <span>TVA sur commission ({vatRate}%)</span>
+                  <span>+{formatPrice(vatOnCommission)}</span>
                 </div>
               )}
 
               <div className="flex justify-between text-sm text-gray-500">
-                <span>Commission plateforme ({commissionRate}%)</span>
-                <span>{formatPrice(platformCommission)}</span>
-              </div>
-
-              <div className="flex justify-between text-sm text-gray-500">
-                <span>Frais de gestion paiement ({stripeFeeRate}%)</span>
-                <span>{formatPrice(paymentFees)}</span>
+                <span>Frais de paiement ({stripeFeeRate}%)</span>
+                <span>+{formatPrice(paymentFees)}</span>
               </div>
 
               <div className="border-t-2 border-primary/20 my-2" />

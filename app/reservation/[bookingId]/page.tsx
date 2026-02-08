@@ -345,12 +345,13 @@ export default function ReservationPage({
   // Frais
   const commissionRate = pricingConfig?.commissionRate ?? 15;
   const stripeFeeRate = pricingConfig?.stripeFeeRate ?? 3;
+  const vatRate = pricingConfig?.vatRate ?? 20;
   const announcerStatusType = bookingData?.announcer?.statusType ?? "particulier";
   const baseAmountHT = totalAmount;
   const platformCommission = Math.round((baseAmountHT * commissionRate) / 100);
-  const totalBeforePaymentFees = baseAmountHT + platformCommission;
-  const paymentFees = Math.round((totalBeforePaymentFees * stripeFeeRate) / 100);
-  const totalWithCommission = totalBeforePaymentFees + paymentFees;
+  const vatOnCommission = Math.round((platformCommission * vatRate) / 100);
+  const paymentFees = Math.round((baseAmountHT * stripeFeeRate) / 100);
+  const totalWithCommission = baseAmountHT + platformCommission + vatOnCommission + paymentFees;
 
   // Toggle option
   const toggleOption = (optionId: string) => {
@@ -765,6 +766,8 @@ export default function ReservationPage({
               commissionRate={commissionRate}
               paymentFees={paymentFees}
               stripeFeeRate={stripeFeeRate}
+              vatRate={vatRate}
+              vatOnCommission={vatOnCommission}
               totalWithCommission={totalWithCommission}
               announcerStatusType={announcerStatusType}
               acceptedCancellationPolicy={acceptedCancellationPolicy}
