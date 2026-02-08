@@ -98,6 +98,8 @@ import type * as public_legal from "../public/legal.js";
 import type * as public_profile from "../public/profile.js";
 import type * as public_search from "../public/search.js";
 import type * as public_searchWithRedis from "../public/searchWithRedis.js";
+import type * as sap_declarations from "../sap/declarations.js";
+import type * as sap_eligibility from "../sap/eligibility.js";
 import type * as seo_serviceCities from "../seo/serviceCities.js";
 import type * as seo_serviceCityPages from "../seo/serviceCityPages.js";
 import type * as seo_servicePages from "../seo/servicePages.js";
@@ -215,6 +217,8 @@ declare const fullApi: ApiFromModules<{
   "public/profile": typeof public_profile;
   "public/search": typeof public_search;
   "public/searchWithRedis": typeof public_searchWithRedis;
+  "sap/declarations": typeof sap_declarations;
+  "sap/eligibility": typeof sap_eligibility;
   "seo/serviceCities": typeof seo_serviceCities;
   "seo/serviceCityPages": typeof seo_serviceCityPages;
   "seo/servicePages": typeof seo_servicePages;

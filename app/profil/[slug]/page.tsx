@@ -308,6 +308,12 @@ export default function PublicProfilePage() {
                           Vérifié
                         </span>
                       )}
+                      {profileData.isSapApproved && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-50 text-blue-600">
+                          <Shield className="w-4 h-4" />
+                          Déclaré SAP
+                        </span>
+                      )}
                       {profileData.icadRegistered && (
                         <span className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-600">
                           I-CAD
@@ -803,7 +809,7 @@ export default function PublicProfilePage() {
                         <div className="flex-1 min-w-0">
                           <h3 className="font-bold text-gray-900">{service.categoryName}</h3>
                           <p className="text-sm text-gray-500">
-                            {service.formules.length} formule{service.formules.length > 1 ? "s" : ""}
+                            {service.formules.length} service{service.formules.length > 1 ? "s" : ""}
                           </p>
                         </div>
                         {minPrice !== Infinity && (

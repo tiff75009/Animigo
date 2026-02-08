@@ -795,6 +795,29 @@ export const finalizeBooking = mutation({
       deadlineConfig
     );
 
+    // Déterminer le taux TVA (SAP ou standard)
+    let vatRate = 20;
+    let isSapApplied = false;
+
+    if (category?.isSapEligible) {
+      const announcerProfile = await ctx.db
+        .query("profiles")
+        .withIndex("by_user", (q) => q.eq("userId", pendingBooking.announcerId))
+        .first();
+
+      if (announcerProfile?.isSapApproved) {
+        const clientProfile = await ctx.db
+          .query("clientProfiles")
+          .withIndex("by_user", (q) => q.eq("userId", session.userId))
+          .first();
+
+        if (clientProfile?.sapEligibility && clientProfile.sapEligibility !== "none" && clientProfile.sapEligibilityAttested) {
+          vatRate = 10;
+          isSapApplied = true;
+        }
+      }
+    }
+
     // Utiliser le montant mis à jour si fourni, sinon utiliser celui de la réservation
     // Ce montant représente le prix du service (ce que l'annonceur recevra)
     const serviceAmount = args.updatedAmount ?? pendingBooking.calculatedAmount;
@@ -867,6 +890,8 @@ export const finalizeBooking = mutation({
       stripeFee, // Frais de gestion paiement Stripe
       commissionRate, // Taux de commission appliqué (%)
       stripeFeeRate, // Taux frais Stripe appliqué (%)
+      vatRate, // Taux TVA appliqué (10 si SAP, 20 sinon)
+      isSapApplied, // true si taux réduit SAP appliqué
       announcerEarnings, // Ce que l'annonceur reçoit (prix du service)
       paymentStatus: "not_due",
       location: args.location,

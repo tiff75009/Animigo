@@ -598,6 +598,18 @@ export default function ReserverPage({
     (v: ServiceVariant) => v.id === bookingData.variantId
   ) as ServiceVariant | undefined;
 
+  // Calculer le taux TVA SAP (si conditions remplies)
+  const sapVatInfo = useQuery(
+    api.sap.eligibility.computeSapVatRate,
+    authToken && selectedService
+      ? {
+          sessionToken: authToken,
+          announcerId: announcerId as Id<"users">,
+          serviceCategorySlug: selectedService.category,
+        }
+      : "skip"
+  );
+
   // Calendar availability
   const startOfMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
   const endOfMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0);
@@ -884,7 +896,7 @@ export default function ReserverPage({
   const handleSubmit = async () => {
     // Vérifier les informations de base
     if (!selectedService || !selectedVariant) {
-      setError("Veuillez sélectionner un service et une formule");
+      setError("Veuillez sélectionner un service");
       return;
     }
 
@@ -927,7 +939,7 @@ export default function ReserverPage({
 
       // Use actual IDs from selected objects, not URL params (which may be slugs)
       if (!selectedService || !selectedVariant) {
-        setError("Service ou formule non trouvé");
+        setError("Service non trouvé");
         setIsSubmitting(false);
         return;
       }
@@ -1533,6 +1545,8 @@ export default function ReserverPage({
                 // Pricing details
                 stripeFeeRate={stripeFeeRate}
                 vatRate={vatRate}
+                isSapApplied={sapVatInfo?.isSapApplied ?? false}
+                sapVatRate={sapVatInfo?.vatRate ?? 20}
                 announcerStatusType={announcerData?.statusType}
                 // Gestion des adresses
                 sessionToken={authToken}

@@ -1107,6 +1107,7 @@ export default function AnnouncerProfilePage() {
               selectedSessions={bookingSelection.selectedSessions}
               announcerFirstName={announcer.firstName}
               announcerId={announcerData?.id}
+              announcerStatusType={announcerData?.statusType as "particulier" | "micro_entrepreneur" | "professionnel" | undefined}
               // Vérification de l'animal pour les invités
               requiresAnimalVerification={requiresAnimalVerification}
               guestAnimalValid={guestAnimalValid}
@@ -1172,6 +1173,7 @@ export default function AnnouncerProfilePage() {
         // Props pour le lieu
         onLocationSelect={handleLocationSelect}
         announcerFirstName={announcer.firstName}
+        announcerStatusType={announcerData?.statusType as "particulier" | "micro_entrepreneur" | "professionnel" | undefined}
         announcerCity={extractCityDisplay(announcer.location)}
         announcerCoordinates={announcerData?.coordinates ?? undefined}
         announcerRadius={announcer.radius}

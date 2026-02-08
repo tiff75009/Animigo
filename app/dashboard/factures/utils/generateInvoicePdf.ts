@@ -46,6 +46,7 @@ export interface InvoiceData {
   amount: number;
   amountHT?: number;
   tva?: number;
+  vatRate?: number; // Taux TVA appliqué (10 ou 20)
   items: InvoiceItem[];
   emitter: InvoiceEmitter;
   emitterAddress?: InvoiceAddress;
@@ -232,11 +233,12 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Blob> {
 
   for (const item of data.items) {
     // Prix HT de l'item
+    const effectiveVatRate = data.vatRate ?? 20;
     const itemUnitHT = data.emitter.isVatSubject
-      ? Math.round(item.unitPrice / 1.20)
+      ? Math.round(item.unitPrice / (1 + effectiveVatRate / 100))
       : item.unitPrice;
     const itemTotalHT = data.emitter.isVatSubject
-      ? Math.round(item.total / 1.20)
+      ? Math.round(item.total / (1 + effectiveVatRate / 100))
       : item.total;
 
     // Description (avec retour à la ligne si trop long)

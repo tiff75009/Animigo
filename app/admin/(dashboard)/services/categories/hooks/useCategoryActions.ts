@@ -94,6 +94,7 @@ export function useCategoryActions(
           enableDurationBasedBlocking: isSubcategory
             ? formData.enableDurationBasedBlocking
             : undefined,
+          isSapEligible: isSubcategory ? formData.isSapEligible : undefined,
         });
         onSuccess();
       } catch (err) {
@@ -156,6 +157,7 @@ export function useCategoryActions(
           updateArgs.allowCustomVariants = formData.allowCustomVariants;
           updateArgs.allowOvernightStay = formData.allowOvernightStay;
           updateArgs.enableDurationBasedBlocking = formData.enableDurationBasedBlocking;
+          updateArgs.isSapEligible = formData.isSapEligible;
         }
 
         await updateCategoryMutation(updateArgs);

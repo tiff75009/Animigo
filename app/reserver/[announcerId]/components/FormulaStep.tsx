@@ -630,7 +630,7 @@ export default function FormulaStep({
               <div className="mt-3 pt-3 border-t border-gray-200/50">
                 <div className="flex items-center gap-2 mb-2">
                   <CheckCircle2 className="w-4 h-4 text-green-600" />
-                  <span className="text-sm font-medium text-foreground">Inclus dans la formule</span>
+                  <span className="text-sm font-medium text-foreground">Inclus dans le service</span>
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {selectedVariant.includedFeatures.map((feature, idx) => (
@@ -905,7 +905,7 @@ export default function FormulaStep({
         {/* Sélection de la formule si plusieurs */}
         {selectedService.variants.length > 1 ? (
           <div className="mb-4">
-            <h3 className="font-medium text-foreground mb-2">Choisissez votre formule</h3>
+            <h3 className="font-medium text-foreground mb-2">Choisissez votre service</h3>
             <div className="space-y-2">
               {selectedService.variants.map((v) => {
                 const isSelected = selectedVariantId === v.id;

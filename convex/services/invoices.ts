@@ -238,6 +238,7 @@ export const createAnnouncerInvoice = mutation({
     // Calcul TVA
     const isVatSubject = user.isVatSubject === true;
     const totalService = items.reduce((sum, item) => sum + item.total, 0);
+    const effectiveVatRate = mission.vatRate ?? 20;
 
     let amountHT: number | undefined;
     let tva: number | undefined;
@@ -246,7 +247,7 @@ export const createAnnouncerInvoice = mutation({
     if (isVatSubject) {
       // Le prix du service est TTC, on en déduit le HT
       amountTTC = totalService;
-      amountHT = Math.round(totalService / 1.20);
+      amountHT = Math.round(totalService / (1 + effectiveVatRate / 100));
       tva = amountTTC - amountHT;
     } else {
       amountTTC = totalService;
@@ -265,6 +266,7 @@ export const createAnnouncerInvoice = mutation({
       amount: amountTTC,
       amountHT,
       tva,
+      vatRate: effectiveVatRate,
       items,
       createdBy: user._id,
       createdAt: Date.now(),

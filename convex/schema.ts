@@ -195,6 +195,10 @@ export default defineSchema({
     isIdentityVerified: v.optional(v.boolean()),
     identityVerifiedAt: v.optional(v.number()), // Date de vérification
 
+    // SAP (Services à la Personne)
+    isSapApproved: v.optional(v.boolean()),
+    sapApprovedAt: v.optional(v.number()),
+
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
@@ -221,6 +225,14 @@ export default defineSchema({
       lng: v.number(),
     })),
     googlePlaceId: v.optional(v.string()),
+    // SAP (Services à la Personne) - Éligibilité client
+    sapEligibility: v.optional(v.union(
+      v.literal("none"),
+      v.literal("elderly_dependent"),  // PA dépendante
+      v.literal("disabled")            // Handicap
+    )),
+    sapEligibilityAttested: v.optional(v.boolean()),
+    sapEligibilityUpdatedAt: v.optional(v.number()),
     // Metadata
     updatedAt: v.number(),
   })
@@ -447,6 +459,8 @@ export default defineSchema({
     // Prix supplément nuit conseillé par défaut (en centimes)
     // Utilisé pour les services de garde avec option nuit
     defaultNightlyPrice: v.optional(v.number()),
+    // SAP : éligible au taux réduit de TVA (10% au lieu de 20%)
+    isSapEligible: v.optional(v.boolean()),
     // Permettre la réservation par plage (dates ou heures)
     // true = le client peut sélectionner une plage de dates ou d'heures
     allowRangeBooking: v.optional(v.boolean()),
@@ -584,6 +598,8 @@ export default defineSchema({
     stripeFee: v.optional(v.number()), // Frais de gestion paiement Stripe (centimes)
     commissionRate: v.optional(v.number()), // Taux de commission appliqué (%)
     stripeFeeRate: v.optional(v.number()), // Taux frais Stripe appliqué (%)
+    vatRate: v.optional(v.number()),         // Taux TVA appliqué (10 ou 20)
+    isSapApplied: v.optional(v.boolean()),   // true si taux réduit SAP
     announcerEarnings: v.optional(v.number()), // Revenus annonceur après commission (centimes)
 
     // Dates
@@ -1273,6 +1289,30 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_ip_status", ["ipAddress", "status"]),
 
+  // Déclarations SAP (Services à la Personne) des annonceurs
+  sapDeclarations: defineTable({
+    userId: v.id("users"),
+    sapDeclarationNumber: v.optional(v.string()),   // Numéro déclaration DDETS
+    sapReceiptUrl: v.optional(v.string()),           // URL Cloudinary récépissé
+    exclusivityAttested: v.optional(v.boolean()),    // Attestation exercice exclusif SAP
+    status: v.union(
+      v.literal("pending"),    // En cours de remplissage
+      v.literal("submitted"),  // Soumis, attente review admin
+      v.literal("approved"),   // Approuvé
+      v.literal("rejected"),   // Rejeté
+      v.literal("revoked")     // Révoqué
+    ),
+    reviewedAt: v.optional(v.number()),
+    reviewedBy: v.optional(v.id("users")),
+    rejectionReason: v.optional(v.string()),
+    adminNotes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    submittedAt: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_status", ["status"]),
+
   // Demandes de vérification d'identité des annonceurs
   verificationRequests: defineTable({
     userId: v.id("users"),
@@ -1383,6 +1423,7 @@ export default defineSchema({
       unitPrice: v.number(),
       total: v.number(),
     })),
+    vatRate: v.optional(v.number()), // Taux TVA appliqué (10 ou 20)
     pdfStorageId: v.optional(v.id("_storage")), // ID du PDF stocké
     pdfUrl: v.optional(v.string()),        // URL du PDF généré
     sentAt: v.optional(v.number()),

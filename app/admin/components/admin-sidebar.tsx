@@ -85,6 +85,12 @@ export function AdminSidebar() {
     token ? { token } : "skip"
   );
 
+  // Récupérer les déclarations SAP en attente
+  const pendingSapDeclarations = useQuery(
+    api.sap.declarations.countPendingSapDeclarations,
+    token ? { sessionToken: token } : "skip"
+  );
+
   const navSections: NavSection[] = [
     {
       title: "Général",
@@ -120,6 +126,12 @@ export function AdminSidebar() {
           label: "Réservations",
           href: "/admin/reservations",
           icon: CalendarCheck,
+        },
+        {
+          label: "Déclarations SAP",
+          href: "/admin/sap",
+          icon: FileCheck,
+          badge: pendingSapDeclarations || 0,
         },
         {
           label: "Réclamations",

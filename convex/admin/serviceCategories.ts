@@ -93,6 +93,7 @@ export const listCategories = query({
           displayFormat: cat.displayFormat,
           isCapacityBased: cat.isCapacityBased,
           enableDurationBasedBlocking: cat.enableDurationBasedBlocking,
+          isSapEligible: cat.isSapEligible,
           // Configuration tarification avancée
           announcerPriceMode: cat.announcerPriceMode,
           clientBillingMode: cat.clientBillingMode,
@@ -223,6 +224,7 @@ export const getActiveCategories = query({
               allowCustomVariants: child.allowCustomVariants,
               allowOvernightStay: child.allowOvernightStay,
               enableDurationBasedBlocking: child.enableDurationBasedBlocking,
+              isSapEligible: child.isSapEligible,
               // Configuration tarification avancée
               announcerPriceMode: child.announcerPriceMode,
               displayPriceUnit: child.displayPriceUnit,
@@ -282,6 +284,7 @@ export const getActiveCategories = query({
           allowCustomVariants: cat.allowCustomVariants,
           allowOvernightStay: cat.allowOvernightStay,
           enableDurationBasedBlocking: cat.enableDurationBasedBlocking,
+          isSapEligible: cat.isSapEligible,
           // Configuration tarification avancée
           announcerPriceMode: cat.announcerPriceMode,
           displayPriceUnit: cat.displayPriceUnit,
@@ -374,6 +377,8 @@ export const createCategory = mutation({
     isCapacityBased: v.optional(v.boolean()),
     // Blocage basé sur la durée (uniquement pour sous-catégories)
     enableDurationBasedBlocking: v.optional(v.boolean()),
+    // SAP : éligible au taux réduit de TVA
+    isSapEligible: v.optional(v.boolean()),
     // === Configuration tarification avancée ===
     announcerPriceMode: v.optional(v.union(v.literal("manual"), v.literal("automatic"))),
     clientBillingMode: v.optional(v.union(
@@ -438,6 +443,8 @@ export const createCategory = mutation({
       allowOvernightStay: args.parentCategoryId ? args.allowOvernightStay : undefined,
       // Blocage basé sur la durée (uniquement pour les sous-catégories)
       enableDurationBasedBlocking: args.parentCategoryId ? args.enableDurationBasedBlocking : undefined,
+      // SAP : éligible au taux réduit (uniquement pour les sous-catégories)
+      isSapEligible: args.parentCategoryId ? args.isSapEligible : undefined,
       // Format d'affichage (uniquement pour les catégories parentes)
       displayFormat: !args.parentCategoryId ? args.displayFormat : undefined,
       // Catégorie basée sur la capacité (uniquement pour les catégories parentes)
@@ -505,6 +512,8 @@ export const updateCategory = mutation({
     isCapacityBased: v.optional(v.boolean()),
     // Blocage basé sur la durée (uniquement pour sous-catégories)
     enableDurationBasedBlocking: v.optional(v.boolean()),
+    // SAP : éligible au taux réduit de TVA
+    isSapEligible: v.optional(v.boolean()),
     // === Configuration tarification avancée ===
     announcerPriceMode: v.optional(v.union(v.literal("manual"), v.literal("automatic"))),
     clientBillingMode: v.optional(v.union(
@@ -590,6 +599,7 @@ export const updateCategory = mutation({
     if (args.displayFormat !== undefined) updates.displayFormat = args.displayFormat;
     if (args.isCapacityBased !== undefined) updates.isCapacityBased = args.isCapacityBased;
     if (args.enableDurationBasedBlocking !== undefined) updates.enableDurationBasedBlocking = args.enableDurationBasedBlocking;
+    if (args.isSapEligible !== undefined) updates.isSapEligible = args.isSapEligible;
     // Configuration tarification avancée
     if (args.announcerPriceMode !== undefined) updates.announcerPriceMode = args.announcerPriceMode;
     if (args.clientBillingMode !== undefined) updates.clientBillingMode = args.clientBillingMode;
@@ -746,6 +756,7 @@ export const listPrestations = query({
           allowRangeBooking: prestation.allowRangeBooking,
           allowOvernightStay: prestation.allowOvernightStay,
           enableDurationBasedBlocking: prestation.enableDurationBasedBlocking,
+          isSapEligible: prestation.isSapEligible,
           // Configuration tarification avancée
           announcerPriceMode: prestation.announcerPriceMode,
           clientBillingMode: prestation.clientBillingMode,

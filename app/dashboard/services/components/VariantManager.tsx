@@ -1,5 +1,7 @@
 "use client";
 
+const DEFAULT_VAT_RATE = 20;
+
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery } from "convex/react";
@@ -23,8 +25,8 @@ import {
   MapPin,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
-import ConfirmModal from "./shared/ConfirmModal";
 import { useAuth } from "@/app/hooks/useAuth";
+import ConfirmModal from "./shared/ConfirmModal";
 
 type PriceUnit = "hour" | "half_day" | "day" | "week" | "month" | "flat";
 type BillingType = "hourly" | "daily" | "flexible";
@@ -369,6 +371,10 @@ function SimpleVariantCard({
   const [newFeature, setNewFeature] = useState("");
   const [showActivitySelector, setShowActivitySelector] = useState(false);
 
+  // TVA
+  const { user: authUser } = useAuth();
+  const isVatSubject = authUser?.isVatSubject;
+
   // Ajouter une activité prédéfinie
   const handleToggleActivity = (activity: AdminActivity) => {
     const currentObjectives = variant.objectives || [];
@@ -506,7 +512,7 @@ function SimpleVariantCard({
           <div className="w-9 h-9 rounded-xl bg-white shadow-sm flex items-center justify-center">
             <Sparkles className="w-4 h-4 text-primary" />
           </div>
-          <span className="text-sm font-medium text-text-light">Formule {index + 1}</span>
+          <span className="text-sm font-medium text-text-light">Service {index + 1}</span>
         </div>
         {canDelete && (
           <button
@@ -525,20 +531,20 @@ function SimpleVariantCard({
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs text-primary">1</div>
-            Identité de la formule
+            Identité du service
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             {/* Nom */}
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                Nom de la formule
+                Nom du service
               </label>
               <input
                 type="text"
                 value={variant.name}
                 onChange={(e) => onUpdate({ name: e.target.value })}
-                placeholder="Ex: Formule découverte"
+                placeholder="Ex: Service découverte"
                 className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 focus:bg-white text-sm transition-all"
               />
             </div>
@@ -575,7 +581,7 @@ function SimpleVariantCard({
               : "bg-gray-50/50 border-gray-100"
           )}>
             <p className="text-xs text-gray-500">
-              Sélectionnez les types d&apos;animaux que vous acceptez pour cette formule
+              Sélectionnez les types d&apos;animaux que vous acceptez pour ce service
             </p>
             <div className="flex flex-wrap gap-2">
               {ANIMAL_TYPES.map((animal) => {
@@ -1097,6 +1103,12 @@ function SimpleVariantCard({
             )}
           </div>
 
+          {isVatSubject && (
+            <p className="text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg mb-4">
+              Les prix saisis sont en TTC (TVA 20% incluse). Le montant HT est calculé automatiquement.
+            </p>
+          )}
+
           {/* Prix conseillé */}
           {recommendedPrice > 0 && !isLoadingPrice && (
             <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
@@ -1121,7 +1133,7 @@ function SimpleVariantCard({
               {/* Prix journée */}
               <div className="p-4 bg-gradient-to-br from-primary/5 to-orange-50 rounded-xl border border-primary/10">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium text-foreground">Prix par jour</span>
+                  <span className="text-sm font-medium text-foreground">Prix par jour{isVatSubject ? " TTC" : ""}</span>
                   <span className="text-xs px-2 py-0.5 bg-white rounded-full text-gray-500">
                     {getDailyPrice() <= dailyRecommendedPrice / 100 * 0.9 ? "Compétitif" :
                      getDailyPrice() >= dailyRecommendedPrice / 100 * 1.1 ? "Premium" : "Standard"}
@@ -1149,7 +1161,10 @@ function SimpleVariantCard({
                   </div>
                   <div className="text-right">
                     <span className="text-2xl font-bold text-primary">{getDailyPrice().toFixed(0)}</span>
-                    <span className="text-sm text-gray-500">€/jour</span>
+                    <span className="text-sm text-gray-500">€/jour{isVatSubject ? " TTC" : ""}</span>
+                    {isVatSubject && (
+                      <div className="text-xs text-blue-600 mt-0.5">HT: {(getDailyPrice() / (1 + DEFAULT_VAT_RATE / 100)).toFixed(2).replace(".", ",")}€</div>
+                    )}
                   </div>
                 </div>
                 {/* Exemples de facturation garde */}
@@ -1260,7 +1275,10 @@ function SimpleVariantCard({
                       </div>
                       <div className="text-right">
                         <span className="text-2xl font-bold text-indigo-600">{getNightlyPrice().toFixed(2).replace(".", ",")}</span>
-                        <span className="text-sm text-indigo-400">€/nuit</span>
+                        <span className="text-sm text-indigo-400">€/nuit{isVatSubject ? " TTC" : ""}</span>
+                        {isVatSubject && (
+                          <div className="text-xs text-blue-600 mt-0.5">HT: {(getNightlyPrice() / (1 + DEFAULT_VAT_RATE / 100)).toFixed(2).replace(".", ",")}€</div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1274,7 +1292,7 @@ function SimpleVariantCard({
               <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-200">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-foreground">Prix par jour</span>
+                    <span className="text-sm font-medium text-foreground">Prix par jour{isVatSubject ? " TTC" : ""}</span>
                     <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
                       Mode auto
                     </span>
@@ -1306,7 +1324,10 @@ function SimpleVariantCard({
                   </div>
                   <div className="text-right">
                     <span className="text-2xl font-bold text-amber-600">{getDailyPrice().toFixed(0)}</span>
-                    <span className="text-sm text-amber-500">€/jour</span>
+                    <span className="text-sm text-amber-500">€/jour{isVatSubject ? " TTC" : ""}</span>
+                    {isVatSubject && (
+                      <div className="text-xs text-blue-600 mt-0.5">HT: {(getDailyPrice() / (1 + DEFAULT_VAT_RATE / 100)).toFixed(2).replace(".", ",")}€</div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1391,7 +1412,7 @@ function SimpleVariantCard({
             /* ═══ TARIFS SERVICES - MODE MANUEL ═══ */
             <div className="p-4 bg-gradient-to-br from-primary/5 to-secondary/5 rounded-xl border border-primary/10">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-foreground">Prix par heure</span>
+                <span className="text-sm font-medium text-foreground">Prix par heure{isVatSubject ? " TTC" : ""}</span>
                 <span className="text-xs px-2 py-0.5 bg-white rounded-full text-gray-500">
                   {getHourlyPrice() <= recommendedPrice / 100 * 0.9 ? "Compétitif" :
                    getHourlyPrice() >= recommendedPrice / 100 * 1.1 ? "Premium" : "Standard"}
@@ -1419,7 +1440,10 @@ function SimpleVariantCard({
                 </div>
                 <div className="text-right">
                   <span className="text-2xl font-bold text-primary">{getHourlyPrice().toFixed(0)}</span>
-                  <span className="text-sm text-gray-500">€/h</span>
+                  <span className="text-sm text-gray-500">€/h{isVatSubject ? " TTC" : ""}</span>
+                  {isVatSubject && (
+                    <div className="text-xs text-blue-600 mt-0.5">HT: {(getHourlyPrice() / (1 + DEFAULT_VAT_RATE / 100)).toFixed(2).replace(".", ",")}€</div>
+                  )}
                 </div>
               </div>
               {/* Exemples de facturation horaire selon le mode de facturation */}
@@ -1570,7 +1594,7 @@ export default function VariantManager({
 
       const firstVariant: LocalVariant = {
         localId: generateLocalId(),
-        name: `${serviceName} - Formule 1`,
+        name: `${serviceName} - Service 1`,
         description: undefined,
         price: mainPrice,
         priceUnit: isGardeService ? "day" : defaultPriceUnit.id,
@@ -1620,7 +1644,7 @@ export default function VariantManager({
 
     const newVariant: LocalVariant = {
       localId: generateLocalId(),
-      name: `${serviceName} - Formule ${nextIndex}`,
+      name: `${serviceName} - Service ${nextIndex}`,
       description: undefined,
       objectives: undefined,
       numberOfSessions: 1,
@@ -1708,7 +1732,7 @@ export default function VariantManager({
                 </span>
                 <p className="text-xs text-indigo-600 mt-1">
                   L&apos;animal peut rester la nuit chez vous. Un supplément nuit sera ajouté
-                  automatiquement aux tarifs de chaque formule.
+                  automatiquement aux tarifs de chaque service.
                 </p>
               </div>
             </label>
@@ -1751,7 +1775,7 @@ export default function VariantManager({
           whileTap={{ scale: 0.99 }}
         >
           <Plus className="w-5 h-5" />
-          <span className="font-medium">Ajouter une formule</span>
+          <span className="font-medium">Ajouter un service</span>
         </motion.button>
 
         {/* Récapitulatif */}
@@ -1760,7 +1784,7 @@ export default function VariantManager({
             <div className="flex items-center gap-2 mb-3">
               <Check className="w-4 h-4 text-secondary" />
               <span className="text-sm font-medium text-foreground">
-                {localVariants.length} formule{localVariants.length > 1 ? "s" : ""} configurée{localVariants.length > 1 ? "s" : ""}
+                {localVariants.length} service{localVariants.length > 1 ? "s" : ""} configuré{localVariants.length > 1 ? "s" : ""}
               </span>
             </div>
             <div className="space-y-2">
@@ -1815,7 +1839,7 @@ export default function VariantManager({
             setItemToDelete(null);
           }}
           onConfirm={handleDelete}
-          title="Supprimer cette formule"
+          title="Supprimer ce service"
           message={`Êtes-vous sûr de vouloir supprimer "${itemToDelete?.name || ""}" ? Cette action est irréversible.`}
           confirmLabel="Supprimer"
           cancelLabel="Annuler"

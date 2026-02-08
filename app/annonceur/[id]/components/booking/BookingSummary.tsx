@@ -69,6 +69,7 @@ interface BookingSummaryProps {
   guestAnimalValid?: boolean;
   guestAnimalError?: string;
   announcerId?: string;
+  announcerStatusType?: "particulier" | "micro_entrepreneur" | "professionnel";
   isGarde?: boolean;
   onBook?: () => void;
   onFinalize?: () => void; // Aller directement à la page de finalisation
@@ -97,6 +98,7 @@ export default function BookingSummary({
   guestAnimalValid = false,
   guestAnimalError,
   announcerId,
+  announcerStatusType,
   isGarde = false,
   onBook,
   onFinalize,
@@ -790,7 +792,10 @@ export default function BookingSummary({
                   <span className="text-gray-500">{formatPrice(variant.price)}€/séance</span>
                 </div>
                 <div className="flex justify-between text-xs text-gray-500 pl-4">
-                  <span>└ {numberOfSessions} séance{numberOfSessions > 1 ? "s" : ""} × {animalCount} animal{animalCount > 1 ? "ux" : ""}</span>
+                  <span>
+                    └ {numberOfSessions} séance{numberOfSessions > 1 ? "s" : ""}
+                    {animalCount > 1 && ` × ${animalCount} animaux`}
+                  </span>
                   <span className="font-medium text-gray-900">
                     {formatPrice(variant.price * numberOfSessions * animalCount)}€
                   </span>
@@ -803,51 +808,96 @@ export default function BookingSummary({
                 <div className="flex justify-between text-gray-700">
                   <span>Formule : {variant.name}</span>
                   <span className="text-gray-500">
-                    {formatPrice(priceBreakdown.dailyRate)}€/jour
+                    {(() => {
+                      // Afficher l'unité de prix correcte selon le billing
+                      const unit = priceBreakdown.billingUnit || (priceBreakdown.hourlyRate > 0 && priceBreakdown.dailyRate === 0 ? "hour" : "day");
+                      if (unit === "fixed") {
+                        const hours = priceBreakdown.hoursCount || priceBreakdown.firstDayHours || 0;
+                        return hours > 0 ? `${formatPrice(priceBreakdown.baseAmount)}€/${hours}h` : `${formatPrice(priceBreakdown.baseAmount)}€`;
+                      }
+                      if (unit === "hour" && priceBreakdown.hourlyRate > 0) {
+                        return `${formatPrice(priceBreakdown.hourlyRate)}€/h`;
+                      }
+                      if (unit === "half_day" && priceBreakdown.halfDailyRate) {
+                        return `${formatPrice(priceBreakdown.halfDailyRate)}€/demi-j`;
+                      }
+                      if (priceBreakdown.dailyRate > 0) {
+                        return `${formatPrice(priceBreakdown.dailyRate)}€/jour`;
+                      }
+                      if (priceBreakdown.hourlyRate > 0) {
+                        return `${formatPrice(priceBreakdown.hourlyRate)}€/h`;
+                      }
+                      return "";
+                    })()}
                   </span>
                 </div>
                 {/* Affichage détaillé du calcul */}
                 {(() => {
-                  // Calculer le nombre de jours complets et demi-journées
                   const dailyRate = priceBreakdown.dailyRate;
                   const halfDailyRate = priceBreakdown.halfDailyRate || Math.round(dailyRate / 2);
+                  const billingUnit = priceBreakdown.billingUnit || (priceBreakdown.hourlyRate > 0 && dailyRate === 0 ? "hour" : "day");
 
-                  // Premier jour
+                  // Facturation fixe (durée prédéfinie, prix fixe)
+                  if (billingUnit === "fixed") {
+                    const hours = priceBreakdown.hoursCount || priceBreakdown.firstDayHours || 0;
+                    return (
+                      <div className="flex justify-between text-xs text-gray-500 pl-4">
+                        <span>
+                          └ Prestation{hours > 0 ? ` (${hours}h)` : ""}
+                          {animalCount > 1 && ` × ${animalCount} animaux`}
+                        </span>
+                        <span className="font-medium text-gray-900">
+                          {formatPrice(priceBreakdown.baseAmount * animalCount)}€
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  // Facturation horaire
+                  if (billingUnit === "hour" || (priceBreakdown.hourlyRate > 0 && dailyRate === 0)) {
+                    const hours = priceBreakdown.hoursCount || priceBreakdown.firstDayHours || 0;
+                    const hourLabel = hours > 0 ? `${hours}h` : "1h";
+                    return (
+                      <div className="flex justify-between text-xs text-gray-500 pl-4">
+                        <span>
+                          └ {hourLabel} × {formatPrice(priceBreakdown.hourlyRate)}€/h
+                          {animalCount > 1 && ` × ${animalCount} animaux`}
+                        </span>
+                        <span className="font-medium text-gray-900">
+                          {formatPrice(priceBreakdown.baseAmount * animalCount)}€
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  // Facturation journalière / demi-journée
                   const firstDayIsFull = priceBreakdown.firstDayIsFullDay;
                   const firstDayIsHalf = priceBreakdown.firstDayIsHalfDay;
-
-                  // Dernier jour (si multi-jours)
                   const lastDayIsFull = priceBreakdown.lastDayIsFullDay;
                   const lastDayIsHalf = priceBreakdown.lastDayIsHalfDay;
-
-                  // Jours complets intermédiaires
                   const middleDays = priceBreakdown.fullDays || 0;
 
-                  // Comptabiliser jours et demi-journées
                   let fullDaysCount = middleDays;
                   let halfDaysCount = 0;
 
                   if (priceBreakdown.daysCount === 1) {
-                    // Un seul jour
                     if (firstDayIsFull) {
                       fullDaysCount = 1;
                     } else if (firstDayIsHalf) {
                       halfDaysCount = 1;
                     } else {
-                      fullDaysCount = 1; // Par défaut
+                      fullDaysCount = 1;
                     }
                   } else {
-                    // Multi-jours
                     if (firstDayIsFull) fullDaysCount++;
                     else if (firstDayIsHalf) halfDaysCount++;
-                    else fullDaysCount++; // Par défaut journée
+                    else fullDaysCount++;
 
                     if (lastDayIsFull) fullDaysCount++;
                     else if (lastDayIsHalf) halfDaysCount++;
-                    else fullDaysCount++; // Par défaut journée
+                    else fullDaysCount++;
                   }
 
-                  // Construire le libellé
                   const parts: string[] = [];
                   if (fullDaysCount > 0) {
                     parts.push(`${fullDaysCount} jour${fullDaysCount > 1 ? "s" : ""}`);
@@ -861,7 +911,8 @@ export default function BookingSummary({
                   return (
                     <div className="flex justify-between text-xs text-gray-500 pl-4">
                       <span>
-                        └ {durationLabel} × {animalCount} animal{animalCount > 1 ? "ux" : ""}
+                        └ {durationLabel}
+                        {animalCount > 1 && ` × ${animalCount} animaux`}
                       </span>
                       <span className="font-medium text-gray-900">
                         {formatPrice(priceBreakdown.baseAmount * animalCount)}€
@@ -878,8 +929,8 @@ export default function BookingSummary({
                     </span>
                   </p>
                 )}
-                {/* Indication de facturation arrondie */}
-                {priceBreakdown.daysCount === 1 && !priceBreakdown.firstDayIsFullDay && !priceBreakdown.firstDayIsHalfDay && priceBreakdown.hoursCount < 8 && (
+                {/* Indication de facturation arrondie — seulement si on a une facturation journalière avec heures < jour complet */}
+                {priceBreakdown.daysCount === 1 && !priceBreakdown.firstDayIsFullDay && !priceBreakdown.firstDayIsHalfDay && priceBreakdown.hoursCount > 0 && priceBreakdown.hoursCount < 8 && priceBreakdown.dailyRate > 0 && (
                   <p className="text-xs text-amber-600 mt-1 pl-4 flex items-center gap-1">
                     <Info className="w-3 h-3" />
                     <span>Facturation minimale : journée</span>
@@ -924,31 +975,71 @@ export default function BookingSummary({
 
             {/* Calcul des montants */}
             {(() => {
-              let subtotalHT = 0;
+              let serviceAmount = 0;
               if (isCollectiveFormule && variant) {
-                subtotalHT = variant.price * numberOfSessions * animalCount;
+                serviceAmount = variant.price * numberOfSessions * animalCount;
               } else if (isMultiSessionIndividual && variant) {
-                subtotalHT = variant.price * numberOfSessions * animalCount;
+                serviceAmount = variant.price * numberOfSessions * animalCount;
               } else if (priceBreakdown) {
                 const baseWithAnimals = priceBreakdown.baseAmount * animalCount;
                 const nightsWithAnimals = (priceBreakdown.nightsAmount || 0) * animalCount;
                 const optionsAmount = priceBreakdown.optionsAmount || 0;
-                subtotalHT = baseWithAnimals + nightsWithAnimals + optionsAmount;
+                serviceAmount = baseWithAnimals + nightsWithAnimals + optionsAmount;
               }
-              const commission = Math.round(subtotalHT * commissionRate / 100);
+
+              // Déterminer si l'annonceur est assujetti TVA
+              const isVatSubject = announcerStatusType === "professionnel";
+              const serviceVatRate = 20; // Taux TVA prestation (20% standard)
+
+              // Calcul HT/TTC de la prestation
+              const serviceHT = isVatSubject
+                ? Math.round(serviceAmount / (1 + serviceVatRate / 100))
+                : serviceAmount;
+              const serviceTVA = isVatSubject
+                ? serviceAmount - serviceHT
+                : 0;
+
+              const commission = Math.round(serviceAmount * commissionRate / 100);
               const vatOnCommission = Math.round(commission * vatRate / 100);
-              const stripeFee = Math.round(subtotalHT * stripeFeeRate / 100);
-              const totalTTC = subtotalHT + commission + vatOnCommission + stripeFee;
+              const stripeFee = Math.round(serviceAmount * stripeFeeRate / 100);
 
               return (
                 <>
-                  {/* Sous-total HT (Prix annonceur) */}
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Prix annonceur</span>
-                    <span className="font-medium text-gray-900">
-                      {formatPrice(subtotalHT)}€
-                    </span>
-                  </div>
+                  {/* Prix prestataire avec détail HT/TTC */}
+                  {isVatSubject ? (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Prix prestataire HT</span>
+                        <span className="font-medium text-gray-900">
+                          {formatPrice(serviceHT)}€
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-gray-500">
+                        <span>TVA prestation ({serviceVatRate}%)</span>
+                        <span>{formatPrice(serviceTVA)}€</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 font-medium">Prix prestataire TTC</span>
+                        <span className="font-semibold text-gray-900">
+                          {formatPrice(serviceAmount)}€
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Prix prestataire</span>
+                      <span className="font-medium text-gray-900">
+                        {formatPrice(serviceAmount)}€
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Mention TVA non applicable pour micro-entrepreneurs */}
+                  {announcerStatusType === "micro_entrepreneur" && (
+                    <p className="text-xs text-gray-400 italic">
+                      TVA non applicable (art. 293 B du CGI)
+                    </p>
+                  )}
 
                   {/* Commission */}
                   <div className="flex justify-between text-gray-500">
@@ -956,11 +1047,13 @@ export default function BookingSummary({
                     <span>+{formatPrice(commission)}€</span>
                   </div>
 
-                  {/* TVA sur commission */}
-                  <div className="flex justify-between text-gray-500">
-                    <span>TVA sur commission ({vatRate}%)</span>
-                    <span>+{formatPrice(vatOnCommission)}€</span>
-                  </div>
+                  {/* TVA sur commission — masquer si 0% */}
+                  {vatRate > 0 && (
+                    <div className="flex justify-between text-gray-500">
+                      <span>TVA sur commission ({vatRate}%)</span>
+                      <span>+{formatPrice(vatOnCommission)}€</span>
+                    </div>
+                  )}
 
                   {/* Frais Stripe */}
                   <div className="flex justify-between text-gray-500">

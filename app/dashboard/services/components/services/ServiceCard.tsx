@@ -1,5 +1,7 @@
 "use client";
 
+const DEFAULT_VAT_RATE = 20;
+
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery } from "convex/react";
@@ -30,6 +32,10 @@ import {
   User,
   Users,
   Calendar,
+  Phone,
+  ArrowRight,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import ConfirmModal from "../shared/ConfirmModal";
@@ -268,12 +274,15 @@ export default function ServiceCard({
   const isVatSubject = user?.isVatSubject;
   const companyType = user?.companyType;
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
   const [editingSection, setEditingSection] = useState<"variants" | "options" | null>(null);
   const [managingSlotsVariant, setManagingSlotsVariant] = useState<Variant | null>(null);
   const [editingVariantId, setEditingVariantId] = useState<Id<"serviceVariants"> | null>(null);
   const [isAddingVariant, setIsAddingVariant] = useState(false);
   const [editingOptionId, setEditingOptionId] = useState<Id<"serviceOptions"> | null>(null);
   const [isAddingOption, setIsAddingOption] = useState(false);
+  const [togglingVariantId, setTogglingVariantId] = useState<Id<"serviceVariants"> | null>(null);
+  const toggleVariantMutation = useMutation(api.services.variants.updateVariant);
 
   // Utiliser filteredVariants si fourni, sinon toutes les variants
   const displayVariants = filteredVariants || service.variants || [];
@@ -291,6 +300,17 @@ export default function ServiceCard({
     ? allPrimaryPrices.reduce((min, p) => (p.value < min.value ? p : min), allPrimaryPrices[0])
     : null;
 
+  const handleToggleVariant = async (variantId: Id<"serviceVariants">, currentlyActive: boolean) => {
+    setTogglingVariantId(variantId);
+    try {
+      await toggleVariantMutation({ token, variantId, isActive: !currentlyActive });
+    } catch (err) {
+      console.error("Erreur toggle variante:", err);
+    } finally {
+      setTogglingVariantId(null);
+    }
+  };
+
   return (
     <motion.div
       layout
@@ -298,14 +318,14 @@ export default function ServiceCard({
         "bg-white rounded-2xl overflow-hidden transition-all",
         service.isActive
           ? "border border-foreground/10 shadow-sm"
-          : "border-2 border-red-200 bg-red-50/30"
+          : "border-2 border-dashed border-red-300/70 bg-red-50/20"
       )}
     >
       {/* Header du service */}
       <div
         className={cn(
           "p-4",
-          !service.isActive && "bg-red-50/50"
+          !service.isActive && "bg-red-50/30"
         )}
       >
         <div className="flex items-center gap-4">
@@ -315,7 +335,7 @@ export default function ServiceCard({
               "w-12 h-12 rounded-xl flex items-center justify-center text-xl flex-shrink-0",
               service.isActive
                 ? "bg-gradient-to-br from-primary/10 to-secondary/10"
-                : "bg-red-100"
+                : "bg-red-100/80"
             )}
           >
             {categoryData?.icon || "✨"}
@@ -323,88 +343,96 @@ export default function ServiceCard({
 
           {/* Info */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-foreground truncate">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className={cn(
+                "font-bold truncate",
+                service.isActive ? "text-foreground" : "text-foreground/60"
+              )}>
                 {categoryData?.name || service.category}
               </h3>
-              {service.isActive ? (
-                <span className="flex items-center gap-1 text-xs text-secondary font-medium px-2 py-0.5 bg-secondary/10 rounded-full">
-                  <Check className="w-3 h-3" />
-                  Actif
-                </span>
-              ) : (
-                <span className="flex items-center gap-1 text-xs text-red-500 font-medium px-2 py-0.5 bg-red-100 rounded-full">
-                  <AlertCircle className="w-3 h-3" />
-                  Inactif
-                </span>
-              )}
               {!service.isActive && !phoneVerified && (
                 <span className="flex items-center gap-1 text-xs text-amber-600 font-medium px-2 py-0.5 bg-amber-100 rounded-full">
+                  <Phone className="w-3 h-3" />
                   Tel. non vérifié
                 </span>
               )}
             </div>
             <p className="text-sm text-text-light">
-              {variantsCount} service{variantsCount > 1 ? "s" : ""}
-              {optionsCount > 0 && ` • ${optionsCount} option${optionsCount > 1 ? "s" : ""}`}
+              {activeVariants.length}/{variantsCount} service{variantsCount > 1 ? "s" : ""} actif{activeVariants.length > 1 ? "s" : ""}
+              {optionsCount > 0 && ` · ${optionsCount} option${optionsCount > 1 ? "s" : ""}`}
             </p>
           </div>
 
-          {/* Price & Actions */}
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {globalMinPrice && (
-              <div className="text-right hidden sm:block mr-2">
-                <div className="text-xs text-text-light">Dès</div>
-                <div className="text-lg font-bold text-primary">
-                  {formatPrice(globalMinPrice.value)}
-                  <span className="text-xs font-normal text-text-light">{globalMinPrice.label}</span>
-                </div>
-                {isVatSubject && (
-                  <div className="text-[10px] text-text-light">
-                    TTC (HT : {formatPrice(Math.round(globalMinPrice.value / 1.20))})
-                  </div>
-                )}
-                {companyType === "micro_enterprise" && !isVatSubject && (
-                  <div className="text-[9px] text-text-light italic">TVA non applicable</div>
-                )}
+          {/* Price */}
+          {globalMinPrice && (
+            <div className="text-right hidden sm:block">
+              <div className="text-xs text-text-light">À partir de</div>
+              <div className="text-lg font-bold text-primary">
+                {formatPrice(globalMinPrice.value)}
+                <span className="text-xs font-normal text-text-light">{globalMinPrice.label}</span>
               </div>
-            )}
+              {isVatSubject && (
+                <div className="text-[10px] text-blue-500 font-medium">
+                  HT : {formatPrice(Math.round(globalMinPrice.value / (1 + DEFAULT_VAT_RATE / 100)))}
+                </div>
+              )}
+              {companyType === "micro_enterprise" && !isVatSubject && (
+                <div className="text-[9px] text-text-light italic">TVA non applicable</div>
+              )}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={() => {
                 setIsAddingVariant(true);
                 setEditingSection("variants");
               }}
               className="p-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
-              title="Ajouter une service"
+              title="Ajouter un service"
             >
               <Plus className="w-4 h-4" />
             </button>
+
+            {/* Toggle catégorie — bien visible */}
             <button
               onClick={() => {
                 if (!service.isActive && !phoneVerified) {
-                  alert("Vous devez vérifier votre numéro de téléphone avant d'activer un service. Rendez-vous dans Paramètres.");
+                  setShowPhoneModal(true);
                   return;
                 }
                 onToggle();
               }}
               className={cn(
-                "p-2 rounded-lg transition-colors",
+                "relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all",
                 service.isActive
-                  ? "bg-secondary/10 text-secondary hover:bg-secondary/20"
+                  ? "bg-secondary/15 text-secondary hover:bg-secondary/25"
                   : !phoneVerified
-                    ? "bg-amber-100 text-amber-500 hover:bg-amber-200"
+                    ? "bg-amber-100 text-amber-600 hover:bg-amber-200"
                     : "bg-red-100 text-red-500 hover:bg-red-200"
               )}
               title={
                 !service.isActive && !phoneVerified
                   ? "Vérifiez votre téléphone pour activer"
                   : service.isActive
-                    ? "Désactiver"
-                    : "Activer"
+                    ? "Désactiver la catégorie"
+                    : "Activer la catégorie"
               }
             >
-              {service.isActive ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+              {service.isActive ? (
+                <>
+                  <Eye className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">En ligne</span>
+                </>
+              ) : (
+                <>
+                  <EyeOff className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Hors ligne</span>
+                </>
+              )}
             </button>
+
             <button
               onClick={() => setShowDeleteModal(true)}
               className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors"
@@ -475,20 +503,20 @@ export default function ServiceCard({
               exit={{ opacity: 0 }}
             >
               {/* Services - Vue Grille ou Liste */}
-              {activeVariants.length > 0 ? (
+              {displayVariants.length > 0 ? (
                 <div className={cn(
                   "p-4",
                   viewMode === "grid"
                     ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"
                     : "flex flex-col gap-2"
                 )}>
-                  {activeVariants.map((variant) => {
+                  {displayVariants.map((variant) => {
                     const primaryPrice = getPrimaryPrice(variant, allowedPriceUnits, allowOvernightStay, displayPriceUnit);
                     const AnimalIcon = variant.animalTypes?.[0] ? (animalIcons[variant.animalTypes[0]] || Star) : null;
-                    // Options liées à ce service (variant)
                     const variantOptions = activeOptions.filter(opt => opt.variantId === variant.id);
-                    // Options partagées (sans variantId)
                     const sharedOptions = activeOptions.filter(opt => !opt.variantId);
+                    const isToggling = togglingVariantId === variant.id;
+                    const htPrice = primaryPrice ? Math.round(primaryPrice.value / (1 + DEFAULT_VAT_RATE / 100)) : 0;
 
                     // ========== VUE LISTE ==========
                     if (viewMode === "list") {
@@ -496,8 +524,30 @@ export default function ServiceCard({
                         <motion.div
                           key={variant.id}
                           layout
-                          className="group flex items-center gap-4 p-3 bg-gradient-to-r from-foreground/[0.02] to-foreground/[0.04] rounded-xl border border-foreground/5 hover:border-primary/30 hover:shadow-sm transition-all"
+                          className={cn(
+                            "group flex items-center gap-3 p-3 rounded-xl border transition-all",
+                            variant.isActive
+                              ? "bg-gradient-to-r from-foreground/[0.02] to-foreground/[0.04] border-foreground/5 hover:border-primary/30 hover:shadow-sm"
+                              : "bg-red-50/30 border-dashed border-red-200/60"
+                          )}
                         >
+                          {/* Toggle individuel */}
+                          <button
+                            onClick={() => handleToggleVariant(variant.id, variant.isActive)}
+                            disabled={isToggling}
+                            className={cn(
+                              "relative w-10 h-5 rounded-full transition-colors flex-shrink-0",
+                              variant.isActive ? "bg-secondary" : "bg-gray-300",
+                              isToggling && "opacity-50"
+                            )}
+                            title={variant.isActive ? "Désactiver ce service" : "Activer ce service"}
+                          >
+                            <span className={cn(
+                              "absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform",
+                              variant.isActive ? "translate-x-5" : "translate-x-0.5"
+                            )} />
+                          </button>
+
                           {/* Badge collectif */}
                           {variant.sessionType === "collective" && (
                             <span className="flex items-center gap-1 px-2 py-1 bg-orange-500 text-white text-xs font-medium rounded-full">
@@ -508,7 +558,13 @@ export default function ServiceCard({
                           {/* Nom et description */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <h4 className="font-semibold text-foreground truncate">{variant.name}</h4>
+                              <h4 className={cn(
+                                "font-semibold truncate",
+                                variant.isActive ? "text-foreground" : "text-foreground/50"
+                              )}>{variant.name}</h4>
+                              {!variant.isActive && (
+                                <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-500 rounded font-medium">Inactif</span>
+                              )}
                               {variant.description && (
                                 <p className="text-xs text-text-light truncate hidden sm:block">— {variant.description}</p>
                               )}
@@ -554,15 +610,17 @@ export default function ServiceCard({
                             </span>
                           )}
 
-                          {/* Prix */}
+                          {/* Prix avec HT/TTC */}
                           {primaryPrice && (
-                            <div className="text-right">
+                            <div className={cn("text-right", !variant.isActive && "opacity-50")}>
                               <div className="text-lg font-bold text-primary">
                                 {formatPrice(primaryPrice.value)}
                               </div>
                               <div className="text-xs text-text-light">{primaryPrice.label}</div>
                               {isVatSubject && (
-                                <div className="text-[10px] text-text-light">HT : {formatPrice(Math.round(primaryPrice.value / 1.20))}</div>
+                                <div className="text-[10px] text-blue-500 font-medium">
+                                  HT : {formatPrice(htPrice)}
+                                </div>
                               )}
                             </div>
                           )}
@@ -586,7 +644,12 @@ export default function ServiceCard({
                       <motion.div
                         key={variant.id}
                         layout
-                        className="group relative p-4 bg-gradient-to-br from-foreground/[0.02] to-foreground/[0.04] rounded-xl border border-foreground/5 hover:border-primary/30 hover:shadow-sm transition-all"
+                        className={cn(
+                          "group relative p-4 rounded-xl border transition-all",
+                          variant.isActive
+                            ? "bg-gradient-to-br from-foreground/[0.02] to-foreground/[0.04] border-foreground/5 hover:border-primary/30 hover:shadow-sm"
+                            : "bg-red-50/20 border-dashed border-red-200/60"
+                        )}
                       >
                         {/* Badge séance collective */}
                         {variant.sessionType === "collective" && (
@@ -596,13 +659,34 @@ export default function ServiceCard({
                           </span>
                         )}
 
-                        {/* Header service */}
+                        {/* Header service avec toggle */}
                         <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold text-foreground truncate">{variant.name}</h4>
-                            {variant.description && (
-                              <p className="text-xs text-text-light line-clamp-2 mt-0.5">{variant.description}</p>
-                            )}
+                          <div className="flex items-start gap-2 flex-1 min-w-0">
+                            {/* Toggle individuel */}
+                            <button
+                              onClick={() => handleToggleVariant(variant.id, variant.isActive)}
+                              disabled={isToggling}
+                              className={cn(
+                                "relative w-9 h-5 rounded-full transition-colors flex-shrink-0 mt-0.5",
+                                variant.isActive ? "bg-secondary" : "bg-gray-300",
+                                isToggling && "opacity-50"
+                              )}
+                              title={variant.isActive ? "Désactiver ce service" : "Activer ce service"}
+                            >
+                              <span className={cn(
+                                "absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform",
+                                variant.isActive ? "translate-x-4" : "translate-x-0.5"
+                              )} />
+                            </button>
+                            <div className="flex-1 min-w-0">
+                              <h4 className={cn(
+                                "font-semibold truncate",
+                                variant.isActive ? "text-foreground" : "text-foreground/50"
+                              )}>{variant.name}</h4>
+                              {variant.description && (
+                                <p className="text-xs text-text-light line-clamp-2 mt-0.5">{variant.description}</p>
+                              )}
+                            </div>
                           </div>
                           <button
                             onClick={() => {
@@ -615,15 +699,22 @@ export default function ServiceCard({
                           </button>
                         </div>
 
-                        {/* Prix */}
+                        {/* Prix avec HT/TTC */}
                         {primaryPrice && (
-                          <div className="mb-2">
-                            <div className="text-lg font-bold text-primary">
-                              {formatPrice(primaryPrice.value)}
+                          <div className={cn("mb-2", !variant.isActive && "opacity-50")}>
+                            <div className="flex items-baseline gap-1.5">
+                              <span className="text-lg font-bold text-primary">
+                                {formatPrice(primaryPrice.value)}
+                              </span>
                               <span className="text-xs font-normal text-text-light">{primaryPrice.label}</span>
+                              {isVatSubject && (
+                                <span className="text-[10px] text-primary/60 font-medium">TTC</span>
+                              )}
                             </div>
                             {isVatSubject && (
-                              <div className="text-[10px] text-text-light">HT : {formatPrice(Math.round(primaryPrice.value / 1.20))}</div>
+                              <div className="text-[11px] text-blue-500 font-medium mt-0.5">
+                                HT : {formatPrice(htPrice)}
+                              </div>
                             )}
                             {companyType === "micro_enterprise" && !isVatSubject && (
                               <div className="text-[9px] text-text-light italic">TVA non applicable, art. 293B</div>
@@ -632,7 +723,7 @@ export default function ServiceCard({
                         )}
 
                         {/* Infos du service */}
-                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                        <div className={cn("flex flex-wrap items-center gap-1.5 text-xs", !variant.isActive && "opacity-50")}>
                           {/* Animaux */}
                           {variant.animalTypes && variant.animalTypes.length > 0 && (
                             <span className="flex items-center gap-1 px-2 py-1 bg-white rounded-md text-text-light">
@@ -688,7 +779,7 @@ export default function ServiceCard({
 
                         {/* Features */}
                         {variant.includedFeatures && variant.includedFeatures.length > 0 && (
-                          <div className="mt-2 pt-2 border-t border-foreground/5">
+                          <div className={cn("mt-2 pt-2 border-t border-foreground/5", !variant.isActive && "opacity-50")}>
                             <div className="flex flex-wrap gap-1">
                               {variant.includedFeatures.slice(0, 3).map((feature, i) => (
                                 <span key={i} className="text-xs text-secondary flex items-center gap-0.5">
@@ -705,7 +796,7 @@ export default function ServiceCard({
 
                         {/* Options du service */}
                         {(variantOptions.length > 0 || sharedOptions.length > 0) && (
-                          <div className="mt-2 pt-2 border-t border-foreground/5">
+                          <div className={cn("mt-2 pt-2 border-t border-foreground/5", !variant.isActive && "opacity-50")}>
                             <div className="flex items-center gap-1 mb-1.5">
                               <Zap className="w-3 h-3 text-amber-500" />
                               <span className="text-xs font-medium text-amber-700">Options</span>
@@ -739,7 +830,7 @@ export default function ServiceCard({
                 </div>
               ) : (
                 <div className="p-6 text-center">
-                  <p className="text-text-light mb-3">Aucun service actif</p>
+                  <p className="text-text-light mb-3">Aucun service</p>
                   <button
                     onClick={() => {
                       setIsAddingVariant(true);
@@ -771,6 +862,77 @@ export default function ServiceCard({
         cancelLabel="Annuler"
         variant="danger"
       />
+
+      {/* Modale vérification téléphone */}
+      <AnimatePresence>
+        {showPhoneModal && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowPhoneModal(false)}
+              className="fixed inset-0 bg-black/50 z-50"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            >
+              <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
+                <div className="p-5 border-b border-foreground/10">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-amber-100 rounded-xl">
+                        <Phone className="w-5 h-5 text-amber-500" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-foreground">Téléphone non vérifié</h3>
+                    </div>
+                    <button
+                      onClick={() => setShowPhoneModal(false)}
+                      className="p-2 text-text-light hover:text-foreground hover:bg-foreground/5 rounded-lg transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="p-5 space-y-3">
+                  <p className="text-text-light">
+                    Vous devez vérifier votre numéro de téléphone avant de pouvoir activer vos services et les rendre visibles aux clients.
+                  </p>
+                  <p className="text-sm text-text-light">
+                    Rendez-vous sur la page <strong>Mes services</strong> et utilisez la bannière de vérification en haut de page, ou allez dans vos <strong>Paramètres</strong>.
+                  </p>
+                </div>
+                <div className="p-5 border-t border-foreground/10 bg-foreground/[0.02] flex items-center justify-end gap-3">
+                  <motion.button
+                    onClick={() => setShowPhoneModal(false)}
+                    className="px-4 py-2.5 text-text-light hover:text-foreground font-medium rounded-xl transition-colors"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    Fermer
+                  </motion.button>
+                  <motion.a
+                    href="/dashboard/services"
+                    onClick={() => {
+                      setShowPhoneModal(false);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-xl transition-colors"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    Vérifier mon téléphone
+                    <ArrowRight className="w-4 h-4" />
+                  </motion.a>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Collective Slots Manager Modal */}
       <AnimatePresence>
@@ -1465,6 +1627,10 @@ function VariantEditForm({
   const [newFeature, setNewFeature] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
+  // TVA
+  const { user: authUser } = useAuth();
+  const isVatSubject = authUser?.isVatSubject;
+
   // Restrictions chiens
   const [dogCategoryAcceptance, setDogCategoryAcceptance] = useState<"none" | "cat1" | "cat2" | "both">(
     variant.dogCategoryAcceptance || "none"
@@ -2012,6 +2178,11 @@ function VariantEditForm({
       {/* Pricing */}
       <div className="space-y-3">
         <label className="block text-sm font-medium text-foreground">Tarifs</label>
+        {isVatSubject && (
+          <p className="text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg">
+            Les prix saisis sont en TTC (TVA 20% incluse). Le montant HT est calculé automatiquement.
+          </p>
+        )}
 
         {isGardeService ? (
           /* ═══ TARIFS GARDE - Système avec slider ═══ */
@@ -2019,7 +2190,7 @@ function VariantEditForm({
             {/* Prix journée */}
             <div className="p-4 bg-gradient-to-br from-primary/5 to-orange-50 rounded-xl border border-primary/10">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-foreground">Prix par jour</span>
+                <span className="text-sm font-medium text-foreground">Prix par jour {isVatSubject ? "TTC" : ""}</span>
                 <span className="text-xs px-2 py-0.5 bg-white rounded-full text-gray-500">
                   {getDailyPrice() <= dailyRecommendedPrice / 100 * 0.9 ? "Compétitif" :
                    getDailyPrice() >= dailyRecommendedPrice / 100 * 1.1 ? "Premium" : "Standard"}
@@ -2048,6 +2219,9 @@ function VariantEditForm({
                 <div className="text-right">
                   <span className="text-2xl font-bold text-primary">{getDailyPrice().toFixed(0)}</span>
                   <span className="text-sm text-gray-500">€/jour</span>
+                  {isVatSubject && (
+                    <div className="text-xs text-blue-600 mt-0.5">HT: {(getDailyPrice() / (1 + DEFAULT_VAT_RATE / 100)).toFixed(2).replace(".", ",")}€</div>
+                  )}
                 </div>
               </div>
               {/* Exemples de facturation garde */}
@@ -2128,6 +2302,9 @@ function VariantEditForm({
                     <div className="text-right">
                       <span className="text-2xl font-bold text-indigo-600">{getNightlyPrice().toFixed(0)}</span>
                       <span className="text-sm text-indigo-400">€/nuit</span>
+                      {isVatSubject && (
+                        <div className="text-xs text-blue-600 mt-0.5">HT: {(getNightlyPrice() / (1 + DEFAULT_VAT_RATE / 100)).toFixed(2).replace(".", ",")}€</div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2140,7 +2317,7 @@ function VariantEditForm({
             <div className="grid grid-cols-2 gap-3">
               {showHourly && (
                 <div>
-                  <label className="block text-xs text-text-light mb-1">Par heure</label>
+                  <label className="block text-xs text-text-light mb-1">Par heure {isVatSubject ? "TTC" : ""}</label>
                   <div className="relative">
                     <input
                       type="number"
@@ -2152,11 +2329,14 @@ function VariantEditForm({
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
                   </div>
+                  {isVatSubject && pricing.hourly ? (
+                    <span className="text-[10px] text-blue-600 mt-0.5 block">HT: {((pricing.hourly || 0) / 120).toFixed(2).replace(".", ",")} €</span>
+                  ) : null}
                 </div>
               )}
               {showHalfDaily && (
                 <div>
-                  <label className="block text-xs text-text-light mb-1">Par demi-journée</label>
+                  <label className="block text-xs text-text-light mb-1">Par demi-journée {isVatSubject ? "TTC" : ""}</label>
                   <div className="relative">
                     <input
                       type="number"
@@ -2168,11 +2348,14 @@ function VariantEditForm({
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
                   </div>
+                  {isVatSubject && pricing.halfDaily ? (
+                    <span className="text-[10px] text-blue-600 mt-0.5 block">HT: {((pricing.halfDaily || 0) / 120).toFixed(2).replace(".", ",")} €</span>
+                  ) : null}
                 </div>
               )}
               {showDaily && (
                 <div>
-                  <label className="block text-xs text-text-light mb-1">Par jour</label>
+                  <label className="block text-xs text-text-light mb-1">Par jour {isVatSubject ? "TTC" : ""}</label>
                   <div className="relative">
                     <input
                       type="number"
@@ -2184,11 +2367,14 @@ function VariantEditForm({
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
                   </div>
+                  {isVatSubject && pricing.daily ? (
+                    <span className="text-[10px] text-blue-600 mt-0.5 block">HT: {((pricing.daily || 0) / 120).toFixed(2).replace(".", ",")} €</span>
+                  ) : null}
                 </div>
               )}
               {showWeekly && (
                 <div>
-                  <label className="block text-xs text-text-light mb-1">Par semaine</label>
+                  <label className="block text-xs text-text-light mb-1">Par semaine {isVatSubject ? "TTC" : ""}</label>
                   <div className="relative">
                     <input
                       type="number"
@@ -2200,11 +2386,14 @@ function VariantEditForm({
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
                   </div>
+                  {isVatSubject && pricing.weekly ? (
+                    <span className="text-[10px] text-blue-600 mt-0.5 block">HT: {((pricing.weekly || 0) / 120).toFixed(2).replace(".", ",")} €</span>
+                  ) : null}
                 </div>
               )}
               {showMonthly && (
                 <div>
-                  <label className="block text-xs text-text-light mb-1">Par mois</label>
+                  <label className="block text-xs text-text-light mb-1">Par mois {isVatSubject ? "TTC" : ""}</label>
                   <div className="relative">
                     <input
                       type="number"
@@ -2216,6 +2405,9 @@ function VariantEditForm({
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
                   </div>
+                  {isVatSubject && pricing.monthly ? (
+                    <span className="text-[10px] text-blue-600 mt-0.5 block">HT: {((pricing.monthly || 0) / 120).toFixed(2).replace(".", ",")} €</span>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -2322,6 +2514,10 @@ function VariantAddForm({
   const [serviceLocation, setServiceLocation] = useState<ServiceLocation>("announcer_home");
   const [selectedAnimalTypes, setSelectedAnimalTypes] = useState<string[]>(serviceAnimalTypes);
   const [duration, setDuration] = useState(60);
+
+  // TVA
+  const { user: authUser } = useAuth();
+  const isVatSubject = authUser?.isVatSubject;
   const [includedFeatures, setIncludedFeatures] = useState<string[]>([]);
   const [newFeature, setNewFeature] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -2860,6 +3056,11 @@ function VariantAddForm({
       {/* Pricing */}
       <div className="space-y-3">
         <label className="block text-sm font-medium text-foreground">Tarifs</label>
+        {isVatSubject && (
+          <p className="text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg">
+            Les prix saisis sont en TTC (TVA 20% incluse). Le montant HT est calculé automatiquement.
+          </p>
+        )}
 
         {isGardeService ? (
           /* ═══ TARIFS GARDE - Système avec slider ═══ */
@@ -2867,7 +3068,7 @@ function VariantAddForm({
             {/* Prix journée */}
             <div className="p-4 bg-gradient-to-br from-secondary/5 to-orange-50 rounded-xl border border-secondary/10">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-foreground">Prix par jour</span>
+                <span className="text-sm font-medium text-foreground">Prix par jour {isVatSubject ? "TTC" : ""}</span>
                 <span className="text-xs px-2 py-0.5 bg-white rounded-full text-gray-500">
                   {getDailyPrice() <= dailyRecommendedPrice / 100 * 0.9 ? "Compétitif" :
                    getDailyPrice() >= dailyRecommendedPrice / 100 * 1.1 ? "Premium" : "Standard"}
@@ -2896,6 +3097,9 @@ function VariantAddForm({
                 <div className="text-right">
                   <span className="text-2xl font-bold text-secondary">{getDailyPrice().toFixed(0)}</span>
                   <span className="text-sm text-gray-500">€/jour</span>
+                  {isVatSubject && (
+                    <div className="text-xs text-blue-600 mt-0.5">HT: {(getDailyPrice() / (1 + DEFAULT_VAT_RATE / 100)).toFixed(2).replace(".", ",")}€</div>
+                  )}
                 </div>
               </div>
             </div>
@@ -2933,6 +3137,9 @@ function VariantAddForm({
                   <div className="text-right">
                     <span className="text-2xl font-bold text-indigo-600">{getNightlyPrice().toFixed(0)}</span>
                     <span className="text-sm text-gray-500">€/nuit</span>
+                    {isVatSubject && (
+                      <div className="text-xs text-blue-600 mt-0.5">HT: {(getNightlyPrice() / (1 + DEFAULT_VAT_RATE / 100)).toFixed(2).replace(".", ",")}€</div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2943,7 +3150,7 @@ function VariantAddForm({
           <div className="grid grid-cols-2 gap-3">
             {showHourly && (
               <div>
-                <label className="block text-xs text-text-light mb-1">Par heure</label>
+                <label className="block text-xs text-text-light mb-1">Par heure {isVatSubject ? "TTC" : ""}</label>
                 <div className="relative">
                   <input
                     type="number"
@@ -2955,11 +3162,14 @@ function VariantAddForm({
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
                 </div>
+                {isVatSubject && pricing.hourly ? (
+                  <span className="text-[10px] text-blue-600 mt-0.5 block">HT: {((pricing.hourly || 0) / 120).toFixed(2).replace(".", ",")} €</span>
+                ) : null}
               </div>
             )}
             {showHalfDaily && (
               <div>
-                <label className="block text-xs text-text-light mb-1">Par demi-journée</label>
+                <label className="block text-xs text-text-light mb-1">Par demi-journée {isVatSubject ? "TTC" : ""}</label>
                 <div className="relative">
                   <input
                     type="number"
@@ -2971,11 +3181,14 @@ function VariantAddForm({
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
                 </div>
+                {isVatSubject && pricing.halfDaily ? (
+                  <span className="text-[10px] text-blue-600 mt-0.5 block">HT: {((pricing.halfDaily || 0) / 120).toFixed(2).replace(".", ",")} €</span>
+                ) : null}
               </div>
             )}
             {showDaily && (
               <div>
-                <label className="block text-xs text-text-light mb-1">Par jour</label>
+                <label className="block text-xs text-text-light mb-1">Par jour {isVatSubject ? "TTC" : ""}</label>
                 <div className="relative">
                   <input
                     type="number"
@@ -2987,11 +3200,14 @@ function VariantAddForm({
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
                 </div>
+                {isVatSubject && pricing.daily ? (
+                  <span className="text-[10px] text-blue-600 mt-0.5 block">HT: {((pricing.daily || 0) / 120).toFixed(2).replace(".", ",")} €</span>
+                ) : null}
               </div>
             )}
             {showWeekly && (
               <div>
-                <label className="block text-xs text-text-light mb-1">Par semaine</label>
+                <label className="block text-xs text-text-light mb-1">Par semaine {isVatSubject ? "TTC" : ""}</label>
                 <div className="relative">
                   <input
                     type="number"
@@ -3003,11 +3219,14 @@ function VariantAddForm({
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
                 </div>
+                {isVatSubject && pricing.weekly ? (
+                  <span className="text-[10px] text-blue-600 mt-0.5 block">HT: {((pricing.weekly || 0) / 120).toFixed(2).replace(".", ",")} €</span>
+                ) : null}
               </div>
             )}
             {showMonthly && (
               <div>
-                <label className="block text-xs text-text-light mb-1">Par mois</label>
+                <label className="block text-xs text-text-light mb-1">Par mois {isVatSubject ? "TTC" : ""}</label>
                 <div className="relative">
                   <input
                     type="number"
@@ -3019,6 +3238,9 @@ function VariantAddForm({
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">€</span>
                 </div>
+                {isVatSubject && pricing.monthly ? (
+                  <span className="text-[10px] text-blue-600 mt-0.5 block">HT: {((pricing.monthly || 0) / 120).toFixed(2).replace(".", ",")} €</span>
+                ) : null}
               </div>
             )}
           </div>

@@ -188,6 +188,7 @@ export const getPublicProfileBySlug = query({
       },
       icadRegistered: profile?.icadRegistered || false,
       isIdentityVerified: profile?.isIdentityVerified || false,
+      isSapApproved: profile?.isSapApproved || false,
       // Galerie
       gallery: profile?.environmentPhotos?.map((p: { url: string }) => p.url) || [],
       // Animaux

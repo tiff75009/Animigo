@@ -116,6 +116,8 @@ interface SummaryStepProps {
   // Pricing details
   stripeFeeRate?: number; // Frais de gestion de paiement (Stripe)
   vatRate?: number; // TVA sur les commissions
+  isSapApplied?: boolean; // true si taux réduit SAP applicable
+  sapVatRate?: number; // Taux TVA SAP (10 ou 20)
   announcerStatusType?: "particulier" | "micro_entrepreneur" | "professionnel";
   error: string | null;
 }
@@ -182,6 +184,8 @@ export default function SummaryStep({
   // Pricing details
   stripeFeeRate = 3,
   vatRate = 20,
+  isSapApplied = false,
+  sapVatRate = 20,
   announcerStatusType = "particulier",
   error,
 }: SummaryStepProps) {
@@ -645,7 +649,7 @@ export default function SummaryStep({
                   isCollective ? "text-purple-600" : isMultiSession ? "text-primary" : "text-gray-600"
                 )} />
                 <span className="font-medium text-foreground">
-                  Formule : {selectedVariant.name}
+                  Service : {selectedVariant.name}
                 </span>
               </div>
 
@@ -859,57 +863,108 @@ export default function SummaryStep({
 
         {/* Prix annonceur HT + Commissions + Total */}
         <div className="bg-gray-100 rounded-xl p-4 space-y-2">
-          {/* Prix annonceur HT (sans commission) */}
+          {/* Prix annonceur avec détail HT/TTC + commissions */}
           {(() => {
-            // Calcul du prix HT (ce que reçoit l'annonceur)
+            // Calcul du montant de la prestation
             const optionsAmount = selectedOptionIds.reduce((sum, optId) => {
               const opt = selectedService.options.find((o: ServiceOption) => o.id === optId);
               return sum + (opt?.price || 0);
             }, 0);
 
-            const baseAmountHT = isCollective
+            const serviceAmount = isCollective
               ? Math.round(selectedVariant.price * numberOfSessions * effectiveAnimalCount) + optionsAmount
               : isMultiSession
                 ? Math.round(selectedVariant.price * numberOfSessions) + optionsAmount
                 : priceBreakdown.totalAmount;
 
-            // Commission plateforme sur le montant HT
-            const platformCommission = Math.round(baseAmountHT * commissionRate / 100);
+            // Déterminer si l'annonceur est assujetti TVA
+            const isVatSubject = announcerStatusType === "professionnel";
+            const serviceVatRate = isSapApplied ? (sapVatRate || 10) : 20;
 
-            // Frais de gestion de paiement (sur le total TTC)
-            const totalBeforePaymentFees = baseAmountHT + platformCommission;
-            const paymentFees = Math.round(totalBeforePaymentFees * stripeFeeRate / 100);
+            // Calcul HT/TTC de la prestation
+            const serviceHT = isVatSubject
+              ? Math.round(serviceAmount / (1 + serviceVatRate / 100))
+              : serviceAmount;
+            const serviceTVA = isVatSubject
+              ? serviceAmount - serviceHT
+              : 0;
+
+            // Commission plateforme
+            const platformCommission = Math.round(serviceAmount * commissionRate / 100);
+
+            // TVA sur commission
+            const vatOnCommission = Math.round(platformCommission * vatRate / 100);
+
+            // Frais de gestion de paiement
+            const paymentFees = Math.round(serviceAmount * stripeFeeRate / 100);
 
             // Total final
-            const totalTTC = totalBeforePaymentFees + paymentFees;
+            const totalTTC = serviceAmount + platformCommission + vatOnCommission + paymentFees;
 
             return (
               <>
-                {/* Prix annonceur HT */}
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Prix prestataire HT</span>
-                  <span className="font-medium text-foreground">
-                    {formatPrice(baseAmountHT)}
-                  </span>
-                </div>
+                {/* Prix prestataire avec détail HT/TTC */}
+                {isVatSubject ? (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Prix prestataire HT</span>
+                      <span className="font-medium text-foreground">
+                        {formatPrice(serviceHT)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm text-gray-500">
+                      <span>TVA prestation ({serviceVatRate}%)</span>
+                      <span>{formatPrice(serviceTVA)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600 font-medium">Prix prestataire TTC</span>
+                      <span className="font-semibold text-foreground">
+                        {formatPrice(serviceAmount)}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Prix prestataire</span>
+                    <span className="font-medium text-foreground">
+                      {formatPrice(serviceAmount)}
+                    </span>
+                  </div>
+                )}
 
                 {/* Mention TVA pour micro-entrepreneurs */}
                 {announcerStatusType === "micro_entrepreneur" && (
                   <div className="text-xs text-gray-500 italic">
-                    TVA non applicable - Autoliquidation de TVA (art. 293 B du CGI)
+                    TVA non applicable (art. 293 B du CGI)
+                  </div>
+                )}
+
+                {/* Indicateur TVA réduite SAP */}
+                {isSapApplied && (
+                  <div className="flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
+                    <span className="font-medium">TVA réduite SAP : {sapVatRate}%</span>
+                    <span className="text-green-600">au lieu de 20%</span>
                   </div>
                 )}
 
                 {/* Commission plateforme */}
                 <div className="flex justify-between text-sm text-gray-500">
                   <span>Commission plateforme ({commissionRate}%)</span>
-                  <span>{formatPrice(platformCommission)}</span>
+                  <span>+{formatPrice(platformCommission)}</span>
                 </div>
+
+                {/* TVA sur commission — masquer si 0% */}
+                {vatRate > 0 && (
+                  <div className="flex justify-between text-sm text-gray-500">
+                    <span>TVA sur commission ({vatRate}%)</span>
+                    <span>+{formatPrice(vatOnCommission)}</span>
+                  </div>
+                )}
 
                 {/* Frais de gestion de paiement */}
                 <div className="flex justify-between text-sm text-gray-500">
-                  <span>Frais de gestion paiement ({stripeFeeRate}%)</span>
-                  <span>{formatPrice(paymentFees)}</span>
+                  <span>Frais de paiement ({stripeFeeRate}%)</span>
+                  <span>+{formatPrice(paymentFees)}</span>
                 </div>
 
                 {/* Ligne de séparation */}

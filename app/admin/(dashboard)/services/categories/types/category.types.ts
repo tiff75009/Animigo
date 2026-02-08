@@ -64,6 +64,7 @@ export interface Category {
   defaultVariants?: DefaultVariant[];
   allowCustomVariants?: boolean;
   enableDurationBasedBlocking?: boolean;
+  isSapEligible?: boolean;
 }
 
 /**
@@ -125,6 +126,7 @@ export interface CategoryFormData {
   defaultVariants: DefaultVariant[];
   allowCustomVariants: boolean;
   enableDurationBasedBlocking: boolean;
+  isSapEligible: boolean;
 }
 
 /**

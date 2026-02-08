@@ -32,6 +32,9 @@ import {
   CalendarIcon,
   Info,
   Ban,
+  FileCheck,
+  Upload,
+  ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/app/lib/utils";
@@ -39,7 +42,7 @@ import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
 // Types
-type TabId = "information" | "paiement" | "notification" | "planning";
+type TabId = "information" | "paiement" | "notification" | "planning" | "sap";
 
 interface Tab {
   id: TabId;
@@ -52,6 +55,7 @@ const tabs: Tab[] = [
   { id: "paiement", label: "Paiement", icon: CreditCard },
   { id: "notification", label: "Notification", icon: Bell },
   { id: "planning", label: "Planning", icon: Calendar },
+  { id: "sap", label: "SAP", icon: FileCheck },
 ];
 
 // Toggle Switch Component
@@ -1969,6 +1973,354 @@ function PlanningTab() {
 }
 
 // Main Page Component
+// ============================================
+// ONGLET SAP (Services à la Personne)
+// ============================================
+function SapTab() {
+  const [token, setToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    setToken(localStorage.getItem("auth_token"));
+  }, []);
+
+  // Queries
+  const sapDeclaration = useQuery(
+    api.sap.declarations.getSapDeclaration,
+    token ? { sessionToken: token } : "skip"
+  );
+  const cloudinaryConfig = useQuery(api.config.getCloudinaryConfig);
+
+  // Mutations
+  const getOrCreateDeclaration = useMutation(api.sap.declarations.getOrCreateSapDeclaration);
+  const updateDocuments = useMutation(api.sap.declarations.updateSapDocuments);
+  const submitDeclaration = useMutation(api.sap.declarations.submitSapDeclaration);
+
+  // Local state
+  const [declarationId, setDeclarationId] = useState<string | null>(null);
+  const [sapNumber, setSapNumber] = useState("");
+  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
+  const [exclusivityAttested, setExclusivityAttested] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [initialized, setInitialized] = useState(false);
+
+  // Init : créer ou récupérer la déclaration
+  useEffect(() => {
+    async function init() {
+      if (!token || initialized) return;
+      try {
+        const result = await getOrCreateDeclaration({ sessionToken: token });
+        if (result.declaration) {
+          setDeclarationId(result.declaration._id);
+          setSapNumber(result.declaration.sapDeclarationNumber ?? "");
+          setReceiptUrl(result.declaration.sapReceiptUrl ?? null);
+          setExclusivityAttested(result.declaration.exclusivityAttested ?? false);
+        }
+        setInitialized(true);
+      } catch (error) {
+        console.error("Erreur init SAP:", error);
+      }
+    }
+    init();
+  }, [token, initialized, getOrCreateDeclaration]);
+
+  // Sync avec les données backend
+  useEffect(() => {
+    if (sapDeclaration && initialized) {
+      setSapNumber(sapDeclaration.sapDeclarationNumber ?? "");
+      setReceiptUrl(sapDeclaration.sapReceiptUrl ?? null);
+      setExclusivityAttested(sapDeclaration.exclusivityAttested ?? false);
+      setDeclarationId(sapDeclaration._id);
+    }
+  }, [sapDeclaration, initialized]);
+
+  // Upload du récépissé vers Cloudinary
+  const handleReceiptUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !token || !declarationId || !cloudinaryConfig?.cloudName) return;
+
+    setIsUploading(true);
+    try {
+      const { uploadToCloudinary } = await import("@/app/lib/cloudinary");
+      const result = await uploadToCloudinary(
+        file,
+        {
+          cloudName: cloudinaryConfig.cloudName,
+          apiKey: cloudinaryConfig.apiKey,
+          uploadPreset: cloudinaryConfig.uploadPreset,
+        },
+        { folder: "sap-receipts", maxWidth: 2000, maxHeight: 2000, quality: 95 }
+      );
+
+      if (result.success && result.url) {
+        setReceiptUrl(result.url);
+        await updateDocuments({
+          sessionToken: token,
+          declarationId: declarationId as any,
+          sapReceiptUrl: result.url,
+        });
+      }
+    } catch (error) {
+      console.error("Erreur upload:", error);
+      setErrorMessage("Erreur lors de l'upload du document");
+      setTimeout(() => setErrorMessage(""), 3000);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Sauvegarder les infos
+  const handleSave = async () => {
+    if (!token || !declarationId) return;
+    setIsSaving(true);
+    setErrorMessage("");
+    try {
+      await updateDocuments({
+        sessionToken: token,
+        declarationId: declarationId as any,
+        sapDeclarationNumber: sapNumber,
+        exclusivityAttested,
+      });
+      setSuccessMessage("Informations enregistrées");
+      setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Erreur lors de la sauvegarde");
+      setTimeout(() => setErrorMessage(""), 3000);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Soumettre la déclaration
+  const handleSubmit = async () => {
+    if (!token || !declarationId) return;
+    setIsSubmitting(true);
+    setErrorMessage("");
+    try {
+      // Sauvegarder d'abord
+      await updateDocuments({
+        sessionToken: token,
+        declarationId: declarationId as any,
+        sapDeclarationNumber: sapNumber,
+        exclusivityAttested,
+      });
+      // Puis soumettre
+      await submitDeclaration({
+        sessionToken: token,
+        declarationId: declarationId as any,
+      });
+      setSuccessMessage("Déclaration SAP soumise pour vérification !");
+      setTimeout(() => setSuccessMessage(""), 5000);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Erreur lors de la soumission");
+      setTimeout(() => setErrorMessage(""), 5000);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const status = sapDeclaration?.status ?? "pending";
+  const isEditable = status === "pending" || status === "rejected" || status === "revoked";
+  const canSubmit = isEditable && sapNumber.trim() && receiptUrl && exclusivityAttested;
+
+  const statusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
+    pending: { label: "Brouillon", color: "bg-gray-100 text-gray-700", icon: Clock },
+    submitted: { label: "En attente de vérification", color: "bg-amber-100 text-amber-700", icon: Clock },
+    approved: { label: "Approuvé", color: "bg-green-100 text-green-700", icon: Check },
+    rejected: { label: "Rejeté", color: "bg-red-100 text-red-700", icon: AlertCircle },
+    revoked: { label: "Révoqué", color: "bg-red-100 text-red-700", icon: Ban },
+  };
+
+  const currentStatus = statusConfig[status] ?? statusConfig.pending;
+  const StatusIcon = currentStatus.icon;
+
+  return (
+    <div className="space-y-6">
+      {/* Encart informatif */}
+      <SectionCard title="Services à la Personne (SAP)" icon={FileCheck}>
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+          <div className="flex gap-3">
+            <Info className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
+            <div className="text-sm text-blue-700 space-y-2">
+              <p className="font-medium">Qu&apos;est-ce que le statut SAP ?</p>
+              <p>
+                Les prestataires déclarés auprès de la DDETS bénéficient d&apos;un taux de TVA réduit à <strong>10%</strong> (au lieu de 20%) sur les services de garde et promenade d&apos;animaux, à condition que le client soit une personne dépendante (personne âgée ou en situation de handicap).
+              </p>
+              <p>
+                Vos clients éligibles profitent également d&apos;un <strong>crédit d&apos;impôt de 50%</strong> sur les prestations SAP.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Statut actuel */}
+        <div className="flex items-center gap-3 mb-6">
+          <span className="text-sm font-medium text-gray-600">Statut :</span>
+          <span className={cn("inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium", currentStatus.color)}>
+            <StatusIcon className="w-4 h-4" />
+            {currentStatus.label}
+          </span>
+          {status === "approved" && sapDeclaration?.reviewedAt && (
+            <span className="text-xs text-gray-500">
+              Approuvé le {new Date(sapDeclaration.reviewedAt).toLocaleDateString("fr-FR")}
+            </span>
+          )}
+        </div>
+
+        {/* Message de rejet */}
+        {(status === "rejected" || status === "revoked") && sapDeclaration?.rejectionReason && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
+            <div className="flex gap-2">
+              <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-red-700">
+                  {status === "rejected" ? "Motif du rejet" : "Motif de la révocation"}
+                </p>
+                <p className="text-sm text-red-600 mt-1">{sapDeclaration.rejectionReason}</p>
+                <p className="text-xs text-red-500 mt-2">Vous pouvez modifier votre déclaration et la soumettre à nouveau.</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Formulaire (si pas approuvé ni en attente) */}
+        {isEditable && (
+          <div className="space-y-6">
+            {/* Numéro de déclaration */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Numéro de déclaration SAP (DDETS)
+              </label>
+              <input
+                type="text"
+                value={sapNumber}
+                onChange={(e) => setSapNumber(e.target.value)}
+                placeholder="Ex: SAP123456789"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
+              />
+            </div>
+
+            {/* Upload récépissé */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Récépissé de déclaration SAP
+              </label>
+              {receiptUrl ? (
+                <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-xl">
+                  <Check className="w-5 h-5 text-green-600" />
+                  <span className="text-sm text-green-700 flex-1">Document uploadé</span>
+                  <a href={receiptUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1">
+                    <ExternalLink className="w-4 h-4" /> Voir
+                  </a>
+                  <label className="cursor-pointer text-sm text-gray-500 hover:text-primary">
+                    Changer
+                    <input type="file" accept="image/*,.pdf" onChange={handleReceiptUpload} className="hidden" />
+                  </label>
+                </div>
+              ) : (
+                <label className={cn(
+                  "flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-xl cursor-pointer transition-colors",
+                  isUploading ? "border-primary bg-primary/5" : "border-gray-300 hover:border-primary"
+                )}>
+                  {isUploading ? (
+                    <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                  ) : (
+                    <>
+                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
+                      <span className="text-sm text-gray-500">Cliquez pour uploader votre récépissé</span>
+                      <span className="text-xs text-gray-400 mt-1">PDF, JPG ou PNG</span>
+                    </>
+                  )}
+                  <input type="file" accept="image/*,.pdf" onChange={handleReceiptUpload} className="hidden" disabled={isUploading} />
+                </label>
+              )}
+            </div>
+
+            {/* Attestation d'exclusivité */}
+            <div>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={exclusivityAttested}
+                  onChange={(e) => setExclusivityAttested(e.target.checked)}
+                  className="mt-1 w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <span className="text-sm text-gray-700">
+                  J&apos;atteste sur l&apos;honneur exercer exclusivement en mode SAP (Services à la Personne), avec un maximum de 30% d&apos;activité non-SAP, conformément à la réglementation en vigueur.
+                </span>
+              </label>
+            </div>
+
+            {/* Messages */}
+            {successMessage && (
+              <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-xl text-green-700 text-sm">
+                <Check className="w-4 h-4" /> {successMessage}
+              </div>
+            )}
+            {errorMessage && (
+              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
+                <AlertCircle className="w-4 h-4" /> {errorMessage}
+              </div>
+            )}
+
+            {/* Boutons */}
+            <div className="flex gap-3">
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="px-6 py-3 bg-gray-200 text-gray-700 rounded-full font-medium hover:bg-gray-300 transition-colors disabled:opacity-50"
+              >
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin inline mr-2" /> : null}
+                Enregistrer
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={!canSubmit || isSubmitting}
+                className="px-6 py-3 bg-primary text-white rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin inline mr-2" /> : <FileCheck className="w-4 h-4 inline mr-2" />}
+                Soumettre ma déclaration SAP
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* En attente de validation */}
+        {status === "submitted" && (
+          <div className="text-center py-8">
+            <Clock className="w-12 h-12 text-amber-500 mx-auto mb-3" />
+            <p className="text-lg font-medium text-gray-700">Déclaration en cours de vérification</p>
+            <p className="text-sm text-gray-500 mt-1">
+              Notre équipe examine votre déclaration SAP. Vous serez notifié du résultat.
+            </p>
+          </div>
+        )}
+
+        {/* Approuvé */}
+        {status === "approved" && (
+          <div className="text-center py-8">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Shield className="w-8 h-8 text-green-600" />
+            </div>
+            <p className="text-lg font-medium text-green-700">Statut SAP vérifié</p>
+            <p className="text-sm text-gray-500 mt-2">
+              Votre déclaration SAP est approuvée. Les clients éligibles bénéficieront automatiquement du taux de TVA réduit à 10% sur vos services de garde et promenade.
+            </p>
+            {sapDeclaration?.sapDeclarationNumber && (
+              <p className="text-sm text-gray-500 mt-2">
+                N° de déclaration : <strong>{sapDeclaration.sapDeclarationNumber}</strong>
+              </p>
+            )}
+          </div>
+        )}
+      </SectionCard>
+    </div>
+  );
+}
+
 export default function ParametresPage() {
   const [activeTab, setActiveTab] = useState<TabId>("information");
 
@@ -1982,6 +2334,8 @@ export default function ParametresPage() {
         return <NotificationTab />;
       case "planning":
         return <PlanningTab />;
+      case "sap":
+        return <SapTab />;
     }
   };
 

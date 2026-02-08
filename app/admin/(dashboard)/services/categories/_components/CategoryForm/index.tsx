@@ -544,6 +544,42 @@ export default function CategoryForm({
                       onChange={handleDurationBlockingChange}
                     />
 
+                    {/* Éligible SAP (Services à la Personne) */}
+                    <div className="p-4 bg-slate-900/50 rounded-lg border border-slate-700">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-300">
+                            Éligible SAP
+                          </label>
+                          <p className="text-xs text-slate-500 mt-1">
+                            TVA réduite à 10% pour les clients dépendants auprès de prestataires déclarés SAP
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onFormDataChange((prev) => ({
+                              ...prev,
+                              isSapEligible: !prev.isSapEligible,
+                            }))
+                          }
+                          className={`relative w-12 h-6 rounded-full transition-colors ${
+                            formData.isSapEligible
+                              ? "bg-blue-600"
+                              : "bg-slate-600"
+                          }`}
+                        >
+                          <span
+                            className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                              formData.isSapEligible
+                                ? "translate-x-6"
+                                : ""
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+
                     {/* Types de prix autorisés */}
                     <PriceUnitsSelector
                       value={formData.allowedPriceUnits}

@@ -117,4 +117,5 @@ export const DEFAULT_FORM_DATA: CategoryFormData = {
   displayFormat: "subcategory",
   isCapacityBased: false,
   enableDurationBasedBlocking: false,
+  isSapEligible: false,
 };

@@ -105,6 +105,8 @@ interface AnnouncerMobileCTAProps {
   // Props pour les options
   onOptionToggle?: (optionId: string) => void;
   selectedOptionIds?: string[];
+  // Statut de l'annonceur pour affichage HT/TTC
+  announcerStatusType?: "particulier" | "micro_entrepreneur" | "professionnel";
   // Vérification de l'animal pour les invités (chien ou chat)
   requiresAnimalVerification?: boolean;
   acceptedAnimalTypes?: string[];
@@ -262,6 +264,8 @@ export default function AnnouncerMobileCTA({
   // Props pour les options
   onOptionToggle,
   selectedOptionIds = [],
+  // Statut annonceur HT/TTC
+  announcerStatusType,
   // Vérification de l'animal pour les invités (chien ou chat)
   requiresAnimalVerification = false,
   acceptedAnimalTypes = [],
@@ -1404,6 +1408,7 @@ export default function AnnouncerMobileCTA({
                           isRangeMode={isRangeMode}
                           animalCount={selectedAnimalIds.length > 0 ? selectedAnimalIds.length : animalCount}
                           announcerFirstName={announcerFirstName}
+                          announcerStatusType={announcerStatusType}
                           requiresAnimalVerification={requiresAnimalVerification}
                           guestAnimalValid={guestAnimalValid}
                           guestAnimalError={guestAnimalError}
@@ -2395,6 +2400,7 @@ export default function AnnouncerMobileCTA({
                           isRangeMode={isRangeMode}
                           animalCount={selectedAnimalIds.length > 0 ? selectedAnimalIds.length : animalCount}
                           announcerFirstName={announcerFirstName}
+                          announcerStatusType={announcerStatusType}
                           requiresAnimalVerification={requiresAnimalVerification}
                           guestAnimalValid={guestAnimalValid}
                           guestAnimalError={guestAnimalError}

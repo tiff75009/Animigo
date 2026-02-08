@@ -69,7 +69,7 @@ type FormStep = 1 | 2 | 3;
 
 const STEPS = [
   { id: 1, label: "Prestation", icon: Briefcase },
-  { id: 2, label: "Formules", icon: Layers },
+  { id: 2, label: "Services", icon: Layers },
   { id: 3, label: "Options", icon: Zap },
 ] as const;
 
@@ -264,7 +264,7 @@ export default function ServiceForm({
       <div className="p-5 border-b border-foreground/10 bg-foreground/[0.02]">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-foreground">
-            {isAddingToExistingService ? "Ajouter une formule" : "Nouveau service"}
+            {isAddingToExistingService ? "Ajouter un service" : "Nouveau service"}
           </h3>
           <button
             onClick={onCancel}
@@ -382,7 +382,7 @@ export default function ServiceForm({
                     {isAddingToExistingService && (
                       <span className="px-2 py-1 bg-secondary/10 text-secondary text-xs font-medium rounded-lg flex items-center gap-1">
                         <Layers className="w-3 h-3" />
-                        Ajouter formule
+                        Ajouter service
                       </span>
                     )}
                     <motion.button
@@ -399,8 +399,8 @@ export default function ServiceForm({
                   {isAddingToExistingService && (
                     <div className="p-3 bg-secondary/5 border border-secondary/20 rounded-xl">
                       <p className="text-sm text-secondary">
-                        <strong>Mode ajout de formule :</strong> Vous avez déjà un service {selectedCategory.name}.
-                        Une nouvelle formule sera ajoutée à ce service existant.
+                        <strong>Mode ajout de service :</strong> Vous avez déjà un service {selectedCategory.name}.
+                        Un nouveau service sera ajouté à cette catégorie existante.
                       </p>
                     </div>
                   )}
@@ -524,7 +524,7 @@ export default function ServiceForm({
                                           </span>
                                           {hasExisting && (
                                             <span className="text-[10px] text-secondary font-medium">
-                                              Ajouter formule
+                                              Ajouter service
                                             </span>
                                           )}
                                         </motion.button>
@@ -577,7 +577,7 @@ export default function ServiceForm({
                   Définissez vos tarifs
                 </h4>
                 <p className="text-sm text-text-light">
-                  Ajustez le prix de chaque formule selon vos prestations
+                  Ajustez le prix de chaque service selon vos prestations
                 </p>
               </div>
 
@@ -685,7 +685,7 @@ export default function ServiceForm({
               ) : (
                 <>
                   <Check className="w-5 h-5" />
-                  {isAddingToExistingService ? "Ajouter la formule" : "Créer le service"}
+                  {isAddingToExistingService ? "Ajouter le service" : "Créer le service"}
                 </>
               )}
             </motion.button>

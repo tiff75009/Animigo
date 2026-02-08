@@ -52,6 +52,7 @@ interface AnnouncerBookingCardProps {
   selectedSessions?: SelectedSession[];
   announcerFirstName?: string; // Prénom de l'annonceur pour "Chez [prénom]"
   announcerId?: string; // ID de l'annonceur pour la politique d'annulation
+  announcerStatusType?: "particulier" | "micro_entrepreneur" | "professionnel";
   // Vérification de l'animal pour les invités
   requiresAnimalVerification?: boolean;
   guestAnimalValid?: boolean;
@@ -100,6 +101,7 @@ export default function AnnouncerBookingCard({
   selectedSessions = [],
   announcerFirstName,
   announcerId,
+  announcerStatusType,
   requiresAnimalVerification = false,
   guestAnimalValid = false,
   guestAnimalError,
@@ -143,6 +145,7 @@ export default function AnnouncerBookingCard({
           selectedSessions={selectedSessions}
           announcerFirstName={announcerFirstName}
           announcerId={announcerId}
+          announcerStatusType={announcerStatusType}
           isGarde={isRangeMode}
           requiresAnimalVerification={requiresAnimalVerification}
           guestAnimalValid={guestAnimalValid}

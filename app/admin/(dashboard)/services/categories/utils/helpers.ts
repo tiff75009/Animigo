@@ -40,6 +40,7 @@ export function categoryToFormData(category: Category): CategoryFormData {
     displayFormat: category.displayFormat || "subcategory",
     isCapacityBased: category.isCapacityBased || false,
     enableDurationBasedBlocking: category.enableDurationBasedBlocking || false,
+    isSapEligible: category.isSapEligible || false,
   };
 }
 
