@@ -173,6 +173,8 @@ export interface FormuleResult {
   announcerDistance?: number;
   announcerVerified: boolean;
   announcerStatusType: "particulier" | "micro_entrepreneur" | "professionnel";
+  isSapEligible?: boolean;
+  announcerSapApproved?: boolean;
   nextSlot?: NextSlot;
   collectiveSlots?: CollectiveSlotInfo[];
   spotsLeft?: number;

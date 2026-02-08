@@ -121,6 +121,20 @@ export default function ReservationPage({
       : "skip"
   );
 
+  // Calculer le taux TVA SAP (si conditions remplies)
+  const sapVatInfo = useQuery(
+    api.sap.eligibility.computeSapVatRate,
+    token && bookingData?.announcer?.id && bookingData?.service?.category
+      ? {
+          sessionToken: token,
+          announcerId: bookingData.announcer.id,
+          serviceCategorySlug: bookingData.service.category,
+          serviceId: bookingData.service.id,
+          variantId: bookingData.variant?.id as Id<"serviceVariants"> | undefined,
+        }
+      : "skip"
+  );
+
   // Politique d'annulation
   const cancellationPolicy = useQuery(
     api.planning.cancellation.getPublicAnnouncerCancellationPolicy,
@@ -774,6 +788,8 @@ export default function ReservationPage({
               vatOnCommission={vatOnCommission}
               totalWithCommission={totalWithCommission}
               announcerStatusType={announcerStatusType}
+              isSapApplied={sapVatInfo?.isSapApplied ?? false}
+              sapVatRate={sapVatInfo?.vatRate ?? 20}
               acceptedCancellationPolicy={acceptedCancellationPolicy}
               setAcceptedCancellationPolicy={setAcceptedCancellationPolicy}
               cancellationServiceType={cancellationServiceType}

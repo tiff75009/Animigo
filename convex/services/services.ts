@@ -139,6 +139,7 @@ export const getMyServices = query({
           basePrice: s.basePrice,
           moderationStatus: s.moderationStatus || "approved",
           moderationNote: s.moderationNote,
+          isSapEligible: s.isSapEligible || false,
           createdAt: s.createdAt,
           updatedAt: s.updatedAt,
           // Compteurs pour l'affichage
@@ -169,6 +170,7 @@ export const getMyServices = query({
               isActive: v.isActive,
               needsSlotConfiguration: v.needsSlotConfiguration, // Créneaux requis pour collectives
               slotsCount: v.slotsCount, // Nombre de créneaux configurés
+              isSapEligible: v.isSapEligible || false,
             })),
           // Options triées par ordre (avec info variantId pour affichage par formule)
           options: options
@@ -226,6 +228,8 @@ export const addService = mutation({
       v.literal("medium"),
       v.literal("large")
     ))),
+    // SAP : éligible TVA réduite pour personnes dépendantes/handicapées
+    isSapEligible: v.optional(v.boolean()),
     // Formule initiale obligatoire
     initialVariants: v.array(v.object({
       name: v.string(),
@@ -277,6 +281,7 @@ export const addService = mutation({
       })),
       duration: v.optional(v.number()),
       includedFeatures: v.optional(v.array(v.string())),
+      isSapEligible: v.optional(v.boolean()),
     })),
     // Options additionnelles (optionnelles) - seront liées aux formules créées
     initialOptions: v.optional(v.array(v.object({
@@ -335,6 +340,13 @@ export const addService = mutation({
       .withIndex("by_user", (q) => q.eq("userId", session.userId))
       .filter((q) => q.eq(q.field("category"), args.category))
       .first();
+
+    // Vérifier si l'annonceur est SAP-approuvé (pour les formules)
+    const sapProfile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", session.userId))
+      .first();
+    const announcerIsSapApproved = sapProfile?.isSapApproved === true;
 
     let serviceId: Id<"services">;
     let isNewService = false;
@@ -411,6 +423,7 @@ export const addService = mutation({
         pricing: variant.pricing,
         duration: variant.duration,
         includedFeatures: variant.includedFeatures,
+        isSapEligible: (variant.isSapEligible && announcerIsSapApproved) ? true : undefined,
         order: existingVariantsCount + i, // Continuer l'ordre après les formules existantes
         isActive: true,
         createdAt: now,
@@ -520,6 +533,8 @@ export const updateService = mutation({
       v.literal("medium"),
       v.literal("large")
     ))),
+    // SAP : éligible TVA réduite
+    isSapEligible: v.optional(v.boolean()),
     isActive: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
@@ -583,6 +598,20 @@ export const updateService = mutation({
     if (args.dogCategoryAcceptance !== undefined) updates.dogCategoryAcceptance = args.dogCategoryAcceptance;
     if (args.acceptedDogSizes !== undefined) updates.acceptedDogSizes = args.acceptedDogSizes;
     if (args.isActive !== undefined) updates.isActive = args.isActive;
+    if (args.isSapEligible !== undefined) {
+      // Vérifier que l'annonceur est SAP-approuvé
+      if (args.isSapEligible === true) {
+        const profile = await ctx.db
+          .query("profiles")
+          .withIndex("by_user", (q) => q.eq("userId", session.userId))
+          .first();
+        if (profile?.isSapApproved) {
+          updates.isSapEligible = true;
+        }
+      } else {
+        updates.isSapEligible = false;
+      }
+    }
 
     await ctx.db.patch(args.serviceId, updates);
 

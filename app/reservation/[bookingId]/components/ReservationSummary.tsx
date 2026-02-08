@@ -69,6 +69,8 @@ interface ReservationSummaryProps {
   vatOnCommission: number;
   totalWithCommission: number;
   announcerStatusType: string;
+  isSapApplied?: boolean;
+  sapVatRate?: number;
   // Annulation
   acceptedCancellationPolicy: boolean;
   setAcceptedCancellationPolicy: (v: boolean) => void;
@@ -108,6 +110,8 @@ export default function ReservationSummary({
   vatOnCommission,
   totalWithCommission,
   announcerStatusType,
+  isSapApplied = false,
+  sapVatRate = 20,
   acceptedCancellationPolicy,
   setAcceptedCancellationPolicy,
   cancellationServiceType,
@@ -359,7 +363,7 @@ export default function ReservationSummary({
               {announcerStatusType === "professionnel" ? (
                 <>
                   {(() => {
-                    const serviceVatRate = 20;
+                    const serviceVatRate = bookingData.variant?.isSapEligible ? 10 : 20;
                     const serviceHT = Math.round(baseAmountHT / (1 + serviceVatRate / 100));
                     const serviceTVA = baseAmountHT - serviceHT;
                     return (
@@ -397,6 +401,14 @@ export default function ReservationSummary({
                 <p className="text-xs text-gray-500 italic">
                   TVA non applicable (art. 293 B du CGI)
                 </p>
+              )}
+
+              {/* Indicateur TVA réduite SAP */}
+              {bookingData.variant?.isSapEligible && (
+                <div className="flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
+                  <span className="font-medium">TVA réduite SAP : 10%</span>
+                  <span className="text-green-600">au lieu de 20%</span>
+                </div>
               )}
 
               <div className="flex justify-between text-sm text-gray-500">

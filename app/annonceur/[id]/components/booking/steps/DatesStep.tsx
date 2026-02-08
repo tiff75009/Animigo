@@ -45,6 +45,8 @@ interface DatesStepProps {
   acceptReservationsFrom: string;
   acceptReservationsTo: string;
 
+  // Délai minimum de réservation à l'avance (en heures)
+  minimumBookingAdvanceHours?: number;
   // Service settings
   allowOvernightStay?: boolean;
   overnightPrice?: number;
@@ -98,6 +100,7 @@ export default function DatesStep({
   bufferAfter,
   acceptReservationsFrom,
   acceptReservationsTo,
+  minimumBookingAdvanceHours,
   allowOvernightStay,
   overnightPrice,
   dayStartTime,
@@ -178,6 +181,7 @@ export default function DatesStep({
           bufferAfter={bufferAfter}
           acceptReservationsFrom={acceptReservationsFrom}
           acceptReservationsTo={acceptReservationsTo}
+          minimumBookingAdvanceHours={minimumBookingAdvanceHours}
           allowOvernightStay={allowOvernightStay}
           overnightPrice={overnightPrice}
           dayStartTime={dayStartTime}

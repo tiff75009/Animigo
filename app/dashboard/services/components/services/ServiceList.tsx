@@ -70,6 +70,7 @@ interface ServiceListProps {
   onDeleteService: (serviceId: Id<"services">) => void;
   phoneVerified?: boolean;
   canCreateServices?: boolean;
+  isSapApproved?: boolean;
 }
 
 const animalIcons: Record<string, React.ElementType> = {
@@ -100,6 +101,7 @@ export default function ServiceList({
   onDeleteService,
   phoneVerified,
   canCreateServices = true,
+  isSapApproved,
 }: ServiceListProps) {
   // Filtres
   const [filterCategory, setFilterCategory] = useState<string>("all");
@@ -379,6 +381,7 @@ export default function ServiceList({
               onToggle={() => onToggleService(service.id, service.isActive)}
               onDelete={() => onDeleteService(service.id)}
               phoneVerified={phoneVerified}
+              isSapApproved={isSapApproved}
             />
           </motion.div>
         ))}

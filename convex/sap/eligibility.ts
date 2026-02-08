@@ -73,6 +73,8 @@ export const computeSapVatRate = query({
     sessionToken: v.string(),
     announcerId: v.id("users"),
     serviceCategorySlug: v.string(),
+    serviceId: v.optional(v.id("services")),
+    variantId: v.optional(v.id("serviceVariants")),
   },
   handler: async (ctx, args) => {
     // Résoudre le client via la session
@@ -85,13 +87,37 @@ export const computeSapVatRate = query({
       return { vatRate: 20, isSapApplied: false };
     }
 
-    // 1. Vérifier si la catégorie est éligible SAP
-    const category = await ctx.db
-      .query("serviceCategories")
-      .withIndex("by_slug", (q) => q.eq("slug", args.serviceCategorySlug))
-      .first();
+    // 1. Vérifier si la formule, le service ou la catégorie est éligible SAP
+    let isEligible = false;
 
-    if (!category?.isSapEligible) {
+    // Vérifier au niveau de la formule d'abord
+    if (args.variantId) {
+      const variant = await ctx.db.get(args.variantId);
+      if (variant?.isSapEligible) {
+        isEligible = true;
+      }
+    }
+
+    // Sinon vérifier au niveau du service
+    if (!isEligible && args.serviceId) {
+      const service = await ctx.db.get(args.serviceId);
+      if (service?.isSapEligible) {
+        isEligible = true;
+      }
+    }
+
+    // Sinon vérifier au niveau de la catégorie
+    if (!isEligible) {
+      const category = await ctx.db
+        .query("serviceCategories")
+        .withIndex("by_slug", (q) => q.eq("slug", args.serviceCategorySlug))
+        .first();
+      if (category?.isSapEligible) {
+        isEligible = true;
+      }
+    }
+
+    if (!isEligible) {
       return { vatRate: 20, isSapApplied: false };
     }
 

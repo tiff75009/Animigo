@@ -606,6 +606,8 @@ export default function ReserverPage({
           sessionToken: authToken,
           announcerId: announcerId as Id<"users">,
           serviceCategorySlug: selectedService.category,
+          serviceId: selectedService.id as Id<"services">,
+          variantId: selectedVariant?.id as Id<"serviceVariants"> | undefined,
         }
       : "skip"
   );
@@ -1489,6 +1491,7 @@ export default function ReserverPage({
                 // Billing info pour affichage jours/demi-journées
                 billingInfo={billingInfo}
                 clientBillingMode={selectedService.clientBillingMode}
+                minimumBookingAdvanceHours={availabilityCalendar?.minimumBookingAdvanceHours}
                 onDateSelect={handleDateSelect}
                 onEndDateSelect={handleEndDateSelect}
                 onTimeSelect={handleTimeSelect}

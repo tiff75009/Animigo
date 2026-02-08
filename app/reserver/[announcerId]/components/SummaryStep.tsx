@@ -881,7 +881,7 @@ export default function SummaryStep({
 
             // Déterminer si l'annonceur est assujetti TVA
             const isVatSubject = announcerStatusType === "professionnel";
-            const serviceVatRate = isSapApplied ? (sapVatRate || 10) : 20;
+            const serviceVatRate = selectedVariant.isSapEligible ? 10 : 20;
 
             // Calcul HT/TTC de la prestation
             const serviceHT = isVatSubject
@@ -942,9 +942,9 @@ export default function SummaryStep({
                 )}
 
                 {/* Indicateur TVA réduite SAP */}
-                {isSapApplied && (
+                {selectedVariant.isSapEligible && (
                   <div className="flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
-                    <span className="font-medium">TVA réduite SAP : {sapVatRate}%</span>
+                    <span className="font-medium">TVA réduite SAP : 10%</span>
                     <span className="text-green-600">au lieu de 20%</span>
                   </div>
                 )}

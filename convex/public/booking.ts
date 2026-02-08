@@ -460,6 +460,7 @@ export const getPendingBooking = query({
         sessionInterval: variant.sessionInterval,
         sessionType: variant.sessionType,
         animalTypes: variant.animalTypes,
+        isSapEligible: variant.isSapEligible ?? false,
       } : null,
       options: selectedOptions,
       availableOptions,
@@ -799,7 +800,7 @@ export const finalizeBooking = mutation({
     let vatRate = 20;
     let isSapApplied = false;
 
-    if (category?.isSapEligible) {
+    if (variant.isSapEligible || service.isSapEligible || category?.isSapEligible) {
       const announcerProfile = await ctx.db
         .query("profiles")
         .withIndex("by_user", (q) => q.eq("userId", pendingBooking.announcerId))

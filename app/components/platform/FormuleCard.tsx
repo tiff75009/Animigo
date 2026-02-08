@@ -18,6 +18,7 @@ import {
   Sparkles,
   ChevronRight,
   Zap,
+  FileCheck,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { formatPrice, formatDistance } from "./helpers";
@@ -156,6 +157,8 @@ export interface FormuleResult {
   announcerDistance?: number;
   announcerVerified: boolean;
   announcerStatusType: "particulier" | "micro_entrepreneur" | "professionnel";
+  isSapEligible?: boolean;
+  announcerSapApproved?: boolean;
   nextSlot?: NextSlot;
   collectiveSlots?: CollectiveSlotInfo[];
   spotsLeft?: number;
@@ -376,6 +379,12 @@ export function FormuleCardGrid({
               {isCollective ? <Users className="w-3 h-3" /> : <User className="w-3 h-3" />}
               {isCollective ? "Collectif" : "Individuel"}
             </span>
+            {formule.isSapEligible && formule.announcerSapApproved && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-medium">
+                <FileCheck className="w-3 h-3" />
+                TVA 10%
+              </span>
+            )}
           </div>
 
           {/* Nom de la formule */}
@@ -570,6 +579,12 @@ export function FormuleCardList({
                     {isCollective ? <Users className="w-3 h-3" /> : <User className="w-3 h-3" />}
                     {isCollective ? "Collectif" : "Individuel"}
                   </span>
+                  {formule.isSapEligible && formule.announcerSapApproved && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-medium">
+                      <FileCheck className="w-3 h-3" />
+                      TVA 10%
+                    </span>
+                  )}
                 </div>
 
                 <h3 className="text-lg font-bold text-gray-900 group-hover:text-primary transition-colors">

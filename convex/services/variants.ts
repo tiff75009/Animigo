@@ -196,6 +196,7 @@ export const addVariant = mutation({
     })),
     duration: v.optional(v.number()),
     includedFeatures: v.optional(v.array(v.string())),
+    isSapEligible: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const { user } = await validateSession(ctx, args.token);
@@ -219,6 +220,18 @@ export const addVariant = mutation({
     // Les formules collectives sont inactives par défaut jusqu'à ce que des créneaux soient configurés
     const isCollective = args.sessionType === "collective";
 
+    // Vérifier SAP-approuvé si isSapEligible demandé
+    let sapEligible: boolean | undefined = undefined;
+    if (args.isSapEligible) {
+      const profile = await ctx.db
+        .query("profiles")
+        .withIndex("by_user", (q: any) => q.eq("userId", user._id))
+        .first();
+      if (profile?.isSapApproved) {
+        sapEligible = true;
+      }
+    }
+
     const variantId = await ctx.db.insert("serviceVariants", {
       serviceId: args.serviceId,
       name: args.name,
@@ -237,6 +250,7 @@ export const addVariant = mutation({
       pricing: args.pricing,
       duration: args.duration,
       includedFeatures: args.includedFeatures,
+      isSapEligible: sapEligible,
       order: maxOrder + 1,
       isActive: !isCollective, // Désactivé par défaut si collective (pas de créneaux)
       needsSlotConfiguration: isCollective, // Flag pour indiquer que des créneaux sont requis
@@ -315,6 +329,7 @@ export const updateVariant = mutation({
     duration: v.optional(v.number()),
     includedFeatures: v.optional(v.array(v.string())),
     isActive: v.optional(v.boolean()),
+    isSapEligible: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const { user } = await validateSession(ctx, args.token);
@@ -353,6 +368,19 @@ export const updateVariant = mutation({
     if (args.includedFeatures !== undefined)
       updates.includedFeatures = args.includedFeatures;
     if (args.isActive !== undefined) updates.isActive = args.isActive;
+    if (args.isSapEligible !== undefined) {
+      if (args.isSapEligible === true) {
+        const profile = await ctx.db
+          .query("profiles")
+          .withIndex("by_user", (q: any) => q.eq("userId", user._id))
+          .first();
+        if (profile?.isSapApproved) {
+          updates.isSapEligible = true;
+        }
+      } else {
+        updates.isSapEligible = false;
+      }
+    }
 
     await ctx.db.patch(args.variantId, updates);
 

@@ -14,6 +14,7 @@ import {
   Briefcase,
   Layers,
   Zap,
+  FileCheck,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import VariantManager, { LocalVariant } from "../VariantManager";
@@ -117,6 +118,8 @@ interface ServiceFormProps {
       // Restrictions chiens au niveau de la formule
       dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
       acceptedDogSizes?: ("small" | "medium" | "large")[];
+      // SAP : TVA réduite par formule
+      isSapEligible?: boolean;
     }>;
     initialOptions?: Array<{
       name: string;
@@ -130,6 +133,7 @@ interface ServiceFormProps {
   onCancel: () => void;
   isSubmitting: boolean;
   error?: string | null;
+  isSapApproved?: boolean;
 }
 
 export default function ServiceForm({
@@ -140,6 +144,7 @@ export default function ServiceForm({
   onCancel,
   isSubmitting,
   error,
+  isSapApproved,
 }: ServiceFormProps) {
   const [currentStep, setCurrentStep] = useState<FormStep>(1);
   const [category, setCategory] = useState("");
@@ -149,6 +154,8 @@ export default function ServiceForm({
 
   // Garde de nuit
   const [allowOvernightStay, setAllowOvernightStay] = useState(false);
+  // SAP : TVA réduite
+  const [isSapEligible, setIsSapEligible] = useState(false);
 
   // Note: Les animaux et restrictions chiens sont maintenant au niveau de chaque formule (variant)
 
@@ -213,6 +220,8 @@ export default function ServiceForm({
       // Restrictions chiens au niveau de la formule
       dogCategoryAcceptance: v.dogCategoryAcceptance,
       acceptedDogSizes: v.acceptedDogSizes,
+      // SAP : TVA réduite (appliquée à toutes les formules si coché en step 1)
+      isSapEligible: isSapEligible || undefined,
     }));
 
     const initialOptions = localOptions.map((o) => ({
@@ -403,6 +412,28 @@ export default function ServiceForm({
                         Un nouveau service sera ajouté à cette catégorie existante.
                       </p>
                     </div>
+                  )}
+                  {/* Toggle SAP si annonceur agréé */}
+                  {isSapApproved && (
+                    <label className="flex items-center gap-3 p-4 rounded-xl border border-emerald-200 bg-emerald-50/50 cursor-pointer hover:bg-emerald-50 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={isSapEligible}
+                        onChange={(e) => setIsSapEligible(e.target.checked)}
+                        className="w-5 h-5 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <FileCheck className="w-4 h-4 text-emerald-600" />
+                          <span className="font-medium text-emerald-800">
+                            Éligible TVA réduite SAP
+                          </span>
+                        </div>
+                        <p className="text-xs text-emerald-600 mt-0.5">
+                          TVA à 10% pour les clients dépendants ou en situation de handicap
+                        </p>
+                      </div>
+                    </label>
                   )}
                 </div>
               ) : (

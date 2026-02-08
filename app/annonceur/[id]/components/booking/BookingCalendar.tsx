@@ -44,6 +44,7 @@ interface BookingCalendarProps {
     lastDayIsHalfDay?: boolean;
   };
   clientBillingMode?: "exact_hourly" | "round_half_day" | "round_full_day";
+  minimumBookingAdvanceHours?: number;
   onDateSelect: (date: string) => void;
   onEndDateSelect: (date: string | null) => void;
   onTimeSelect: (time: string) => void;
@@ -52,8 +53,9 @@ interface BookingCalendarProps {
   onMonthChange: (date: Date) => void;
 }
 
-// Délai minimum de réservation (en heures)
-const MIN_BOOKING_LEAD_TIME_HOURS = 2;
+// Délai minimum de réservation par défaut (en heures)
+// Sera écrasé par la prop minimumBookingAdvanceHours si fournie
+const DEFAULT_MIN_BOOKING_LEAD_TIME_HOURS = 24;
 
 // Helper functions
 function parseTimeToMinutes(time: string): number {
@@ -62,22 +64,31 @@ function parseTimeToMinutes(time: string): number {
 }
 
 // Vérifier si un créneau est réservable (pas passé + délai minimum)
-function isSlotBookable(dateStr: string, startTime: string): boolean {
+function isSlotBookable(dateStr: string, startTime: string, leadTimeHours: number = DEFAULT_MIN_BOOKING_LEAD_TIME_HOURS): boolean {
   const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
-  // Date passée = non réservable
-  if (dateStr < todayStr) return false;
+  // Calculer la date/heure minimum réservable
+  const minBookableMs = now.getTime() + leadTimeHours * 60 * 60 * 1000;
 
-  // Date future = réservable
-  if (dateStr > todayStr) return true;
+  // Parser la date et l'heure du créneau
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const [hours, minutes] = startTime.split(":").map(Number);
+  const slotDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
 
-  // Date = aujourd'hui : vérifier l'heure avec délai minimum
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const slotMinutes = parseTimeToMinutes(startTime);
-  const minBookableMinutes = currentMinutes + (MIN_BOOKING_LEAD_TIME_HOURS * 60);
+  return slotDate.getTime() >= minBookableMs;
+}
 
-  return slotMinutes >= minBookableMinutes;
+// Vérifier si une date a au moins un créneau réservable
+function isDateBookable(dateStr: string, acceptReservationsTo: string, leadTimeHours: number = DEFAULT_MIN_BOOKING_LEAD_TIME_HOURS): boolean {
+  const now = new Date();
+  const minBookableMs = now.getTime() + leadTimeHours * 60 * 60 * 1000;
+
+  // Vérifier si le dernier créneau possible de la journée est réservable
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const [endH, endM] = acceptReservationsTo.split(":").map(Number);
+  const lastSlotDate = new Date(year, month - 1, day, endH, endM, 0, 0);
+
+  return lastSlotDate.getTime() >= minBookableMs;
 }
 
 function calculateDuration(startTime: string, endTime: string): string {
@@ -153,6 +164,7 @@ export default function BookingCalendar({
   dayEndTime,
   billingInfo,
   clientBillingMode,
+  minimumBookingAdvanceHours = DEFAULT_MIN_BOOKING_LEAD_TIME_HOURS,
   onDateSelect,
   onEndDateSelect,
   onTimeSelect,
@@ -354,7 +366,10 @@ export default function BookingCalendar({
       const isPast = dateStr < todayStr;
       const availability = availabilityCalendar?.find((a) => a.date === dateStr);
       // Si pas de données de calendrier ou pas d'entrée, considérer comme indisponible
-      const status = isPast ? "past" : (!availabilityCalendar || !availability) ? "unavailable" : availability.status;
+      const rawStatus = isPast ? "past" : (!availabilityCalendar || !availability) ? "unavailable" : availability.status;
+      // Vérifier si la date est réservable en tenant compte du délai minimum
+      const isTooSoon = !isPast && rawStatus !== "unavailable" && !isDateBookable(dateStr, acceptReservationsTo, minimumBookingAdvanceHours);
+      const status = isTooSoon ? "past" as const : rawStatus;
 
       const capacity = availability?.capacity;
       const hasCapacityInfo = isCapacityBased && capacity;
@@ -457,8 +472,8 @@ export default function BookingCalendar({
 
   // Check if a time slot is available
   const isTimeSlotAvailable = (startTime: string, duration: number = variantDuration) => {
-    // Vérifier d'abord si le créneau est réservable (pas passé + délai minimum 2h)
-    if (selectedDate && !isSlotBookable(selectedDate, startTime)) {
+    // Vérifier d'abord si le créneau est réservable (pas passé + délai minimum)
+    if (selectedDate && !isSlotBookable(selectedDate, startTime, minimumBookingAdvanceHours)) {
       return false;
     }
 
@@ -546,7 +561,10 @@ export default function BookingCalendar({
       const isPast = dateStr < todayStr;
       const isToday = dateStr === todayStr;
       const availability = availabilityCalendar?.find((a) => a.date === dateStr);
-      const status = isPast ? "past" : (!availabilityCalendar || !availability) ? "unavailable" : availability.status;
+      const rawStatus = isPast ? "past" : (!availabilityCalendar || !availability) ? "unavailable" : availability.status;
+      // Vérifier si la date est réservable en tenant compte du délai minimum
+      const isTooSoonEnhanced = !isPast && rawStatus !== "unavailable" && !isDateBookable(dateStr, acceptReservationsTo, minimumBookingAdvanceHours);
+      const status = isTooSoonEnhanced ? "past" as const : rawStatus;
       const isSelected = selectedDate === dateStr;
       const isDisabled = status === "past" || status === "unavailable";
 

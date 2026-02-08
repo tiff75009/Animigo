@@ -121,6 +121,7 @@ interface ServicesTabProps {
       };
       duration?: number;
       includedFeatures?: string[];
+      isSapEligible?: boolean;
     }>;
     initialOptions?: Array<{
       name: string;
@@ -140,6 +141,7 @@ interface ServicesTabProps {
   onClearSuccess: () => void;
   phoneVerified?: boolean;
   canCreateServices?: boolean;
+  isSapApproved?: boolean;
 }
 
 export default function ServicesTab({
@@ -157,6 +159,7 @@ export default function ServicesTab({
   onClearSuccess,
   phoneVerified,
   canCreateServices = true,
+  isSapApproved,
 }: ServicesTabProps) {
   const [isAddingService, setIsAddingService] = useState(false);
   const [editingServiceId, setEditingServiceId] = useState<Id<"services"> | null>(null);
@@ -262,6 +265,7 @@ export default function ServicesTab({
             onCancel={() => setIsAddingService(false)}
             isSubmitting={isSaving}
             error={error}
+            isSapApproved={isSapApproved}
           />
         )}
       </AnimatePresence>
@@ -277,6 +281,7 @@ export default function ServicesTab({
         onDeleteService={onDeleteService}
         phoneVerified={phoneVerified}
         canCreateServices={canCreateServices}
+        isSapApproved={isSapApproved}
       />
     </div>
   );

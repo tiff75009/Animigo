@@ -31,6 +31,8 @@ export interface ServiceVariant {
   // Restrictions chiens (au niveau de la formule)
   dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
   acceptedDogSizes?: ("small" | "medium" | "large")[];
+  // SAP eligibility (TVA réduite)
+  isSapEligible?: boolean;
 }
 
 export interface PriceRange {

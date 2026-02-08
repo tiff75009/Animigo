@@ -50,6 +50,7 @@ export default function ServicesPage() {
   const hasPlanning = hasAvailability === true;
 
   const canCreateServices = isProfileComplete && hasPlanning;
+  const isSapApproved = profile?.isSapApproved === true;
 
   // Étapes de complétion
   const prerequisites = [
@@ -192,6 +193,7 @@ export default function ServicesPage() {
             onClearSuccess={clearSuccess}
             phoneVerified={isPhoneVerified}
             canCreateServices={!!canCreateServices}
+            isSapApproved={isSapApproved}
           />
         ) : (
           <div className="flex items-center justify-center p-12">

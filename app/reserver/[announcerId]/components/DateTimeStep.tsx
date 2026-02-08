@@ -72,6 +72,8 @@ interface DateTimeStepProps {
     lastDayIsHalfDay?: boolean;
   };
   clientBillingMode?: "exact_hourly" | "round_half_day" | "round_full_day";
+  // Délai minimum de réservation à l'avance (en heures)
+  minimumBookingAdvanceHours?: number;
   onDateSelect: (date: string) => void;
   onEndDateSelect: (date: string | null) => void;
   onTimeSelect: (time: string) => void;
@@ -115,6 +117,7 @@ export default function DateTimeStep({
   // Billing info pour affichage jours/demi-journées
   billingInfo,
   clientBillingMode,
+  minimumBookingAdvanceHours,
   onDateSelect,
   onEndDateSelect,
   onTimeSelect,
@@ -285,6 +288,7 @@ export default function DateTimeStep({
           dayEndTime={selectedService.dayEndTime}
           billingInfo={billingInfo}
           clientBillingMode={clientBillingMode}
+          minimumBookingAdvanceHours={minimumBookingAdvanceHours}
           onDateSelect={onDateSelect}
           onEndDateSelect={onEndDateSelect}
           onTimeSelect={onTimeSelect}

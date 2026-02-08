@@ -1034,6 +1034,9 @@ interface FormuleResult {
   announcerDistance?: number;
   announcerVerified: boolean;
   announcerStatusType: "particulier" | "micro_entrepreneur" | "professionnel";
+  // SAP
+  isSapEligible?: boolean; // Service éligible TVA réduite
+  announcerSapApproved?: boolean; // Annonceur agréé SAP
   // Disponibilité
   nextSlot?: NextSlot;
   collectiveSlots?: CollectiveSlotInfo[];
@@ -1348,6 +1351,8 @@ export const searchFormules = query({
           announcerDistance: distance,
           announcerVerified: announcer.accountType === "annonceur_pro",
           announcerStatusType: statusType,
+          isSapEligible: variant.isSapEligible || false,
+          announcerSapApproved: profile.isSapApproved || false,
           nextSlot,
           collectiveSlots: collectiveSlots.length > 0 ? collectiveSlots : undefined,
           spotsLeft,
@@ -1662,6 +1667,8 @@ export const searchFormulesInternal = query({
           announcerDistance: distance,
           announcerVerified: announcer.accountType === "annonceur_pro",
           announcerStatusType: statusType,
+          isSapEligible: variant.isSapEligible || false,
+          announcerSapApproved: profile.isSapApproved || false,
           nextSlot,
           collectiveSlots: collectiveSlots.length > 0 ? collectiveSlots : undefined,
           spotsLeft,
@@ -1888,6 +1895,8 @@ export const getAnnouncerServiceDetails = query({
           // Restrictions chiens (au niveau de la formule)
           dogCategoryAcceptance: v.dogCategoryAcceptance as "none" | "cat1" | "cat2" | "both" | undefined,
           acceptedDogSizes: v.acceptedDogSizes as ("small" | "medium" | "large")[] | undefined,
+          // SAP eligibility
+          isSapEligible: v.isSapEligible ?? false,
         })),
         options: options.map((o) => ({
           id: o._id,
@@ -2220,6 +2229,22 @@ export const getAnnouncerAvailabilityCalendar = query({
     const todayDate = new Date();
     const today = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, "0")}-${String(todayDate.getDate()).padStart(2, "0")}`;
 
+    // Lire le délai minimum de réservation à l'avance (24h par défaut)
+    const advanceConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q: any) => q.eq("key", "minimum_booking_advance_hours"))
+      .first();
+    const minimumBookingAdvanceHours = advanceConfig
+      ? parseInt(advanceConfig.value) || 24
+      : 24;
+
+    // Calculer la date/heure minimum réservable
+    const nowMs = Date.now();
+    const minBookableMs = nowMs + minimumBookingAdvanceHours * 60 * 60 * 1000;
+    const minBookableDate = new Date(minBookableMs);
+    const minBookableDateStr = `${minBookableDate.getFullYear()}-${String(minBookableDate.getMonth() + 1).padStart(2, "0")}-${String(minBookableDate.getDate()).padStart(2, "0")}`;
+    const minBookableTimeStr = `${String(minBookableDate.getHours()).padStart(2, "0")}:${String(minBookableDate.getMinutes()).padStart(2, "0")}`;
+
     // Construire le calendrier
     const calendar: Array<{
       date: string;
@@ -2236,6 +2261,20 @@ export const getAnnouncerAvailabilityCalendar = query({
 
     for (const date of allDates) {
       if (date < today) {
+        calendar.push({ date, status: "past" });
+        continue;
+      }
+
+      // Vérifier le délai minimum de réservation à l'avance
+      // Si la date est entièrement avant la date/heure minimum réservable, la marquer comme passée
+      if (date < minBookableDateStr) {
+        // Toute la journée est dans le délai minimum → non réservable
+        calendar.push({ date, status: "past" });
+        continue;
+      }
+      // Si la date est le jour de la limite, vérifier si l'heure de fin de dispo est avant le minimum
+      if (date === minBookableDateStr && acceptReservationsTo <= minBookableTimeStr) {
+        // Tous les créneaux de cette journée sont avant le minimum → non réservable
         calendar.push({ date, status: "past" });
         continue;
       }
@@ -2538,6 +2577,8 @@ export const getAnnouncerAvailabilityCalendar = query({
       // Informations de capacité globales
       isCapacityBased: isCapacityBasedCategory,
       maxAnimalsPerSlot: isCapacityBasedCategory ? maxAnimalsPerSlot : undefined,
+      // Délai minimum de réservation à l'avance (en heures)
+      minimumBookingAdvanceHours,
     };
   },
 });

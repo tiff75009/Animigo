@@ -286,6 +286,7 @@ export function useServicesPageData(token: string | undefined) {
       };
       duration?: number;
       includedFeatures?: string[];
+      isSapEligible?: boolean;
     }>;
     initialOptions?: Array<{
       name: string;

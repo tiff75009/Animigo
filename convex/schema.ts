@@ -312,6 +312,8 @@ export default defineSchema({
       v.literal("rejected")
     )),
     moderationNote: v.optional(v.string()),
+    // SAP : l'annonceur déclare ce service éligible TVA réduite (10%) pour personnes dépendantes
+    isSapEligible: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -381,6 +383,8 @@ export default defineSchema({
     isActive: v.boolean(),
     needsSlotConfiguration: v.optional(v.boolean()), // true si formule collective sans créneaux configurés
     slotsCount: v.optional(v.number()), // Nombre de créneaux futurs configurés (cache)
+    // SAP : l'annonceur déclare cette formule éligible TVA réduite (10%) pour personnes dépendantes
+    isSapEligible: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

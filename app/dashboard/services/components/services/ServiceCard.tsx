@@ -37,6 +37,7 @@ import {
   ArrowRight,
   Eye,
   EyeOff,
+  FileCheck,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import ConfirmModal from "../shared/ConfirmModal";
@@ -99,6 +100,7 @@ interface Variant {
   isActive: boolean;
   needsSlotConfiguration?: boolean; // true si service collective sans créneaux
   slotsCount?: number; // Nombre de créneaux futurs configurés
+  isSapEligible?: boolean;
 }
 
 interface Option {
@@ -126,6 +128,7 @@ interface Service {
   dayEndTime?: string;
   overnightPrice?: number;
   dogCategoryAcceptance?: DogCategoryAcceptance;
+  isSapEligible?: boolean;
   isActive: boolean;
   basePrice?: number;
   moderationStatus?: string;
@@ -143,6 +146,7 @@ interface ServiceCardProps {
   onToggle: () => void;
   onDelete: () => void;
   phoneVerified?: boolean;
+  isSapApproved?: boolean;
 }
 
 const animalIcons: Record<string, React.ElementType> = {
@@ -270,6 +274,7 @@ export default function ServiceCard({
   onToggle,
   onDelete,
   phoneVerified,
+  isSapApproved,
 }: ServiceCardProps) {
   const { user } = useAuth();
   const isVatSubject = user?.isVatSubject;
@@ -355,6 +360,12 @@ export default function ServiceCard({
                 <span className="flex items-center gap-1 text-xs text-amber-600 font-medium px-2 py-0.5 bg-amber-100 rounded-full">
                   <Phone className="w-3 h-3" />
                   Tel. non vérifié
+                </span>
+              )}
+              {(service.variants || []).some(v => v.isSapEligible) && (
+                <span className="flex items-center gap-1 text-xs text-emerald-700 font-medium px-2 py-0.5 bg-emerald-100 rounded-full">
+                  <FileCheck className="w-3 h-3" />
+                  SAP
                 </span>
               )}
             </div>
@@ -470,6 +481,7 @@ export default function ServiceCard({
                   setIsAddingVariant(false);
                   setEditingSection(null);
                 }}
+                isSapApproved={isSapApproved}
               />
             </motion.div>
           ) : editingSection === "variants" && editingVariantId ? (
@@ -494,6 +506,7 @@ export default function ServiceCard({
                   setEditingVariantId(null);
                   setEditingSection(null);
                 }}
+                isSapApproved={isSapApproved}
               />
             </motion.div>
           ) : (
@@ -577,6 +590,12 @@ export default function ServiceCard({
                               )}>{variant.name}</h4>
                               {!variant.isActive && (
                                 <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-500 rounded font-medium">Inactif</span>
+                              )}
+                              {variant.isSapEligible && (
+                                <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded font-medium">
+                                  <FileCheck className="w-3 h-3" />
+                                  SAP
+                                </span>
                               )}
                               {variant.description && (
                                 <p className="text-xs text-text-light truncate hidden sm:block">— {variant.description}</p>
@@ -664,13 +683,21 @@ export default function ServiceCard({
                             : "bg-red-50/20 border-dashed border-red-200/60"
                         )}
                       >
-                        {/* Badge séance collective */}
-                        {variant.sessionType === "collective" && (
-                          <span className="absolute -top-2 -right-2 flex items-center gap-1 px-2 py-0.5 bg-orange-500 text-white text-xs font-medium rounded-full">
-                            <Users className="w-3 h-3" />
-                            Collectif
-                          </span>
-                        )}
+                        {/* Badges en haut à droite */}
+                        <div className="absolute -top-2 -right-2 flex items-center gap-1">
+                          {variant.isSapEligible && (
+                            <span className="flex items-center gap-1 px-2 py-0.5 bg-emerald-500 text-white text-xs font-medium rounded-full">
+                              <FileCheck className="w-3 h-3" />
+                              SAP
+                            </span>
+                          )}
+                          {variant.sessionType === "collective" && (
+                            <span className="flex items-center gap-1 px-2 py-0.5 bg-orange-500 text-white text-xs font-medium rounded-full">
+                              <Users className="w-3 h-3" />
+                              Collectif
+                            </span>
+                          )}
+                        </div>
 
                         {/* Header service avec toggle */}
                         <div className="flex items-start justify-between mb-2">
@@ -996,9 +1023,11 @@ interface VariantEditorProps {
   initialEditingId?: Id<"serviceVariants"> | null;
   initialAddMode?: boolean;
   onClose?: () => void;
+  // SAP
+  isSapApproved?: boolean;
 }
 
-function VariantEditor({ serviceId, variants, token, categoryData, category, allowOvernightStay, serviceAnimalTypes, onManageSlots, initialEditingId, initialAddMode, onClose }: VariantEditorProps) {
+function VariantEditor({ serviceId, variants, token, categoryData, category, allowOvernightStay, serviceAnimalTypes, onManageSlots, initialEditingId, initialAddMode, onClose, isSapApproved }: VariantEditorProps) {
   const [isAdding, setIsAdding] = useState(initialAddMode || false);
   const [editingId, setEditingId] = useState<Id<"serviceVariants"> | null>(initialEditingId || null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -1105,6 +1134,7 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
             defaultNightlyPrice={categoryData?.defaultNightlyPrice}
             serviceAnimalTypes={serviceAnimalTypes}
             availableActivities={availableActivities}
+            isSapApproved={isSapApproved}
             onSave={async (data) => {
               await updateVariantMutation({ token, variantId: variantToEdit.id, ...data });
               onClose?.();
@@ -1143,6 +1173,7 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
           serviceAnimalTypes={serviceAnimalTypes}
           availableActivities={availableActivities}
           existingCount={variants.length}
+          isSapApproved={isSapApproved}
           onSave={async (data) => {
             await addVariantMutation({ token, serviceId, ...data });
             onClose?.();
@@ -1255,6 +1286,7 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
                 defaultNightlyPrice={categoryData?.defaultNightlyPrice}
                 serviceAnimalTypes={serviceAnimalTypes}
                 availableActivities={availableActivities}
+                isSapApproved={isSapApproved}
                 onSave={async (data) => {
                   await updateVariantMutation({ token, variantId: variant.id, ...data });
                   setEditingId(null);
@@ -1302,6 +1334,7 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
               serviceAnimalTypes={serviceAnimalTypes}
               availableActivities={availableActivities}
               existingCount={variants.length}
+              isSapApproved={isSapApproved}
               onSave={async (data) => {
                 await addVariantMutation({ token, serviceId, ...data });
                 setIsAdding(false);
@@ -1597,6 +1630,7 @@ function VariantEditForm({
   defaultNightlyPrice,
   serviceAnimalTypes,
   availableActivities = [],
+  isSapApproved,
   onSave,
   onCancel,
 }: {
@@ -1611,6 +1645,7 @@ function VariantEditForm({
   defaultNightlyPrice?: number;
   serviceAnimalTypes: string[];
   availableActivities?: AdminActivity[];
+  isSapApproved?: boolean;
   onSave: (data: {
     name?: string;
     description?: string;
@@ -1627,6 +1662,7 @@ function VariantEditForm({
     duration?: number;
     includedFeatures?: string[];
     isActive?: boolean;
+    isSapEligible?: boolean;
   }) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -1642,6 +1678,7 @@ function VariantEditForm({
   const [selectedAnimalTypes, setSelectedAnimalTypes] = useState<string[]>(variant.animalTypes || serviceAnimalTypes);
   const [duration, setDuration] = useState(variant.duration || 60);
   const [isActive, setIsActive] = useState(variant.isActive);
+  const [sapEligible, setSapEligible] = useState(variant.isSapEligible || false);
   const [pricing, setPricing] = useState<Pricing>(variant.pricing || {});
   const [includedFeatures, setIncludedFeatures] = useState<string[]>(variant.includedFeatures || []);
   const [newFeature, setNewFeature] = useState("");
@@ -1783,6 +1820,7 @@ function VariantEditForm({
         duration,
         includedFeatures: includedFeatures.length > 0 ? includedFeatures : undefined,
         isActive,
+        isSapEligible: sapEligible || undefined,
       });
     } finally {
       setIsSaving(false);
@@ -1796,6 +1834,22 @@ function VariantEditForm({
           <Edit2 className="w-4 h-4 text-primary" />
           Modifier la service
         </h5>
+        <div className="flex items-center gap-3">
+          {isSapApproved && (
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={sapEligible}
+                onChange={(e) => setSapEligible(e.target.checked)}
+                className="w-4 h-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              <span className="flex items-center gap-1 text-xs font-medium text-emerald-700">
+                <FileCheck className="w-3 h-3" />
+                SAP
+              </span>
+            </label>
+          )}
+        </div>
         <label className="flex items-center gap-2 cursor-pointer">
           <span className="text-xs text-text-light">Active</span>
           <input
@@ -2488,6 +2542,7 @@ function VariantAddForm({
   serviceAnimalTypes,
   availableActivities = [],
   existingCount,
+  isSapApproved,
   onSave,
   onCancel,
 }: {
@@ -2503,6 +2558,7 @@ function VariantAddForm({
   serviceAnimalTypes: string[];
   availableActivities?: AdminActivity[];
   existingCount: number;
+  isSapApproved?: boolean;
   onSave: (data: {
     name: string;
     description?: string;
@@ -2520,6 +2576,7 @@ function VariantAddForm({
     pricing?: Pricing;
     duration?: number;
     includedFeatures?: string[];
+    isSapEligible?: boolean;
   }) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -2532,6 +2589,7 @@ function VariantAddForm({
   const [sessionType, setSessionType] = useState<"individual" | "collective">("individual");
   const [maxAnimalsPerSession, setMaxAnimalsPerSession] = useState<number | undefined>(undefined);
   const [serviceLocation, setServiceLocation] = useState<ServiceLocation>("announcer_home");
+  const [sapEligible, setSapEligible] = useState(false);
   const [selectedAnimalTypes, setSelectedAnimalTypes] = useState<string[]>(serviceAnimalTypes);
   const [duration, setDuration] = useState(60);
 
@@ -2672,6 +2730,7 @@ function VariantAddForm({
         pricing,
         duration,
         includedFeatures: includedFeatures.length > 0 ? includedFeatures : undefined,
+        isSapEligible: sapEligible || undefined,
       });
     } finally {
       setIsSaving(false);
@@ -2680,9 +2739,25 @@ function VariantAddForm({
 
   return (
     <div className="p-4 bg-secondary/5 rounded-xl border-2 border-secondary/20 space-y-4">
-      <div className="flex items-center gap-2">
-        <Plus className="w-4 h-4 text-secondary" />
-        <h5 className="font-semibold text-foreground">Nouvelle service</h5>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Plus className="w-4 h-4 text-secondary" />
+          <h5 className="font-semibold text-foreground">Nouvelle service</h5>
+        </div>
+        {isSapApproved && (
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={sapEligible}
+              onChange={(e) => setSapEligible(e.target.checked)}
+              className="w-4 h-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            <span className="flex items-center gap-1 text-xs font-medium text-emerald-700">
+              <FileCheck className="w-3 h-3" />
+              SAP
+            </span>
+          </label>
+        )}
       </div>
 
       {/* Name */}

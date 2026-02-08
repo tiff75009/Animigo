@@ -68,6 +68,7 @@ export interface PendingBookingData {
     sessionInterval?: number;
     sessionType?: "individual" | "collective";
     animalTypes?: string[];
+    isSapEligible?: boolean;
   } | null;
   options: Array<{ id: string; name: string; price: number }>;
   availableOptions: ServiceOption[];
