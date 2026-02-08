@@ -138,6 +138,8 @@ interface ServicesTabProps {
   error?: string | null;
   successMessage?: string | null;
   onClearSuccess: () => void;
+  phoneVerified?: boolean;
+  canCreateServices?: boolean;
 }
 
 export default function ServicesTab({
@@ -153,6 +155,8 @@ export default function ServicesTab({
   error,
   successMessage,
   onClearSuccess,
+  phoneVerified,
+  canCreateServices = true,
 }: ServicesTabProps) {
   const [isAddingService, setIsAddingService] = useState(false);
   const [editingServiceId, setEditingServiceId] = useState<Id<"services"> | null>(null);
@@ -216,7 +220,7 @@ export default function ServicesTab({
 
       {/* Add Service Button */}
       <AnimatePresence>
-        {!isAddingService && (
+        {!isAddingService && canCreateServices && (
           <motion.button
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -243,7 +247,7 @@ export default function ServicesTab({
 
       {/* Service Form */}
       <AnimatePresence>
-        {isAddingService && (
+        {isAddingService && canCreateServices && (
           <ServiceForm
             categories={categories}
             categoryTypes={categoryTypes}
@@ -271,6 +275,7 @@ export default function ServicesTab({
         onEditService={handleEditService}
         onToggleService={onToggleService}
         onDeleteService={onDeleteService}
+        phoneVerified={phoneVerified}
       />
     </div>
   );

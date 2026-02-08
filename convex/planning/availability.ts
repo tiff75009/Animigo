@@ -93,6 +93,33 @@ async function checkCollectiveSlotsConflict(
  * NOTE: Par défaut, l'annonceur est INDISPONIBLE. Une entrée avec status "available"
  * ou "partial" indique une disponibilité explicite.
  */
+// Vérifier si l'utilisateur a au moins une disponibilité future configurée
+export const hasAnyAvailability = query({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+
+    if (!session || session.expiresAt < Date.now()) {
+      return false;
+    }
+
+    const today = new Date().toISOString().split("T")[0];
+
+    const availabilities = await ctx.db
+      .query("availability")
+      .withIndex("by_user", (q) => q.eq("userId", session.userId))
+      .collect();
+
+    // Au moins une disponibilité future avec statut "available" ou "partial"
+    return availabilities.some(
+      (a) => a.date >= today && (a.status === "available" || a.status === "partial")
+    );
+  },
+});
+
 export const getAvailabilityByDateRange = query({
   args: {
     token: v.string(),

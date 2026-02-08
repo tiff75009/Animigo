@@ -309,6 +309,9 @@ export const addService = mutation({
       throw new ConvexError("Seuls les annonceurs peuvent ajouter des services");
     }
 
+    // Vérifier le statut de vérification du téléphone
+    const isPhoneVerified = user.phoneVerified === true;
+
     // Vérifier qu'au moins une formule est fournie
     if (!args.initialVariants || args.initialVariants.length === 0) {
       throw new ConvexError("Au moins une formule est requise");
@@ -376,7 +379,7 @@ export const addService = mutation({
         overnightPrice: args.overnightPrice,
         dogCategoryAcceptance: args.dogCategoryAcceptance,
         acceptedDogSizes: args.acceptedDogSizes,
-        isActive: true,
+        isActive: isPhoneVerified, // Inactif si téléphone non vérifié
         basePrice: basePrice,
         moderationStatus: "approved", // Catégories gérées par admin = pas de modération
         createdAt: now,
@@ -477,8 +480,11 @@ export const addService = mutation({
       serviceId,
       variantIds: createdVariantIds,
       isNewService,
+      phoneVerified: isPhoneVerified,
       message: isNewService
-        ? "Service créé avec succès"
+        ? (isPhoneVerified
+            ? "Service créé avec succès"
+            : "Service créé mais inactif — veuillez vérifier votre téléphone pour le mettre en ligne")
         : `${args.initialVariants.length} formule(s) ajoutée(s) au service existant`,
     };
   },
@@ -558,6 +564,12 @@ export const updateService = mutation({
       if (existingService) {
         throw new ConvexError("Vous avez déjà un service pour cette prestation");
       }
+    }
+
+    // Bloquer l'activation si le téléphone n'est pas vérifié
+    const user = await ctx.db.get(session.userId);
+    if (args.isActive === true && user && user.phoneVerified !== true) {
+      throw new ConvexError("Vous devez vérifier votre numéro de téléphone avant d'activer un service. Rendez-vous dans Paramètres pour vérifier votre téléphone.");
     }
 
     const updates: Record<string, unknown> = { updatedAt: Date.now() };

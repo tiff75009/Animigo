@@ -453,9 +453,20 @@ function FloatingSidebarContent() {
                   transition={{ duration: 0.2 }}
                   className="overflow-hidden flex-1 min-w-0"
                 >
-                  <p className="font-semibold text-slate-800 text-sm whitespace-nowrap truncate">
-                    {user?.firstName} {user?.lastName}
-                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="font-semibold text-slate-800 text-sm whitespace-nowrap truncate">
+                      {user?.firstName} {user?.lastName}
+                    </p>
+                    {user?.accountType === "annonceur_pro" ? (
+                      <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] font-bold bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-md leading-none">
+                        PRO
+                      </span>
+                    ) : user?.accountType === "annonceur_particulier" ? (
+                      <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] font-bold bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-md leading-none">
+                        Particulier
+                      </span>
+                    ) : null}
+                  </div>
                   {user?.username ? (
                     <p className="text-xs text-slate-500 whitespace-nowrap truncate">@{user.username}</p>
                   ) : null}

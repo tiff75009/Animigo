@@ -13,6 +13,7 @@ interface User {
   username?: string;
   accountType: "annonceur_pro" | "annonceur_particulier" | "utilisateur";
   phone: string;
+  phoneVerified: boolean;
   siret?: string;
   companyName?: string;
   emailVerified: boolean;

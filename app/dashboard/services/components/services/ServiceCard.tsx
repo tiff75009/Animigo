@@ -134,6 +134,7 @@ interface ServiceCardProps {
   onEdit: () => void;
   onToggle: () => void;
   onDelete: () => void;
+  phoneVerified?: boolean;
 }
 
 const animalIcons: Record<string, React.ElementType> = {
@@ -260,6 +261,7 @@ export default function ServiceCard({
   viewMode = "grid",
   onToggle,
   onDelete,
+  phoneVerified,
 }: ServiceCardProps) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editingSection, setEditingSection] = useState<"variants" | "options" | null>(null);
@@ -332,6 +334,11 @@ export default function ServiceCard({
                   Inactif
                 </span>
               )}
+              {!service.isActive && !phoneVerified && (
+                <span className="flex items-center gap-1 text-xs text-amber-600 font-medium px-2 py-0.5 bg-amber-100 rounded-full">
+                  Tel. non vérifié
+                </span>
+              )}
             </div>
             <p className="text-sm text-text-light">
               {variantsCount} service{variantsCount > 1 ? "s" : ""}
@@ -361,14 +368,28 @@ export default function ServiceCard({
               <Plus className="w-4 h-4" />
             </button>
             <button
-              onClick={onToggle}
+              onClick={() => {
+                if (!service.isActive && !phoneVerified) {
+                  alert("Vous devez vérifier votre numéro de téléphone avant d'activer un service. Rendez-vous dans Paramètres.");
+                  return;
+                }
+                onToggle();
+              }}
               className={cn(
                 "p-2 rounded-lg transition-colors",
                 service.isActive
                   ? "bg-secondary/10 text-secondary hover:bg-secondary/20"
-                  : "bg-red-100 text-red-500 hover:bg-red-200"
+                  : !phoneVerified
+                    ? "bg-amber-100 text-amber-500 hover:bg-amber-200"
+                    : "bg-red-100 text-red-500 hover:bg-red-200"
               )}
-              title={service.isActive ? "Désactiver" : "Activer"}
+              title={
+                !service.isActive && !phoneVerified
+                  ? "Vérifiez votre téléphone pour activer"
+                  : service.isActive
+                    ? "Désactiver"
+                    : "Activer"
+              }
             >
               {service.isActive ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
             </button>

@@ -1,5 +1,6 @@
-import { internalMutation, internalQuery, query } from "../_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "../_generated/server";
 import { v } from "convex/values";
+import { ConvexError } from "convex/values";
 
 // Query publique : récupérer la config Octopush (pour le frontend)
 // Passée ensuite en argument aux actions (contourne le bug ctx.runQuery dans "use node" sur self-hosted)
@@ -89,5 +90,54 @@ export const markVerified = internalMutation({
     if (attempt) {
       await ctx.db.patch(attempt._id, { verified: true });
     }
+  },
+});
+
+// Mutation publique : marquer le téléphone de l'utilisateur comme vérifié
+// Appelée depuis le dashboard après vérification SMS réussie
+export const markUserPhoneVerified = mutation({
+  args: {
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+
+    if (!session || session.expiresAt < Date.now()) {
+      throw new ConvexError("Session invalide");
+    }
+
+    const user = await ctx.db.get(session.userId);
+    if (!user) throw new ConvexError("Utilisateur non trouvé");
+
+    if (user.phoneVerified) {
+      return { success: true, alreadyVerified: true };
+    }
+
+    await ctx.db.patch(session.userId, {
+      phoneVerified: true,
+      updatedAt: Date.now(),
+    });
+
+    // Activer automatiquement tous les services inactifs de l'utilisateur
+    const services = await ctx.db
+      .query("services")
+      .withIndex("by_user", (q) => q.eq("userId", session.userId))
+      .collect();
+
+    let activatedCount = 0;
+    for (const service of services) {
+      if (!service.isActive) {
+        await ctx.db.patch(service._id, {
+          isActive: true,
+          updatedAt: Date.now(),
+        });
+        activatedCount++;
+      }
+    }
+
+    return { success: true, activatedCount };
   },
 });

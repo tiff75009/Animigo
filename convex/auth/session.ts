@@ -43,6 +43,7 @@ export const getSession = query({
         username: user.username,
         accountType: user.accountType,
         phone: user.phone,
+        phoneVerified: user.phoneVerified || false,
         siret: user.siret,
         companyName: user.companyName,
         emailVerified: user.emailVerified,

@@ -131,6 +131,11 @@ export function useServicesPageData(token: string | undefined) {
     token ? { token } : "skip"
   );
 
+  const hasAvailability = useQuery(
+    api.planning.availability.hasAnyAvailability,
+    token ? { token } : "skip"
+  );
+
   const photos = useQuery(
     api.services.photos.getMyPhotos,
     token ? { token } : "skip"
@@ -295,7 +300,7 @@ export function useServicesPageData(token: string | undefined) {
     setIsSaving(true);
     setError(null);
     try {
-      await addServiceMutation({
+      const result = await addServiceMutation({
         token,
         category: data.category,
         animalTypes: data.animalTypes,
@@ -310,7 +315,7 @@ export function useServicesPageData(token: string | undefined) {
         initialOptions: data.initialOptions?.length ? data.initialOptions : undefined,
       });
 
-      setSuccessMessage("Service créé avec succès");
+      setSuccessMessage(result?.message || "Service créé avec succès");
 
       // Refetch manuel pour s'assurer que le nouveau service apparaît
       await refetchServices();
@@ -410,6 +415,7 @@ export function useServicesPageData(token: string | undefined) {
     categories,
     categoriesHierarchy,
     categoryTypes,
+    hasAvailability: hasAvailability ?? false,
 
     // Loading states
     isLoading: !profileData && !services && !photos,
