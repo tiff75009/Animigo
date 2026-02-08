@@ -32,6 +32,7 @@ import {
   User,
   Users,
   Calendar,
+  CalendarPlus,
   Phone,
   ArrowRight,
   Eye,
@@ -548,11 +549,23 @@ export default function ServiceCard({
                             )} />
                           </button>
 
-                          {/* Badge collectif */}
+                          {/* Badge + bouton créneaux collectif */}
                           {variant.sessionType === "collective" && (
-                            <span className="flex items-center gap-1 px-2 py-1 bg-orange-500 text-white text-xs font-medium rounded-full">
-                              <Users className="w-3 h-3" />
-                            </span>
+                            <button
+                              onClick={() => setManagingSlotsVariant(variant)}
+                              className={cn(
+                                "flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full transition-colors",
+                                variant.needsSlotConfiguration || !variant.slotsCount
+                                  ? "bg-red-500 text-white animate-pulse hover:bg-red-600"
+                                  : "bg-orange-500 text-white hover:bg-orange-600"
+                              )}
+                              title="Gérer les créneaux collectifs"
+                            >
+                              <CalendarPlus className="w-3.5 h-3.5" />
+                              {variant.needsSlotConfiguration || !variant.slotsCount
+                                ? "Créer créneaux"
+                                : `${variant.slotsCount} créneaux`}
+                            </button>
                           )}
 
                           {/* Nom et description */}
@@ -765,14 +778,21 @@ export default function ServiceCard({
                             </span>
                           )}
 
-                          {/* Créneaux à configurer */}
-                          {variant.needsSlotConfiguration && (
+                          {/* Bouton créneaux pour services collectifs */}
+                          {variant.sessionType === "collective" && (
                             <button
                               onClick={() => setManagingSlotsVariant(variant)}
-                              className="flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-md hover:bg-amber-200 transition-colors"
+                              className={cn(
+                                "flex items-center gap-1 px-2 py-1 rounded-md transition-colors",
+                                variant.needsSlotConfiguration || !variant.slotsCount
+                                  ? "bg-red-100 text-red-700 hover:bg-red-200 animate-pulse"
+                                  : "bg-green-100 text-green-700 hover:bg-green-200"
+                              )}
                             >
-                              <Calendar className="w-3 h-3" />
-                              Créneaux
+                              <CalendarPlus className="w-3 h-3" />
+                              {variant.needsSlotConfiguration || !variant.slotsCount
+                                ? "Créer créneaux"
+                                : `${variant.slotsCount} créneaux`}
                             </button>
                           )}
                         </div>
