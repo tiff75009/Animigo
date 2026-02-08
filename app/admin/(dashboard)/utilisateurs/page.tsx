@@ -39,6 +39,7 @@ interface User {
   companyName?: string;
   isActive: boolean;
   emailVerified?: boolean;
+  phoneVerified?: boolean;
   createdAt: number;
   role?: string;
 }
@@ -524,7 +525,10 @@ export default function UtilisateursPage() {
                   Type
                 </th>
                 <th className="text-left px-6 py-4 text-slate-400 font-medium">
-                  Contact
+                  Email
+                </th>
+                <th className="text-left px-6 py-4 text-slate-400 font-medium">
+                  Telephone
                 </th>
                 <th className="text-left px-6 py-4 text-slate-400 font-medium">
                   Inscription
@@ -566,29 +570,42 @@ export default function UtilisateursPage() {
                   <td className="px-6 py-4">
                     {getAccountTypeBadge(user.accountType)}
                   </td>
+                  {/* Email */}
                   <td className="px-6 py-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 text-slate-300 text-sm">
-                        <Mail className="w-4 h-4 text-slate-500" />
-                        {user.email}
-                        {user.emailVerified && (
-                          <span className="text-green-400 text-xs">✓</span>
-                        )}
-                      </div>
-                      {user.phone && (
-                        <div className="flex items-center gap-2 text-slate-400 text-sm">
-                          <Phone className="w-4 h-4 text-slate-500" />
-                          {user.phone}
-                        </div>
+                    <div className="flex items-center gap-2 text-slate-300 text-sm">
+                      <Mail className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                      <span className="truncate max-w-[180px]">{user.email}</span>
+                      {user.emailVerified ? (
+                        <span className="flex-shrink-0 px-1.5 py-0.5 bg-green-500/20 text-green-400 text-xs rounded-full">Verifie</span>
+                      ) : (
+                        <span className="flex-shrink-0 px-1.5 py-0.5 bg-amber-500/20 text-amber-400 text-xs rounded-full">Non verifie</span>
                       )}
                     </div>
                   </td>
+                  {/* Telephone */}
+                  <td className="px-6 py-4">
+                    {user.phone ? (
+                      <div className="flex items-center gap-2 text-slate-300 text-sm">
+                        <Phone className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                        <span>{user.phone}</span>
+                        {user.phoneVerified ? (
+                          <span className="flex-shrink-0 px-1.5 py-0.5 bg-green-500/20 text-green-400 text-xs rounded-full">Verifie</span>
+                        ) : (
+                          <span className="flex-shrink-0 px-1.5 py-0.5 bg-amber-500/20 text-amber-400 text-xs rounded-full">Non verifie</span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-slate-500 text-sm">—</span>
+                    )}
+                  </td>
+                  {/* Inscription */}
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2 text-slate-400 text-sm">
                       <Calendar className="w-4 h-4" />
                       {formatDate(user.createdAt)}
                     </div>
                   </td>
+                  {/* Statut */}
                   <td className="px-6 py-4">
                     <button
                       onClick={() => handleToggleActive(user._id)}

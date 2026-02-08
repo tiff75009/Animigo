@@ -3,6 +3,101 @@ import { v } from "convex/values";
 import { Id } from "../_generated/dataModel";
 import { internal } from "../_generated/api";
 
+// Helper pour récupérer la config email depuis systemConfig
+async function getEmailConfig(ctx: { db: any }) {
+  const apiKeyConfig = await ctx.db
+    .query("systemConfig")
+    .withIndex("by_key", (q: any) => q.eq("key", "resend_api_key"))
+    .first();
+  const fromEmailConfig = await ctx.db
+    .query("systemConfig")
+    .withIndex("by_key", (q: any) => q.eq("key", "resend_from_email"))
+    .first();
+  const fromNameConfig = await ctx.db
+    .query("systemConfig")
+    .withIndex("by_key", (q: any) => q.eq("key", "resend_from_name"))
+    .first();
+  const appUrlConfig = await ctx.db
+    .query("systemConfig")
+    .withIndex("by_key", (q: any) => q.eq("key", "app_url"))
+    .first();
+
+  return {
+    emailConfig: apiKeyConfig?.value ? {
+      apiKey: apiKeyConfig.value,
+      fromEmail: fromEmailConfig?.value,
+      fromName: fromNameConfig?.value,
+    } : undefined,
+    appUrl: appUrlConfig?.value || undefined,
+  };
+}
+
+// Mutation publique pour renvoyer l'email de vérification
+// Note: Converti en mutation (au lieu d'action) car ctx.runQuery échoue dans les actions sur Convex self-hosted
+export const resendVerificationEmail = mutation({
+  args: {
+    email: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Chercher l'utilisateur directement via ctx.db (pas ctx.runQuery)
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q: any) => q.eq("email", args.email.toLowerCase()))
+      .first();
+
+    if (!user) {
+      return { success: false, error: "Utilisateur non trouvé" };
+    }
+
+    if (user.emailVerified) {
+      return { success: false, error: "Email déjà vérifié" };
+    }
+
+    // Supprimer les anciens tokens pour cet utilisateur
+    const oldTokens = await ctx.db
+      .query("emailVerificationTokens")
+      .withIndex("by_user", (q: any) => q.eq("userId", user._id))
+      .collect();
+
+    for (const token of oldTokens) {
+      await ctx.db.delete(token._id);
+    }
+
+    // Générer un nouveau token (64 chars hex)
+    const tokenBytes = new Uint8Array(32);
+    crypto.getRandomValues(tokenBytes);
+    const verificationToken = Array.from(tokenBytes)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    // Créer le token (expire dans 24h)
+    await ctx.db.insert("emailVerificationTokens", {
+      userId: user._id,
+      token: verificationToken,
+      email: user.email,
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+      createdAt: Date.now(),
+      context: "registration",
+    });
+
+    // Récupérer la config email depuis la DB
+    const { emailConfig, appUrl } = await getEmailConfig(ctx);
+
+    // Scheduler l'envoi d'email de vérification
+    await ctx.scheduler.runAfter(0, internal.api.email.sendVerificationEmail, {
+      userId: user._id,
+      email: user.email,
+      firstName: user.firstName,
+      token: verificationToken,
+      context: "registration" as const,
+      emailConfig,
+      appUrl,
+    });
+
+    return { success: true };
+  },
+});
+
 // Taux de commission de la plateforme (en pourcentage)
 const PLATFORM_COMMISSION_RATE = 15; // 15%
 

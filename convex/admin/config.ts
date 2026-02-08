@@ -316,30 +316,39 @@ export const testRedisConnection = action({
   },
 });
 
-// Action: Tester la connexion Infobip
-export const testInfobipConnection = action({
+// Action: Tester la connexion Octopush
+export const testOctopushConnection = action({
   args: {
     token: v.string(),
+    apiLogin: v.string(),
     apiKey: v.string(),
-    baseUrl: v.string(),
   },
   handler: async (ctx, args): Promise<{
     success: boolean;
     message?: string;
+    balance?: string;
     error?: string;
   }> => {
     await requireAdminAction(ctx, args.token);
 
     try {
-      const response = await fetch(`https://${args.baseUrl}/2fa/2/applications`, {
+      // Vérifier le solde via l'API Octopush
+      const response = await fetch("https://api.octopush.com/v1/public/wallet/check-balance", {
         method: "GET",
         headers: {
-          "Authorization": `App ${args.apiKey}`,
+          "api-login": args.apiLogin,
+          "api-key": args.apiKey,
           "Content-Type": "application/json",
         },
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          return {
+            success: false,
+            error: "Identifiants invalides. Vérifiez votre api-login (email) et api-key.",
+          };
+        }
         const errorText = await response.text();
         return {
           success: false,
@@ -348,11 +357,14 @@ export const testInfobipConnection = action({
       }
 
       const data = await response.json();
-      const appCount = Array.isArray(data) ? data.length : 0;
+
+      // Octopush retourne { amount: 12.50, unit: "euros" } ou similaire
+      const balance = data.amount !== undefined ? `${data.amount} ${data.unit || "€"}` : "OK";
 
       return {
         success: true,
-        message: `Connexion Infobip OK — ${appCount} application(s) 2FA trouvée(s)`,
+        message: "Connexion Octopush OK",
+        balance,
       };
     } catch (error) {
       return {

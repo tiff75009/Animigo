@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -78,6 +78,7 @@ function VerifyEmailContent() {
   const [reservationData, setReservationData] = useState<ReservationData | null>(null);
 
   const verifyEmail = useMutation(api.public.emailVerify.verifyEmail);
+  const hasVerified = useRef(false);
 
   useEffect(() => {
     if (!token) {
@@ -85,6 +86,10 @@ function VerifyEmailContent() {
       setErrorMessage("Lien invalide : aucun token fourni.");
       return;
     }
+
+    // Empêcher le double appel en React StrictMode (dev)
+    if (hasVerified.current) return;
+    hasVerified.current = true;
 
     const verify = async () => {
       try {
@@ -113,7 +118,8 @@ function VerifyEmailContent() {
     };
 
     verify();
-  }, [token, verifyEmail]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background flex items-center justify-center p-4">

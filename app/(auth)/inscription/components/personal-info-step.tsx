@@ -38,8 +38,8 @@ export function PersonalInfoStep({
   const sendPhoneVerification = useAction(api.api.sms.sendPhoneVerification);
   const verifyPhoneCode = useAction(api.api.sms.verifyPhoneCode);
 
-  // Récupérer la config Infobip pour la passer aux actions (contourne le bug ctx.runQuery sur self-hosted)
-  const infobipConfig = useQuery(api.api.smsInternal.getInfobipConfig);
+  // Récupérer la config Octopush pour la passer aux actions (contourne le bug ctx.runQuery sur self-hosted)
+  const octopushConfig = useQuery(api.api.smsInternal.getOctopushConfig);
 
   // Debounce username
   useEffect(() => {
@@ -110,7 +110,7 @@ export function PersonalInfoStep({
     try {
       const result = await sendPhoneVerification({
         phone: data.phone,
-        infobipConfig: infobipConfig ?? undefined,
+        octopushConfig: octopushConfig ?? undefined,
       });
       if (result.success && result.pinId) {
         setPinId(result.pinId);
@@ -181,7 +181,7 @@ export function PersonalInfoStep({
       const result = await verifyPhoneCode({
         pinId,
         code: fullCode,
-        infobipConfig: infobipConfig ? { apiKey: infobipConfig.apiKey, baseUrl: infobipConfig.baseUrl } : undefined,
+        octopushConfig: octopushConfig ?? undefined,
       });
       if (result.success && result.verified) {
         setPhoneStatus("verified");
@@ -196,7 +196,7 @@ export function PersonalInfoStep({
       setPhoneStatus("code_sent");
       setCodeError("Erreur de vérification");
     }
-  }, [code, pinId, verifyPhoneCode, onChange, infobipConfig]);
+  }, [code, pinId, verifyPhoneCode, onChange]);
 
   // Auto-submit when 6 digits entered
   useEffect(() => {
@@ -213,7 +213,7 @@ export function PersonalInfoStep({
     try {
       const result = await sendPhoneVerification({
         phone: data.phone,
-        infobipConfig: infobipConfig ?? undefined,
+        octopushConfig: octopushConfig ?? undefined,
       });
       if (result.success && result.pinId) {
         setPinId(result.pinId);

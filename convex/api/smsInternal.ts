@@ -1,25 +1,21 @@
 import { internalMutation, internalQuery, query } from "../_generated/server";
 import { v } from "convex/values";
 
-// Query publique : récupérer la config Infobip complète (pour le frontend)
+// Query publique : récupérer la config Octopush (pour le frontend)
 // Passée ensuite en argument aux actions (contourne le bug ctx.runQuery dans "use node" sur self-hosted)
-export const getInfobipConfig = query({
+export const getOctopushConfig = query({
   args: {},
   handler: async (ctx) => {
-    const apiKey = await ctx.db.query("systemConfig").withIndex("by_key", (q: any) => q.eq("key", "infobip_api_key")).first();
-    const baseUrl = await ctx.db.query("systemConfig").withIndex("by_key", (q: any) => q.eq("key", "infobip_base_url")).first();
-    const appId = await ctx.db.query("systemConfig").withIndex("by_key", (q: any) => q.eq("key", "infobip_app_id")).first();
-    const messageId = await ctx.db.query("systemConfig").withIndex("by_key", (q: any) => q.eq("key", "infobip_message_id")).first();
+    const apiLogin = await ctx.db.query("systemConfig").withIndex("by_key", (q: any) => q.eq("key", "octopush_api_login")).first();
+    const apiKey = await ctx.db.query("systemConfig").withIndex("by_key", (q: any) => q.eq("key", "octopush_api_key")).first();
 
-    if (!apiKey?.value || !baseUrl?.value || !appId?.value || !messageId?.value) {
+    if (!apiLogin?.value || !apiKey?.value) {
       return null;
     }
 
     return {
+      apiLogin: apiLogin.value,
       apiKey: apiKey.value,
-      baseUrl: baseUrl.value,
-      appId: appId.value,
-      messageId: messageId.value,
     };
   },
 });
@@ -52,7 +48,7 @@ export const getRecentAttempts = internalQuery({
   },
 });
 
-// Mutation interne : insérer une tentative
+// Mutation interne : insérer une tentative de vérification
 export const insertAttempt = internalMutation({
   args: {
     phone: v.string(),
@@ -65,6 +61,17 @@ export const insertAttempt = internalMutation({
       createdAt: Date.now(),
       verified: false,
     });
+  },
+});
+
+// Query interne : récupérer une tentative par pinId
+export const getAttemptByPinId = internalQuery({
+  args: { pinId: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("phoneVerificationAttempts")
+      .withIndex("by_pinId", (q) => q.eq("pinId", args.pinId))
+      .first();
   },
 });
 

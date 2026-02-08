@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useAction } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { motion } from "framer-motion";
 import { Mail, Loader2, RefreshCw, ArrowRight, CheckCircle } from "lucide-react";
@@ -18,7 +18,7 @@ function ConfirmerEmailContent() {
   const [resent, setResent] = useState(false);
   const [countdown, setCountdown] = useState(0);
 
-  const resendVerification = useAction(api.api.email.resendVerificationEmail);
+  const resendVerification = useMutation(api.public.emailVerify.resendVerificationEmail);
 
   // Countdown pour le bouton renvoyer
   useEffect(() => {

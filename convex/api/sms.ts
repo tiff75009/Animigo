@@ -22,33 +22,29 @@ function normalizePhone(phone: string): string {
   return "+33" + digits;
 }
 
-// Action publique : Envoyer un code de vérification SMS
+// Action publique : Envoyer un code de vérification SMS via Octopush OTP
 export const sendPhoneVerification = action({
   args: {
     phone: v.string(),
-    // Config Infobip passée depuis le frontend (contourne le bug ctx.runQuery sur self-hosted)
-    infobipConfig: v.optional(v.object({
+    // Config Octopush passée depuis le frontend (contourne le bug ctx.runQuery sur self-hosted)
+    octopushConfig: v.optional(v.object({
+      apiLogin: v.string(),
       apiKey: v.string(),
-      baseUrl: v.string(),
-      appId: v.string(),
-      messageId: v.string(),
     })),
   },
   handler: async (ctx, args): Promise<{ success: boolean; pinId?: string; error?: string }> => {
     try {
-      // Utiliser la config passée en argument (le frontend la récupère via getInfobipConfig query)
-      let config = args.infobipConfig;
+      // Utiliser la config passée en argument (le frontend la récupère via getOctopushConfig query)
+      let config = args.octopushConfig;
 
       // Fallback : essayer de lire depuis la DB (fonctionne si pas en "use node")
       if (!config) {
         try {
-          const apiKey = await ctx.runQuery(internal.api.smsInternal.getConfigValue, { key: "infobip_api_key" });
-          const baseUrl = await ctx.runQuery(internal.api.smsInternal.getConfigValue, { key: "infobip_base_url" });
-          const appId = await ctx.runQuery(internal.api.smsInternal.getConfigValue, { key: "infobip_app_id" });
-          const messageId = await ctx.runQuery(internal.api.smsInternal.getConfigValue, { key: "infobip_message_id" });
+          const apiLogin = await ctx.runQuery(internal.api.smsInternal.getConfigValue, { key: "octopush_api_login" });
+          const apiKey = await ctx.runQuery(internal.api.smsInternal.getConfigValue, { key: "octopush_api_key" });
 
-          if (apiKey && baseUrl && appId && messageId) {
-            config = { apiKey, baseUrl, appId, messageId };
+          if (apiLogin && apiKey) {
+            config = { apiLogin, apiKey };
           }
         } catch (e) {
           console.warn("Fallback ctx.runQuery failed (self-hosted bug), using args only");
@@ -56,18 +52,7 @@ export const sendPhoneVerification = action({
       }
 
       if (!config) {
-        return { success: false, error: "Service SMS non configuré. Configurez Infobip dans Admin > Intégrations (les 4 champs sont requis)." };
-      }
-
-      // Nettoyer le baseUrl : enlever https://, espaces, slashes finaux
-      let cleanBaseUrl = config.baseUrl.trim();
-      cleanBaseUrl = cleanBaseUrl.replace(/^https?:\/\//, "");
-      cleanBaseUrl = cleanBaseUrl.replace(/\/+$/, "");
-
-      // Valider que le baseUrl ressemble à une URL Infobip
-      if (!cleanBaseUrl.includes(".api.infobip.com") && !cleanBaseUrl.includes("infobip")) {
-        console.error(`Infobip base URL invalide: "${cleanBaseUrl}". Attendu: xxxxx.api.infobip.com`);
-        return { success: false, error: "Configuration Infobip incorrecte (URL invalide)" };
+        return { success: false, error: "Service SMS non configuré. Configurez Octopush dans Admin > Intégrations." };
       }
 
       const normalizedPhone = normalizePhone(args.phone);
@@ -86,141 +71,142 @@ export const sendPhoneVerification = action({
         console.warn("Rate limit check failed (self-hosted bug), continuing without rate limit...");
       }
 
-      const url = `https://${cleanBaseUrl}/2fa/2/pin`;
-      console.log(`Infobip SMS: envoi vers ${normalizedPhone} via ${url}`);
+      // Appeler l'API Octopush OTP Generate
+      console.log(`Octopush OTP: envoi vers ${normalizedPhone}`);
 
-      const response = await fetch(url, {
+      const response = await fetch("https://api.octopush.com/v1/public/service/otp/generate", {
         method: "POST",
         headers: {
-          "Authorization": `App ${config.apiKey}`,
+          "api-login": config.apiLogin,
+          "api-key": config.apiKey,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          applicationId: config.appId,
-          messageId: config.messageId,
-          to: normalizedPhone,
+          phone_number: normalizedPhone,
+          text: "Votre code de verification Animigo : {code}",
+          sender: "Animigo",
+          channel: "sms",
+          code_length: 6,
+          validity_period: 900, // 15 minutes
         }),
       });
 
-      // Vérifier que la réponse est bien du JSON (pas une page HTML)
-      const contentType = response.headers.get("content-type") || "";
-      if (contentType.includes("text/html")) {
-        console.error(`Infobip API a retourné du HTML au lieu de JSON. URL appelée: ${url}. Vérifiez la valeur de infobip_base_url (attendu: xxxxx.api.infobip.com)`);
-        return { success: false, error: "Configuration Infobip incorrecte (URL invalide)" };
-      }
-
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("Infobip API error:", response.status, errorText);
+        console.error("Octopush API error:", response.status, errorText);
+
+        // Interpréter les erreurs courantes
+        if (response.status === 401) {
+          return { success: false, error: "Identifiants Octopush invalides. Vérifiez api-login et api-key dans Admin > Intégrations." };
+        }
+        if (response.status === 402) {
+          return { success: false, error: "Crédits SMS insuffisants. Rechargez votre compte Octopush." };
+        }
+
         return { success: false, error: `Erreur d'envoi SMS (${response.status})` };
       }
 
       const data = await response.json();
-      const pinId = data.pinId;
 
-      if (!pinId) {
-        console.error("Infobip API: pas de pinId dans la réponse", data);
-        return { success: false, error: "Réponse Infobip invalide" };
+      // Octopush retourne { otp_request_token: "xxx", ... } en cas de succès
+      if (!data.otp_request_token) {
+        console.error("Octopush API: pas de otp_request_token dans la réponse", data);
+        return { success: false, error: data.message || "Erreur Octopush : réponse inattendue" };
       }
 
-      // Enregistrer la tentative (tolérant si ça échoue sur self-hosted)
+      const otpToken = data.otp_request_token;
+
+      // Enregistrer la tentative
       try {
         await ctx.runMutation(internal.api.smsInternal.insertAttempt, {
           phone: normalizedPhone,
-          pinId,
+          pinId: otpToken,
         });
       } catch (e) {
         console.warn("insertAttempt failed (self-hosted bug), continuing without tracking...");
       }
 
-      return { success: true, pinId };
+      return { success: true, pinId: otpToken };
     } catch (error: any) {
       console.error("sendPhoneVerification error:", error?.message || error);
-      return { success: false, error: "Impossible d'envoyer le SMS. Vérifiez la configuration Infobip." };
+      return { success: false, error: "Impossible d'envoyer le SMS. Vérifiez la configuration Octopush." };
     }
   },
 });
 
-// Action publique : Vérifier le code SMS
+// Action publique : Vérifier le code SMS via Octopush OTP Validate
 export const verifyPhoneCode = action({
   args: {
     pinId: v.string(),
     code: v.string(),
-    // Config Infobip passée depuis le frontend
-    infobipConfig: v.optional(v.object({
+    // Config Octopush nécessaire pour appeler l'API de validation
+    octopushConfig: v.optional(v.object({
+      apiLogin: v.string(),
       apiKey: v.string(),
-      baseUrl: v.string(),
     })),
   },
   handler: async (ctx, args): Promise<{ success: boolean; verified?: boolean; error?: string }> => {
     try {
       // Utiliser la config passée en argument
-      let apiKey = args.infobipConfig?.apiKey;
-      let baseUrl = args.infobipConfig?.baseUrl;
+      let config = args.octopushConfig;
 
       // Fallback : essayer de lire depuis la DB
-      if (!apiKey || !baseUrl) {
+      if (!config) {
         try {
-          apiKey = apiKey || await ctx.runQuery(internal.api.smsInternal.getConfigValue, { key: "infobip_api_key" });
-          baseUrl = baseUrl || await ctx.runQuery(internal.api.smsInternal.getConfigValue, { key: "infobip_base_url" });
+          const apiLogin = await ctx.runQuery(internal.api.smsInternal.getConfigValue, { key: "octopush_api_login" });
+          const apiKey = await ctx.runQuery(internal.api.smsInternal.getConfigValue, { key: "octopush_api_key" });
+
+          if (apiLogin && apiKey) {
+            config = { apiLogin, apiKey };
+          }
         } catch (e) {
-          console.warn("Fallback ctx.runQuery failed for verify");
+          console.warn("Fallback ctx.runQuery failed (self-hosted bug), using args only");
         }
       }
 
-      if (!apiKey || !baseUrl) {
+      if (!config) {
         return { success: false, error: "Service SMS non configuré" };
       }
 
-      // Nettoyer le baseUrl
-      let cleanBaseUrl = baseUrl.trim();
-      cleanBaseUrl = cleanBaseUrl.replace(/^https?:\/\//, "");
-      cleanBaseUrl = cleanBaseUrl.replace(/\/+$/, "");
-
-      const url = `https://${cleanBaseUrl}/2fa/2/pin/${args.pinId}/verify`;
-      const response = await fetch(url, {
-        method: "POST",
+      // Appeler l'API Octopush OTP Validate
+      const response = await fetch("https://api.octopush.com/v1/public/service/otp/validate", {
+        method: "PUT",
         headers: {
-          "Authorization": `App ${apiKey}`,
+          "api-login": config.apiLogin,
+          "api-key": config.apiKey,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          pin: args.code,
+          otp_request_token: args.pinId,
+          code: args.code,
         }),
       });
 
-      // Vérifier que la réponse est bien du JSON
-      const contentType = response.headers.get("content-type") || "";
-      if (contentType.includes("text/html")) {
-        console.error(`Infobip verify: réponse HTML reçue. URL: ${url}`);
-        return { success: false, error: "Configuration Infobip incorrecte" };
-      }
-
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("Infobip verify error:", response.status, errorText);
+        console.error("Octopush validate error:", response.status, errorText);
 
-        if (response.status === 401 || response.status === 400) {
+        if (response.status === 422 || response.status === 400) {
           return { success: false, error: "Code incorrect" };
         }
-        return { success: false, error: "Erreur de vérification" };
-      }
-
-      const data = await response.json();
-
-      if (data.verified) {
-        // Marquer comme vérifié (tolérant si ça échoue)
-        try {
-          await ctx.runMutation(internal.api.smsInternal.markVerified, {
-            pinId: args.pinId,
-          });
-        } catch (e) {
-          console.warn("markVerified failed (self-hosted bug), continuing...");
+        if (response.status === 410) {
+          return { success: false, error: "Code expiré. Demandez un nouveau code." };
         }
-        return { success: true, verified: true };
+
+        return { success: false, error: "Impossible de vérifier le code" };
       }
 
-      return { success: false, error: "Code incorrect" };
+      // Succès : Octopush a validé le code
+      // Marquer comme vérifié dans notre DB
+      try {
+        await ctx.runMutation(internal.api.smsInternal.markVerified, {
+          pinId: args.pinId,
+        });
+      } catch (e) {
+        console.warn("markVerified failed (self-hosted bug), continuing...");
+      }
+
+      return { success: true, verified: true };
     } catch (error: any) {
       console.error("verifyPhoneCode error:", error?.message || error);
       return { success: false, error: "Impossible de vérifier le code" };

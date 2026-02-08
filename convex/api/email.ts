@@ -31,217 +31,392 @@ function formatDate(dateStr: string): string {
 }
 
 // Templates HTML par défaut (fallback si pas en base)
+// Utilise des <table> pour compatibilité Outlook/desktop + fallback background-color pour les gradients
 const DEFAULT_TEMPLATES: Record<string, { subject: string; html: string }> = {
   verification: {
     subject: "Confirmez votre adresse email - {{siteName}}",
-    html: `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
-<div style="padding: 40px 20px; background-color: #f4f4f5;">
-  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-    <div style="background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%); padding: 40px 30px; text-align: center;">
-      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">🐾 {{siteName}}</h1>
-    </div>
-    <div style="padding: 40px 30px;">
-      <h2 style="margin: 0 0 20px 0; color: #1e293b; font-size: 24px;">Bonjour {{firstName}} ! 👋</h2>
-      <p style="margin: 0 0 20px 0; color: #475569; font-size: 16px; line-height: 1.6;">
-        Merci de vous être inscrit(e) sur {{siteName}} ! Pour finaliser votre inscription, veuillez confirmer votre adresse email.
-      </p>
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="{{verificationUrl}}" style="display: inline-block; background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 50px; font-weight: bold; font-size: 16px;">✓ Confirmer mon email</a>
-      </div>
-      <div style="margin-top: 30px; padding: 20px; background-color: #fef3c7; border-radius: 12px; border-left: 4px solid #f59e0b;">
-        <p style="margin: 0; color: #92400e; font-size: 14px;">⚠️ Ce lien expire dans {{expirationHours}} heures.</p>
-      </div>
-    </div>
-    <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
-      <p style="margin: 0; color: #94a3b8; font-size: 12px;">© 2025 {{siteName}}. Tous droits réservés.</p>
-    </div>
-  </div>
-</div>
+    html: `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Confirmez votre email</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;-webkit-font-smoothing:antialiased;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+<tr><td align="center" style="padding:40px 20px;">
+  <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+    <!-- Header -->
+    <tr>
+      <td align="center" style="background-color:#FF6B6B;padding:40px 30px;">
+        <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:bold;">&#128062; {{siteName}}</h1>
+      </td>
+    </tr>
+    <!-- Body -->
+    <tr>
+      <td style="padding:40px 30px;">
+        <h2 style="margin:0 0 20px 0;color:#1e293b;font-size:24px;">Bonjour {{firstName}} !</h2>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          Merci de vous etre inscrit(e) sur {{siteName}} ! Pour finaliser votre inscription, veuillez confirmer votre adresse email.
+        </p>
+        <!-- Button -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center" style="padding:30px 0;">
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{verificationUrl}}" style="height:52px;v-text-anchor:middle;width:280px;" arcsize="50%" fillcolor="#FF6B6B" stroke="f"><v:textbox inset="0,0,0,0"><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Confirmer mon email</center></v:textbox></v:roundrect><![endif]-->
+              <!--[if !mso]><!--><a href="{{verificationUrl}}" style="display:inline-block;background-color:#FF6B6B;color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:bold;font-size:16px;">Confirmer mon email</a><!--<![endif]-->
+            </td>
+          </tr>
+        </table>
+        <!-- Warning -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td style="padding:20px;background-color:#fef3c7;border-left:4px solid #f59e0b;border-radius:8px;">
+              <p style="margin:0;color:#92400e;font-size:14px;">Ce lien expire dans {{expirationHours}} heures.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <!-- Footer -->
+    <tr>
+      <td align="center" style="background-color:#f8fafc;padding:30px;border-top:1px solid #e2e8f0;">
+        <p style="margin:0;color:#94a3b8;font-size:12px;">&copy; 2025 {{siteName}}. Tous droits reserves.</p>
+      </td>
+    </tr>
+  </table>
+  <!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
 </body>
 </html>`,
   },
   verification_reservation: {
-    subject: "Confirmez votre email pour valider votre réservation - {{siteName}}",
-    html: `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
-<div style="padding: 40px 20px; background-color: #f4f4f5;">
-  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-    <div style="background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%); padding: 40px 30px; text-align: center;">
-      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">🐾 {{siteName}}</h1>
-      <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">Confirmez votre email pour finaliser votre réservation</p>
-    </div>
-    <div style="padding: 40px 30px;">
-      <h2 style="margin: 0 0 20px 0; color: #1e293b; font-size: 24px;">Bonjour {{firstName}} ! 👋</h2>
-      <p style="margin: 0 0 20px 0; color: #475569; font-size: 16px; line-height: 1.6;">
-        Vous avez effectué une réservation sur {{siteName}}. Pour la valider, veuillez confirmer votre adresse email.
-      </p>
-      <div style="margin: 20px 0; padding: 20px; background-color: #f0f9ff; border-radius: 12px; border-left: 4px solid #0ea5e9;">
-        <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">📋 Récapitulatif de votre réservation</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Service :</strong> {{serviceName}}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Prestataire :</strong> {{announcerName}}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Montant :</strong> {{totalAmount}}</p>
-      </div>
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="{{verificationUrl}}" style="display: inline-block; background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 50px; font-weight: bold; font-size: 16px;">✓ Confirmer et valider ma réservation</a>
-      </div>
-      <div style="margin-top: 30px; padding: 20px; background-color: #fef3c7; border-radius: 12px; border-left: 4px solid #f59e0b;">
-        <p style="margin: 0; color: #92400e; font-size: 14px;">⚠️ Ce lien expire dans {{expirationHours}} heures. Sans confirmation, votre réservation sera annulée.</p>
-      </div>
-    </div>
-    <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
-      <p style="margin: 0; color: #94a3b8; font-size: 12px;">© 2025 {{siteName}}. Tous droits réservés.</p>
-    </div>
-  </div>
-</div>
+    subject: "Confirmez votre email pour valider votre reservation - {{siteName}}",
+    html: `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Confirmez votre email - Reservation</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+<tr><td align="center" style="padding:40px 20px;">
+  <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+    <!-- Header -->
+    <tr>
+      <td align="center" style="background-color:#FF6B6B;padding:40px 30px;">
+        <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:bold;">&#128062; {{siteName}}</h1>
+        <p style="margin:10px 0 0 0;color:#ffffff;font-size:14px;">Confirmez votre email pour finaliser votre reservation</p>
+      </td>
+    </tr>
+    <!-- Body -->
+    <tr>
+      <td style="padding:40px 30px;">
+        <h2 style="margin:0 0 20px 0;color:#1e293b;font-size:24px;">Bonjour {{firstName}} !</h2>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          Vous avez effectue une reservation sur {{siteName}}. Pour la valider, veuillez confirmer votre adresse email.
+        </p>
+        <!-- Recap -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#f0f9ff;border-left:4px solid #0ea5e9;border-radius:8px;">
+              <p style="margin:0 0 10px 0;font-weight:bold;color:#0369a1;">Recapitulatif de votre reservation</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Service :</strong> {{serviceName}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Prestataire :</strong> {{announcerName}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Montant :</strong> {{totalAmount}}</p>
+            </td>
+          </tr>
+        </table>
+        <!-- Button -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center" style="padding:30px 0;">
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{verificationUrl}}" style="height:52px;v-text-anchor:middle;width:340px;" arcsize="50%" fillcolor="#FF6B6B" stroke="f"><v:textbox inset="0,0,0,0"><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Confirmer et valider ma reservation</center></v:textbox></v:roundrect><![endif]-->
+              <!--[if !mso]><!--><a href="{{verificationUrl}}" style="display:inline-block;background-color:#FF6B6B;color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:bold;font-size:16px;">Confirmer et valider ma reservation</a><!--<![endif]-->
+            </td>
+          </tr>
+        </table>
+        <!-- Warning -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td style="padding:20px;background-color:#fef3c7;border-left:4px solid #f59e0b;border-radius:8px;">
+              <p style="margin:0;color:#92400e;font-size:14px;">Ce lien expire dans {{expirationHours}} heures. Sans confirmation, votre reservation sera annulee.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <!-- Footer -->
+    <tr>
+      <td align="center" style="background-color:#f8fafc;padding:30px;border-top:1px solid #e2e8f0;">
+        <p style="margin:0;color:#94a3b8;font-size:12px;">&copy; 2025 {{siteName}}. Tous droits reserves.</p>
+      </td>
+    </tr>
+  </table>
+  <!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
 </body>
 </html>`,
   },
   welcome: {
-    subject: "Bienvenue sur {{siteName}} ! 🐾",
-    html: `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
-<div style="padding: 40px 20px; background-color: #f4f4f5;">
-  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-    <div style="background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%); padding: 40px 30px; text-align: center;">
-      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">🎉 Bienvenue !</h1>
-    </div>
-    <div style="padding: 40px 30px;">
-      <h2 style="margin: 0 0 20px 0; color: #1e293b; font-size: 24px;">Votre compte est confirmé, {{firstName}} !</h2>
-      <p style="margin: 0 0 20px 0; color: #475569; font-size: 16px; line-height: 1.6;">
-        Félicitations ! Votre adresse email a été vérifiée avec succès. Vous pouvez maintenant profiter de toutes les fonctionnalités de {{siteName}}.
-      </p>
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="{{dashboardUrl}}" style="display: inline-block; background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 50px; font-weight: bold; font-size: 16px;">Accéder à mon espace</a>
-      </div>
-    </div>
-    <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
-      <p style="margin: 0; color: #94a3b8; font-size: 12px;">© 2025 {{siteName}}. Tous droits réservés.</p>
-    </div>
-  </div>
-</div>
+    subject: "Bienvenue sur {{siteName}} !",
+    html: `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Bienvenue</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+<tr><td align="center" style="padding:40px 20px;">
+  <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+    <!-- Header -->
+    <tr>
+      <td align="center" style="background-color:#4ECDC4;padding:40px 30px;">
+        <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:bold;">Bienvenue !</h1>
+      </td>
+    </tr>
+    <!-- Body -->
+    <tr>
+      <td style="padding:40px 30px;">
+        <h2 style="margin:0 0 20px 0;color:#1e293b;font-size:24px;">Votre compte est confirme, {{firstName}} !</h2>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          Felicitations ! Votre adresse email a ete verifiee avec succes. Vous pouvez maintenant profiter de toutes les fonctionnalites de {{siteName}}.
+        </p>
+        <!-- Button -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center" style="padding:30px 0;">
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{dashboardUrl}}" style="height:52px;v-text-anchor:middle;width:280px;" arcsize="50%" fillcolor="#4ECDC4" stroke="f"><v:textbox inset="0,0,0,0"><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Acceder a mon espace</center></v:textbox></v:roundrect><![endif]-->
+              <!--[if !mso]><!--><a href="{{dashboardUrl}}" style="display:inline-block;background-color:#4ECDC4;color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:bold;font-size:16px;">Acceder a mon espace</a><!--<![endif]-->
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <!-- Footer -->
+    <tr>
+      <td align="center" style="background-color:#f8fafc;padding:30px;border-top:1px solid #e2e8f0;">
+        <p style="margin:0;color:#94a3b8;font-size:12px;">&copy; 2025 {{siteName}}. Tous droits reserves.</p>
+      </td>
+    </tr>
+  </table>
+  <!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
 </body>
 </html>`,
   },
   reservation_confirmed: {
-    subject: "Votre réservation est confirmée ! - {{siteName}}",
-    html: `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
-<div style="padding: 40px 20px; background-color: #f4f4f5;">
-  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-    <div style="background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%); padding: 40px 30px; text-align: center;">
-      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">✅ Réservation confirmée !</h1>
-    </div>
-    <div style="padding: 40px 30px;">
-      <h2 style="margin: 0 0 20px 0; color: #1e293b; font-size: 24px;">Félicitations {{firstName}} !</h2>
-      <p style="margin: 0 0 20px 0; color: #475569; font-size: 16px; line-height: 1.6;">
-        Votre email est maintenant vérifié et votre demande de réservation a été envoyée à {{announcerName}}. Vous recevrez une notification dès que votre réservation sera acceptée.
-      </p>
-      <div style="margin: 20px 0; padding: 20px; background-color: #f0f9ff; border-radius: 12px; border-left: 4px solid #0ea5e9;">
-        <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">📋 Récapitulatif</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Service :</strong> {{serviceName}}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Prestataire :</strong> {{announcerName}}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Animal :</strong> {{animalName}} ({{animalType}})</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Lieu :</strong> {{location}}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Montant total :</strong> {{totalAmount}}</p>
-      </div>
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="{{dashboardUrl}}" style="display: inline-block; background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 50px; font-weight: bold; font-size: 16px;">Voir ma réservation</a>
-      </div>
-    </div>
-    <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
-      <p style="margin: 0; color: #94a3b8; font-size: 12px;">© 2025 {{siteName}}. Tous droits réservés.</p>
-    </div>
-  </div>
-</div>
+    subject: "Votre reservation est confirmee ! - {{siteName}}",
+    html: `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Reservation confirmee</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+<tr><td align="center" style="padding:40px 20px;">
+  <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+    <!-- Header -->
+    <tr>
+      <td align="center" style="background-color:#4ECDC4;padding:40px 30px;">
+        <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:bold;">Reservation confirmee !</h1>
+      </td>
+    </tr>
+    <!-- Body -->
+    <tr>
+      <td style="padding:40px 30px;">
+        <h2 style="margin:0 0 20px 0;color:#1e293b;font-size:24px;">Felicitations {{firstName}} !</h2>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          Votre email est maintenant verifie et votre demande de reservation a ete envoyee a {{announcerName}}. Vous recevrez une notification des que votre reservation sera acceptee.
+        </p>
+        <!-- Recap -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#f0f9ff;border-left:4px solid #0ea5e9;border-radius:8px;">
+              <p style="margin:0 0 10px 0;font-weight:bold;color:#0369a1;">Recapitulatif</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Service :</strong> {{serviceName}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Prestataire :</strong> {{announcerName}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Animal :</strong> {{animalName}} ({{animalType}})</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Lieu :</strong> {{location}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Montant total :</strong> {{totalAmount}}</p>
+            </td>
+          </tr>
+        </table>
+        <!-- Button -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center" style="padding:30px 0;">
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{dashboardUrl}}" style="height:52px;v-text-anchor:middle;width:280px;" arcsize="50%" fillcolor="#4ECDC4" stroke="f"><v:textbox inset="0,0,0,0"><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Voir ma reservation</center></v:textbox></v:roundrect><![endif]-->
+              <!--[if !mso]><!--><a href="{{dashboardUrl}}" style="display:inline-block;background-color:#4ECDC4;color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:bold;font-size:16px;">Voir ma reservation</a><!--<![endif]-->
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <!-- Footer -->
+    <tr>
+      <td align="center" style="background-color:#f8fafc;padding:30px;border-top:1px solid #e2e8f0;">
+        <p style="margin:0;color:#94a3b8;font-size:12px;">&copy; 2025 {{siteName}}. Tous droits reserves.</p>
+      </td>
+    </tr>
+  </table>
+  <!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
 </body>
 </html>`,
   },
   new_reservation_request: {
-    subject: "Nouvelle demande de réservation ! - {{siteName}}",
-    html: `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
-<div style="padding: 40px 20px; background-color: #f4f4f5;">
-  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-    <div style="background: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%); padding: 40px 30px; text-align: center;">
-      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">🔔 Nouvelle réservation !</h1>
-    </div>
-    <div style="padding: 40px 30px;">
-      <h2 style="margin: 0 0 20px 0; color: #1e293b; font-size: 24px;">Bonjour {{announcerFirstName}} !</h2>
-      <p style="margin: 0 0 20px 0; color: #475569; font-size: 16px; line-height: 1.6;">
-        Vous avez reçu une nouvelle demande de réservation de la part de {{clientName}}.
-      </p>
-      <div style="margin: 20px 0; padding: 20px; background-color: #f0f9ff; border-radius: 12px; border-left: 4px solid #0ea5e9;">
-        <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">📋 Détails de la demande</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Service :</strong> {{serviceName}}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> {{dateRange}}</p>
-        {{timeRangeHtml}}
-        {{overnightHtml}}
-        <p style="margin: 5px 0; color: #475569;"><strong>Animal :</strong> {{animalName}} ({{animalType}})</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Lieu :</strong> {{location}}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Montant :</strong> {{totalAmount}}</p>
-      </div>
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="{{dashboardUrl}}" style="display: inline-block; background: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 50px; font-weight: bold; font-size: 16px;">Voir et répondre</a>
-      </div>
-    </div>
-    <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
-      <p style="margin: 0; color: #94a3b8; font-size: 12px;">© 2025 {{siteName}}. Tous droits réservés.</p>
-    </div>
-  </div>
-</div>
+    subject: "Nouvelle demande de reservation ! - {{siteName}}",
+    html: `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Nouvelle reservation</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+<tr><td align="center" style="padding:40px 20px;">
+  <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+    <!-- Header -->
+    <tr>
+      <td align="center" style="background-color:#8B5CF6;padding:40px 30px;">
+        <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:bold;">Nouvelle reservation !</h1>
+      </td>
+    </tr>
+    <!-- Body -->
+    <tr>
+      <td style="padding:40px 30px;">
+        <h2 style="margin:0 0 20px 0;color:#1e293b;font-size:24px;">Bonjour {{announcerFirstName}} !</h2>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          Vous avez recu une nouvelle demande de reservation de la part de {{clientName}}.
+        </p>
+        <!-- Details -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#f0f9ff;border-left:4px solid #0ea5e9;border-radius:8px;">
+              <p style="margin:0 0 10px 0;font-weight:bold;color:#0369a1;">Details de la demande</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Service :</strong> {{serviceName}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Dates :</strong> {{dateRange}}</p>
+              {{timeRangeHtml}}
+              {{overnightHtml}}
+              <p style="margin:5px 0;color:#475569;"><strong>Animal :</strong> {{animalName}} ({{animalType}})</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Lieu :</strong> {{location}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Montant :</strong> {{totalAmount}}</p>
+            </td>
+          </tr>
+        </table>
+        <!-- Button -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center" style="padding:30px 0;">
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{dashboardUrl}}" style="height:52px;v-text-anchor:middle;width:280px;" arcsize="50%" fillcolor="#8B5CF6" stroke="f"><v:textbox inset="0,0,0,0"><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Voir et repondre</center></v:textbox></v:roundrect><![endif]-->
+              <!--[if !mso]><!--><a href="{{dashboardUrl}}" style="display:inline-block;background-color:#8B5CF6;color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:bold;font-size:16px;">Voir et repondre</a><!--<![endif]-->
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <!-- Footer -->
+    <tr>
+      <td align="center" style="background-color:#f8fafc;padding:30px;border-top:1px solid #e2e8f0;">
+        <p style="margin:0;color:#94a3b8;font-size:12px;">&copy; 2025 {{siteName}}. Tous droits reserves.</p>
+      </td>
+    </tr>
+  </table>
+  <!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
 </body>
 </html>`,
   },
   password_reset: {
-    subject: "Réinitialisation de votre mot de passe - {{siteName}}",
-    html: `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
-<div style="padding: 40px 20px; background-color: #f4f4f5;">
-  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-    <div style="background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%); padding: 40px 30px; text-align: center;">
-      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">🔐 {{siteName}}</h1>
-    </div>
-    <div style="padding: 40px 30px;">
-      <h2 style="margin: 0 0 20px 0; color: #1e293b; font-size: 24px;">Bonjour {{firstName}} !</h2>
-      <p style="margin: 0 0 20px 0; color: #475569; font-size: 16px; line-height: 1.6;">
-        Vous avez demandé (ou un administrateur a initié) la réinitialisation de votre mot de passe sur {{siteName}}.
-      </p>
-      <p style="margin: 0 0 20px 0; color: #475569; font-size: 16px; line-height: 1.6;">
-        Cliquez sur le bouton ci-dessous pour créer un nouveau mot de passe :
-      </p>
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="{{resetUrl}}" style="display: inline-block; background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 50px; font-weight: bold; font-size: 16px;">🔑 Réinitialiser mon mot de passe</a>
-      </div>
-      <div style="margin-top: 30px; padding: 20px; background-color: #fef3c7; border-radius: 12px; border-left: 4px solid #f59e0b;">
-        <p style="margin: 0; color: #92400e; font-size: 14px;">⚠️ Ce lien expire dans {{expirationHours}} heure(s). Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
-      </div>
-    </div>
-    <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
-      <p style="margin: 0; color: #94a3b8; font-size: 12px;">© 2025 {{siteName}}. Tous droits réservés.</p>
-    </div>
-  </div>
-</div>
+    subject: "Reinitialisation de votre mot de passe - {{siteName}}",
+    html: `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Reinitialisation mot de passe</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+<tr><td align="center" style="padding:40px 20px;">
+  <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+    <!-- Header -->
+    <tr>
+      <td align="center" style="background-color:#FF6B6B;padding:40px 30px;">
+        <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:bold;">{{siteName}}</h1>
+      </td>
+    </tr>
+    <!-- Body -->
+    <tr>
+      <td style="padding:40px 30px;">
+        <h2 style="margin:0 0 20px 0;color:#1e293b;font-size:24px;">Bonjour {{firstName}} !</h2>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          Vous avez demande (ou un administrateur a initie) la reinitialisation de votre mot de passe sur {{siteName}}.
+        </p>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          Cliquez sur le bouton ci-dessous pour creer un nouveau mot de passe :
+        </p>
+        <!-- Button -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center" style="padding:30px 0;">
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{resetUrl}}" style="height:52px;v-text-anchor:middle;width:320px;" arcsize="50%" fillcolor="#FF6B6B" stroke="f"><v:textbox inset="0,0,0,0"><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Reinitialiser mon mot de passe</center></v:textbox></v:roundrect><![endif]-->
+              <!--[if !mso]><!--><a href="{{resetUrl}}" style="display:inline-block;background-color:#FF6B6B;color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:bold;font-size:16px;">Reinitialiser mon mot de passe</a><!--<![endif]-->
+            </td>
+          </tr>
+        </table>
+        <!-- Warning -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td style="padding:20px;background-color:#fef3c7;border-left:4px solid #f59e0b;border-radius:8px;">
+              <p style="margin:0;color:#92400e;font-size:14px;">Ce lien expire dans {{expirationHours}} heure(s). Si vous n'etes pas a l'origine de cette demande, ignorez cet email.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <!-- Footer -->
+    <tr>
+      <td align="center" style="background-color:#f8fafc;padding:30px;border-top:1px solid #e2e8f0;">
+        <p style="margin:0;color:#94a3b8;font-size:12px;">&copy; 2025 {{siteName}}. Tous droits reserves.</p>
+      </td>
+    </tr>
+  </table>
+  <!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
 </body>
 </html>`,
   },

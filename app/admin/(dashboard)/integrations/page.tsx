@@ -237,40 +237,26 @@ const integrations: IntegrationSection[] = [
     ],
   },
   {
-    id: "infobip",
-    name: "Infobip SMS",
-    description: "Vérification des numéros de téléphone par SMS (2FA)",
+    id: "octopush",
+    name: "Octopush SMS",
+    description: "Vérification des numéros de téléphone par SMS avec OTP natif",
     icon: MessageSquare,
-    color: "bg-orange-500",
-    docsUrl: "https://www.infobip.com/docs/api",
+    color: "bg-teal-500",
+    docsUrl: "https://www.octopush.com/api-sms-doc",
     fields: [
       {
-        key: "infobip_api_key",
+        key: "octopush_api_login",
+        label: "API Login (email)",
+        description: "Email de connexion à votre compte Octopush",
+        isSecret: false,
+        placeholder: "votre@email.com",
+      },
+      {
+        key: "octopush_api_key",
         label: "Clé API",
-        description: "Clé API depuis le dashboard Infobip",
+        description: "Clé API depuis votre espace Octopush (HTTP API V2)",
         isSecret: true,
-        placeholder: "xxxxxxxx",
-      },
-      {
-        key: "infobip_base_url",
-        label: "URL de base",
-        description: "Base URL API (sans https://)",
-        isSecret: false,
-        placeholder: "xxxxx.api.infobip.com",
-      },
-      {
-        key: "infobip_app_id",
-        label: "Application ID (2FA)",
-        description: "ID de l'app 2FA créée sur Infobip",
-        isSecret: false,
-        placeholder: "XXXXXXXX",
-      },
-      {
-        key: "infobip_message_id",
-        label: "Message Template ID",
-        description: "ID du template SMS 2FA",
-        isSecret: false,
-        placeholder: "XXXXXXXX",
+        placeholder: "xxxxxxxxxxxxxxxxxxxxxxxx",
       },
     ],
   },
@@ -400,10 +386,11 @@ export default function IntegrationsPage() {
     profileCount?: number;
     error?: string;
   } | null>(null);
-  const [testingInfobip, setTestingInfobip] = useState(false);
-  const [infobipTestResult, setInfobipTestResult] = useState<{
+  const [testingOctopush, setTestingOctopush] = useState(false);
+  const [octopushTestResult, setOctopushTestResult] = useState<{
     success: boolean;
     message?: string;
+    balance?: string;
     error?: string;
   } | null>(null);
 
@@ -416,7 +403,7 @@ export default function IntegrationsPage() {
   const testStripeConnection = useAction(api.admin.config.testStripeConnection);
   const testQStashConnection = useAction(api.admin.config.testQStashConnection);
   const testRedisConnection = useAction(api.admin.config.testRedisConnection);
-  const testInfobipConnection = useAction(api.admin.config.testInfobipConnection);
+  const testOctopushConnection = useAction(api.admin.config.testOctopushConnection);
 
   const getConfigValue = (key: string) => {
     if (values[key] !== undefined) return values[key];
@@ -530,33 +517,33 @@ export default function IntegrationsPage() {
     }
   };
 
-  const handleTestInfobip = async () => {
+  const handleTestOctopush = async () => {
     if (!token) return;
 
-    const apiKey = getConfigValue("infobip_api_key");
-    const baseUrl = getConfigValue("infobip_base_url");
+    const apiLogin = getConfigValue("octopush_api_login");
+    const apiKey = getConfigValue("octopush_api_key");
 
-    if (!apiKey || !baseUrl) {
-      setInfobipTestResult({
+    if (!apiLogin || !apiKey) {
+      setOctopushTestResult({
         success: false,
-        error: "Veuillez d'abord entrer et sauvegarder la clé API et l'URL de base Infobip.",
+        error: "Veuillez d'abord entrer et sauvegarder l'API Login et la clé API Octopush.",
       });
       return;
     }
 
-    setTestingInfobip(true);
-    setInfobipTestResult(null);
+    setTestingOctopush(true);
+    setOctopushTestResult(null);
 
     try {
-      const result = await testInfobipConnection({ token, apiKey, baseUrl });
-      setInfobipTestResult(result);
+      const result = await testOctopushConnection({ token, apiLogin, apiKey });
+      setOctopushTestResult(result);
     } catch (error) {
-      setInfobipTestResult({
+      setOctopushTestResult({
         success: false,
         error: error instanceof Error ? error.message : "Erreur inconnue",
       });
     } finally {
-      setTestingInfobip(false);
+      setTestingOctopush(false);
     }
   };
 
@@ -950,20 +937,20 @@ export default function IntegrationsPage() {
               </div>
             )}
 
-            {/* Test Connection Section - Infobip */}
-            {integration.id === "infobip" && (
+            {/* Test Connection Section - Octopush */}
+            {integration.id === "octopush" && (
               <div className="p-6 border-t border-slate-800">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Zap className="w-5 h-5 text-orange-400" />
+                    <Zap className="w-5 h-5 text-teal-400" />
                     <h3 className="text-lg font-semibold text-white">Tester la connexion</h3>
                   </div>
                   <button
-                    onClick={handleTestInfobip}
-                    disabled={testingInfobip}
-                    className="px-4 py-2 rounded-lg font-medium flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white transition-colors disabled:opacity-50"
+                    onClick={handleTestOctopush}
+                    disabled={testingOctopush}
+                    className="px-4 py-2 rounded-lg font-medium flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white transition-colors disabled:opacity-50"
                   >
-                    {testingInfobip ? (
+                    {testingOctopush ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
                         Test en cours...
@@ -977,14 +964,14 @@ export default function IntegrationsPage() {
                   </button>
                 </div>
 
-                {infobipTestResult && (
+                {octopushTestResult && (
                   <div className={`mt-4 p-4 rounded-lg border ${
-                    infobipTestResult.success
+                    octopushTestResult.success
                       ? "bg-green-500/10 border-green-500/30"
                       : "bg-red-500/10 border-red-500/30"
                   }`}>
                     <div className="flex items-center gap-2 mb-2">
-                      {infobipTestResult.success ? (
+                      {octopushTestResult.success ? (
                         <>
                           <CheckCircle className="w-5 h-5 text-green-400" />
                           <span className="text-green-400 font-medium">Connexion réussie</span>
@@ -996,25 +983,30 @@ export default function IntegrationsPage() {
                         </>
                       )}
                     </div>
-                    {infobipTestResult.success ? (
-                      <p className="text-sm text-slate-300">{infobipTestResult.message}</p>
+                    {octopushTestResult.success ? (
+                      <div className="text-sm text-slate-300 space-y-1">
+                        <p><strong>Statut :</strong> {octopushTestResult.message}</p>
+                        {octopushTestResult.balance && (
+                          <p><strong>Solde :</strong> {octopushTestResult.balance}</p>
+                        )}
+                      </div>
                     ) : (
-                      <p className="text-sm text-red-300">{infobipTestResult.error}</p>
+                      <p className="text-sm text-red-300">{octopushTestResult.error}</p>
                     )}
                   </div>
                 )}
 
                 {/* Info box */}
-                <div className="mt-4 p-4 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+                <div className="mt-4 p-4 bg-teal-500/10 border border-teal-500/20 rounded-lg">
                   <div className="flex items-start gap-3">
-                    <Info className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
+                    <Info className="w-5 h-5 text-teal-400 flex-shrink-0 mt-0.5" />
                     <div className="text-sm">
-                      <p className="text-orange-300 font-medium mb-2">Configuration 2FA Infobip :</p>
-                      <ol className="text-orange-300/80 space-y-1 list-decimal list-inside">
-                        <li>Créez un compte sur <a href="https://portal.infobip.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-orange-200">Infobip Portal</a></li>
-                        <li>Copiez votre API Key et Base URL depuis le dashboard</li>
-                        <li>Créez une application 2FA et un template de message SMS</li>
-                        <li>Renseignez l&apos;Application ID et le Message Template ID ci-dessus</li>
+                      <p className="text-teal-300 font-medium mb-2">Configuration Octopush :</p>
+                      <ol className="text-teal-300/80 space-y-1 list-decimal list-inside">
+                        <li>Créez un compte sur <a href="https://www.octopush.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-teal-200">Octopush.com</a></li>
+                        <li>Allez dans Paramètres → API et copiez votre &quot;API Login&quot; (email) et &quot;API Key&quot;</li>
+                        <li>Octopush gère nativement les codes OTP (génération + validation)</li>
+                        <li>Tarif : ~0.039&euro;/SMS en France</li>
                       </ol>
                     </div>
                   </div>

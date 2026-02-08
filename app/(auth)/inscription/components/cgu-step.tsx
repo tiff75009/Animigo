@@ -79,19 +79,27 @@ export function CguStep({
             <span>
               J&apos;accepte les{" "}
               <a
-                href="/cgu"
+                href="/legal/cgu"
                 target="_blank"
                 className="text-primary hover:underline"
               >
-                Conditions Générales d&apos;Utilisation
+                Conditions Generales d&apos;Utilisation
+              </a>
+              , les{" "}
+              <a
+                href="/legal/cgv"
+                target="_blank"
+                className="text-primary hover:underline"
+              >
+                Conditions Generales de Vente
               </a>{" "}
               et la{" "}
               <a
-                href="/confidentialite"
+                href="/legal/privacy"
                 target="_blank"
                 className="text-primary hover:underline"
               >
-                Politique de Confidentialité
+                Politique de Confidentialite
               </a>
             </span>
           }

@@ -1902,10 +1902,12 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
 
-  // Tentatives de vérification téléphone par SMS (Infobip 2FA)
+  // Tentatives de vérification téléphone par SMS (Octopush OTP)
   phoneVerificationAttempts: defineTable({
     phone: v.string(),
-    pinId: v.string(),
+    pinId: v.string(), // otp_request_token d'Octopush
+    codeHash: v.optional(v.string()), // legacy (non utilisé avec Octopush)
+    expiresAt: v.optional(v.number()), // legacy (non utilisé avec Octopush)
     createdAt: v.number(),
     verified: v.boolean(),
   })

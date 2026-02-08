@@ -57,6 +57,7 @@ export const listUsers = query({
         companyName: u.companyName,
         isActive: u.isActive,
         emailVerified: u.emailVerified,
+        phoneVerified: u.phoneVerified,
         createdAt: u.createdAt,
         role: u.role || "user",
       })),
