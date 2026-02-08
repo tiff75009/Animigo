@@ -102,6 +102,7 @@ import type * as seo_serviceCities from "../seo/serviceCities.js";
 import type * as seo_serviceCityPages from "../seo/serviceCityPages.js";
 import type * as seo_servicePages from "../seo/servicePages.js";
 import type * as services_activities from "../services/activities.js";
+import type * as services_invoices from "../services/invoices.js";
 import type * as services_options from "../services/options.js";
 import type * as services_photos from "../services/photos.js";
 import type * as services_preferences from "../services/preferences.js";
@@ -218,6 +219,7 @@ declare const fullApi: ApiFromModules<{
   "seo/serviceCityPages": typeof seo_serviceCityPages;
   "seo/servicePages": typeof seo_servicePages;
   "services/activities": typeof services_activities;
+  "services/invoices": typeof services_invoices;
   "services/options": typeof services_options;
   "services/photos": typeof services_photos;
   "services/preferences": typeof services_preferences;

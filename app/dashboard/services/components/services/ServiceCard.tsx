@@ -36,6 +36,7 @@ import ConfirmModal from "../shared/ConfirmModal";
 import { PriceRecommendationCompact } from "../PriceRecommendationCompact";
 import CollectiveSlotsManager from "../CollectiveSlotsManager";
 import { cn } from "@/app/lib/utils";
+import { useAuth } from "@/app/hooks/useAuth";
 
 interface ServiceCategory {
   slug: string;
@@ -263,6 +264,9 @@ export default function ServiceCard({
   onDelete,
   phoneVerified,
 }: ServiceCardProps) {
+  const { user } = useAuth();
+  const isVatSubject = user?.isVatSubject;
+  const companyType = user?.companyType;
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editingSection, setEditingSection] = useState<"variants" | "options" | null>(null);
   const [managingSlotsVariant, setManagingSlotsVariant] = useState<Variant | null>(null);
@@ -355,6 +359,14 @@ export default function ServiceCard({
                   {formatPrice(globalMinPrice.value)}
                   <span className="text-xs font-normal text-text-light">{globalMinPrice.label}</span>
                 </div>
+                {isVatSubject && (
+                  <div className="text-[10px] text-text-light">
+                    TTC (HT : {formatPrice(Math.round(globalMinPrice.value / 1.20))})
+                  </div>
+                )}
+                {companyType === "micro_enterprise" && !isVatSubject && (
+                  <div className="text-[9px] text-text-light italic">TVA non applicable</div>
+                )}
               </div>
             )}
             <button
@@ -549,6 +561,9 @@ export default function ServiceCard({
                                 {formatPrice(primaryPrice.value)}
                               </div>
                               <div className="text-xs text-text-light">{primaryPrice.label}</div>
+                              {isVatSubject && (
+                                <div className="text-[10px] text-text-light">HT : {formatPrice(Math.round(primaryPrice.value / 1.20))}</div>
+                              )}
                             </div>
                           )}
 
@@ -602,9 +617,17 @@ export default function ServiceCard({
 
                         {/* Prix */}
                         {primaryPrice && (
-                          <div className="text-lg font-bold text-primary mb-2">
-                            {formatPrice(primaryPrice.value)}
-                            <span className="text-xs font-normal text-text-light">{primaryPrice.label}</span>
+                          <div className="mb-2">
+                            <div className="text-lg font-bold text-primary">
+                              {formatPrice(primaryPrice.value)}
+                              <span className="text-xs font-normal text-text-light">{primaryPrice.label}</span>
+                            </div>
+                            {isVatSubject && (
+                              <div className="text-[10px] text-text-light">HT : {formatPrice(Math.round(primaryPrice.value / 1.20))}</div>
+                            )}
+                            {companyType === "micro_enterprise" && !isVatSubject && (
+                              <div className="text-[9px] text-text-light italic">TVA non applicable, art. 293B</div>
+                            )}
                           </div>
                         )}
 

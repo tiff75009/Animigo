@@ -17,6 +17,7 @@ import {
   ChevronDown,
   Bell,
   Heart,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { useAuth } from "@/app/hooks/useAuth";
@@ -218,6 +219,7 @@ export default function FloatingSidebar() {
     { href: "/client/profil", icon: <User className="w-5 h-5" />, label: "Mon profil" },
     { href: "/client/mes-animaux", icon: <PawPrint className="w-5 h-5" />, label: "Mes animaux" },
     { href: "/client/reservations", icon: <Calendar className="w-5 h-5" />, label: "Réservations" },
+    { href: "/client/factures", icon: <FileText className="w-5 h-5" />, label: "Mes factures" },
     { href: "/client/favoris", icon: <Heart className="w-5 h-5" />, label: "Favoris" },
     { href: "/client/parametres", icon: <Settings className="w-5 h-5" />, label: "Paramètres" },
   ];

@@ -16,6 +16,9 @@ interface User {
   phoneVerified: boolean;
   siret?: string;
   companyName?: string;
+  companyType?: "micro_enterprise" | "regular_company" | "unknown";
+  isVatSubject?: boolean;
+  legalForm?: string;
   emailVerified: boolean;
   createdAt: number;
 }

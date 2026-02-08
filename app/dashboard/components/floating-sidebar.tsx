@@ -27,6 +27,7 @@ import {
   ClipboardList,
   ShieldCheck,
   AlertCircle,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { useQuery } from "convex/react";
@@ -380,6 +381,7 @@ function FloatingSidebarContent() {
   const financeNavItems: NavItem[] = [
     { href: "/dashboard/paiements", icon: <CreditCard className="w-5 h-5" />, label: "Paiements" },
     { href: "/dashboard/fiscalite", icon: <Receipt className="w-5 h-5" />, label: "Fiscalité" },
+    ...(user?.accountType === "annonceur_pro" ? [{ href: "/dashboard/factures", icon: <FileText className="w-5 h-5" />, label: "Factures" }] : []),
   ];
 
   const settingsNavItems: NavItem[] = [
