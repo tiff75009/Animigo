@@ -69,6 +69,7 @@ interface ServiceListProps {
   onToggleService: (serviceId: Id<"services">, isActive: boolean) => void;
   onDeleteService: (serviceId: Id<"services">) => void;
   phoneVerified?: boolean;
+  canCreateServices?: boolean;
 }
 
 const animalIcons: Record<string, React.ElementType> = {
@@ -98,6 +99,7 @@ export default function ServiceList({
   onToggleService,
   onDeleteService,
   phoneVerified,
+  canCreateServices = true,
 }: ServiceListProps) {
   // Filtres
   const [filterCategory, setFilterCategory] = useState<string>("all");
@@ -175,6 +177,7 @@ export default function ServiceList({
   };
 
   if (services.length === 0) {
+    if (!canCreateServices) return null;
     return (
       <EmptyState
         icon={Briefcase}

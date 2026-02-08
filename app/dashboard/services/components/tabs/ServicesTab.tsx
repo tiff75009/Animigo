@@ -199,7 +199,7 @@ export default function ServicesTab({
 
       {/* Info Banner */}
       <AnimatePresence>
-        {services.length === 0 && !isAddingService && (
+        {services.length === 0 && !isAddingService && canCreateServices && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -276,6 +276,7 @@ export default function ServicesTab({
         onToggleService={onToggleService}
         onDeleteService={onDeleteService}
         phoneVerified={phoneVerified}
+        canCreateServices={canCreateServices}
       />
     </div>
   );

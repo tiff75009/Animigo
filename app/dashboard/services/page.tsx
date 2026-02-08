@@ -191,7 +191,7 @@ export default function ServicesPage() {
             successMessage={successMessage}
             onClearSuccess={clearSuccess}
             phoneVerified={isPhoneVerified}
-            canCreateServices={canCreateServices !== false}
+            canCreateServices={!!canCreateServices}
           />
         ) : (
           <div className="flex items-center justify-center p-12">
