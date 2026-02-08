@@ -38,6 +38,9 @@ export function PersonalInfoStep({
   const sendPhoneVerification = useAction(api.api.sms.sendPhoneVerification);
   const verifyPhoneCode = useAction(api.api.sms.verifyPhoneCode);
 
+  // Récupérer la config Infobip pour la passer aux actions (contourne le bug ctx.runQuery sur self-hosted)
+  const infobipConfig = useQuery(api.api.smsInternal.getInfobipConfig);
+
   // Debounce username
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -105,7 +108,10 @@ export function PersonalInfoStep({
     setPhoneStatus("sending");
     setCodeError("");
     try {
-      const result = await sendPhoneVerification({ phone: data.phone });
+      const result = await sendPhoneVerification({
+        phone: data.phone,
+        infobipConfig: infobipConfig ?? undefined,
+      });
       if (result.success && result.pinId) {
         setPinId(result.pinId);
         setPhoneStatus("code_sent");
@@ -172,7 +178,11 @@ export function PersonalInfoStep({
     setPhoneStatus("verifying");
     setCodeError("");
     try {
-      const result = await verifyPhoneCode({ pinId, code: fullCode });
+      const result = await verifyPhoneCode({
+        pinId,
+        code: fullCode,
+        infobipConfig: infobipConfig ? { apiKey: infobipConfig.apiKey, baseUrl: infobipConfig.baseUrl } : undefined,
+      });
       if (result.success && result.verified) {
         setPhoneStatus("verified");
         onChange({ phoneVerified: true });
@@ -186,7 +196,7 @@ export function PersonalInfoStep({
       setPhoneStatus("code_sent");
       setCodeError("Erreur de vérification");
     }
-  }, [code, pinId, verifyPhoneCode, onChange]);
+  }, [code, pinId, verifyPhoneCode, onChange, infobipConfig]);
 
   // Auto-submit when 6 digits entered
   useEffect(() => {
@@ -201,7 +211,10 @@ export function PersonalInfoStep({
     setIsResending(true);
     setCodeError("");
     try {
-      const result = await sendPhoneVerification({ phone: data.phone });
+      const result = await sendPhoneVerification({
+        phone: data.phone,
+        infobipConfig: infobipConfig ?? undefined,
+      });
       if (result.success && result.pinId) {
         setPinId(result.pinId);
         setCountdown(60);

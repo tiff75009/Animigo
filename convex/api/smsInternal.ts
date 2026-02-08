@@ -1,5 +1,28 @@
-import { internalMutation, internalQuery } from "../_generated/server";
+import { internalMutation, internalQuery, query } from "../_generated/server";
 import { v } from "convex/values";
+
+// Query publique : récupérer la config Infobip complète (pour le frontend)
+// Passée ensuite en argument aux actions (contourne le bug ctx.runQuery dans "use node" sur self-hosted)
+export const getInfobipConfig = query({
+  args: {},
+  handler: async (ctx) => {
+    const apiKey = await ctx.db.query("systemConfig").withIndex("by_key", (q: any) => q.eq("key", "infobip_api_key")).first();
+    const baseUrl = await ctx.db.query("systemConfig").withIndex("by_key", (q: any) => q.eq("key", "infobip_base_url")).first();
+    const appId = await ctx.db.query("systemConfig").withIndex("by_key", (q: any) => q.eq("key", "infobip_app_id")).first();
+    const messageId = await ctx.db.query("systemConfig").withIndex("by_key", (q: any) => q.eq("key", "infobip_message_id")).first();
+
+    if (!apiKey?.value || !baseUrl?.value || !appId?.value || !messageId?.value) {
+      return null;
+    }
+
+    return {
+      apiKey: apiKey.value,
+      baseUrl: baseUrl.value,
+      appId: appId.value,
+      messageId: messageId.value,
+    };
+  },
+});
 
 // Query interne : récupérer une valeur de config
 export const getConfigValue = internalQuery({
