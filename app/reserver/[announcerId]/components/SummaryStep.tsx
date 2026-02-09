@@ -663,9 +663,10 @@ export default function SummaryStep({
                   {effectiveAnimalCount > 1 && ` × ${effectiveAnimalCount} animaux`}
                 </p>
               ) : isMultiSession ? (
-                // Formule multi-séances: prix × séances
+                // Formule multi-séances: prix × séances × animaux
                 <p className="text-xs text-gray-500 ml-6">
                   └ {formatPrice(selectedVariant.price)} × {numberOfSessions} séance{numberOfSessions > 1 ? "s" : ""}
+                  {effectiveAnimalCount > 1 && ` × ${effectiveAnimalCount} animaux`}
                 </p>
               ) : (
                 // Formule uni-séance: détail avec jours/demi-journées
@@ -812,9 +813,9 @@ export default function SummaryStep({
               {isCollective ? (
                 formatPrice(Math.round(selectedVariant.price * actualSlotCount * effectiveAnimalCount))
               ) : isMultiSession ? (
-                formatPrice(Math.round(selectedVariant.price * numberOfSessions))
+                formatPrice(Math.round(selectedVariant.price * numberOfSessions * effectiveAnimalCount))
               ) : (
-                formatPrice(priceBreakdown.firstDayAmount + priceBreakdown.fullDaysAmount + priceBreakdown.lastDayAmount)
+                formatPrice((priceBreakdown.firstDayAmount + priceBreakdown.fullDaysAmount + priceBreakdown.lastDayAmount) * effectiveAnimalCount)
               )}
             </span>
           </div>
@@ -829,10 +830,11 @@ export default function SummaryStep({
                 </div>
                 <p className="text-xs text-indigo-600 ml-6">
                   └ {priceBreakdown.nights} nuit{priceBreakdown.nights > 1 ? "s" : ""} × {formatPrice(priceBreakdown.nightlyRate)}/nuit
+                  {effectiveAnimalCount > 1 && ` × ${effectiveAnimalCount} animaux`}
                 </p>
               </div>
               <span className="font-medium text-indigo-700">
-                +{formatPrice(priceBreakdown.nightsAmount)}
+                +{formatPrice(priceBreakdown.nightsAmount * effectiveAnimalCount)}
               </span>
             </div>
           )}
@@ -876,8 +878,8 @@ export default function SummaryStep({
             const serviceAmount = isCollective
               ? Math.round(selectedVariant.price * actualSlotCount * effectiveAnimalCount) + optionsAmount
               : isMultiSession
-                ? Math.round(selectedVariant.price * numberOfSessions) + optionsAmount
-                : priceBreakdown.totalAmount;
+                ? Math.round(selectedVariant.price * numberOfSessions * effectiveAnimalCount) + optionsAmount
+                : priceBreakdown.totalAmount * effectiveAnimalCount;
 
             // Déterminer si l'annonceur est assujetti TVA
             const isVatSubject = announcerStatusType === "professionnel";

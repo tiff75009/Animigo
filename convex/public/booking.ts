@@ -504,6 +504,7 @@ export const finalizeBooking = mutation({
     token: v.string(),
     bookingId: v.id("pendingBookings"),
     animalId: v.id("animals"),
+    animalIds: v.optional(v.array(v.id("animals"))),
     location: v.string(),
     city: v.optional(v.string()),
     postalCode: v.optional(v.string()),
@@ -546,7 +547,7 @@ export const finalizeBooking = mutation({
       throw new ConvexError("La réservation a expiré");
     }
 
-    // Récupérer l'animal
+    // Récupérer l'animal principal
     const animal = await ctx.db.get(args.animalId);
 
     if (!animal) {
@@ -557,6 +558,20 @@ export const finalizeBooking = mutation({
     if (animal.userId !== session.userId) {
       throw new ConvexError("Cet animal ne vous appartient pas");
     }
+
+    // Résoudre tous les animaux si animalIds fourni
+    const allAnimalIds = args.animalIds && args.animalIds.length > 0
+      ? args.animalIds
+      : [args.animalId];
+    const allAnimals = [];
+    for (const aid of allAnimalIds) {
+      const a = aid === args.animalId ? animal : await ctx.db.get(aid);
+      if (!a) throw new ConvexError("Animal non trouvé");
+      if (a.userId !== session.userId) throw new ConvexError("Cet animal ne vous appartient pas");
+      const aType = ANIMAL_TYPES.find((t) => t.id === a.type);
+      allAnimals.push({ name: a.name, type: a.type, emoji: aType?.emoji ?? "🐾" });
+    }
+    console.log("[finalizeBooking] All animals resolved:", allAnimals.length);
 
     // Récupérer l'utilisateur client
     const client = await ctx.db.get(session.userId);
@@ -872,6 +887,7 @@ export const finalizeBooking = mutation({
       clientId: session.userId,
       serviceId: pendingBooking.serviceId,
       animalId: args.animalId,
+      animalIds: allAnimalIds,
       clientName: `${client.firstName} ${client.lastName}`,
       clientPhone: client.phone,
       animal: {
@@ -879,6 +895,7 @@ export const finalizeBooking = mutation({
         type: animal.type,
         emoji: animalType?.emoji ?? "🐾",
       },
+      animals: allAnimals,
       serviceName: `${category?.name ?? service.category} - ${variant.name}`,
       serviceCategory: service.category,
       startDate: pendingBooking.startDate,
@@ -984,10 +1001,11 @@ export const finalizeBooking = mutation({
     }
 
     // Envoyer la notification push à l'annonceur (nouvelle mission)
+    const allAnimalNames = allAnimals.map(a => a.name).join(", ");
     await ctx.scheduler.runAfter(0, internal.notifications.actions.sendNewMissionNotification, {
       announcerId: pendingBooking.announcerId,
       clientName: `${client.firstName} ${client.lastName}`,
-      animalName: animal.name,
+      animalName: allAnimalNames,
       serviceName: `${category?.name ?? service.category} - ${variant.name}`,
       missionId,
     });
@@ -1026,7 +1044,7 @@ export const finalizeBooking = mutation({
           endDate: pendingBooking.endDate,
           startTime: pendingBooking.startTime,
           endTime: pendingBooking.endTime,
-          animalName: animal.name,
+          animalName: allAnimalNames,
           animalType: animalTypeName?.name ?? animal.type,
           location: args.location,
           includeOvernightStay: pendingBooking.includeOvernightStay,

@@ -332,13 +332,14 @@ export default function BookingSummary({
                 <span className="text-lg font-bold text-primary">
                   {formatPrice(
                     Math.round(
-                      variant.price * numberOfSessions * (1 + commissionRate / 100)
+                      variant.price * numberOfSessions * animalCount * (1 + commissionRate / 100)
                     )
                   )}€
                 </span>
               </div>
               <p className="text-xs text-gray-400 mt-1">
                 {formatPrice(variant.price * (1 + commissionRate / 100))}€ × {numberOfSessions} séances
+                {animalCount > 1 && ` × ${animalCount} animaux`}
               </p>
             </div>
           </div>
@@ -744,7 +745,7 @@ export default function BookingSummary({
                 {priceBreakdown.nights} nuit{priceBreakdown.nights > 1 ? "s" : ""}
               </span>
               <span className="text-sm text-indigo-600 ml-auto">
-                +{formatPrice(priceBreakdown.nightsAmount * (1 + commissionRate / 100))}€
+                +{formatPrice(priceBreakdown.nightsAmount * animalCount * (1 + commissionRate / 100))}€
               </span>
             </div>
           </div>

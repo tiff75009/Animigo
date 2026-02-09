@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { cn } from "@/app/lib/utils";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Calendar,
   MapPin,
@@ -28,6 +28,8 @@ import {
   ShieldCheck,
   Star,
   Lock,
+  ArrowLeft,
+  PawPrint,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import { useQuery } from "convex/react";
@@ -56,6 +58,8 @@ export interface ConvexMission {
     emoji: string;
   };
   animalId?: Id<"animals">;
+  animalIds?: (Id<"animals"> | string)[];
+  animals?: Array<{ name: string; type: string; emoji: string }>;
   serviceName: string;
   serviceCategory: string;
   variantId?: string;
@@ -114,6 +118,7 @@ interface MissionCardProps {
   onRefuse?: (id: string) => void;
   onCancel?: (id: string) => void;
   onContact?: (id: string) => void;
+  onViewDetails?: () => void;
   announcerCoordinates?: { lat: number; lng: number } | null;
   token?: string | null;
 }
@@ -308,11 +313,10 @@ export function MissionCard({
   onRefuse,
   onCancel,
   onContact,
+  onViewDetails,
   announcerCoordinates,
   token,
 }: MissionCardProps) {
-  const [showDetails, setShowDetails] = useState(false);
-  const [showAnimalModal, setShowAnimalModal] = useState(false);
   const [, setTick] = useState(0); // Force re-render pour mettre à jour le temps écoulé
   const status = statusConfig[mission.status] || statusConfig.pending_acceptance;
   // L'adresse exacte et le téléphone sont visibles uniquement après acceptation ET paiement
@@ -392,8 +396,25 @@ export function MissionCard({
           <div className="flex-1 min-w-0">
             {/* Header compact */}
             <div className="p-3 flex items-center gap-3">
-              <div className="w-11 h-11 bg-primary/10 rounded-xl flex items-center justify-center text-xl flex-shrink-0">
-                {mission.animal.emoji}
+              <div className="w-11 h-11 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0 relative">
+                {mission.animals && mission.animals.length > 1 ? (
+                  <div className="flex items-center">
+                    {mission.animals.slice(0, 3).map((a, i) => (
+                      <span
+                        key={i}
+                        className="text-lg"
+                        style={{ marginLeft: i > 0 ? "-4px" : "0" }}
+                      >
+                        {a.emoji}
+                      </span>
+                    ))}
+                    {mission.animals.length > 3 && (
+                      <span className="text-[10px] font-bold text-primary ml-0.5">+{mission.animals.length - 3}</span>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-xl">{mission.animal.emoji}</span>
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -434,7 +455,12 @@ export function MissionCard({
                   )}
                 </div>
                 <p className="text-xs text-text-light truncate">
-                  {mission.animal.name} • {mission.serviceName}
+                  {mission.animals && mission.animals.length > 1
+                    ? mission.animals.length <= 3
+                      ? mission.animals.map(a => a.name).join(" & ")
+                      : `${mission.animals.length} animaux`
+                    : mission.animal.name
+                  } • {mission.serviceName}
                 </p>
                 {/* Temps écoulé depuis la réservation */}
                 {mission.bookedAt && mission.status === "pending_acceptance" && (
@@ -513,7 +539,7 @@ export function MissionCard({
             {/* Bouton voir détails */}
             <button
               className="w-full py-2 px-3 bg-slate-50 hover:bg-slate-100 text-sm text-foreground flex items-center justify-center gap-1.5 transition-colors"
-              onClick={() => setShowDetails(true)}
+              onClick={onViewDetails}
             >
               <Eye className="w-4 h-4" />
               Voir les détails
@@ -576,51 +602,29 @@ export function MissionCard({
           )}
         </div>
       </motion.div>
-
-      {/* Modal de détails */}
-      <AnimatePresence>
-        {showDetails && (
-          <MissionDetailsModal
-            mission={mission}
-            onClose={() => setShowDetails(false)}
-            onViewAnimal={() => setShowAnimalModal(true)}
-            isAccepted={isAccepted}
-            distance={distance}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Modal fiche animal */}
-      <AnimatePresence>
-        {showAnimalModal && token && (
-          <AnimalDetailsModal
-            missionId={mission.id}
-            token={token}
-            animalEmoji={mission.animal.emoji}
-            onClose={() => setShowAnimalModal(false)}
-          />
-        )}
-      </AnimatePresence>
     </>
   );
 }
 
-// Modal des détails de la mission
-interface MissionDetailsModalProps {
+// Vue split-screen inline : Détails + Fiches animaux
+export interface MissionSplitViewProps {
   mission: ConvexMission;
   onClose: () => void;
-  onViewAnimal?: () => void;
   isAccepted: boolean;
   distance: number | null;
+  token: string | null;
 }
 
-function MissionDetailsModal({
+export function MissionSplitView({
   mission,
   onClose,
-  onViewAnimal,
   isAccepted,
   distance,
-}: MissionDetailsModalProps) {
+  token,
+}: MissionSplitViewProps) {
+  const [activeTab, setActiveTab] = useState<"details" | "animals">("details");
+  const [selectedAnimalIndex, setSelectedAnimalIndex] = useState(0);
+
   const days = getDaysDifference(mission.startDate, mission.endDate);
   const hasOptions = mission.optionNames && mission.optionNames.length > 0;
   const firstName = getFirstName(mission.clientName);
@@ -631,212 +635,179 @@ function MissionDetailsModal({
   const platformFee = mission.platformFee ?? Math.round(totalAmount * 0.15);
   const announcerEarnings = mission.announcerEarnings ?? totalAmount - platformFee;
 
-  return (
-    <motion.div
-      className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      onClick={onClose}
-    >
-      <motion.div
-        className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md max-h-[85vh] overflow-y-auto"
-        initial={{ y: 100, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 100, opacity: 0 }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="sticky top-0 bg-white px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-foreground">Détails de la mission</h2>
-          <motion.button
-            className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center"
-            onClick={onClose}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-          >
-            <X className="w-4 h-4 text-foreground" />
-          </motion.button>
-        </div>
+  // Queries animaux
+  const isMulti = mission.animals && mission.animals.length > 1;
+  const allAnimalsData = useQuery(
+    api.planning.missions.getMissionAnimalsDetails,
+    isMulti && token ? { token, missionId: mission.id as Id<"missions"> } : "skip"
+  );
+  const singleAnimalData = useQuery(
+    api.planning.missions.getMissionAnimalDetails,
+    !isMulti && token ? { token, missionId: mission.id as Id<"missions"> } : "skip"
+  );
 
-        <div className="p-4 space-y-3">
-          {/* Client et Animal */}
-          <div className="bg-slate-50 rounded-xl p-3">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-2xl">
-                {mission.animal.emoji}
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-bold text-foreground">{firstName}</p>
-                  {/* Badge historique client */}
-                  {mission.clientHistory && (
-                    mission.clientHistory.isNewClient ? (
-                      <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-purple/10 text-purple rounded-full text-[10px] font-medium">
-                        <Star className="w-2.5 h-2.5" />
-                        Nouveau client
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-medium">
-                        <Repeat className="w-2.5 h-2.5" />
-                        {mission.clientHistory.previousMissionsCount} mission{mission.clientHistory.previousMissionsCount > 1 ? "s" : ""} ensemble
-                      </span>
-                    )
-                  )}
-                </div>
-                <p className="text-sm text-text-light">
-                  {mission.animal.name} ({mission.animal.type})
-                </p>
-              </div>
-              {onViewAnimal && (
-                <motion.button
-                  className="px-2.5 py-1.5 bg-purple/10 text-purple rounded-lg text-xs font-medium flex items-center gap-1"
-                  onClick={onViewAnimal}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  Fiche
-                </motion.button>
-              )}
-            </div>
-          </div>
+  const animalData = isMulti
+    ? (allAnimalsData ? allAnimalsData[selectedAnimalIndex] : undefined)
+    : singleAnimalData;
 
-          {/* Service et Prestation */}
-          <div className="bg-slate-50 rounded-xl p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <Package className="w-4 h-4 text-foreground" />
-              <span className="font-semibold text-foreground text-sm">Prestation</span>
-            </div>
-            <p className="font-medium text-foreground">{mission.serviceName}</p>
-            {mission.variantName && (
-              <p className="text-sm text-text-light mt-1">Prestation : {mission.variantName}</p>
-            )}
-            {hasOptions && (
-              <div className="flex flex-wrap gap-1 mt-2">
-                {mission.optionNames?.map((option, idx) => (
-                  <span
-                    key={idx}
-                    className="px-2 py-0.5 bg-purple/10 text-purple text-xs rounded-full"
-                  >
-                    + {option}
+  const currentEmoji = isMulti
+    ? (mission.animals![selectedAnimalIndex]?.emoji || mission.animal.emoji)
+    : mission.animal.emoji;
+
+  // Helpers animaux
+  const calculateAge = (birthDate?: string): string | null => {
+    if (!birthDate) return null;
+    const birth = new Date(birthDate);
+    const now = new Date();
+    const years = now.getFullYear() - birth.getFullYear();
+    const months = now.getMonth() - birth.getMonth();
+    if (years < 1) {
+      const totalMonths = years * 12 + months;
+      return totalMonths <= 0 ? "Moins d'un mois" : `${totalMonths} mois`;
+    }
+    return years === 1 ? "1 an" : `${years} ans`;
+  };
+
+  const getGenderLabel = (gender?: string): string => {
+    switch (gender) {
+      case "male": return "Mâle";
+      case "female": return "Femelle";
+      default: return "Non précisé";
+    }
+  };
+
+  const getTraitLabel = (traitId: string, category: keyof typeof ANIMAL_TRAITS): string => {
+    const traits = ANIMAL_TRAITS[category].traits as Record<string, string>;
+    return traits[traitId] || traitId;
+  };
+
+  // ── Panneau gauche : Détails ──
+  const detailsContent = (
+    <div className="p-4 space-y-3">
+      {/* Client et Animaux */}
+      <div className="bg-slate-50 rounded-xl p-3">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center relative">
+            {mission.animals && mission.animals.length > 1 ? (
+              <div className="flex items-center">
+                {mission.animals.slice(0, 3).map((a, i) => (
+                  <span key={i} className="text-xl" style={{ marginLeft: i > 0 ? "-4px" : "0" }}>
+                    {a.emoji}
                   </span>
                 ))}
               </div>
+            ) : (
+              <span className="text-2xl">{mission.animal.emoji}</span>
             )}
           </div>
-
-          {/* Type de formule et créneaux */}
-          {mission.sessionType === "collective" ? (
-            // Formule COLLECTIVE
-            <div className="bg-gradient-to-br from-blue-50 to-purple/5 rounded-xl p-3 space-y-3">
-              <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-blue-600" />
-                <span className="font-semibold text-foreground text-sm">Formule collective</span>
-                {mission.collectiveSlotDates && mission.collectiveSlotDates.length > 0 && (
-                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
-                    {mission.collectiveSlotDates.length} séance{mission.collectiveSlotDates.length > 1 ? "s" : ""}
+          <div className="flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="font-bold text-foreground">{firstName}</p>
+              {mission.clientHistory && (
+                mission.clientHistory.isNewClient ? (
+                  <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-purple/10 text-purple rounded-full text-[10px] font-medium">
+                    <Star className="w-2.5 h-2.5" />
+                    Nouveau client
                   </span>
-                )}
-                {mission.animalCount && mission.animalCount > 1 && (
-                  <span className="px-2 py-0.5 bg-purple/20 text-purple text-xs rounded-full">
-                    {mission.animalCount} animaux
+                ) : (
+                  <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-medium">
+                    <Repeat className="w-2.5 h-2.5" />
+                    {mission.clientHistory.previousMissionsCount} mission{mission.clientHistory.previousMissionsCount > 1 ? "s" : ""} ensemble
                   </span>
-                )}
+                )
+              )}
+            </div>
+            {mission.animals && mission.animals.length > 1 ? (
+              <div className="flex flex-wrap gap-1 mt-0.5">
+                {mission.animals.map((a, i) => (
+                  <span key={i} className="text-xs text-text-light">
+                    {a.emoji} {a.name}{i < mission.animals!.length - 1 ? " ·" : ""}
+                  </span>
+                ))}
               </div>
-              {/* Afficher les dates des créneaux réservés */}
-              {mission.collectiveSlotDates && mission.collectiveSlotDates.length > 0 ? (
-                <div className="space-y-2 pl-6 max-h-40 overflow-y-auto">
-                  {mission.collectiveSlotDates.map((date, idx) => (
-                    <div key={idx} className="flex items-center gap-3 text-sm">
-                      <span className="w-5 h-5 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-medium">
-                        {idx + 1}
-                      </span>
-                      <Calendar className="w-3.5 h-3.5 text-purple" />
-                      <span className="text-foreground">
-                        {new Date(date).toLocaleDateString("fr-FR", {
-                          weekday: "short",
-                          day: "numeric",
-                          month: "short",
-                        })}
-                      </span>
-                      {mission.startTime && (
-                        <>
-                          <Clock className="w-3.5 h-3.5 text-accent" />
-                          <span className="text-text-light">
-                            {mission.startTime}
-                            {mission.endTime && ` - ${mission.endTime}`}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-2 pl-6">
-                  <div className="flex items-center gap-2">
-                    <CalendarDays className="w-4 h-4 text-purple" />
-                    <span className="text-sm text-foreground">
-                      {formatDateRange(mission.startDate, mission.endDate)}
-                    </span>
-                  </div>
-                  {(mission.startTime || mission.endTime) && (
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-accent" />
-                      <span className="text-sm text-foreground">
+            ) : (
+              <p className="text-sm text-text-light">
+                {mission.animal.name} ({mission.animal.type})
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Service et Prestation */}
+      <div className="bg-slate-50 rounded-xl p-3">
+        <div className="flex items-center gap-2 mb-2">
+          <Package className="w-4 h-4 text-foreground" />
+          <span className="font-semibold text-foreground text-sm">Prestation</span>
+        </div>
+        <p className="font-medium text-foreground">{mission.serviceName}</p>
+        {mission.variantName && (
+          <p className="text-sm text-text-light mt-1">Prestation : {mission.variantName}</p>
+        )}
+        {hasOptions && (
+          <div className="flex flex-wrap gap-1 mt-2">
+            {mission.optionNames?.map((option, idx) => (
+              <span
+                key={idx}
+                className="px-2 py-0.5 bg-purple/10 text-purple text-xs rounded-full"
+              >
+                + {option}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Type de formule et créneaux */}
+      {mission.sessionType === "collective" ? (
+        <div className="bg-gradient-to-br from-blue-50 to-purple/5 rounded-xl p-3 space-y-3">
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-blue-600" />
+            <span className="font-semibold text-foreground text-sm">Formule collective</span>
+            {mission.collectiveSlotDates && mission.collectiveSlotDates.length > 0 && (
+              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
+                {mission.collectiveSlotDates.length} séance{mission.collectiveSlotDates.length > 1 ? "s" : ""}
+              </span>
+            )}
+            {mission.animalCount && mission.animalCount > 1 && (
+              <span className="px-2 py-0.5 bg-purple/20 text-purple text-xs rounded-full">
+                {mission.animalCount} animaux
+              </span>
+            )}
+          </div>
+          {mission.collectiveSlotDates && mission.collectiveSlotDates.length > 0 ? (
+            <div className="space-y-2 pl-6 max-h-40 overflow-y-auto">
+              {mission.collectiveSlotDates.map((date, idx) => (
+                <div key={idx} className="flex items-center gap-3 text-sm">
+                  <span className="w-5 h-5 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-medium">
+                    {idx + 1}
+                  </span>
+                  <Calendar className="w-3.5 h-3.5 text-purple" />
+                  <span className="text-foreground">
+                    {new Date(date).toLocaleDateString("fr-FR", {
+                      weekday: "short",
+                      day: "numeric",
+                      month: "short",
+                    })}
+                  </span>
+                  {mission.startTime && (
+                    <>
+                      <Clock className="w-3.5 h-3.5 text-accent" />
+                      <span className="text-text-light">
                         {mission.startTime}
                         {mission.endTime && ` - ${mission.endTime}`}
                       </span>
-                    </div>
+                    </>
                   )}
                 </div>
-              )}
-              <p className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">
-                Séance collective avec d'autres animaux
-              </p>
-            </div>
-          ) : mission.sessions && mission.sessions.length > 1 ? (
-            // Formule MULTI-SÉANCES
-            <div className="bg-gradient-to-br from-accent/10 to-secondary/5 rounded-xl p-3 space-y-3">
-              <div className="flex items-center gap-2">
-                <Repeat className="w-4 h-4 text-secondary" />
-                <span className="font-semibold text-foreground text-sm">
-                  Formule multi-séances
-                </span>
-                <span className="px-2 py-0.5 bg-secondary/20 text-secondary text-xs rounded-full">
-                  {mission.sessions.length} séances
-                </span>
-              </div>
-              <div className="space-y-2 pl-6 max-h-40 overflow-y-auto">
-                {mission.sessions.map((session, idx) => (
-                  <div key={idx} className="flex items-center gap-3 text-sm">
-                    <span className="w-5 h-5 bg-secondary/20 text-secondary rounded-full flex items-center justify-center text-xs font-medium">
-                      {idx + 1}
-                    </span>
-                    <Calendar className="w-3.5 h-3.5 text-purple" />
-                    <span className="text-foreground">
-                      {new Date(session.date).toLocaleDateString("fr-FR", {
-                        weekday: "short",
-                        day: "numeric",
-                        month: "short",
-                      })}
-                    </span>
-                    <Clock className="w-3.5 h-3.5 text-accent" />
-                    <span className="text-text-light">
-                      {session.startTime} - {session.endTime}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              ))}
             </div>
           ) : (
-            // Formule UNI-SÉANCE (standard)
-            <div className="bg-slate-50 rounded-xl p-3 space-y-2">
+            <div className="space-y-2 pl-6">
               <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-purple" />
+                <CalendarDays className="w-4 h-4 text-purple" />
                 <span className="text-sm text-foreground">
                   {formatDateRange(mission.startDate, mission.endDate)}
-                  {days > 1 && <span className="text-text-light"> ({days} jours)</span>}
                 </span>
               </div>
               {(mission.startTime || mission.endTime) && (
@@ -850,366 +821,447 @@ function MissionDetailsModal({
               )}
             </div>
           )}
+          <p className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">
+            Séance collective avec d'autres animaux
+          </p>
+        </div>
+      ) : mission.sessions && mission.sessions.length > 1 ? (
+        <div className="bg-gradient-to-br from-accent/10 to-secondary/5 rounded-xl p-3 space-y-3">
+          <div className="flex items-center gap-2">
+            <Repeat className="w-4 h-4 text-secondary" />
+            <span className="font-semibold text-foreground text-sm">
+              Formule multi-séances
+            </span>
+            <span className="px-2 py-0.5 bg-secondary/20 text-secondary text-xs rounded-full">
+              {mission.sessions.length} séances
+            </span>
+          </div>
+          <div className="space-y-2 pl-6 max-h-40 overflow-y-auto">
+            {mission.sessions.map((session, idx) => (
+              <div key={idx} className="flex items-center gap-3 text-sm">
+                <span className="w-5 h-5 bg-secondary/20 text-secondary rounded-full flex items-center justify-center text-xs font-medium">
+                  {idx + 1}
+                </span>
+                <Calendar className="w-3.5 h-3.5 text-purple" />
+                <span className="text-foreground">
+                  {new Date(session.date).toLocaleDateString("fr-FR", {
+                    weekday: "short",
+                    day: "numeric",
+                    month: "short",
+                  })}
+                </span>
+                <Clock className="w-3.5 h-3.5 text-accent" />
+                <span className="text-text-light">
+                  {session.startTime} - {session.endTime}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="bg-slate-50 rounded-xl p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-purple" />
+            <span className="text-sm text-foreground">
+              {formatDateRange(mission.startDate, mission.endDate)}
+              {days > 1 && <span className="text-text-light"> ({days} jours)</span>}
+            </span>
+          </div>
+          {(mission.startTime || mission.endTime) && (
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-accent" />
+              <span className="text-sm text-foreground">
+                {mission.startTime}
+                {mission.endTime && ` - ${mission.endTime}`}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
-          {/* Lieu et Distance */}
-          <div className="bg-slate-50 rounded-xl p-3 space-y-2">
-            {mission.serviceLocation === "announcer_home" ? (
+      {/* Lieu et Distance */}
+      <div className="bg-slate-50 rounded-xl p-3 space-y-2">
+        {mission.serviceLocation === "announcer_home" ? (
+          <div className="flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-secondary" />
+            <span className="text-sm text-secondary font-medium">Chez vous</span>
+          </div>
+        ) : cityDisplay && (
+          <div className="flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-secondary" />
+            {isAccepted ? (
+              <span className="text-sm text-foreground">{mission.location}</span>
+            ) : (
               <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-secondary" />
-                <span className="text-sm text-secondary font-medium">Chez vous</span>
-              </div>
-            ) : cityDisplay && (
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-secondary" />
-                {isAccepted ? (
-                  <span className="text-sm text-foreground">{mission.location}</span>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-foreground">{cityDisplay}</span>
-                    <span className="flex items-center gap-1 text-[10px] text-text-light bg-slate-200 px-1.5 py-0.5 rounded-full">
-                      <Lock className="w-3 h-3" />
-                      Masquée
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-            {distance !== null && mission.serviceLocation !== "announcer_home" && (
-              <div className="flex items-center gap-2">
-                <Navigation className="w-4 h-4 text-blue-500" />
-                <span className="text-sm text-foreground">
-                  À {formatDistance(distance)} de chez vous
+                <span className="text-sm text-foreground">{cityDisplay}</span>
+                <span className="flex items-center gap-1 text-[10px] text-text-light bg-slate-200 px-1.5 py-0.5 rounded-full">
+                  <Lock className="w-3 h-3" />
+                  Masquée
                 </span>
               </div>
             )}
           </div>
+        )}
+        {distance !== null && mission.serviceLocation !== "announcer_home" && (
+          <div className="flex items-center gap-2">
+            <Navigation className="w-4 h-4 text-blue-500" />
+            <span className="text-sm text-foreground">
+              À {formatDistance(distance)} de chez vous
+            </span>
+          </div>
+        )}
+      </div>
 
-          {/* Notes client */}
-          {mission.clientNotes && (
-            <div className="bg-slate-50 rounded-xl p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <MessageSquare className="w-4 h-4 text-foreground" />
-                <span className="font-semibold text-foreground text-sm">Message</span>
-              </div>
-              <p className="text-sm text-text-light">{mission.clientNotes}</p>
-            </div>
-          )}
+      {/* Notes client */}
+      {mission.clientNotes && (
+        <div className="bg-slate-50 rounded-xl p-3">
+          <div className="flex items-center gap-2 mb-1">
+            <MessageSquare className="w-4 h-4 text-foreground" />
+            <span className="font-semibold text-foreground text-sm">Message</span>
+          </div>
+          <p className="text-sm text-text-light">{mission.clientNotes}</p>
+        </div>
+      )}
 
-          {/* Détail des prix */}
-          <div className="bg-gradient-to-br from-secondary/5 to-primary/5 rounded-xl p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <Euro className="w-4 h-4 text-foreground" />
-              <span className="font-semibold text-foreground text-sm">Tarification</span>
-            </div>
-            <div className="space-y-1.5 text-sm">
-              <div className="flex justify-between">
-                <span className="text-text-light">Prix client</span>
-                <span className="text-foreground">{formatPrice(totalAmount)}</span>
+      {/* Détail des prix */}
+      <div className="bg-gradient-to-br from-secondary/5 to-primary/5 rounded-xl p-3">
+        <div className="flex items-center gap-2 mb-2">
+          <Euro className="w-4 h-4 text-foreground" />
+          <span className="font-semibold text-foreground text-sm">Tarification</span>
+        </div>
+        <div className="space-y-1.5 text-sm">
+          <div className="flex justify-between">
+            <span className="text-text-light">Prix client</span>
+            <span className="text-foreground">{formatPrice(totalAmount)}</span>
+          </div>
+          <div className="flex justify-between text-primary text-xs">
+            <span>Commission (15%)</span>
+            <span>-{formatPrice(platformFee)}</span>
+          </div>
+          <div className="flex justify-between pt-1.5 border-t border-slate-200">
+            <span className="font-semibold text-foreground">Votre revenu</span>
+            <span className="text-lg font-bold text-secondary">{formatPrice(announcerEarnings)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Info */}
+      {!isAccepted && (
+        <div className="flex items-start gap-2 p-2.5 bg-blue-50 rounded-lg">
+          <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-blue-800">
+            L'adresse exacte et le téléphone du client seront visibles une fois la mission acceptée et le paiement effectué.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+
+  // ── Panneau droit : Fiches animaux ──
+  const animalsContent = (
+    <div className="p-4">
+      {/* Sélecteur d'animaux si multi */}
+      {isMulti && (
+        <div className="flex gap-2 overflow-x-auto pb-3 mb-3 border-b border-slate-100">
+          {mission.animals!.map((a, i) => (
+            <button
+              key={i}
+              onClick={() => setSelectedAnimalIndex(i)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors",
+                i === selectedAnimalIndex
+                  ? "bg-purple text-white"
+                  : "bg-slate-100 text-text-light hover:bg-slate-200"
+              )}
+            >
+              <span>{a.emoji}</span>
+              {a.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Loading */}
+      {!token ? (
+        <div className="text-center py-8">
+          <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Lock className="w-8 h-8 text-text-light" />
+          </div>
+          <p className="text-text-light text-sm">Les fiches animaux sont disponibles après acceptation de la mission.</p>
+        </div>
+      ) : animalData === undefined ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 text-purple animate-spin" />
+        </div>
+      ) : animalData === null ? (
+        <div className="text-center py-8">
+          <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <AlertTriangle className="w-8 h-8 text-text-light" />
+          </div>
+          <p className="text-text-light">Impossible de charger les informations de l'animal.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {/* Infos principales */}
+          <div className="bg-gradient-to-br from-purple/5 to-primary/5 rounded-xl p-4">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-4xl shadow-sm">
+                {currentEmoji}
               </div>
-              <div className="flex justify-between text-primary text-xs">
-                <span>Commission (15%)</span>
-                <span>-{formatPrice(platformFee)}</span>
-              </div>
-              <div className="flex justify-between pt-1.5 border-t border-slate-200">
-                <span className="font-semibold text-foreground">Votre revenu</span>
-                <span className="text-lg font-bold text-secondary">{formatPrice(announcerEarnings)}</span>
+              <div>
+                <h3 className="text-xl font-bold text-foreground">{animalData.name}</h3>
+                <p className="text-text-light capitalize">{animalData.type}</p>
+                {animalData.breed && (
+                  <p className="text-sm text-purple font-medium">{animalData.breed}</p>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Info */}
-          {!isAccepted && (
-            <div className="flex items-start gap-2 p-2.5 bg-blue-50 rounded-lg">
+          {/* Genre / Âge */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-slate-50 rounded-xl p-3">
+              <p className="text-xs text-text-light mb-1">Genre</p>
+              <p className="font-semibold text-foreground">{getGenderLabel(animalData.gender)}</p>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-3">
+              <p className="text-xs text-text-light mb-1">Âge</p>
+              <p className="font-semibold text-foreground">
+                {calculateAge(animalData.birthDate) || "Non précisé"}
+              </p>
+            </div>
+          </div>
+
+          {/* Description */}
+          {animalData.description && (
+            <div className="bg-slate-50 rounded-xl p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles className="w-4 h-4 text-purple" />
+                <span className="font-semibold text-foreground text-sm">Description</span>
+              </div>
+              <p className="text-sm text-text-light">{animalData.description}</p>
+            </div>
+          )}
+
+          {/* Compatibilité */}
+          {animalData.compatibilityTraits && animalData.compatibilityTraits.length > 0 && (
+            <div className="bg-slate-50 rounded-xl p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Users className="w-4 h-4 text-secondary" />
+                <span className="font-semibold text-foreground text-sm">Compatibilité</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {animalData.compatibilityTraits.map((trait: string) => (
+                  <span key={trait} className="px-2 py-1 bg-secondary/10 text-secondary text-xs rounded-full">
+                    {getTraitLabel(trait, "compatibility")}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Comportement */}
+          {animalData.behaviorTraits && animalData.behaviorTraits.length > 0 && (
+            <div className="bg-slate-50 rounded-xl p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Activity className="w-4 h-4 text-primary" />
+                <span className="font-semibold text-foreground text-sm">Comportement</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {animalData.behaviorTraits.map((trait: string) => (
+                  <span key={trait} className="px-2 py-1 bg-primary/10 text-primary text-xs rounded-full">
+                    {getTraitLabel(trait, "behavior")}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Besoins */}
+          {animalData.needsTraits && animalData.needsTraits.length > 0 && (
+            <div className="bg-slate-50 rounded-xl p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Heart className="w-4 h-4 text-pink-500" />
+                <span className="font-semibold text-foreground text-sm">Besoins particuliers</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {animalData.needsTraits.map((trait: string) => (
+                  <span key={trait} className="px-2 py-1 bg-pink-100 text-pink-700 text-xs rounded-full">
+                    {getTraitLabel(trait, "needs")}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Traits personnalisés */}
+          {animalData.customTraits && animalData.customTraits.length > 0 && (
+            <div className="bg-slate-50 rounded-xl p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles className="w-4 h-4 text-accent" />
+                <span className="font-semibold text-foreground text-sm">Autres caractéristiques</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {animalData.customTraits.map((trait: string, idx: number) => (
+                  <span key={idx} className="px-2 py-1 bg-accent/20 text-foreground text-xs rounded-full">
+                    {trait}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Besoins spéciaux */}
+          {animalData.specialNeeds && (
+            <div className="bg-orange-50 rounded-xl p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle className="w-4 h-4 text-orange-500" />
+                <span className="font-semibold text-foreground text-sm">Besoins spéciaux</span>
+              </div>
+              <p className="text-sm text-text-light">{animalData.specialNeeds}</p>
+            </div>
+          )}
+
+          {/* Conditions médicales */}
+          {animalData.medicalConditions && (
+            <div className="bg-red-50 rounded-xl p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Stethoscope className="w-4 h-4 text-red-500" />
+                <span className="font-semibold text-foreground text-sm">Conditions médicales</span>
+              </div>
+              <p className="text-sm text-text-light">{animalData.medicalConditions}</p>
+            </div>
+          )}
+
+          {/* Message si données inline seulement */}
+          {animalData.isInline && (
+            <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-lg">
               <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
               <p className="text-xs text-blue-800">
-                L'adresse exacte et le téléphone du client seront visibles une fois la mission acceptée et le paiement effectué.
+                Cette fiche contient uniquement les informations de base.
+                Le propriétaire n'a pas encore créé de fiche détaillée pour cet animal.
               </p>
             </div>
           )}
         </div>
-
-        {/* Footer */}
-        <div className="sticky bottom-0 bg-white p-3 border-t border-slate-100">
-          <button
-            className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-foreground rounded-xl font-medium text-sm"
-            onClick={onClose}
-          >
-            Fermer
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
+      )}
+    </div>
   );
-}
-
-// Modal de la fiche animal
-interface AnimalDetailsModalProps {
-  missionId: Id<"missions"> | string;
-  token: string;
-  animalEmoji: string;
-  onClose: () => void;
-}
-
-function AnimalDetailsModal({
-  missionId,
-  token,
-  animalEmoji,
-  onClose,
-}: AnimalDetailsModalProps) {
-  const animalData = useQuery(
-    api.planning.missions.getMissionAnimalDetails,
-    { token, missionId: missionId as Id<"missions"> }
-  );
-
-  // Helper pour calculer l'âge
-  const calculateAge = (birthDate?: string): string | null => {
-    if (!birthDate) return null;
-    const birth = new Date(birthDate);
-    const now = new Date();
-    const years = now.getFullYear() - birth.getFullYear();
-    const months = now.getMonth() - birth.getMonth();
-
-    if (years < 1) {
-      const totalMonths = years * 12 + months;
-      return totalMonths <= 0 ? "Moins d'un mois" : `${totalMonths} mois`;
-    }
-    return years === 1 ? "1 an" : `${years} ans`;
-  };
-
-  // Helper pour traduire le genre
-  const getGenderLabel = (gender?: string): string => {
-    switch (gender) {
-      case "male": return "Mâle";
-      case "female": return "Femelle";
-      default: return "Non précisé";
-    }
-  };
-
-  // Helper pour traduire un trait
-  const getTraitLabel = (traitId: string, category: keyof typeof ANIMAL_TRAITS): string => {
-    const traits = ANIMAL_TRAITS[category].traits as Record<string, string>;
-    return traits[traitId] || traitId;
-  };
 
   return (
     <motion.div
-      className="fixed inset-0 bg-black/50 z-[60] flex items-end sm:items-center justify-center"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      onClick={onClose}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-4"
     >
-      <motion.div
-        className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md max-h-[85vh] overflow-y-auto"
-        initial={{ y: 100, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 100, opacity: 0 }}
-        onClick={(e) => e.stopPropagation()}
+      {/* Bouton retour */}
+      <button
+        onClick={onClose}
+        className="flex items-center gap-2 text-sm text-text-light hover:text-foreground transition-colors group"
       >
-        {/* Header */}
-        <div className="sticky top-0 bg-gradient-to-r from-purple/90 to-primary/90 px-4 py-3 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            <span className="text-2xl">{animalEmoji}</span>
-            Fiche de l'animal
-          </h2>
-          <motion.button
-            className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center"
-            onClick={onClose}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-          >
-            <X className="w-4 h-4 text-white" />
-          </motion.button>
-        </div>
+        <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+        Retour aux réservations
+      </button>
 
-        <div className="p-4">
-          {/* Loading state */}
-          {animalData === undefined && (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 text-purple animate-spin" />
+      {/* Header mission */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex items-center gap-3">
+        <div className="w-11 h-11 bg-primary/10 rounded-xl flex items-center justify-center">
+          {mission.animals && mission.animals.length > 1 ? (
+            <div className="flex items-center">
+              {mission.animals.slice(0, 3).map((a, i) => (
+                <span key={i} className="text-lg" style={{ marginLeft: i > 0 ? "-4px" : "0" }}>
+                  {a.emoji}
+                </span>
+              ))}
             </div>
-          )}
-
-          {/* Error state */}
-          {animalData === null && (
-            <div className="text-center py-8">
-              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <AlertTriangle className="w-8 h-8 text-text-light" />
-              </div>
-              <p className="text-text-light">Impossible de charger les informations de l'animal.</p>
-            </div>
-          )}
-
-          {/* Animal data */}
-          {animalData && (
-            <div className="space-y-4">
-              {/* Infos principales */}
-              <div className="bg-gradient-to-br from-purple/5 to-primary/5 rounded-xl p-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-4xl shadow-sm">
-                    {animalEmoji}
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-foreground">{animalData.name}</h3>
-                    <p className="text-text-light capitalize">{animalData.type}</p>
-                    {animalData.breed && (
-                      <p className="text-sm text-purple font-medium">{animalData.breed}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Détails */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-slate-50 rounded-xl p-3">
-                  <p className="text-xs text-text-light mb-1">Genre</p>
-                  <p className="font-semibold text-foreground">{getGenderLabel(animalData.gender)}</p>
-                </div>
-                <div className="bg-slate-50 rounded-xl p-3">
-                  <p className="text-xs text-text-light mb-1">Âge</p>
-                  <p className="font-semibold text-foreground">
-                    {calculateAge(animalData.birthDate) || "Non précisé"}
-                  </p>
-                </div>
-              </div>
-
-              {/* Description */}
-              {animalData.description && (
-                <div className="bg-slate-50 rounded-xl p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Sparkles className="w-4 h-4 text-purple" />
-                    <span className="font-semibold text-foreground text-sm">Description</span>
-                  </div>
-                  <p className="text-sm text-text-light">{animalData.description}</p>
-                </div>
-              )}
-
-              {/* Compatibilité */}
-              {animalData.compatibilityTraits && animalData.compatibilityTraits.length > 0 && (
-                <div className="bg-slate-50 rounded-xl p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Users className="w-4 h-4 text-secondary" />
-                    <span className="font-semibold text-foreground text-sm">Compatibilité</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {animalData.compatibilityTraits.map((trait: string) => (
-                      <span
-                        key={trait}
-                        className="px-2 py-1 bg-secondary/10 text-secondary text-xs rounded-full"
-                      >
-                        {getTraitLabel(trait, "compatibility")}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Comportement */}
-              {animalData.behaviorTraits && animalData.behaviorTraits.length > 0 && (
-                <div className="bg-slate-50 rounded-xl p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Activity className="w-4 h-4 text-primary" />
-                    <span className="font-semibold text-foreground text-sm">Comportement</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {animalData.behaviorTraits.map((trait: string) => (
-                      <span
-                        key={trait}
-                        className="px-2 py-1 bg-primary/10 text-primary text-xs rounded-full"
-                      >
-                        {getTraitLabel(trait, "behavior")}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Besoins */}
-              {animalData.needsTraits && animalData.needsTraits.length > 0 && (
-                <div className="bg-slate-50 rounded-xl p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Heart className="w-4 h-4 text-pink-500" />
-                    <span className="font-semibold text-foreground text-sm">Besoins particuliers</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {animalData.needsTraits.map((trait: string) => (
-                      <span
-                        key={trait}
-                        className="px-2 py-1 bg-pink-100 text-pink-700 text-xs rounded-full"
-                      >
-                        {getTraitLabel(trait, "needs")}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Traits personnalisés */}
-              {animalData.customTraits && animalData.customTraits.length > 0 && (
-                <div className="bg-slate-50 rounded-xl p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Sparkles className="w-4 h-4 text-accent" />
-                    <span className="font-semibold text-foreground text-sm">Autres caractéristiques</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {animalData.customTraits.map((trait: string, idx: number) => (
-                      <span
-                        key={idx}
-                        className="px-2 py-1 bg-accent/20 text-foreground text-xs rounded-full"
-                      >
-                        {trait}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Besoins spéciaux */}
-              {animalData.specialNeeds && (
-                <div className="bg-orange-50 rounded-xl p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <AlertTriangle className="w-4 h-4 text-orange-500" />
-                    <span className="font-semibold text-foreground text-sm">Besoins spéciaux</span>
-                  </div>
-                  <p className="text-sm text-text-light">{animalData.specialNeeds}</p>
-                </div>
-              )}
-
-              {/* Conditions médicales */}
-              {animalData.medicalConditions && (
-                <div className="bg-red-50 rounded-xl p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Stethoscope className="w-4 h-4 text-red-500" />
-                    <span className="font-semibold text-foreground text-sm">Conditions médicales</span>
-                  </div>
-                  <p className="text-sm text-text-light">{animalData.medicalConditions}</p>
-                </div>
-              )}
-
-              {/* Message si données inline seulement */}
-              {animalData.isInline && (
-                <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-lg">
-                  <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-blue-800">
-                    Cette fiche contient uniquement les informations de base.
-                    Le propriétaire n'a pas encore créé de fiche détaillée pour cet animal.
-                  </p>
-                </div>
-              )}
-            </div>
+          ) : (
+            <span className="text-xl">{mission.animal.emoji}</span>
           )}
         </div>
+        <div>
+          <h2 className="text-lg font-bold text-foreground">{firstName} — {mission.serviceName}</h2>
+          <p className="text-sm text-text-light">
+            {mission.animals && mission.animals.length > 1
+              ? mission.animals.map(a => a.name).join(", ")
+              : mission.animal.name}
+          </p>
+        </div>
+      </div>
 
-        {/* Footer */}
-        <div className="sticky bottom-0 bg-white p-3 border-t border-slate-100">
+      {/* MOBILE : onglets */}
+      <div className="sm:hidden bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="flex border-b border-slate-100">
           <button
-            className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-foreground rounded-xl font-medium text-sm"
-            onClick={onClose}
+            onClick={() => setActiveTab("details")}
+            className={cn(
+              "flex-1 py-2.5 text-sm font-medium text-center transition-colors relative",
+              activeTab === "details"
+                ? "text-foreground"
+                : "text-text-light hover:text-foreground"
+            )}
           >
-            Fermer
+            <span className="flex items-center justify-center gap-1.5">
+              <Eye className="w-4 h-4" />
+              Détails
+            </span>
+            {activeTab === "details" && (
+              <motion.div
+                className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+                layoutId="splitTabIndicator"
+              />
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab("animals")}
+            className={cn(
+              "flex-1 py-2.5 text-sm font-medium text-center transition-colors relative",
+              activeTab === "animals"
+                ? "text-foreground"
+                : "text-text-light hover:text-foreground"
+            )}
+          >
+            <span className="flex items-center justify-center gap-1.5">
+              <PawPrint className="w-4 h-4" />
+              Animaux
+            </span>
+            {activeTab === "animals" && (
+              <motion.div
+                className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple"
+                layoutId="splitTabIndicator"
+              />
+            )}
           </button>
         </div>
-      </motion.div>
+        <div className="max-h-[70vh] overflow-y-auto">
+          {activeTab === "details" ? detailsContent : animalsContent}
+        </div>
+      </div>
+
+      {/* DESKTOP : split 50/50 */}
+      <div className="hidden sm:grid sm:grid-cols-2 gap-4">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 bg-slate-50">
+            <h3 className="font-semibold text-foreground flex items-center gap-2 text-sm">
+              <Eye className="w-4 h-4 text-primary" />
+              Détails de la mission
+            </h3>
+          </div>
+          <div className="max-h-[70vh] overflow-y-auto">
+            {detailsContent}
+          </div>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-purple/5 to-primary/5">
+            <h3 className="font-semibold text-foreground flex items-center gap-2 text-sm">
+              <PawPrint className="w-4 h-4 text-purple" />
+              {isMulti ? "Fiches animaux" : "Fiche de l'animal"}
+            </h3>
+          </div>
+          <div className="max-h-[70vh] overflow-y-auto">
+            {animalsContent}
+          </div>
+        </div>
+      </div>
     </motion.div>
   );
 }

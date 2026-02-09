@@ -163,7 +163,7 @@ export default function ReservationPage({
     }
   }, [bookingData?.options]);
 
-  // Pré-sélectionner l'animal
+  // Pré-sélectionner les animaux (mono et multi)
   useEffect(() => {
     if (
       bookingData?.selectedAnimalIds &&
@@ -172,6 +172,10 @@ export default function ReservationPage({
       isLoggedIn
     ) {
       setSelectedAnimalId(bookingData.selectedAnimalIds[0] as Id<"animals">);
+      // Pré-sélectionner tous les animaux pour le mode multi
+      if (bookingData.selectedAnimalIds.length > 1) {
+        setSelectedAnimalIds(bookingData.selectedAnimalIds.map((id: string) => id as Id<"animals">));
+      }
     }
   }, [bookingData?.selectedAnimalIds, selectedAnimalId, isLoggedIn]);
 
@@ -233,7 +237,11 @@ export default function ReservationPage({
     ((bookingData?.variant?.numberOfSessions ?? 1) > 1 ||
     (bookingData?.sessions && bookingData.sessions.length > 1));
   const numberOfSessions = bookingData?.variant?.numberOfSessions || 1;
-  const effectiveAnimalCount = bookingData?.animalCount || 1;
+  // Nombre d'animaux : pris depuis la sélection réelle si multi, sinon depuis bookingData
+  const isMultiAnimalBooking = (bookingData?.selectedAnimalIds?.length ?? 0) > 1;
+  const effectiveAnimalCount = isMultiAnimalBooking
+    ? (selectedAnimalIds.length || bookingData?.selectedAnimalIds?.length || bookingData?.animalCount || 1)
+    : (bookingData?.animalCount || 1);
   // Nombre réel de créneaux sélectionnés (pour les formules collectives)
   const actualSlotCount = isCollectiveFormula && bookingData?.collectiveSlots?.length
     ? bookingData.collectiveSlots.length
@@ -308,16 +316,17 @@ export default function ReservationPage({
     });
   })();
 
-  // Montant total selon le type de formule
+  // Montant total selon le type de formule (prix × animaux pour toutes les formules)
   const totalAmount = (() => {
     if (!bookingData?.variant) return 0;
     if (isCollectiveFormula) {
       return bookingData.variant.price * actualSlotCount * effectiveAnimalCount + optionsTotal;
     }
     if (isMultiSessionFormula) {
-      return bookingData.variant.price * numberOfSessions + optionsTotal;
+      return bookingData.variant.price * numberOfSessions * effectiveAnimalCount + optionsTotal;
     }
-    return priceCalculation?.totalAmount ?? 0;
+    const baseTotal = priceCalculation?.totalAmount ?? 0;
+    return effectiveAnimalCount > 1 ? baseTotal * effectiveAnimalCount : baseTotal;
   })();
 
   const isMultiDay = bookingData?.dates.endDate !== bookingData?.dates.startDate;
@@ -407,13 +416,14 @@ export default function ReservationPage({
     const errors: Record<string, string> = {};
 
     if (isLoggedIn) {
-      if (isCollectiveFormula) {
+      const isMultiAnimal = (bookingData?.selectedAnimalIds?.length ?? 0) > 1;
+      if (isCollectiveFormula || isMultiAnimal) {
         if (selectedAnimalIds.length === 0) {
-          errors.animal = "Veuillez selectionner au moins un animal";
+          errors.animal = "Veuillez sélectionner au moins un animal";
         }
       } else {
         if (!selectedAnimalId) {
-          errors.animal = "Veuillez selectionner un animal";
+          errors.animal = "Veuillez sélectionner un animal";
         }
       }
     } else {
@@ -485,6 +495,7 @@ export default function ReservationPage({
           token,
           bookingId: bookingId as Id<"pendingBookings">,
           animalId: effectiveAnimalId,
+          animalIds: selectedAnimalIds.length > 1 ? selectedAnimalIds : undefined,
           location: effectiveLocation,
           city: effectiveCity || undefined,
           postalCode: effectivePostalCode || undefined,

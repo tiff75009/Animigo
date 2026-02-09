@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
-import { MissionCard, type ConvexMission } from "../../../components/mission-card";
+import { MissionCard, MissionSplitView, calculateDistance, type ConvexMission } from "../../../components/mission-card";
 import { MissionsStats } from "../MissionsStats";
 import { MissionsEmptyState } from "../MissionsEmptyState";
 import { MissionListSkeleton } from "../MissionCardSkeleton";
@@ -36,6 +36,7 @@ export function PendingAcceptanceTab({
   const [acceptModalOpen, setAcceptModalOpen] = useState(false);
   const [refuseModalOpen, setRefuseModalOpen] = useState(false);
   const [selectedMission, setSelectedMission] = useState<ConvexMission | null>(null);
+  const [detailMission, setDetailMission] = useState<ConvexMission | null>(null);
 
   const acceptMissionMutation = useMutation(api.planning.missions.acceptMission);
   const refuseMissionMutation = useMutation(api.planning.missions.refuseMission);
@@ -102,6 +103,24 @@ export function PendingAcceptanceTab({
     );
   }
 
+  // Si une mission est sélectionnée, afficher la vue détail split
+  if (detailMission) {
+    const dist = announcerCoordinates && detailMission.clientCoordinates
+      ? calculateDistance(announcerCoordinates, detailMission.clientCoordinates)
+      : null;
+    const isAccepted = ["upcoming", "in_progress", "completed"].includes(detailMission.status);
+
+    return (
+      <MissionSplitView
+        mission={detailMission}
+        onClose={() => setDetailMission(null)}
+        isAccepted={isAccepted}
+        distance={dist}
+        token={token}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Stats */}
@@ -128,6 +147,7 @@ export function PendingAcceptanceTab({
                 showActions={true}
                 onAccept={handleAcceptClick}
                 onRefuse={handleRefuseClick}
+                onViewDetails={() => setDetailMission(mission)}
                 announcerCoordinates={announcerCoordinates}
                 token={token}
               />

@@ -38,6 +38,9 @@ export default function AnimalSection({
   setGuestAnimalData,
   fieldErrors,
 }: AnimalSectionProps) {
+  // Mode multi-sélection si plusieurs animaux pré-sélectionnés (même hors collectif)
+  const isMultiAnimal = preSelectedAnimalIds.length > 1 && !isCollectiveFormula;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -48,7 +51,7 @@ export default function AnimalSection({
       <div className="bg-gradient-to-r from-secondary to-secondary/80 px-6 py-4">
         <h2 className="text-lg font-semibold text-white flex items-center gap-2">
           <PawPrint className="w-5 h-5" />
-          {isCollectiveFormula ? "Vos animaux" : "Votre animal"}
+          {isCollectiveFormula || isMultiAnimal ? "Vos animaux" : "Votre animal"}
         </h2>
       </div>
       <div className="p-6">
@@ -67,6 +70,27 @@ export default function AnimalSection({
                 }}
                 error={fieldErrors.animal}
               />
+            ) : isMultiAnimal ? (
+              <>
+                <AnimalSelector
+                  token={token}
+                  selectedAnimalId={selectedAnimalId}
+                  onSelect={setSelectedAnimalId}
+                  compact
+                  multiSelect
+                  selectedAnimalIds={selectedAnimalIds}
+                  onMultiSelect={(ids) => {
+                    setSelectedAnimalIds(ids);
+                    setSelectedAnimalId(ids.length > 0 ? ids[0] : null);
+                  }}
+                />
+                {fieldErrors.animal && (
+                  <p className="mt-3 text-sm text-red-500 flex items-center gap-1">
+                    <AlertCircle className="w-4 h-4" />
+                    {fieldErrors.animal}
+                  </p>
+                )}
+              </>
             ) : (
               <>
                 <AnimalSelector

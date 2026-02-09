@@ -292,7 +292,7 @@ export default function ReservationSummary({
                 : numberOfSessions;
               const basePrice = isCollectiveFormula
                 ? bookingData.variant.price * actualSlots * effectiveAnimalCount
-                : bookingData.variant.price * numberOfSessions;
+                : bookingData.variant.price * numberOfSessions * effectiveAnimalCount;
 
               return (
                 <div className={`rounded-xl p-4 space-y-3 mb-3 ${isCollectiveFormula ? "bg-purple-50" : "bg-primary/5"}`}>
@@ -306,7 +306,7 @@ export default function ReservationSummary({
                       </div>
                       <p className="text-xs text-gray-500 ml-6">
                         └ {formatPrice(bookingData.variant.price)} × {isCollectiveFormula ? actualSlots : numberOfSessions} {isCollectiveFormula ? "créneau" : "séance"}{(isCollectiveFormula ? actualSlots : numberOfSessions) > 1 ? (isCollectiveFormula ? "x" : "s") : ""}
-                        {isCollectiveFormula && effectiveAnimalCount > 1 && ` × ${effectiveAnimalCount} animaux`}
+                        {effectiveAnimalCount > 1 && ` × ${effectiveAnimalCount} animaux`}
                       </p>
                     </div>
                     <span className={`font-bold text-lg ${isCollectiveFormula ? "text-purple-700" : "text-primary"}`}>
@@ -329,6 +329,7 @@ export default function ReservationSummary({
                 halfDayRate={halfDayRate}
                 dayStartDisplay={dayStartDisplay}
                 dayEndDisplay={dayEndDisplay}
+                effectiveAnimalCount={effectiveAnimalCount}
               />
             )}
 
@@ -732,6 +733,7 @@ function UniSessionPriceDetail({
   halfDayRate,
   dayStartDisplay,
   dayEndDisplay,
+  effectiveAnimalCount = 1,
 }: {
   priceCalculation: PriceCalculationResult;
   billingInfo: BillingInfo | null;
@@ -742,6 +744,7 @@ function UniSessionPriceDetail({
   halfDayRate: number;
   dayStartDisplay: string;
   dayEndDisplay: string;
+  effectiveAnimalCount?: number;
 }) {
   return (
     <div className="bg-gray-50 rounded-xl p-3 space-y-2 mb-3">
@@ -873,6 +876,18 @@ function UniSessionPriceDetail({
             </span>
           </span>
           <span className="font-medium text-indigo-700">+{formatPrice(priceCalculation.nightsAmount)}</span>
+        </div>
+      )}
+
+      {/* Multiplicateur animaux */}
+      {effectiveAnimalCount > 1 && (
+        <div className="flex justify-between text-sm pt-1 border-t border-gray-200/50 mt-1">
+          <span className="text-gray-600 flex items-center gap-2">
+            × {effectiveAnimalCount} animaux
+          </span>
+          <span className="font-medium text-foreground">
+            {formatPrice(priceCalculation.totalAmount * effectiveAnimalCount)}
+          </span>
         </div>
       )}
     </div>

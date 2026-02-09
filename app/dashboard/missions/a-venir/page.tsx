@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Calendar, Euro, CalendarDays, Loader2, X, AlertTriangle, MessageSquare } from "lucide-react";
-import { MissionCard } from "../../components/mission-card";
+import { MissionCard, MissionSplitView, calculateDistance, type ConvexMission } from "../../components/mission-card";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/app/hooks/useAuth";
@@ -114,6 +114,7 @@ export default function MissionsAVenirPage() {
   const [selectedMissionId, setSelectedMissionId] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isContacting, setIsContacting] = useState(false);
+  const [detailMission, setDetailMission] = useState<MissionType | null>(null);
 
   // Query Convex pour les missions "upcoming"
   const missions = useQuery(
@@ -211,6 +212,24 @@ export default function MissionsAVenirPage() {
   const sortedMissions = [...missionsList].sort(
     (a: MissionType, b: MissionType) => new Date(a.startDate || 0).getTime() - new Date(b.startDate || 0).getTime()
   );
+
+  // Vue détail split
+  if (detailMission) {
+    const dist = announcerData?.coordinates && detailMission.clientCoordinates
+      ? calculateDistance(announcerData.coordinates, detailMission.clientCoordinates)
+      : null;
+    const accepted = ["upcoming", "in_progress", "completed"].includes(detailMission.status);
+
+    return (
+      <MissionSplitView
+        mission={detailMission as ConvexMission}
+        onClose={() => setDetailMission(null)}
+        isAccepted={accepted}
+        distance={dist}
+        token={token}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -314,6 +333,7 @@ export default function MissionsAVenirPage() {
                 token={token}
                 onContact={handleContact}
                 onCancel={handleCancelClick}
+                onViewDetails={() => setDetailMission(mission)}
               />
             </motion.div>
           ))

@@ -13,6 +13,10 @@ interface AnimalSelectorProps {
   selectedAnimalId: Id<"animals"> | null;
   onSelect: (animalId: Id<"animals">) => void;
   compact?: boolean;
+  // Mode multi-sélection
+  multiSelect?: boolean;
+  selectedAnimalIds?: Id<"animals">[];
+  onMultiSelect?: (animalIds: Id<"animals">[]) => void;
 }
 
 export default function AnimalSelector({
@@ -20,6 +24,9 @@ export default function AnimalSelector({
   selectedAnimalId,
   onSelect,
   compact = false,
+  multiSelect = false,
+  selectedAnimalIds = [],
+  onMultiSelect,
 }: AnimalSelectorProps) {
   // Récupérer les animaux de l'utilisateur
   const animals = useQuery(api.animals.getUserAnimals, { token });
@@ -42,7 +49,12 @@ export default function AnimalSelector({
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
           <PawPrint className="w-5 h-5 text-primary" />
-          Sélectionner un animal
+          {multiSelect ? "Sélectionner vos animaux" : "Sélectionner un animal"}
+          {multiSelect && selectedAnimalIds.length > 0 && (
+            <span className="text-sm font-normal text-primary">
+              ({selectedAnimalIds.length} sélectionné{selectedAnimalIds.length > 1 ? "s" : ""})
+            </span>
+          )}
         </h3>
         <Link
           href="/client/mes-animaux/nouveau"
@@ -88,8 +100,17 @@ export default function AnimalSelector({
                   breed={animal.breed}
                   gender={animal.gender}
                   photoUrl={animal.primaryPhotoUrl}
-                  isSelected={selectedAnimalId === animal.id}
-                  onSelect={() => onSelect(animal.id)}
+                  isSelected={multiSelect ? selectedAnimalIds.includes(animal.id) : selectedAnimalId === animal.id}
+                  onSelect={() => {
+                    if (multiSelect && onMultiSelect) {
+                      const newIds = selectedAnimalIds.includes(animal.id)
+                        ? selectedAnimalIds.filter(id => id !== animal.id)
+                        : [...selectedAnimalIds, animal.id];
+                      onMultiSelect(newIds);
+                    } else {
+                      onSelect(animal.id);
+                    }
+                  }}
                   compact={compact}
                 />
               </motion.div>

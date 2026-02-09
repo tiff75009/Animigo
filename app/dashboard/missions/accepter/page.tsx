@@ -11,7 +11,7 @@ import {
   Loader2,
   TrendingUp,
 } from "lucide-react";
-import { MissionCard, type ConvexMission } from "../../components/mission-card";
+import { MissionCard, MissionSplitView, calculateDistance, type ConvexMission } from "../../components/mission-card";
 
 // Helper pour extraire le prénom
 function getFirstName(fullName: string): string {
@@ -344,6 +344,7 @@ export default function MissionsAccepterPage() {
   const [acceptModalOpen, setAcceptModalOpen] = useState(false);
   const [refuseModalOpen, setRefuseModalOpen] = useState(false);
   const [selectedMission, setSelectedMission] = useState<ConvexMission | null>(null);
+  const [detailMission, setDetailMission] = useState<ConvexMission | null>(null);
 
   // Récupérer le token depuis localStorage
   useEffect(() => {
@@ -431,6 +432,24 @@ export default function MissionsAccepterPage() {
     );
   }
 
+  // Vue détail split
+  if (detailMission) {
+    const dist = announcerData?.coordinates && detailMission.clientCoordinates
+      ? calculateDistance(announcerData.coordinates, detailMission.clientCoordinates)
+      : null;
+    const accepted = ["upcoming", "in_progress", "completed"].includes(detailMission.status);
+
+    return (
+      <MissionSplitView
+        mission={detailMission}
+        onClose={() => setDetailMission(null)}
+        isAccepted={accepted}
+        distance={dist}
+        token={token}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -509,6 +528,7 @@ export default function MissionsAccepterPage() {
                 showActions={true}
                 onAccept={handleAcceptClick}
                 onRefuse={handleRefuseClick}
+                onViewDetails={() => setDetailMission(mission)}
                 announcerCoordinates={announcerData?.coordinates}
                 token={token}
               />

@@ -2,7 +2,8 @@
 
 import { motion } from "framer-motion";
 import { Ban, Calendar, Euro, Loader2 } from "lucide-react";
-import { MissionCard } from "../../components/mission-card";
+import { useState } from "react";
+import { MissionCard, MissionSplitView, type ConvexMission } from "../../components/mission-card";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/app/hooks/useAuth";
@@ -12,6 +13,7 @@ type MissionType = FunctionReturnType<typeof api.planning.missions.getMissionsBy
 
 export default function MissionsAnnuleesPage() {
   const { token, isLoading: authLoading } = useAuth();
+  const [detailMission, setDetailMission] = useState<MissionType | null>(null);
 
   // Query Convex pour les missions "cancelled"
   const missions = useQuery(
@@ -51,6 +53,21 @@ export default function MissionsAnnuleesPage() {
   const sortedMissions = [...missionsList].sort(
     (a: MissionType, b: MissionType) => new Date(b.startDate || 0).getTime() - new Date(a.startDate || 0).getTime()
   );
+
+  // Vue détail split
+  if (detailMission) {
+    const accepted = ["upcoming", "in_progress", "completed"].includes(detailMission.status);
+
+    return (
+      <MissionSplitView
+        mission={detailMission as ConvexMission}
+        onClose={() => setDetailMission(null)}
+        isAccepted={accepted}
+        distance={null}
+        token={token}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -149,7 +166,7 @@ export default function MissionsAnnuleesPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 + index * 0.05 }}
             >
-              <MissionCard mission={mission} token={token} />
+              <MissionCard mission={mission} token={token} onViewDetails={() => setDetailMission(mission)} />
             </motion.div>
           ))
         )}

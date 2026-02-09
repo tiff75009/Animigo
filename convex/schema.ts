@@ -580,12 +580,18 @@ export default defineSchema({
     clientPhone: v.optional(v.string()),
 
     // Animal (référence ou données inline pour invités)
-    animalId: v.optional(v.id("animals")), // Référence si utilisateur connecté
+    animalId: v.optional(v.id("animals")), // Référence si utilisateur connecté (premier animal, rétrocompat)
+    animalIds: v.optional(v.array(v.id("animals"))), // Tous les animaux sélectionnés
     animal: v.object({
       name: v.string(),
       type: v.string(),
       emoji: v.string(),
     }),
+    animals: v.optional(v.array(v.object({
+      name: v.string(),
+      type: v.string(),
+      emoji: v.string(),
+    }))),
 
     // Service
     serviceName: v.string(),

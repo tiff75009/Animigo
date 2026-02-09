@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { CalendarClock, Euro, Calendar, MessageSquare, Loader2 } from "lucide-react";
-import { MissionCard } from "../../components/mission-card";
+import { MissionCard, MissionSplitView, calculateDistance, type ConvexMission } from "../../components/mission-card";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/app/hooks/useAuth";
@@ -19,6 +19,7 @@ export default function MissionsEnCoursPage() {
   const router = useRouter();
   const { error: toastError } = useToast();
   const [isContacting, setIsContacting] = useState(false);
+  const [detailMission, setDetailMission] = useState<MissionType | null>(null);
 
   // Query Convex pour les missions "in_progress"
   const missions = useQuery(
@@ -82,6 +83,24 @@ export default function MissionsEnCoursPage() {
   let totalAmount = 0;
   for (const m of missionsList) {
     totalAmount += m.announcerEarnings ?? (m.amount ?? 0) * 0.85;
+  }
+
+  // Vue détail split
+  if (detailMission) {
+    const dist = announcerData?.coordinates && detailMission.clientCoordinates
+      ? calculateDistance(announcerData.coordinates, detailMission.clientCoordinates)
+      : null;
+    const accepted = ["upcoming", "in_progress", "completed"].includes(detailMission.status);
+
+    return (
+      <MissionSplitView
+        mission={detailMission as ConvexMission}
+        onClose={() => setDetailMission(null)}
+        isAccepted={accepted}
+        distance={dist}
+        token={token}
+      />
+    );
   }
 
   return (
@@ -204,6 +223,7 @@ export default function MissionsEnCoursPage() {
                 announcerCoordinates={announcerData?.coordinates}
                 token={token}
                 onContact={handleContact}
+                onViewDetails={() => setDetailMission(mission)}
               />
             </motion.div>
           ))

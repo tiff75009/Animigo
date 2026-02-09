@@ -365,6 +365,8 @@ export const getMissionsByStatus = query({
         clientPhone: m.clientPhone,
         animal: m.animal,
         animalId: m.animalId,
+        animals: m.animals,
+        animalIds: m.animalIds,
         serviceName: m.serviceName,
         serviceCategory: m.serviceCategory,
         variantId: m.variantId,
@@ -1034,6 +1036,90 @@ export const getMissionAnimalDetails = query({
 });
 
 /**
+ * Récupère les fiches détaillées de TOUS les animaux d'une mission (multi-animaux)
+ */
+export const getMissionAnimalsDetails = query({
+  args: {
+    token: v.string(),
+    missionId: v.id("missions"),
+  },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+
+    if (!session || session.expiresAt < Date.now()) {
+      return null;
+    }
+
+    const mission = await ctx.db.get(args.missionId);
+    if (!mission || mission.announcerId !== session.userId) {
+      return null;
+    }
+
+    // Déterminer la liste des animalIds à résoudre
+    const animalIds = mission.animalIds && mission.animalIds.length > 0
+      ? mission.animalIds
+      : mission.animalId
+        ? [mission.animalId]
+        : [];
+
+    // Déterminer les infos inline (animals[] ou animal)
+    const inlineAnimals = mission.animals && mission.animals.length > 0
+      ? mission.animals
+      : [mission.animal];
+
+    // Résoudre toutes les fiches en parallèle
+    const animals = await Promise.all(
+      animalIds.map(async (id, index) => {
+        const animal = await ctx.db.get(id);
+        const inline = inlineAnimals[index] || inlineAnimals[0];
+
+        if (!animal) {
+          return {
+            name: inline.name,
+            type: inline.type,
+            emoji: inline.emoji,
+            isInline: true,
+          };
+        }
+
+        return {
+          id: animal._id,
+          name: animal.name,
+          type: animal.type,
+          emoji: inline.emoji,
+          gender: animal.gender,
+          breed: animal.breed,
+          birthDate: animal.birthDate,
+          description: animal.description,
+          compatibilityTraits: animal.compatibilityTraits,
+          behaviorTraits: animal.behaviorTraits,
+          needsTraits: animal.needsTraits,
+          customTraits: animal.customTraits,
+          specialNeeds: animal.specialNeeds,
+          medicalConditions: animal.medicalConditions,
+          isInline: false,
+        };
+      })
+    );
+
+    // Si aucun animalId, retourner les données inline
+    if (animals.length === 0) {
+      return inlineAnimals.map(a => ({
+        name: a.name,
+        type: a.type,
+        emoji: a.emoji,
+        isInline: true,
+      }));
+    }
+
+    return animals;
+  },
+});
+
+/**
  * Récupère les missions d'un client (propriétaire d'animal)
  */
 export const getClientMissions = query({
@@ -1518,6 +1604,8 @@ export const getAnnouncerMissionsWithStats = query({
         clientPhone: m.clientPhone,
         animal: m.animal,
         animalId: m.animalId,
+        animals: m.animals,
+        animalIds: m.animalIds,
         serviceName: m.serviceName,
         serviceCategory: m.serviceCategory,
         variantId: m.variantId,

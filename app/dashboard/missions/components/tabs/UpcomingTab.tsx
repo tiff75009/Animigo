@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
-import { MissionCard } from "../../../components/mission-card";
+import { MissionCard, MissionSplitView, calculateDistance, type ConvexMission } from "../../../components/mission-card";
 import { MissionsStats } from "../MissionsStats";
 import { MissionsEmptyState } from "../MissionsEmptyState";
 import { MissionsInfoBanner } from "../MissionsInfoBanner";
@@ -45,6 +45,7 @@ export function UpcomingTab({
   const [selectedMissionId, setSelectedMissionId] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isContacting, setIsContacting] = useState(false);
+  const [detailMission, setDetailMission] = useState<MissionType | null>(null);
 
   const cancelMission = useMutation(api.planning.missions.cancelMission);
   const getOrCreateConversation = useMutation(api.messaging.mutations.getOrCreateConversation);
@@ -126,6 +127,24 @@ export function UpcomingTab({
     );
   }
 
+  // Vue détail split
+  if (detailMission) {
+    const dist = announcerCoordinates && detailMission.clientCoordinates
+      ? calculateDistance(announcerCoordinates, detailMission.clientCoordinates)
+      : null;
+    const accepted = ["upcoming", "in_progress", "completed"].includes(detailMission.status);
+
+    return (
+      <MissionSplitView
+        mission={detailMission as ConvexMission}
+        onClose={() => setDetailMission(null)}
+        isAccepted={accepted}
+        distance={dist}
+        token={token}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Stats */}
@@ -156,6 +175,7 @@ export function UpcomingTab({
                 token={token}
                 onContact={handleContact}
                 onCancel={handleCancelClick}
+                onViewDetails={() => setDetailMission(mission)}
               />
             </motion.div>
           ))}

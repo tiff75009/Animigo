@@ -2,7 +2,8 @@
 
 import { motion } from "framer-motion";
 import { CheckCircle, Euro, Calendar, TrendingUp, Loader2 } from "lucide-react";
-import { MissionCard } from "../../components/mission-card";
+import { useState } from "react";
+import { MissionCard, MissionSplitView, calculateDistance, type ConvexMission } from "../../components/mission-card";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/app/hooks/useAuth";
@@ -12,6 +13,7 @@ type MissionType = FunctionReturnType<typeof api.planning.missions.getMissionsBy
 
 export default function MissionsTermineesPage() {
   const { token, isLoading: authLoading } = useAuth();
+  const [detailMission, setDetailMission] = useState<MissionType | null>(null);
 
   // Query Convex pour les missions "completed"
   const missions = useQuery(
@@ -63,6 +65,24 @@ export default function MissionsTermineesPage() {
   const sortedMissions = [...missionsList].sort(
     (a: MissionType, b: MissionType) => new Date(b.endDate || 0).getTime() - new Date(a.endDate || 0).getTime()
   );
+
+  // Vue détail split
+  if (detailMission) {
+    const dist = announcerData?.coordinates && detailMission.clientCoordinates
+      ? calculateDistance(announcerData.coordinates, detailMission.clientCoordinates)
+      : null;
+    const accepted = ["upcoming", "in_progress", "completed"].includes(detailMission.status);
+
+    return (
+      <MissionSplitView
+        mission={detailMission as ConvexMission}
+        onClose={() => setDetailMission(null)}
+        isAccepted={accepted}
+        distance={dist}
+        token={token}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -188,6 +208,7 @@ export default function MissionsTermineesPage() {
                 mission={mission}
                 announcerCoordinates={announcerData?.coordinates}
                 token={token}
+                onViewDetails={() => setDetailMission(mission)}
               />
             </motion.div>
           ))

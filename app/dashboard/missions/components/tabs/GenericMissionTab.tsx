@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
-import { MissionCard } from "../../../components/mission-card";
+import { MissionCard, MissionSplitView, calculateDistance, type ConvexMission } from "../../../components/mission-card";
 import { MissionsStats } from "../MissionsStats";
 import { MissionsEmptyState } from "../MissionsEmptyState";
 import { MissionsInfoBanner } from "../MissionsInfoBanner";
@@ -53,6 +53,7 @@ export function GenericMissionTab({
   const router = useRouter();
   const { error: toastError } = useToast();
   const [isContacting, setIsContacting] = useState(false);
+  const [detailMission, setDetailMission] = useState<MissionType | null>(null);
 
   const getOrCreateConversation = useMutation(api.messaging.mutations.getOrCreateConversation);
 
@@ -120,6 +121,24 @@ export function GenericMissionTab({
   const tabId = status as MissionTab;
   const pendingAmount = totalAmount - paidAmount;
 
+  // Vue détail split
+  if (detailMission) {
+    const dist = announcerCoordinates && detailMission.clientCoordinates
+      ? calculateDistance(announcerCoordinates, detailMission.clientCoordinates)
+      : null;
+    const accepted = ["upcoming", "in_progress", "completed"].includes(detailMission.status);
+
+    return (
+      <MissionSplitView
+        mission={detailMission as ConvexMission}
+        onClose={() => setDetailMission(null)}
+        isAccepted={accepted}
+        distance={dist}
+        token={token}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Stats */}
@@ -152,6 +171,7 @@ export function GenericMissionTab({
                 announcerCoordinates={announcerCoordinates}
                 token={token}
                 onContact={status === "in_progress" ? handleContact : undefined}
+                onViewDetails={() => setDetailMission(mission)}
               />
             </motion.div>
           ))}
