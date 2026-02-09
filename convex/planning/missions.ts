@@ -244,6 +244,10 @@ export const getMissionsByStatus = query({
       .withIndex("by_announcer", (q) => q.eq("announcerId", session.userId))
       .collect();
 
+    // Récupérer le statut TVA de l'annonceur
+    const announcer = await ctx.db.get(session.userId);
+    const announcerIsVatSubject = announcer?.isVatSubject === true;
+
     // 2. Filtrer par statut demandé
     let missions = allAnnouncerMissions.filter(m => m.status === args.status);
     if (args.limit) {
@@ -400,6 +404,9 @@ export const getMissionsByStatus = query({
         clientTrustStats: clientStats,
         serviceLocation: m.serviceLocation,
         clientHistory,
+        vatRate: m.vatRate,
+        isSapApplied: m.isSapApplied,
+        isVatSubject: announcerIsVatSubject,
       };
     });
 
@@ -1568,6 +1575,10 @@ export const getAnnouncerMissionsWithStats = query({
       };
     }
 
+    // Récupérer le statut TVA de l'annonceur
+    const announcerUser = await ctx.db.get(session.userId);
+    const announcerIsVatSubject = announcerUser?.isVatSubject === true;
+
     // 5. Batch lookup des collectiveSlots
     const allSlotIds: string[] = [];
     filteredMissions.forEach(m => {
@@ -1643,6 +1654,9 @@ export const getAnnouncerMissionsWithStats = query({
         clientHistory: clientHistoryWithAnnouncer[m.clientId as string] || {
           previousMissionsCount: 0, isNewClient: true
         },
+        vatRate: m.vatRate,
+        isSapApplied: m.isSapApplied,
+        isVatSubject: announcerIsVatSubject,
       };
     });
 

@@ -44,7 +44,8 @@ const VALID_TABS: MissionTab[] = [
 function MissionsPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { token, isLoading: authLoading } = useAuth();
+  const { token, user, isLoading: authLoading } = useAuth();
+  const isVatSubject = user?.isVatSubject ?? false;
 
   // Récupérer et VALIDER l'onglet actif depuis l'URL
   const tabFromUrl = searchParams.get("tab");
@@ -353,6 +354,7 @@ function MissionsPageContent() {
             sessionType={sessionType}
             animalType={animalType}
             month={month}
+            isVatSubject={isVatSubject}
           />
         )}
         {activeTab === "upcoming" && (
@@ -364,6 +366,7 @@ function MissionsPageContent() {
             sessionType={sessionType}
             animalType={animalType}
             month={month}
+            isVatSubject={isVatSubject}
           />
         )}
         {activeTab === "pending_confirmation" && (
@@ -376,6 +379,7 @@ function MissionsPageContent() {
             sessionType={sessionType}
             animalType={animalType}
             month={month}
+            isVatSubject={isVatSubject}
           />
         )}
         {activeTab === "in_progress" && (
@@ -388,6 +392,7 @@ function MissionsPageContent() {
             sessionType={sessionType}
             animalType={animalType}
             month={month}
+            isVatSubject={isVatSubject}
           />
         )}
         {activeTab === "completed" && (
@@ -400,6 +405,7 @@ function MissionsPageContent() {
             sessionType={sessionType}
             animalType={animalType}
             month={month}
+            isVatSubject={isVatSubject}
           />
         )}
         {activeTab === "refused" && (
@@ -412,6 +418,7 @@ function MissionsPageContent() {
             sessionType={sessionType}
             animalType={animalType}
             month={month}
+            isVatSubject={isVatSubject}
           />
         )}
         {activeTab === "cancelled" && (
@@ -424,6 +431,7 @@ function MissionsPageContent() {
             sessionType={sessionType}
             animalType={animalType}
             month={month}
+            isVatSubject={isVatSubject}
           />
         )}
       </motion.div>

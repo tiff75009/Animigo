@@ -28,6 +28,7 @@ interface UpcomingTabProps {
   sessionType?: SessionTypeFilter;
   animalType?: AnimalTypeFilter;
   month?: MonthFilter;
+  isVatSubject?: boolean;
 }
 
 export function UpcomingTab({
@@ -38,6 +39,7 @@ export function UpcomingTab({
   sessionType = "all",
   animalType = "all",
   month = "all",
+  isVatSubject = false,
 }: UpcomingTabProps) {
   const router = useRouter();
   const { error: toastError } = useToast();
@@ -141,6 +143,7 @@ export function UpcomingTab({
         isAccepted={accepted}
         distance={dist}
         token={token}
+        isVatSubject={isVatSubject}
       />
     );
   }

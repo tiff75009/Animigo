@@ -123,6 +123,8 @@ interface AnnouncerMobileCTAProps {
   connectedDogErrors?: Record<string, string>;
   // Callback pour la connexion inline
   onLoginSuccess?: (token: string) => void;
+  // Blocage annonceur
+  isAnnouncer?: boolean;
 }
 
 // Get minimum price for a service
@@ -277,6 +279,7 @@ export default function AnnouncerMobileCTA({
   onGuestAnimalValidationChange,
   connectedDogErrors = {},
   onLoginSuccess,
+  isAnnouncer = false,
 }: AnnouncerMobileCTAProps) {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isCalendarSheetOpen, setIsCalendarSheetOpen] = useState(false);
@@ -1324,6 +1327,9 @@ export default function AnnouncerMobileCTA({
 
   // Check if book button should be enabled
   const isBookButtonEnabled = !hasVariantSelected || (hasFullBooking && hasRequiredTimeSelection) || !hasDateSelected || !hasRequiredTimeSelection;
+
+  // Si annonceur, ne pas afficher le CTA
+  if (isAnnouncer) return null;
 
   return (
     <>

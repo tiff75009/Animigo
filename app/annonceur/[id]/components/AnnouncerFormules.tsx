@@ -144,6 +144,7 @@ interface AnnouncerFormulesProps {
   // Callback pour finaliser la réservation
   onBook?: () => void;
   onFinalize?: () => void;
+  isAnnouncer?: boolean;
   className?: string;
 }
 
@@ -209,6 +210,7 @@ export default function AnnouncerFormules({
   connectedDogErrors = {},
   onBook,
   onFinalize,
+  isAnnouncer = false,
   className,
 }: AnnouncerFormulesProps) {
   // État pour l'étape actuelle (desktop)
@@ -644,6 +646,7 @@ export default function AnnouncerFormules({
                     isGarde={isGarde}
                     commissionRate={commissionRate}
                     announcerFirstName={announcerFirstName}
+                    isAnnouncer={isAnnouncer}
                     onVariantSelect={(sId, vId) => onVariantSelect?.(sId, vId)}
                     slideVariants={slideVariants}
                     slideDirection={slideDirection}
@@ -966,6 +969,7 @@ export default function AnnouncerFormules({
               overnightPrice={service.overnightPrice}
               announcerFirstName={announcerFirstName}
               dogCategoryAcceptance={service.dogCategoryAcceptance}
+              isAnnouncer={isAnnouncer}
             />
           ))}
         </div>

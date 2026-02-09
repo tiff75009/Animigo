@@ -15,7 +15,7 @@ import type { FunctionReturnType } from "convex/server";
 type MissionType = FunctionReturnType<typeof api.planning.missions.getMissionsByStatus>[number];
 
 export default function MissionsEnCoursPage() {
-  const { token, isLoading: authLoading } = useAuth();
+  const { token, user, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const { error: toastError } = useToast();
   const [isContacting, setIsContacting] = useState(false);
@@ -99,6 +99,7 @@ export default function MissionsEnCoursPage() {
         isAccepted={accepted}
         distance={dist}
         token={token}
+        isVatSubject={user?.isVatSubject}
       />
     );
   }

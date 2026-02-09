@@ -83,7 +83,8 @@ function extractCityDisplay(location: string | null | undefined): string | undef
 export default function AnnouncerProfilePage() {
   const params = useParams();
   const router = useRouter();
-  const { token, refreshToken } = useAuth();
+  const { token, user: authUser, refreshToken } = useAuth();
+  const isAnnouncer = authUser?.accountType === "annonceur_pro" || authUser?.accountType === "annonceur_particulier";
   const [isFavorite, setIsFavorite] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("formules");
 
@@ -766,7 +767,7 @@ export default function AnnouncerProfilePage() {
   }, [bookingVariant, userAnimals]);
 
   const handleBook = useCallback(() => {
-    if (!announcerData || !announcer) return;
+    if (isAnnouncer || !announcerData || !announcer) return;
 
     const params = new URLSearchParams();
 
@@ -840,7 +841,7 @@ export default function AnnouncerProfilePage() {
 
   // Handler pour aller directement à la finalisation
   const handleFinalize = useCallback(() => {
-    if (!announcerData || !announcer) return;
+    if (isAnnouncer || !announcerData || !announcer) return;
 
     const params = new URLSearchParams();
 
@@ -1064,9 +1065,10 @@ export default function AnnouncerProfilePage() {
                 onGuestAnimalValidationChange={handleGuestAnimalValidationChange}
                 // Erreurs de restriction pour les chiens des utilisateurs connectés
                 connectedDogErrors={connectedDogErrors}
-                // Callback pour finaliser la réservation
-                onBook={handleBook}
-                onFinalize={handleFinalize}
+                // Callback pour finaliser la réservation (undefined pour les annonceurs)
+                onBook={isAnnouncer ? undefined : handleBook}
+                onFinalize={isAnnouncer ? undefined : handleFinalize}
+                isAnnouncer={isAnnouncer}
               />
             )}
 
@@ -1087,8 +1089,8 @@ export default function AnnouncerProfilePage() {
             )}
           </div>
 
-          {/* Right Column - Booking Card (Sticky) */}
-          <div className="hidden md:block">
+          {/* Right Column - Booking Card (Sticky) - caché pour les annonceurs */}
+          {!isAnnouncer && <div className="hidden md:block">
             <AnnouncerBookingCard
               services={announcer.services}
               responseRate={announcer.responseRate}
@@ -1121,7 +1123,7 @@ export default function AnnouncerProfilePage() {
               onBook={handleBook}
               onFinalize={handleFinalize}
             />
-          </div>
+          </div>}
         </div>
       </main>
 
@@ -1201,6 +1203,8 @@ export default function AnnouncerProfilePage() {
         onGuestAnimalValidationChange={handleGuestAnimalValidationChange}
         // Erreurs de restriction pour les chiens des utilisateurs connectés
         connectedDogErrors={connectedDogErrors}
+        // Blocage annonceur
+        isAnnouncer={isAnnouncer}
       />
     </div>
   );

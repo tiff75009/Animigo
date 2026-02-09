@@ -108,6 +108,10 @@ export interface ConvexMission {
     previousMissionsCount: number;
     isNewClient: boolean;
   };
+  // TVA
+  vatRate?: number;
+  isSapApplied?: boolean;
+  isVatSubject?: boolean;
 }
 
 interface MissionCardProps {
@@ -516,6 +520,13 @@ export function MissionCard({
                 </p>
               </div>
               <div className="flex items-center gap-1.5">
+                {/* Badge SAP */}
+                {mission.isSapApplied && (
+                  <span className="flex items-center gap-1 text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-md">
+                    <ShieldCheck className="w-3 h-3" />
+                    SAP
+                  </span>
+                )}
                 {/* Badge type de formule */}
                 {mission.sessionType === "collective" ? (
                   <span className="flex items-center gap-1 text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-md">
@@ -613,6 +624,7 @@ export interface MissionSplitViewProps {
   isAccepted: boolean;
   distance: number | null;
   token: string | null;
+  isVatSubject?: boolean;
 }
 
 export function MissionSplitView({
@@ -621,7 +633,10 @@ export function MissionSplitView({
   isAccepted,
   distance,
   token,
+  isVatSubject: isVatSubjectProp = false,
 }: MissionSplitViewProps) {
+  // Utiliser isVatSubject de la mission (vient de la query) OU du prop (fallback)
+  const isVatSubject = mission.isVatSubject ?? isVatSubjectProp;
   const [activeTab, setActiveTab] = useState<"details" | "animals">("details");
   const [selectedAnimalIndex, setSelectedAnimalIndex] = useState(0);
 
@@ -632,8 +647,8 @@ export function MissionSplitView({
 
   // Calcul des prix
   const totalAmount = mission.amount;
-  const platformFee = mission.platformFee ?? Math.round(totalAmount * 0.15);
-  const announcerEarnings = mission.announcerEarnings ?? totalAmount - platformFee;
+  const announcerEarnings = mission.announcerEarnings ?? Math.round(totalAmount * 0.85);
+  const effectiveVatRate = mission.vatRate ?? (mission.isSapApplied ? 10 : 20);
 
   // Queries animaux
   const isMulti = mission.animals && mission.animals.length > 1;
@@ -923,25 +938,38 @@ export function MissionSplitView({
         </div>
       )}
 
-      {/* Détail des prix */}
+      {/* Revenu annonceur */}
       <div className="bg-gradient-to-br from-secondary/5 to-primary/5 rounded-xl p-3">
         <div className="flex items-center gap-2 mb-2">
           <Euro className="w-4 h-4 text-foreground" />
-          <span className="font-semibold text-foreground text-sm">Tarification</span>
+          <span className="font-semibold text-foreground text-sm">Votre revenu</span>
         </div>
         <div className="space-y-1.5 text-sm">
-          <div className="flex justify-between">
-            <span className="text-text-light">Prix client</span>
-            <span className="text-foreground">{formatPrice(totalAmount)}</span>
-          </div>
-          <div className="flex justify-between text-primary text-xs">
-            <span>Commission (15%)</span>
-            <span>-{formatPrice(platformFee)}</span>
-          </div>
-          <div className="flex justify-between pt-1.5 border-t border-slate-200">
-            <span className="font-semibold text-foreground">Votre revenu</span>
-            <span className="text-lg font-bold text-secondary">{formatPrice(announcerEarnings)}</span>
-          </div>
+          {isVatSubject ? (
+            <>
+              <div className="flex justify-between">
+                <span className="text-text-light">Montant HT</span>
+                <span className="text-foreground">
+                  {formatPrice(Math.round(announcerEarnings / (1 + effectiveVatRate / 100)))}
+                </span>
+              </div>
+              <div className="flex justify-between text-text-light text-xs">
+                <span>TVA ({effectiveVatRate}%){mission.isSapApplied ? " — taux réduit SAP" : ""}</span>
+                <span>
+                  {formatPrice(announcerEarnings - Math.round(announcerEarnings / (1 + effectiveVatRate / 100)))}
+                </span>
+              </div>
+              <div className="flex justify-between pt-1.5 border-t border-slate-200">
+                <span className="font-semibold text-foreground">Montant TTC</span>
+                <span className="text-lg font-bold text-secondary">{formatPrice(announcerEarnings)}</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex justify-between">
+              <span className="font-semibold text-foreground">Montant perçu</span>
+              <span className="text-lg font-bold text-secondary">{formatPrice(announcerEarnings)}</span>
+            </div>
+          )}
         </div>
       </div>
 

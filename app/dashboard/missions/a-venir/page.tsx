@@ -107,7 +107,7 @@ function CancelModal({
 }
 
 export default function MissionsAVenirPage() {
-  const { token, isLoading: authLoading } = useAuth();
+  const { token, user, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const { error: toastError } = useToast();
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
@@ -227,6 +227,7 @@ export default function MissionsAVenirPage() {
         isAccepted={accepted}
         distance={dist}
         token={token}
+        isVatSubject={user?.isVatSubject}
       />
     );
   }

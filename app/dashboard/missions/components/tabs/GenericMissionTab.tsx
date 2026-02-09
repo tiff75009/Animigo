@@ -38,6 +38,7 @@ interface GenericMissionTabProps {
   sessionType?: SessionTypeFilter;
   animalType?: AnimalTypeFilter;
   month?: MonthFilter;
+  isVatSubject?: boolean;
 }
 
 export function GenericMissionTab({
@@ -49,6 +50,7 @@ export function GenericMissionTab({
   sessionType = "all",
   animalType = "all",
   month = "all",
+  isVatSubject = false,
 }: GenericMissionTabProps) {
   const router = useRouter();
   const { error: toastError } = useToast();
@@ -135,6 +137,7 @@ export function GenericMissionTab({
         isAccepted={accepted}
         distance={dist}
         token={token}
+        isVatSubject={isVatSubject}
       />
     );
   }

@@ -82,7 +82,8 @@ const searchParamsParsers = {
 
 export default function RecherchePage() {
   // Auth pour récupérer l'adresse du profil
-  const { token, isAuthenticated } = useAuth();
+  const { token, isAuthenticated, user: authUser } = useAuth();
+  const isAnnouncer = authUser?.accountType === "annonceur_pro" || authUser?.accountType === "annonceur_particulier";
 
   // URL state with nuqs
   const [urlParams, setUrlParams] = useQueryStates(searchParamsParsers, {
@@ -771,6 +772,7 @@ export default function RecherchePage() {
                   isFavorite={favoriteIds?.includes(formule.formuleId) ?? false}
                   onToggleFavorite={handleToggleFavorite}
                   isTogglingFavorite={togglingFavoriteId === formule.formuleId}
+                  isAnnouncer={isAnnouncer}
                 />
               ))}
             </motion.div>
@@ -789,6 +791,7 @@ export default function RecherchePage() {
                   isFavorite={favoriteIds?.includes(formule.formuleId) ?? false}
                   onToggleFavorite={handleToggleFavorite}
                   isTogglingFavorite={togglingFavoriteId === formule.formuleId}
+                  isAnnouncer={isAnnouncer}
                 />
               ))}
             </motion.div>

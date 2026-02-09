@@ -15,6 +15,8 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
+import { useAuth } from "@/app/hooks/useAuth";
+import { ShieldAlert } from "lucide-react";
 
 // Import factorized components
 import {
@@ -388,6 +390,10 @@ export default function ReserverPage({
   const guestPostalCodeParam = searchParams.get("guestPostalCode");
   const guestLatParam = searchParams.get("guestLat");
   const guestLngParam = searchParams.get("guestLng");
+
+  // Vérifier si l'utilisateur connecté est un annonceur
+  const { user: authUser, isLoading: authLoading } = useAuth();
+  const isAnnouncer = authUser?.accountType === "annonceur_pro" || authUser?.accountType === "annonceur_particulier";
 
   // Direct finalization param (skip to step 4)
   const shouldFinalize = searchParams.get("finalize") === "true";
@@ -1244,6 +1250,30 @@ export default function ReserverPage({
       };
     });
   };
+
+  // Bloquer les annonceurs
+  if (!authLoading && isAnnouncer) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full text-center space-y-4">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto">
+            <ShieldAlert className="w-8 h-8 text-red-500" />
+          </div>
+          <h2 className="text-xl font-bold text-foreground">Réservation impossible</h2>
+          <p className="text-text-light">
+            Les comptes annonceurs ne peuvent pas effectuer de réservations.
+            Pour réserver un service, veuillez utiliser un compte client.
+          </p>
+          <button
+            onClick={() => router.back()}
+            className="w-full py-3 bg-primary text-white font-semibold rounded-full hover:bg-primary/90 transition-colors"
+          >
+            Retour
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Loading state
   if (!announcerData || !serviceDetails) {

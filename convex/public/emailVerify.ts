@@ -190,6 +190,39 @@ export const verifyEmail = mutation({
         const platformFee = Math.round(totalAmount * PLATFORM_COMMISSION_RATE / 100);
         const announcerEarnings = totalAmount - platformFee;
 
+        // Déterminer le taux TVA (SAP ou standard)
+        let vatRate = 20;
+        let isSapApplied = false;
+
+        const variant = pendingBooking.variantId
+          ? await ctx.db.get(pendingBooking.variantId as Id<"serviceVariants">)
+          : null;
+        const category = service
+          ? await ctx.db
+              .query("serviceCategories")
+              .withIndex("by_slug", (q: any) => q.eq("slug", service.category))
+              .first()
+          : null;
+
+        if (variant?.isSapEligible || service?.isSapEligible || category?.isSapEligible) {
+          const announcerProfile = await ctx.db
+            .query("profiles")
+            .withIndex("by_user", (q: any) => q.eq("userId", pendingBooking.announcerId))
+            .first();
+
+          if (announcerProfile?.isSapApproved) {
+            const clientProfile = await ctx.db
+              .query("clientProfiles")
+              .withIndex("by_user", (q: any) => q.eq("userId", tokenDoc.userId))
+              .first();
+
+            if (clientProfile?.sapEligibility && clientProfile.sapEligibility !== "none" && clientProfile.sapEligibilityAttested) {
+              vatRate = 10;
+              isSapApplied = true;
+            }
+          }
+        }
+
         // Helper pour obtenir l'emoji d'un animal
         const getAnimalEmoji = (type: string): string => {
           const emojis: Record<string, string> = {
@@ -249,6 +282,8 @@ export const verifyEmail = mutation({
           postalCode: pendingBooking.postalCode,
           clientCoordinates: pendingBooking.coordinates,
           clientNotes: pendingBooking.clientData?.notes,
+          vatRate,
+          isSapApplied,
           createdAt: Date.now(),
           updatedAt: Date.now(),
           bookedAt: pendingBooking.createdAt, // Date de finalisation de la réservation par le client

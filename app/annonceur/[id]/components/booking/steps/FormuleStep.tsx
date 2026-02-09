@@ -25,6 +25,7 @@ interface FormuleStepProps {
   isGarde: boolean;
   commissionRate: number;
   announcerFirstName?: string;
+  isAnnouncer?: boolean;
   onVariantSelect: (serviceId: string, variantId: string) => void;
   slideVariants: Record<string, { x: number; opacity: number }>;
   slideDirection: "left" | "right";
@@ -36,6 +37,7 @@ export default function FormuleStep({
   isGarde,
   commissionRate,
   announcerFirstName,
+  isAnnouncer = false,
   onVariantSelect,
   slideVariants,
   slideDirection,
@@ -222,6 +224,7 @@ export default function FormuleStep({
               overnightPrice={service.overnightPrice}
               announcerFirstName={announcerFirstName}
               dogCategoryAcceptance={service.dogCategoryAcceptance}
+              isAnnouncer={isAnnouncer}
             />
           ))}
         </div>

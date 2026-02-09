@@ -115,6 +115,12 @@ export const createPendingBooking = mutation({
 
       if (session && session.expiresAt > Date.now()) {
         userId = session.userId;
+
+        // Vérifier que l'utilisateur n'est pas un annonceur
+        const user = await ctx.db.get(session.userId);
+        if (user?.accountType === "annonceur_particulier" || user?.accountType === "annonceur_pro") {
+          throw new ConvexError("Les annonceurs ne peuvent pas effectuer de réservations. Veuillez utiliser un compte client.");
+        }
       }
     }
 
@@ -533,6 +539,13 @@ export const finalizeBooking = mutation({
     if (!session || session.expiresAt < Date.now()) {
       throw new ConvexError("Vous devez être connecté pour finaliser la réservation");
     }
+
+    // Vérifier que l'utilisateur n'est pas un annonceur
+    const bookingUser = await ctx.db.get(session.userId);
+    if (bookingUser?.accountType === "annonceur_particulier" || bookingUser?.accountType === "annonceur_pro") {
+      throw new ConvexError("Les annonceurs ne peuvent pas effectuer de réservations. Veuillez utiliser un compte client.");
+    }
+
     console.log("[finalizeBooking] Session valid, userId:", session.userId);
 
     // Récupérer la réservation en attente

@@ -266,6 +266,39 @@ export const verifyEmailToken = internalMutation({
           deadlineConfig
         );
 
+        // Déterminer le taux TVA (SAP ou standard)
+        let vatRate = 20;
+        let isSapApplied = false;
+
+        const variant = pendingBooking.variantId
+          ? await ctx.db.get(pendingBooking.variantId as any)
+          : null;
+        const category = service
+          ? await ctx.db
+              .query("serviceCategories")
+              .withIndex("by_slug", (q: any) => q.eq("slug", service.category))
+              .first()
+          : null;
+
+        if (variant?.isSapEligible || service?.isSapEligible || category?.isSapEligible) {
+          const announcerProfile = await ctx.db
+            .query("profiles")
+            .withIndex("by_user", (q: any) => q.eq("userId", pendingBooking.announcerId))
+            .first();
+
+          if (announcerProfile?.isSapApproved) {
+            const clientProfile = await ctx.db
+              .query("clientProfiles")
+              .withIndex("by_user", (q: any) => q.eq("userId", tokenDoc.userId))
+              .first();
+
+            if (clientProfile?.sapEligibility && clientProfile.sapEligibility !== "none" && clientProfile.sapEligibilityAttested) {
+              vatRate = 10;
+              isSapApplied = true;
+            }
+          }
+        }
+
         // Créer la mission
         const missionId = await ctx.db.insert("missions", {
           announcerId: pendingBooking.announcerId,
@@ -304,6 +337,9 @@ export const verifyEmailToken = internalMutation({
           bookedAt: now,
           createdAt: now,
           updatedAt: now,
+          // TVA SAP
+          vatRate,
+          isSapApplied,
           // Délai d'acceptation
           acceptanceDeadline: acceptanceDeadline ?? undefined,
         });

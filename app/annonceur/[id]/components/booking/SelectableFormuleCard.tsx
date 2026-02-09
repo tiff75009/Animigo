@@ -17,6 +17,7 @@ interface SelectableFormuleCardProps {
   overnightPrice?: number;
   announcerFirstName?: string; // Prénom de l'annonceur pour le badge "Chez [prénom]"
   dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both"; // Chiens catégorisés acceptés
+  isAnnouncer?: boolean;
 }
 
 // Calculer le prix total avec durée et nombre de séances
@@ -42,6 +43,7 @@ export default function SelectableFormuleCard({
   overnightPrice,
   announcerFirstName,
   dogCategoryAcceptance,
+  isAnnouncer = false,
 }: SelectableFormuleCardProps) {
   const { price: formulePrice, unit: formuleUnit } = getFormuleBestPrice(formule, isGarde);
 
@@ -71,9 +73,10 @@ export default function SelectableFormuleCard({
           ease: "easeInOut"
         },
       }}
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.99 }}
-      onClick={onSelect}
+      whileHover={{ scale: isAnnouncer ? 1 : 1.02 }}
+      whileTap={{ scale: isAnnouncer ? 1 : 0.99 }}
+      onClick={isAnnouncer ? undefined : onSelect}
+      style={isAnnouncer ? { cursor: "default" } : undefined}
       className={cn(
         "w-full p-4 rounded-xl transition-all text-left relative overflow-hidden",
         "border-2",
@@ -308,28 +311,30 @@ export default function SelectableFormuleCard({
         </div>
       )}
 
-      {/* Bouton Réserver */}
-      <div className="mt-4 pt-3 border-t border-gray-200/50 relative z-10">
-        <div
-          className={cn(
-            "w-full py-2.5 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all",
-            isSelected
-              ? "bg-primary text-white"
-              : "bg-gradient-to-r from-primary to-primary/90 text-white hover:from-primary/90 hover:to-primary/80"
-          )}
-        >
-          {isSelected ? (
-            <>
-              <Check className="w-4 h-4" />
-              Formule sélectionnée
-            </>
-          ) : (
-            <>
-              Réserver maintenant
-            </>
-          )}
+      {/* Bouton Réserver - caché pour les annonceurs */}
+      {!isAnnouncer && (
+        <div className="mt-4 pt-3 border-t border-gray-200/50 relative z-10">
+          <div
+            className={cn(
+              "w-full py-2.5 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all",
+              isSelected
+                ? "bg-primary text-white"
+                : "bg-gradient-to-r from-primary to-primary/90 text-white hover:from-primary/90 hover:to-primary/80"
+            )}
+          >
+            {isSelected ? (
+              <>
+                <Check className="w-4 h-4" />
+                Formule sélectionnée
+              </>
+            ) : (
+              <>
+                Réserver maintenant
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
     </motion.button>
   );

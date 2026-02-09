@@ -170,6 +170,7 @@ interface FormuleCardProps {
   isFavorite?: boolean;
   onToggleFavorite?: (formuleId: string) => void;
   isTogglingFavorite?: boolean;
+  isAnnouncer?: boolean;
 }
 
 // Helper pour formater la date du prochain créneau
@@ -242,6 +243,7 @@ export function FormuleCardGrid({
   isFavorite = false,
   onToggleFavorite,
   isTogglingFavorite = false,
+  isAnnouncer = false,
 }: FormuleCardProps) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -454,19 +456,21 @@ export function FormuleCardGrid({
               )}
             </div>
 
-            {/* CTA Button */}
-            <Link href={announcerBookingUrl}>
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                className="relative px-5 py-3 bg-gradient-to-r from-primary to-primary/90 text-white font-bold rounded-xl shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all duration-300 flex items-center gap-2 overflow-hidden group/btn"
-              >
-                <span className="relative z-10">Réserver</span>
-                <ChevronRight className="w-4 h-4 relative z-10 group-hover/btn:translate-x-0.5 transition-transform" />
-                {/* Shine effect */}
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/btn:translate-x-full transition-transform duration-700" />
-              </motion.button>
-            </Link>
+            {/* CTA Button - caché pour les annonceurs */}
+            {!isAnnouncer && (
+              <Link href={announcerBookingUrl}>
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  className="relative px-5 py-3 bg-gradient-to-r from-primary to-primary/90 text-white font-bold rounded-xl shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all duration-300 flex items-center gap-2 overflow-hidden group/btn"
+                >
+                  <span className="relative z-10">Réserver</span>
+                  <ChevronRight className="w-4 h-4 relative z-10 group-hover/btn:translate-x-0.5 transition-transform" />
+                  {/* Shine effect */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/btn:translate-x-full transition-transform duration-700" />
+                </motion.button>
+              </Link>
+            )}
           </div>
         </div>
       </div>
@@ -481,6 +485,7 @@ export function FormuleCardList({
   isFavorite = false,
   onToggleFavorite,
   isTogglingFavorite = false,
+  isAnnouncer = false,
 }: FormuleCardProps) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -686,18 +691,20 @@ export function FormuleCardList({
                 </div>
               )}
 
-              {/* CTA */}
-              <Link href={announcerBookingUrl} className="ml-auto">
-                <motion.button
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  className="relative px-6 py-3 bg-gradient-to-r from-primary to-primary/90 text-white font-bold rounded-xl shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all duration-300 flex items-center gap-2 overflow-hidden group/btn"
-                >
-                  <span className="relative z-10">Réserver</span>
-                  <ChevronRight className="w-4 h-4 relative z-10 group-hover/btn:translate-x-0.5 transition-transform" />
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/btn:translate-x-full transition-transform duration-700" />
-                </motion.button>
-              </Link>
+              {/* CTA - caché pour les annonceurs */}
+              {!isAnnouncer && (
+                <Link href={announcerBookingUrl} className="ml-auto">
+                  <motion.button
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    className="relative px-6 py-3 bg-gradient-to-r from-primary to-primary/90 text-white font-bold rounded-xl shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all duration-300 flex items-center gap-2 overflow-hidden group/btn"
+                  >
+                    <span className="relative z-10">Réserver</span>
+                    <ChevronRight className="w-4 h-4 relative z-10 group-hover/btn:translate-x-0.5 transition-transform" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/btn:translate-x-full transition-transform duration-700" />
+                  </motion.button>
+                </Link>
+              )}
             </div>
           </div>
         </div>

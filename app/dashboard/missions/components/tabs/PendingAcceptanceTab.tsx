@@ -22,6 +22,7 @@ interface PendingAcceptanceTabProps {
   sessionType?: SessionTypeFilter;
   animalType?: AnimalTypeFilter;
   month?: MonthFilter;
+  isVatSubject?: boolean;
 }
 
 export function PendingAcceptanceTab({
@@ -32,6 +33,7 @@ export function PendingAcceptanceTab({
   sessionType = "all",
   animalType = "all",
   month = "all",
+  isVatSubject = false,
 }: PendingAcceptanceTabProps) {
   const [acceptModalOpen, setAcceptModalOpen] = useState(false);
   const [refuseModalOpen, setRefuseModalOpen] = useState(false);
@@ -117,6 +119,7 @@ export function PendingAcceptanceTab({
         isAccepted={isAccepted}
         distance={dist}
         token={token}
+        isVatSubject={isVatSubject}
       />
     );
   }

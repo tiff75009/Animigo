@@ -3370,6 +3370,29 @@ export const createBookingRequest = mutation({
 
     const now = Date.now();
 
+    // Déterminer le taux TVA (SAP ou standard)
+    let vatRate = 20;
+    let isSapApplied = false;
+
+    if (variant.isSapEligible || service.isSapEligible || category?.isSapEligible) {
+      const announcerProfileSap = await ctx.db
+        .query("profiles")
+        .withIndex("by_user", (q) => q.eq("userId", args.announcerId))
+        .first();
+
+      if (announcerProfileSap?.isSapApproved) {
+        const clientProfileSap = await ctx.db
+          .query("clientProfiles")
+          .withIndex("by_user", (q) => q.eq("userId", session.userId))
+          .first();
+
+        if (clientProfileSap?.sapEligibility && clientProfileSap.sapEligibility !== "none" && clientProfileSap.sapEligibilityAttested) {
+          vatRate = 10;
+          isSapApplied = true;
+        }
+      }
+    }
+
     // Créer la mission
     const missionId = await ctx.db.insert("missions", {
       announcerId: args.announcerId,
@@ -3386,6 +3409,8 @@ export const createBookingRequest = mutation({
       endTime: args.endTime,
       status: "pending_acceptance",
       amount: totalAmount,
+      vatRate,
+      isSapApplied,
       paymentStatus: "not_due",
       location: args.location,
       clientNotes: args.notes,

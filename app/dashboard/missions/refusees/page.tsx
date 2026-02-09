@@ -12,7 +12,7 @@ import type { FunctionReturnType } from "convex/server";
 type MissionType = FunctionReturnType<typeof api.planning.missions.getMissionsByStatus>[number];
 
 export default function MissionsRefuseesPage() {
-  const { token, isLoading: authLoading } = useAuth();
+  const { token, user, isLoading: authLoading } = useAuth();
   const [detailMission, setDetailMission] = useState<MissionType | null>(null);
 
   // Query Convex pour les missions "refused"
@@ -65,6 +65,7 @@ export default function MissionsRefuseesPage() {
         isAccepted={accepted}
         distance={null}
         token={token}
+        isVatSubject={user?.isVatSubject}
       />
     );
   }
