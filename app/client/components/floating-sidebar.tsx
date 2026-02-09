@@ -25,6 +25,7 @@ import { useSidebar } from "@/app/contexts/SidebarContext";
 import { useActiveConversation } from "@/app/contexts/MessagingContext";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import Image from "next/image";
 
 interface NavItem {
   href: string;
@@ -167,6 +168,13 @@ export default function FloatingSidebar() {
     : 0;
   const unreadCount = Math.max(0, (unreadMessagesCount ?? 0) - activeConvUnread);
 
+  // Photo de profil
+  const profile = useQuery(
+    api.client.profile.getClientProfile,
+    token ? { token } : "skip"
+  );
+  const profileImageUrl = profile?.profileImageUrl;
+
   const [mounted, setMounted] = useState(false);
 
   // Scroll detection
@@ -269,9 +277,19 @@ export default function FloatingSidebar() {
             "flex items-center gap-3",
             isCollapsed && "justify-center"
           )}>
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg shadow-primary/25 shrink-0">
-              <User className="w-5 h-5 text-white" />
-            </div>
+            {profileImageUrl ? (
+              <Image
+                src={profileImageUrl}
+                alt="Mon profil"
+                width={40}
+                height={40}
+                className="w-10 h-10 rounded-2xl object-cover shadow-lg shadow-primary/25 shrink-0"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg shadow-primary/25 shrink-0">
+                <User className="w-5 h-5 text-white" />
+              </div>
+            )}
             <AnimatePresence mode="wait">
               {!isCollapsed && (
                 <motion.div

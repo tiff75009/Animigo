@@ -251,6 +251,7 @@ export const getPopularArticles = query({
       _id: art._id,
       title: art.title,
       slug: art.slug,
+      content: art.content,
       viewCount: art.viewCount,
       categoryName: categoriesMap.get(art.categoryId)?.name || "",
       categorySlug: categoriesMap.get(art.categoryId)?.slug || "",

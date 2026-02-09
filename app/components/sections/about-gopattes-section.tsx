@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { Play, X, Heart, Shield, Users, Star } from "lucide-react";
 import Image from "next/image";
 
@@ -17,6 +19,7 @@ export function AboutGopattesSection({
   thumbnailUrl = "https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=800&q=80",
 }: AboutGopattesProps) {
   const [isVideoOpen, setIsVideoOpen] = useState(false);
+  const siteName = useQuery(api.admin.config.getSiteName) ?? "Animigo";
 
   const features = [
     {
@@ -77,7 +80,7 @@ export function AboutGopattesSection({
                 {/* Thumbnail */}
                 <Image
                   src={thumbnailUrl}
-                  alt="Découvrez Gopattes"
+                  alt={`Découvrez ${siteName}`}
                   fill
                   className="object-cover transition-transform duration-700 group-hover:scale-105"
                 />
@@ -174,12 +177,12 @@ export function AboutGopattesSection({
               {/* Title */}
               <h2 className="font-love-taking text-4xl sm:text-5xl lg:text-6xl text-foreground mb-6">
                 Nous sommes{" "}
-                <span style={{ color: categoryColor }}>Gopattes</span>
+                <span style={{ color: categoryColor }}>{siteName}</span>
               </h2>
 
               {/* Description */}
               <p className="text-lg text-muted-foreground mb-6 leading-relaxed">
-                Chez Gopattes, nous croyons que chaque animal mérite les meilleurs soins.
+                Chez {siteName}, nous croyons que chaque animal mérite les meilleurs soins.
                 Notre plateforme connecte les propriétaires d&apos;animaux avec des professionnels
                 passionnés et vérifiés, pour des services de qualité en toute confiance.
               </p>
@@ -258,7 +261,7 @@ export function AboutGopattesSection({
             >
               <iframe
                 src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`}
-                title="Gopattes - Notre histoire"
+                title={`${siteName} - Notre histoire`}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
                 className="w-full h-full"

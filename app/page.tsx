@@ -7,6 +7,7 @@ import { Testimonials } from "./components/sections/testimonials";
 import { Stats } from "./components/sections/stats";
 import { FAQ } from "./components/sections/faq";
 import { TrustSection } from "./components/sections/trust";
+import { AboutGopattesSection } from "./components/sections/about-gopattes-section";
 import { CTA } from "./components/sections/cta";
 import { Footer } from "./components/footer";
 
@@ -20,6 +21,7 @@ export default function Home() {
         <SeoServicesSection />
         <HowItWorks />
         <TrustSection />
+        <AboutGopattesSection />
         <Testimonials />
         <Stats />
         <FAQ />

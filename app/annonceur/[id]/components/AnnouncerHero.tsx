@@ -1,12 +1,14 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import {
   MapPin,
   Star,
   Clock,
   Calendar,
   User,
+  UserCircle,
   ShieldCheck,
   ChevronDown,
   Zap,
@@ -26,6 +28,7 @@ import AnnouncerActionBar from "./AnnouncerActionBar";
 
 interface AnnouncerHeroProps {
   announcer: AnnouncerData;
+  slug: string;
   distance?: number;
   isFavorite?: boolean;
   onToggleFavorite?: () => void;
@@ -33,6 +36,7 @@ interface AnnouncerHeroProps {
 
 export default function AnnouncerHero({
   announcer,
+  slug,
   distance,
   isFavorite = false,
   onToggleFavorite,
@@ -171,8 +175,8 @@ export default function AnnouncerHero({
                     )}
                   </div>
 
-                  {/* Verification badges */}
-                  <div className="flex flex-wrap justify-center sm:justify-end gap-1.5">
+                  {/* Verification badges + Voir profil */}
+                  <div className="flex flex-wrap justify-center sm:justify-end items-center gap-1.5">
                     {announcer.isIdentityVerified && (
                       <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-secondary/10 text-secondary">
                         <ShieldCheck className="w-3.5 h-3.5" />
@@ -184,6 +188,13 @@ export default function AnnouncerHero({
                         I-CAD
                       </span>
                     )}
+                    <Link
+                      href={`/profil/${announcer.username || slug}`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all duration-200 shadow-sm hover:shadow-md"
+                    >
+                      <UserCircle className="w-3.5 h-3.5" />
+                      Voir le profil
+                    </Link>
                   </div>
                 </div>
 

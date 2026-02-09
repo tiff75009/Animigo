@@ -250,6 +250,7 @@ export function FormuleCardGrid({
   const announcerBaseUrl = `/annonceur/${formule.announcerSlug || formule.announcerId}`;
   const announcerProfileUrl = `${announcerBaseUrl}?service=${formule.categorySlug}`;
   const announcerBookingUrl = `${announcerBaseUrl}?formule=${formule.formuleId}`;
+  const announcerPublicProfileUrl = `/profil/${formule.announcerSlug || formule.announcerId}`;
 
   const finalPrice = getPriceWithCommission(formule.price, formule.announcerStatusType);
   const priceLabel = priceUnitLabels[formule.priceUnit] || formule.priceUnit;
@@ -305,7 +306,7 @@ export function FormuleCardGrid({
         <div className={cn("p-5", formule.nextSlot ? "pt-7" : "")}>
           <div className="flex items-start gap-4">
             {/* Avatar avec ring gradient */}
-            <Link href={announcerProfileUrl} className="relative flex-shrink-0 group/avatar">
+            <Link href={announcerPublicProfileUrl} className="relative flex-shrink-0 group/avatar">
               <div className="absolute -inset-1 bg-gradient-to-tr from-primary via-secondary to-primary rounded-2xl opacity-75 blur-sm group-hover/avatar:opacity-100 transition-opacity" />
               <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-white ring-2 ring-white">
                 {formule.announcerProfileImage ? (
@@ -331,13 +332,13 @@ export function FormuleCardGrid({
 
             {/* Infos annonceur */}
             <div className="flex-1 min-w-0">
-              <Link href={announcerProfileUrl}>
+              <Link href={announcerPublicProfileUrl}>
                 <h4 className="font-bold text-gray-900 hover:text-primary transition-colors truncate">
                   {formule.announcerFirstName}
                 </h4>
               </Link>
               {formule.announcerUsername && (
-                <span className="text-xs text-gray-400 truncate">@{formule.announcerUsername}</span>
+                <Link href={announcerPublicProfileUrl} className="text-xs text-gray-400 truncate hover:text-primary transition-colors">@{formule.announcerUsername}</Link>
               )}
               <div className="flex items-center gap-2 mt-1">
                 <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 rounded-full">
@@ -489,6 +490,7 @@ export function FormuleCardList({
   const announcerBaseUrl = `/annonceur/${formule.announcerSlug || formule.announcerId}`;
   const announcerProfileUrl = `${announcerBaseUrl}?service=${formule.categorySlug}`;
   const announcerBookingUrl = `${announcerBaseUrl}?formule=${formule.formuleId}`;
+  const announcerPublicProfileUrl = `/profil/${formule.announcerSlug || formule.announcerId}`;
 
   const finalPrice = getPriceWithCommission(formule.price, formule.announcerStatusType);
   const priceLabel = priceUnitLabels[formule.priceUnit] || formule.priceUnit;
@@ -513,7 +515,7 @@ export function FormuleCardList({
           {/* Section gauche - Annonceur */}
           <div className="relative md:w-40 p-5 bg-gradient-to-br from-gray-50/80 to-white flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-gray-100">
             {/* Avatar avec ring gradient */}
-            <Link href={announcerProfileUrl} className="relative group/avatar">
+            <Link href={announcerPublicProfileUrl} className="relative group/avatar">
               <div className="absolute -inset-1.5 bg-gradient-to-tr from-primary via-secondary to-primary rounded-2xl opacity-60 blur-sm group-hover/avatar:opacity-100 transition-opacity" />
               <div className="relative w-16 h-16 rounded-xl overflow-hidden bg-white ring-2 ring-white shadow-md">
                 {formule.announcerProfileImage ? (
@@ -537,13 +539,13 @@ export function FormuleCardList({
               )}
             </Link>
 
-            <Link href={announcerProfileUrl}>
+            <Link href={announcerPublicProfileUrl}>
               <span className="font-bold text-gray-900 text-sm mt-3 hover:text-primary transition-colors">
                 {formule.announcerFirstName}
               </span>
             </Link>
             {formule.announcerUsername && (
-              <span className="text-xs text-gray-400 truncate">@{formule.announcerUsername}</span>
+              <Link href={announcerPublicProfileUrl} className="text-xs text-gray-400 truncate hover:text-primary transition-colors">@{formule.announcerUsername}</Link>
             )}
 
             <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 rounded-full mt-1.5">

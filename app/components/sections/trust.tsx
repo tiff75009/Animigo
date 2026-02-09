@@ -81,7 +81,7 @@ export function TrustSection() {
             <Lock className="w-4 h-4" />
             Sécurité & confiance
           </div>
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-foreground mb-4">
+          <h2 className="font-love-taking text-4xl sm:text-5xl md:text-6xl text-foreground mb-4">
             Vos animaux entre de{" "}
             <span className="text-secondary">bonnes mains</span>
           </h2>

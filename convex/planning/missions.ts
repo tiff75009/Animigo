@@ -1235,7 +1235,7 @@ export const getClientMissionById = query({
       announcerPhone: announcer?.phone,
       announcerEmail: announcer?.email,
       announcerPhotoUrl,
-      announcerSlug: announcer?.slug,
+      announcerSlug: announcer?.username || announcer?.slug,
       animal: mission.animal,
       animalId: mission.animalId,
       serviceName: mission.serviceName,

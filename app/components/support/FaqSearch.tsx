@@ -10,7 +10,7 @@ import { useDebounce } from "@/app/hooks/useDebounce";
 
 interface FaqSearchProps {
   audience?: "client" | "annonceur";
-  basePath: string; // "/client/aide" ou "/dashboard/aide"
+  basePath: string; // "/faq"
   placeholder?: string;
   className?: string;
 }

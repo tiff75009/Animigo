@@ -23,7 +23,6 @@ import {
   Home,
   Search,
   PawPrint,
-  HelpCircle,
   Ticket,
   UserPlus,
   ShieldCheck,
@@ -330,15 +329,6 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
             <div className="hidden lg:flex items-center gap-3">
               {!isLoading && isAuthenticated && user ? (
                 <>
-                  {/* Aide */}
-                  <Tooltip content="Centre d'aide">
-                    <Link
-                      href={isOnClientDashboard ? "/client/aide" : "/dashboard/aide"}
-                      className="relative p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                    >
-                      <HelpCircle className="w-5 h-5" />
-                    </Link>
-                  </Tooltip>
 
                   {/* Tickets */}
                   <Tooltip content="Mes tickets">
@@ -725,19 +715,6 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                       </p>
                       <div className="space-y-0.5">
                         <Link
-                          href={isOnClientDashboard ? "/client/aide" : "/dashboard/aide"}
-                          onClick={() => setIsMobileMenuOpen(false)}
-                          className={cn(
-                            "flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors",
-                            pathname.endsWith("/aide")
-                              ? "bg-primary text-white"
-                              : "hover:bg-gray-50 text-gray-700"
-                          )}
-                        >
-                          <HelpCircle className="w-4 h-4" />
-                          <span className="text-sm font-medium">Centre d&apos;aide</span>
-                        </Link>
-                        <Link
                           href={isOnClientDashboard ? "/client/tickets" : "/dashboard/tickets"}
                           onClick={() => setIsMobileMenuOpen(false)}
                           className={cn(
@@ -886,14 +863,6 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                         Aide & Support
                       </p>
                       <div className="space-y-0.5">
-                        <Link
-                          href={user.accountType === "utilisateur" ? "/client/aide" : "/dashboard/aide"}
-                          onClick={() => setIsMobileMenuOpen(false)}
-                          className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700 transition-colors"
-                        >
-                          <HelpCircle className="w-4 h-4" />
-                          <span className="text-sm font-medium">Centre d&apos;aide</span>
-                        </Link>
                         <Link
                           href={user.accountType === "utilisateur" ? "/client/tickets" : "/dashboard/tickets"}
                           onClick={() => setIsMobileMenuOpen(false)}

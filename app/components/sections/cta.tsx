@@ -40,8 +40,8 @@ export function CTA() {
           </div>
 
           {/* Title */}
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white">
-            Prêt à rejoindre l&apos;aventure ?
+          <h2 className="font-love-taking text-4xl sm:text-5xl md:text-6xl text-white">
+            Pret a rejoindre l&apos;aventure ?
           </h2>
 
           {/* Subtitle */}

@@ -557,7 +557,7 @@ export default function ReservationPage({
   // Fonction retour annonceur
   const handleBack = () => {
     if (!bookingData) return;
-    const announcerSlug = bookingData.announcer.slug;
+    const announcerSlug = bookingData.announcer.username || bookingData.announcer.slug;
     if (!announcerSlug) {
       router.back();
       return;

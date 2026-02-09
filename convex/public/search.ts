@@ -1340,7 +1340,7 @@ export const searchFormules = query({
           categoryIcon: categoryDoc?.icon,
           animalTypes: variant.animalTypes || service.animalTypes || [],
           announcerId: announcer._id,
-          announcerSlug: announcer.slug || undefined,
+          announcerSlug: announcer.username || announcer.slug || undefined,
           announcerFirstName: announcer.firstName,
           announcerLastName: announcer.lastName,
           announcerUsername: announcer.username ?? undefined,
@@ -1656,7 +1656,7 @@ export const searchFormulesInternal = query({
           categoryIcon: categoryDoc?.icon,
           animalTypes: variant.animalTypes || service.animalTypes || [],
           announcerId: announcer._id,
-          announcerSlug: announcer.slug || undefined,
+          announcerSlug: announcer.username || announcer.slug || undefined,
           announcerFirstName: announcer.firstName,
           announcerLastName: announcer.lastName,
           announcerUsername: announcer.username ?? undefined,
@@ -3147,7 +3147,7 @@ export const searchServices = query({
         results.push({
           serviceId: service._id,
           announcerId: announcer._id,
-          announcerSlug: announcer.slug ?? announcer._id, // Fallback sur l'ID si pas de slug
+          announcerSlug: announcer.username || announcer.slug || announcer._id, // Username > slug > ID
           firstName: announcer.firstName,
           lastName: announcer.lastName,
           username: announcer.username ?? undefined,

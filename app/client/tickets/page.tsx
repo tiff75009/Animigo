@@ -188,7 +188,7 @@ export default function ClientTicketsPage() {
           Consultez d'abord notre centre d'aide
         </p>
         <Link
-          href="/client/aide"
+          href="/faq"
           className="text-primary font-medium hover:underline"
         >
           Accéder à la FAQ

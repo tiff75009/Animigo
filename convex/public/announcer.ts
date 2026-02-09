@@ -318,11 +318,18 @@ export const getAnnouncerProfile = query({
 export const getAnnouncerBySlug = query({
   args: { slug: v.string() },
   handler: async (ctx, args) => {
-    // Récupérer l'utilisateur par son slug
-    const user = await ctx.db
+    // Chercher d'abord par username, puis par slug (rétrocompatibilité)
+    let user = await ctx.db
       .query("users")
-      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
+      .withIndex("by_username", (q) => q.eq("username", args.slug.toLowerCase()))
       .first();
+
+    if (!user) {
+      user = await ctx.db
+        .query("users")
+        .withIndex("by_slug", (q) => q.eq("slug", args.slug))
+        .first();
+    }
 
     if (!user) {
       return null;

@@ -112,7 +112,7 @@ export default function ClientNouveauTicketPage() {
         <p className="font-medium mb-1">Conseil</p>
         <p>
           Avant de créer un ticket, consultez notre{" "}
-          <Link href="/client/aide" className="underline hover:no-underline">
+          <Link href="/faq" className="underline hover:no-underline">
             centre d'aide
           </Link>{" "}
           pour trouver une réponse rapide à votre question.

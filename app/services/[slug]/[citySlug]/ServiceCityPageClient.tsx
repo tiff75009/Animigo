@@ -541,46 +541,73 @@ export default function ServiceCityPageClient({ serviceSlug, citySlug }: Props) 
 
         {/* Other Services in this City */}
         {filteredOtherServices && filteredOtherServices.length > 0 && (
-          <section
-            className="py-16 md:py-24 relative"
-            style={{
-              background: `linear-gradient(180deg, rgb(248 250 252) 0%, ${categoryColor}06 50%, rgb(248 250 252) 100%)`
-            }}
-          >
-            <div className="max-w-7xl mx-auto px-4">
+          <section className="py-20 md:py-28 relative overflow-hidden">
+            {/* Background */}
+            <div className="absolute inset-0 pointer-events-none">
+              <div
+                className="absolute -top-20 -right-20 w-80 h-80 rounded-full blur-[120px] opacity-10"
+                style={{ backgroundColor: categoryColor }}
+              />
+              <div
+                className="absolute -bottom-20 -left-20 w-60 h-60 rounded-full blur-[100px] opacity-[0.07]"
+                style={{ backgroundColor: categoryColor }}
+              />
+            </div>
+
+            <div className="max-w-5xl mx-auto px-4 relative z-10">
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 className="text-center mb-12"
               >
-                <h2 className="text-3xl font-bold text-foreground mb-4 font-nunito">
-                  Autres services a {page.city.name}
+                <p
+                  className="text-sm font-semibold uppercase tracking-wider mb-3"
+                  style={{ color: categoryColor }}
+                >
+                  Explorez aussi
+                </p>
+                <h2 className="font-love-taking text-4xl sm:text-5xl text-foreground mb-3">
+                  Autres services a{" "}
+                  <span style={{ color: categoryColor }}>{page.city.name}</span>
                 </h2>
+                <p className="text-muted-foreground max-w-lg mx-auto">
+                  Découvrez tous les services disponibles pour vos animaux à {page.city.name}.
+                </p>
               </motion.div>
 
-              <div className="flex flex-wrap justify-center gap-3">
-                {filteredOtherServices.slice(0, 10).map((service: OtherService, index: number) => (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredOtherServices.slice(0, 9).map((service: OtherService, index: number) => (
                   <motion.div
                     key={service.serviceSlug}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    whileInView={{ opacity: 1, scale: 1 }}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true }}
                     transition={{ delay: index * 0.05 }}
                   >
                     <Link
                       href={`/services/${service.serviceSlug}/${citySlug}`}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-white rounded-full border border-slate-200 text-sm text-foreground hover:shadow-md transition-all"
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = categoryColor;
-                        e.currentTarget.style.color = categoryColor;
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = "";
-                        e.currentTarget.style.color = "";
-                      }}
+                      className="group block bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300"
                     >
-                      {service.serviceTitle}
+                      <div className="flex items-center gap-4">
+                        <div
+                          className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform duration-300 group-hover:scale-110"
+                          style={{ backgroundColor: `${categoryColor}12` }}
+                        >
+                          <ArrowRight
+                            className="w-5 h-5 transition-transform duration-300 group-hover:translate-x-0.5"
+                            style={{ color: categoryColor }}
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                            {service.serviceTitle}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            à {page.city.name}
+                          </p>
+                        </div>
+                      </div>
                     </Link>
                   </motion.div>
                 ))}

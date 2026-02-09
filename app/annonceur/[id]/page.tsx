@@ -976,6 +976,7 @@ export default function AnnouncerProfilePage() {
       {/* Hero Section avec Cover et Action Bar */}
       <AnnouncerHero
         announcer={announcer}
+        slug={announcerSlug}
         distance={distance}
         isFavorite={isFavorite}
         onToggleFavorite={() => setIsFavorite(!isFavorite)}

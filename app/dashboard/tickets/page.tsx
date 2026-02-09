@@ -188,7 +188,7 @@ export default function DashboardTicketsPage() {
           Consultez d'abord notre centre d'aide
         </p>
         <Link
-          href="/dashboard/aide"
+          href="/faq"
           className="text-primary font-medium hover:underline"
         >
           Accéder à la FAQ

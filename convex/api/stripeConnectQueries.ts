@@ -48,7 +48,7 @@ export const getAnnouncerStripeInfo = query({
       ibanMasked: user.iban || null,
       payoutMode: user.payoutMode || "scheduled",
       // Pour construire l'URL du profil annonceur
-      userSlug: user.slug || null,
+      userSlug: user.username || user.slug || null,
       userId: user._id,
       // Infos pour pré-remplir le formulaire RIB
       firstName: user.firstName || null,

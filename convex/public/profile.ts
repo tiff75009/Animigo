@@ -1,15 +1,23 @@
 import { query } from "../_generated/server";
 import { v } from "convex/values";
 
-// Récupérer un profil public par son slug
+// Récupérer un profil public par son username (ou slug en fallback)
 export const getPublicProfileBySlug = query({
   args: { slug: v.string() },
   handler: async (ctx, args) => {
-    // Trouver l'utilisateur par son slug
-    const user = await ctx.db
+    // Chercher d'abord par username
+    let user = await ctx.db
       .query("users")
-      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
+      .withIndex("by_username", (q) => q.eq("username", args.slug.toLowerCase()))
       .first();
+
+    // Fallback : chercher par slug (rétrocompatibilité)
+    if (!user) {
+      user = await ctx.db
+        .query("users")
+        .withIndex("by_slug", (q) => q.eq("slug", args.slug))
+        .first();
+    }
 
     if (!user || !user.isActive) {
       return null;

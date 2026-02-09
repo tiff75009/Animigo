@@ -125,8 +125,8 @@ export default function AnnouncerDetailPage() {
               </div>
 
               <div className="flex items-center gap-3 mt-1">
-                {user.slug && (
-                  <span className="text-slate-400">@{user.slug}</span>
+                {(user.username || user.slug) && (
+                  <span className="text-slate-400">@{user.username || user.slug}</span>
                 )}
                 <span
                   className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -187,9 +187,9 @@ export default function AnnouncerDetailPage() {
               )}
             </button>
 
-            {user.slug && (
+            {(user.username || user.slug) && (
               <a
-                href={`/annonceur/${user.slug}`}
+                href={`/annonceur/${user.username || user.slug}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm font-medium text-white transition-colors"

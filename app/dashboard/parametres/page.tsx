@@ -665,9 +665,9 @@ function PaymentTab() {
 
       // 3. Construire l'URL du profil annonceur
       const profileUrl = stripeInfo?.userSlug
-        ? `https://animigo.fr/profil/${stripeInfo.userSlug}`
+        ? `https://animigo.fr/annonceur/${stripeInfo.userSlug}`
         : stripeInfo?.userId
-          ? `https://animigo.fr/profil/${stripeInfo.userId}`
+          ? `https://animigo.fr/annonceur/${stripeInfo.userId}`
           : undefined;
 
       // 4. Appeler l'action Stripe (crée le compte et ajoute le compte bancaire)
@@ -728,9 +728,9 @@ function PaymentTab() {
 
     // Construire l'URL du profil
     const profileUrl = stripeInfo?.userSlug
-      ? `https://animigo.fr/profil/${stripeInfo.userSlug}`
+      ? `https://animigo.fr/annonceur/${stripeInfo.userSlug}`
       : stripeInfo?.userId
-        ? `https://animigo.fr/profil/${stripeInfo.userId}`
+        ? `https://animigo.fr/annonceur/${stripeInfo.userId}`
         : "https://animigo.fr";
 
     setIsUpdatingProfile(true);
