@@ -16,6 +16,7 @@ import {
   AnnouncerProfile,
   AnnouncerReviews,
   AnnouncerBookingCard,
+  AnnouncerInsightCard,
   AnnouncerMobileCTA,
   AnnouncerTabs,
   type TabType,
@@ -1089,41 +1090,48 @@ export default function AnnouncerProfilePage() {
             )}
           </div>
 
-          {/* Right Column - Booking Card (Sticky) - caché pour les annonceurs */}
-          {!isAnnouncer && <div className="hidden md:block">
-            <AnnouncerBookingCard
-              services={announcer.services}
-              responseRate={announcer.responseRate}
-              responseTime={announcer.responseTime}
-              nextAvailable={announcer.availability.nextAvailable}
-              selectedServiceId={selectedService?.id ?? null}
-              commissionRate={commissionRate}
-              vatRate={vatRate}
-              stripeFeeRate={stripeFeeRate}
-              bookingService={bookingService}
-              bookingVariant={bookingVariant}
-              bookingSelection={bookingSelection}
-              priceBreakdown={priceBreakdown}
-              clientAddress={selectedClientAddress}
-              collectiveSlots={collectiveSlots}
-              animalCount={bookingSelection.animalCount}
-              selectedSessions={bookingSelection.selectedSessions}
-              announcerFirstName={announcer.firstName}
-              announcerId={announcerData?.id}
-              announcerStatusType={announcerData?.statusType as "particulier" | "micro_entrepreneur" | "professionnel" | undefined}
-              // Vérification de l'animal pour les invités
-              requiresAnimalVerification={requiresAnimalVerification}
-              guestAnimalValid={guestAnimalValid}
-              guestAnimalError={guestAnimalError}
-              onServiceChange={(serviceId) => {
-                // Trouver le categorySlug du service sélectionné et mettre à jour l'URL
-                const service = announcer.services.find((s) => s.id === serviceId);
-                setSelectedServiceSlug(service?.categorySlug ?? service?.categoryId ?? null);
-              }}
-              onBook={handleBook}
-              onFinalize={handleFinalize}
-            />
-          </div>}
+          {/* Right Column - Booking Card ou Insight Card (Sticky) */}
+          <div className="hidden md:block">
+            {isAnnouncer ? (
+              <AnnouncerInsightCard
+                announcer={announcer}
+                commissionRate={commissionRate}
+              />
+            ) : (
+              <AnnouncerBookingCard
+                services={announcer.services}
+                responseRate={announcer.responseRate}
+                responseTime={announcer.responseTime}
+                nextAvailable={announcer.availability.nextAvailable}
+                selectedServiceId={selectedService?.id ?? null}
+                commissionRate={commissionRate}
+                vatRate={vatRate}
+                stripeFeeRate={stripeFeeRate}
+                bookingService={bookingService}
+                bookingVariant={bookingVariant}
+                bookingSelection={bookingSelection}
+                priceBreakdown={priceBreakdown}
+                clientAddress={selectedClientAddress}
+                collectiveSlots={collectiveSlots}
+                animalCount={bookingSelection.animalCount}
+                selectedSessions={bookingSelection.selectedSessions}
+                announcerFirstName={announcer.firstName}
+                announcerId={announcerData?.id}
+                announcerStatusType={announcerData?.statusType as "particulier" | "micro_entrepreneur" | "professionnel" | undefined}
+                // Vérification de l'animal pour les invités
+                requiresAnimalVerification={requiresAnimalVerification}
+                guestAnimalValid={guestAnimalValid}
+                guestAnimalError={guestAnimalError}
+                onServiceChange={(serviceId) => {
+                  // Trouver le categorySlug du service sélectionné et mettre à jour l'URL
+                  const service = announcer.services.find((s) => s.id === serviceId);
+                  setSelectedServiceSlug(service?.categorySlug ?? service?.categoryId ?? null);
+                }}
+                onBook={handleBook}
+                onFinalize={handleFinalize}
+              />
+            )}
+          </div>
         </div>
       </main>
 

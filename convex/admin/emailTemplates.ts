@@ -203,6 +203,54 @@ const DEFAULT_TEMPLATES = [
     ],
     isSystem: true,
   },
+  {
+    slug: "mission_auto_refused",
+    name: "Auto-refus (délai acceptation dépassé)",
+    description: "Email envoyé au client quand une réservation est auto-refusée car l'annonceur n'a pas répondu à temps",
+    subject: "Votre réservation n'a pas été acceptée à temps - {{siteName}}",
+    availableVariables: [
+      { key: "clientName", description: "Prénom du client", example: "Jean" },
+      { key: "announcerName", description: "Nom de l'annonceur", example: "Marie D." },
+      { key: "serviceName", description: "Nom du service", example: "Garde de chien" },
+      { key: "startDate", description: "Date de début", example: "15/03/2025" },
+      { key: "endDate", description: "Date de fin", example: "17/03/2025" },
+      { key: "siteName", description: "Nom du site", example: "Animigo" },
+      { key: "searchUrl", description: "Lien vers la recherche", example: "https://..." },
+    ],
+    isSystem: true,
+  },
+  {
+    slug: "mission_auto_expired_client",
+    name: "Expiration paiement (client)",
+    description: "Email envoyé au client quand la réservation expire car le paiement n'a pas été effectué à temps",
+    subject: "Votre réservation a expiré (paiement non effectué) - {{siteName}}",
+    availableVariables: [
+      { key: "clientName", description: "Prénom du client", example: "Jean" },
+      { key: "announcerName", description: "Nom de l'annonceur", example: "Marie D." },
+      { key: "serviceName", description: "Nom du service", example: "Garde de chien" },
+      { key: "startDate", description: "Date de début", example: "15/03/2025" },
+      { key: "endDate", description: "Date de fin", example: "17/03/2025" },
+      { key: "siteName", description: "Nom du site", example: "Animigo" },
+      { key: "searchUrl", description: "Lien vers la recherche", example: "https://..." },
+    ],
+    isSystem: true,
+  },
+  {
+    slug: "mission_auto_expired_announcer",
+    name: "Expiration paiement (annonceur)",
+    description: "Email envoyé à l'annonceur quand la réservation expire car le client n'a pas payé à temps",
+    subject: "Une réservation a expiré (paiement non effectué) - {{siteName}}",
+    availableVariables: [
+      { key: "announcerName", description: "Prénom de l'annonceur", example: "Marie" },
+      { key: "clientName", description: "Nom du client", example: "Jean D." },
+      { key: "serviceName", description: "Nom du service", example: "Garde de chien" },
+      { key: "startDate", description: "Date de début", example: "15/03/2025" },
+      { key: "endDate", description: "Date de fin", example: "17/03/2025" },
+      { key: "siteName", description: "Nom du site", example: "Animigo" },
+      { key: "dashboardUrl", description: "Lien vers le dashboard", example: "https://..." },
+    ],
+    isSystem: true,
+  },
 ];
 
 // HTML par défaut pour les templates
@@ -607,6 +655,107 @@ const getDefaultHtmlContent = (slug: string): string => {
         <p style="margin: 0 0 10px 0; font-weight: bold; color: #065f46;">Remboursement</p>
         <p style="margin: 5px 0; color: #475569;"><strong>Montant remboursé :</strong> {{refundAmount}}</p>
         <p style="margin: 5px 0; color: #475569;"><strong>Délai estimé :</strong> {{refundDelay}}</p>
+      </div>
+    </div>
+    <div class="footer">
+      <p>&copy; 2025 {{siteName}}. Tous droits réservés.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+
+    case "mission_auto_refused":
+      return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>${baseStyle}</style></head>
+<body>
+<div style="padding: 40px 20px; background-color: #f4f4f5;">
+  <div class="container">
+    <div style="background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%); padding: 40px 30px; text-align: center;">
+      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">Réservation non acceptée</h1>
+    </div>
+    <div class="content">
+      <h2>Bonjour {{clientName}},</h2>
+      <p>Malheureusement, votre réservation auprès de {{announcerName}} n'a pas été acceptée dans le délai imparti.</p>
+      <div class="info-box">
+        <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">Détails de la réservation</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Service :</strong> {{serviceName}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Prestataire :</strong> {{announcerName}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
+      </div>
+      <div class="warning-box">
+        <p style="margin: 0; color: #92400e; font-size: 14px;">Le prestataire n'a pas répondu à votre demande dans le délai prévu. La réservation a été automatiquement annulée.</p>
+      </div>
+      <p>Nous vous invitons à rechercher un autre prestataire disponible pour votre besoin.</p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="{{searchUrl}}" class="btn" style="background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%);">Rechercher un prestataire</a>
+      </div>
+    </div>
+    <div class="footer">
+      <p>&copy; 2025 {{siteName}}. Tous droits réservés.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+
+    case "mission_auto_expired_client":
+      return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>${baseStyle}</style></head>
+<body>
+<div style="padding: 40px 20px; background-color: #f4f4f5;">
+  <div class="container">
+    <div style="background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%); padding: 40px 30px; text-align: center;">
+      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">Réservation expirée</h1>
+    </div>
+    <div class="content">
+      <h2>Bonjour {{clientName}},</h2>
+      <p>Votre réservation auprès de {{announcerName}} a expiré car le paiement n'a pas été effectué dans le délai imparti.</p>
+      <div class="info-box">
+        <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">Détails de la réservation</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Service :</strong> {{serviceName}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Prestataire :</strong> {{announcerName}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
+      </div>
+      <div class="warning-box">
+        <p style="margin: 0; color: #92400e; font-size: 14px;">Le délai de paiement a expiré. La réservation a été automatiquement annulée.</p>
+      </div>
+      <p>Vous pouvez effectuer une nouvelle réservation si vous le souhaitez.</p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="{{searchUrl}}" class="btn" style="background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%);">Rechercher un prestataire</a>
+      </div>
+    </div>
+    <div class="footer">
+      <p>&copy; 2025 {{siteName}}. Tous droits réservés.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+
+    case "mission_auto_expired_announcer":
+      return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>${baseStyle}</style></head>
+<body>
+<div style="padding: 40px 20px; background-color: #f4f4f5;">
+  <div class="container">
+    <div style="background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%); padding: 40px 30px; text-align: center;">
+      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">Réservation expirée</h1>
+    </div>
+    <div class="content">
+      <h2>Bonjour {{announcerName}},</h2>
+      <p>La réservation de {{clientName}} pour votre service "{{serviceName}}" a expiré car le paiement n'a pas été effectué dans le délai imparti.</p>
+      <div class="info-box">
+        <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">Détails de la réservation</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Service :</strong> {{serviceName}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Client :</strong> {{clientName}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
+      </div>
+      <div class="warning-box">
+        <p style="margin: 0; color: #92400e; font-size: 14px;">Le client n'a pas effectué le paiement dans le délai prévu. Les créneaux concernés sont de nouveau disponibles.</p>
+      </div>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="{{dashboardUrl}}" class="btn">Voir mon dashboard</a>
       </div>
     </div>
     <div class="footer">

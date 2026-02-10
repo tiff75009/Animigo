@@ -52,6 +52,19 @@ export default function EmailTemplatesPage() {
   const [error, setError] = useState<string | null>(null);
   const [showVariables, setShowVariables] = useState(true);
   const [seeding, setSeeding] = useState(false);
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+
+  const toggleCategory = (label: string) => {
+    setCollapsedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) {
+        next.delete(label);
+      } else {
+        next.add(label);
+      }
+      return next;
+    });
+  };
 
   // États pour config expéditeur
   const [emailFrom, setEmailFrom] = useState("noreply@animigo.fr");
@@ -203,6 +216,53 @@ export default function EmailTemplatesPage() {
     return preview;
   };
 
+  // Catégories de templates pour la sidebar
+  const TEMPLATE_CATEGORIES: { label: string; icon: string; slugs: string[] }[] = [
+    {
+      label: "Inscription",
+      icon: "🔐",
+      slugs: ["verification", "verification_reservation", "welcome"],
+    },
+    {
+      label: "Réservations",
+      icon: "📅",
+      slugs: ["reservation_confirmed", "new_reservation_request", "reservation_accepted"],
+    },
+    {
+      label: "Missions",
+      icon: "✅",
+      slugs: ["mission_validated_by_client", "mission_auto_validated_announcer", "mission_auto_validated_client"],
+    },
+    {
+      label: "Annulations",
+      icon: "❌",
+      slugs: [
+        "mission_cancelled_by_client",
+        "mission_cancelled_by_client_confirmation",
+        "mission_auto_refused",
+        "mission_auto_expired_client",
+        "mission_auto_expired_announcer",
+      ],
+    },
+    {
+      label: "Réclamations",
+      icon: "⚠️",
+      slugs: ["dispute_opened"],
+    },
+  ];
+
+  // Grouper les templates par catégorie
+  const categorizedTemplates = TEMPLATE_CATEGORIES.map((cat) => ({
+    ...cat,
+    templates: (templates || []).filter((t: EmailTemplate) => cat.slugs.includes(t.slug)),
+  })).filter((cat) => cat.templates.length > 0);
+
+  // Templates non catégorisés (au cas où)
+  const categorizedSlugs = TEMPLATE_CATEGORIES.flatMap((c) => c.slugs);
+  const uncategorized = (templates || []).filter(
+    (t: EmailTemplate) => !categorizedSlugs.includes(t.slug)
+  );
+
   if (!templates) {
     return (
       <div className="p-8 flex items-center justify-center min-h-screen">
@@ -337,29 +397,87 @@ export default function EmailTemplatesPage() {
           <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
             <div className="p-4 border-b border-slate-800">
               <h2 className="font-semibold text-white">Templates</h2>
+              <p className="text-xs text-slate-500 mt-0.5">{templates.length} template{templates.length > 1 ? "s" : ""}</p>
             </div>
-            <div className="p-2">
-              {templates.map((template: EmailTemplate) => (
-                <button
-                  key={template.slug}
-                  onClick={() => setSelectedTemplate(template.slug)}
-                  className={`w-full text-left p-3 rounded-lg transition-colors ${
-                    selectedTemplate === template.slug
-                      ? "bg-primary/20 text-primary"
-                      : "text-slate-300 hover:bg-slate-800"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <p className="font-medium truncate">{template.name}</p>
-                      <p className="text-xs text-slate-500 truncate">
-                        {template.slug}
-                      </p>
-                    </div>
+            <div className="p-2 space-y-1">
+              {categorizedTemplates.map((category) => {
+                const isCollapsed = collapsedCategories.has(category.label);
+                return (
+                  <div key={category.label}>
+                    <button
+                      onClick={() => toggleCategory(category.label)}
+                      className="w-full px-3 py-2 flex items-center justify-between hover:bg-slate-800/50 rounded-lg transition-colors group"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm">{category.icon}</span>
+                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider group-hover:text-slate-400 transition-colors">
+                          {category.label}
+                        </span>
+                        <span className="text-[10px] text-slate-600 font-medium">{category.templates.length}</span>
+                      </div>
+                      {isCollapsed ? (
+                        <ChevronDown className="w-3.5 h-3.5 text-slate-600" />
+                      ) : (
+                        <ChevronUp className="w-3.5 h-3.5 text-slate-600" />
+                      )}
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {!isCollapsed && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="overflow-hidden"
+                        >
+                          {category.templates.map((template: EmailTemplate) => (
+                            <button
+                              key={template.slug}
+                              onClick={() => setSelectedTemplate(template.slug)}
+                              className={`w-full text-left p-2.5 pl-4 rounded-lg transition-colors ${
+                                selectedTemplate === template.slug
+                                  ? "bg-primary/20 text-primary"
+                                  : "text-slate-300 hover:bg-slate-800"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <FileText className="w-3.5 h-3.5 flex-shrink-0" />
+                                <p className="text-sm font-medium truncate">{template.name}</p>
+                              </div>
+                            </button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
-                </button>
-              ))}
+                );
+              })}
+              {uncategorized.length > 0 && (
+                <div>
+                  <div className="px-3 py-2 flex items-center gap-2">
+                    <span className="text-sm">📄</span>
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      Autres
+                    </span>
+                  </div>
+                  {uncategorized.map((template: EmailTemplate) => (
+                    <button
+                      key={template.slug}
+                      onClick={() => setSelectedTemplate(template.slug)}
+                      className={`w-full text-left p-2.5 pl-4 rounded-lg transition-colors ${
+                        selectedTemplate === template.slug
+                          ? "bg-primary/20 text-primary"
+                          : "text-slate-300 hover:bg-slate-800"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-3.5 h-3.5 flex-shrink-0" />
+                        <p className="text-sm font-medium truncate">{template.name}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

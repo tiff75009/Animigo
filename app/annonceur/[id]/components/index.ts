@@ -8,6 +8,7 @@ export { default as AnnouncerFormules } from "./AnnouncerFormules";
 export { default as AnnouncerProfile } from "./AnnouncerProfile";
 export { default as AnnouncerReviews } from "./AnnouncerReviews";
 export { default as AnnouncerBookingCard } from "./AnnouncerBookingCard";
+export { default as AnnouncerInsightCard } from "./AnnouncerInsightCard";
 export { default as AnnouncerMobileCTA } from "./AnnouncerMobileCTA";
 export { default as AnnouncerTabs } from "./AnnouncerTabs";
 export type { TabType } from "./AnnouncerTabs";

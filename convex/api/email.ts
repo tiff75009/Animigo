@@ -356,6 +356,210 @@ const DEFAULT_TEMPLATES: Record<string, { subject: string; html: string }> = {
 </body>
 </html>`,
   },
+  mission_auto_refused: {
+    subject: "Votre reservation n'a pas ete acceptee a temps - {{siteName}}",
+    html: `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Reservation non acceptee</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+<tr><td align="center" style="padding:40px 20px;">
+  <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+    <tr>
+      <td align="center" style="background-color:#EF4444;padding:40px 30px;">
+        <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:bold;">Reservation non acceptee</h1>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:40px 30px;">
+        <h2 style="margin:0 0 20px 0;color:#1e293b;font-size:24px;">Bonjour {{clientName}},</h2>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          Malheureusement, votre reservation aupres de {{announcerName}} n'a pas ete acceptee dans le delai imparti.
+        </p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#f0f9ff;border-left:4px solid #0ea5e9;border-radius:8px;">
+              <p style="margin:0 0 10px 0;font-weight:bold;color:#0369a1;">Details de la reservation</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Service :</strong> {{serviceName}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Prestataire :</strong> {{announcerName}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#fef3c7;border-left:4px solid #f59e0b;border-radius:8px;">
+              <p style="margin:0;color:#92400e;font-size:14px;">Le prestataire n'a pas repondu a votre demande dans le delai prevu. La reservation a ete automatiquement annulee.</p>
+            </td>
+          </tr>
+        </table>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          Nous vous invitons a rechercher un autre prestataire disponible pour votre besoin.
+        </p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center" style="padding:30px 0;">
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{searchUrl}}" style="height:52px;v-text-anchor:middle;width:300px;" arcsize="50%" fillcolor="#FF6B6B" stroke="f"><v:textbox inset="0,0,0,0"><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Rechercher un prestataire</center></v:textbox></v:roundrect><![endif]-->
+              <!--[if !mso]><!--><a href="{{searchUrl}}" style="display:inline-block;background-color:#FF6B6B;color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:bold;font-size:16px;">Rechercher un prestataire</a><!--<![endif]-->
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="background-color:#f8fafc;padding:30px;border-top:1px solid #e2e8f0;">
+        <p style="margin:0;color:#94a3b8;font-size:12px;">&copy; 2025 {{siteName}}. Tous droits reserves.</p>
+      </td>
+    </tr>
+  </table>
+  <!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
+</body>
+</html>`,
+  },
+  mission_auto_expired_client: {
+    subject: "Votre reservation a expire (paiement non effectue) - {{siteName}}",
+    html: `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Reservation expiree</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+<tr><td align="center" style="padding:40px 20px;">
+  <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+    <tr>
+      <td align="center" style="background-color:#EF4444;padding:40px 30px;">
+        <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:bold;">Reservation expiree</h1>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:40px 30px;">
+        <h2 style="margin:0 0 20px 0;color:#1e293b;font-size:24px;">Bonjour {{clientName}},</h2>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          Votre reservation aupres de {{announcerName}} a expire car le paiement n'a pas ete effectue dans le delai imparti.
+        </p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#f0f9ff;border-left:4px solid #0ea5e9;border-radius:8px;">
+              <p style="margin:0 0 10px 0;font-weight:bold;color:#0369a1;">Details de la reservation</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Service :</strong> {{serviceName}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Prestataire :</strong> {{announcerName}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#fef3c7;border-left:4px solid #f59e0b;border-radius:8px;">
+              <p style="margin:0;color:#92400e;font-size:14px;">Le delai de paiement a expire. La reservation a ete automatiquement annulee.</p>
+            </td>
+          </tr>
+        </table>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          Vous pouvez effectuer une nouvelle reservation si vous le souhaitez.
+        </p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center" style="padding:30px 0;">
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{searchUrl}}" style="height:52px;v-text-anchor:middle;width:300px;" arcsize="50%" fillcolor="#FF6B6B" stroke="f"><v:textbox inset="0,0,0,0"><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Rechercher un prestataire</center></v:textbox></v:roundrect><![endif]-->
+              <!--[if !mso]><!--><a href="{{searchUrl}}" style="display:inline-block;background-color:#FF6B6B;color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:bold;font-size:16px;">Rechercher un prestataire</a><!--<![endif]-->
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="background-color:#f8fafc;padding:30px;border-top:1px solid #e2e8f0;">
+        <p style="margin:0;color:#94a3b8;font-size:12px;">&copy; 2025 {{siteName}}. Tous droits reserves.</p>
+      </td>
+    </tr>
+  </table>
+  <!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
+</body>
+</html>`,
+  },
+  mission_auto_expired_announcer: {
+    subject: "Une reservation a expire (paiement non effectue) - {{siteName}}",
+    html: `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Reservation expiree</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+<tr><td align="center" style="padding:40px 20px;">
+  <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+    <tr>
+      <td align="center" style="background-color:#EF4444;padding:40px 30px;">
+        <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:bold;">Reservation expiree</h1>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:40px 30px;">
+        <h2 style="margin:0 0 20px 0;color:#1e293b;font-size:24px;">Bonjour {{announcerName}},</h2>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          La reservation de {{clientName}} pour votre service "{{serviceName}}" a expire car le paiement n'a pas ete effectue dans le delai imparti.
+        </p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#f0f9ff;border-left:4px solid #0ea5e9;border-radius:8px;">
+              <p style="margin:0 0 10px 0;font-weight:bold;color:#0369a1;">Details de la reservation</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Service :</strong> {{serviceName}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Client :</strong> {{clientName}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#fef3c7;border-left:4px solid #f59e0b;border-radius:8px;">
+              <p style="margin:0;color:#92400e;font-size:14px;">Le client n'a pas effectue le paiement dans le delai prevu. Les creneaux concernes sont de nouveau disponibles.</p>
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center" style="padding:30px 0;">
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{dashboardUrl}}" style="height:52px;v-text-anchor:middle;width:280px;" arcsize="50%" fillcolor="#FF6B6B" stroke="f"><v:textbox inset="0,0,0,0"><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Voir mon dashboard</center></v:textbox></v:roundrect><![endif]-->
+              <!--[if !mso]><!--><a href="{{dashboardUrl}}" style="display:inline-block;background-color:#FF6B6B;color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:bold;font-size:16px;">Voir mon dashboard</a><!--<![endif]-->
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="background-color:#f8fafc;padding:30px;border-top:1px solid #e2e8f0;">
+        <p style="margin:0;color:#94a3b8;font-size:12px;">&copy; 2025 {{siteName}}. Tous droits reserves.</p>
+      </td>
+    </tr>
+  </table>
+  <!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
+</body>
+</html>`,
+  },
   password_reset: {
     subject: "Reinitialisation de votre mot de passe - {{siteName}}",
     html: `<!DOCTYPE html>
@@ -997,6 +1201,250 @@ export const sendPasswordResetEmail = internalAction({
       console.error("Failed to send password reset email:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       return { success: false, error: errorMessage };
+    }
+  },
+});
+
+// ============================================
+// EMAILS AUTO-ANNULATION RÉSERVATIONS
+// ============================================
+
+// Email au client quand la mission est auto-refusée (deadline acceptation dépassée)
+export const sendMissionAutoRefusedEmail = internalAction({
+  args: {
+    clientEmail: v.string(),
+    clientName: v.string(),
+    announcerName: v.string(),
+    serviceName: v.string(),
+    startDate: v.string(),
+    endDate: v.string(),
+    emailConfig: v.object({
+      apiKey: v.string(),
+      fromEmail: v.optional(v.string()),
+      fromName: v.optional(v.string()),
+    }),
+    appUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const fromEmail = args.emailConfig.fromEmail || "onboarding@resend.dev";
+      const fromName = args.emailConfig.fromName || "Animigo";
+      const siteName = "Animigo";
+      const appUrl = args.appUrl || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+      const template = getTemplate("mission_auto_refused");
+      if (!template) {
+        return { success: false, error: "Template not found" };
+      }
+
+      const variables = {
+        clientName: args.clientName,
+        announcerName: args.announcerName,
+        serviceName: args.serviceName,
+        startDate: formatDate(args.startDate),
+        endDate: formatDate(args.endDate),
+        siteName,
+        searchUrl: `${appUrl}/recherche`,
+      };
+
+      const subject = replaceVariables(template.subject, variables);
+      const html = replaceVariables(template.htmlContent, variables);
+
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${args.emailConfig.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: `${fromName} <${fromEmail}>`,
+          to: [args.clientEmail],
+          subject,
+          html,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Resend API error: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log("Mission auto-refused email sent:", result);
+
+      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+        to: args.clientEmail,
+        from: `${fromName} <${fromEmail}>`,
+        subject,
+        template: "mission_auto_refused",
+        status: "sent",
+        resendId: result.id,
+      });
+
+      return { success: true, id: result.id };
+    } catch (error) {
+      console.error("Failed to send mission auto-refused email:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  },
+});
+
+// Email au client quand le paiement expire
+export const sendMissionAutoExpiredClientEmail = internalAction({
+  args: {
+    clientEmail: v.string(),
+    clientName: v.string(),
+    announcerName: v.string(),
+    serviceName: v.string(),
+    startDate: v.string(),
+    endDate: v.string(),
+    emailConfig: v.object({
+      apiKey: v.string(),
+      fromEmail: v.optional(v.string()),
+      fromName: v.optional(v.string()),
+    }),
+    appUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const fromEmail = args.emailConfig.fromEmail || "onboarding@resend.dev";
+      const fromName = args.emailConfig.fromName || "Animigo";
+      const siteName = "Animigo";
+      const appUrl = args.appUrl || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+      const template = getTemplate("mission_auto_expired_client");
+      if (!template) {
+        return { success: false, error: "Template not found" };
+      }
+
+      const variables = {
+        clientName: args.clientName,
+        announcerName: args.announcerName,
+        serviceName: args.serviceName,
+        startDate: formatDate(args.startDate),
+        endDate: formatDate(args.endDate),
+        siteName,
+        searchUrl: `${appUrl}/recherche`,
+      };
+
+      const subject = replaceVariables(template.subject, variables);
+      const html = replaceVariables(template.htmlContent, variables);
+
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${args.emailConfig.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: `${fromName} <${fromEmail}>`,
+          to: [args.clientEmail],
+          subject,
+          html,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Resend API error: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log("Mission auto-expired client email sent:", result);
+
+      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+        to: args.clientEmail,
+        from: `${fromName} <${fromEmail}>`,
+        subject,
+        template: "mission_auto_expired_client",
+        status: "sent",
+        resendId: result.id,
+      });
+
+      return { success: true, id: result.id };
+    } catch (error) {
+      console.error("Failed to send mission auto-expired client email:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  },
+});
+
+// Email à l'annonceur quand le paiement expire
+export const sendMissionAutoExpiredAnnouncerEmail = internalAction({
+  args: {
+    announcerEmail: v.string(),
+    announcerName: v.string(),
+    clientName: v.string(),
+    serviceName: v.string(),
+    startDate: v.string(),
+    endDate: v.string(),
+    emailConfig: v.object({
+      apiKey: v.string(),
+      fromEmail: v.optional(v.string()),
+      fromName: v.optional(v.string()),
+    }),
+    appUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const fromEmail = args.emailConfig.fromEmail || "onboarding@resend.dev";
+      const fromName = args.emailConfig.fromName || "Animigo";
+      const siteName = "Animigo";
+      const appUrl = args.appUrl || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+      const template = getTemplate("mission_auto_expired_announcer");
+      if (!template) {
+        return { success: false, error: "Template not found" };
+      }
+
+      const variables = {
+        announcerName: args.announcerName,
+        clientName: args.clientName,
+        serviceName: args.serviceName,
+        startDate: formatDate(args.startDate),
+        endDate: formatDate(args.endDate),
+        siteName,
+        dashboardUrl: `${appUrl}/dashboard/missions`,
+      };
+
+      const subject = replaceVariables(template.subject, variables);
+      const html = replaceVariables(template.htmlContent, variables);
+
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${args.emailConfig.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: `${fromName} <${fromEmail}>`,
+          to: [args.announcerEmail],
+          subject,
+          html,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Resend API error: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log("Mission auto-expired announcer email sent:", result);
+
+      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+        to: args.announcerEmail,
+        from: `${fromName} <${fromEmail}>`,
+        subject,
+        template: "mission_auto_expired_announcer",
+        status: "sent",
+        resendId: result.id,
+      });
+
+      return { success: true, id: result.id };
+    } catch (error) {
+      console.error("Failed to send mission auto-expired announcer email:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
     }
   },
 });

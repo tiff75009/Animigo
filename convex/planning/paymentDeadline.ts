@@ -171,6 +171,81 @@ export const autoExpirePendingPayments = internalMutation({
       );
     }
 
+    // Envoyer les emails d'expiration paiement (client + annonceur)
+    const apiKeyConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "resend_api_key"))
+      .first();
+
+    if (apiKeyConfig?.value) {
+      const fromEmailConfig = await ctx.db
+        .query("systemConfig")
+        .withIndex("by_key", (q) => q.eq("key", "resend_from_email"))
+        .first();
+      const fromNameConfig = await ctx.db
+        .query("systemConfig")
+        .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
+        .first();
+      const appUrlConfig = await ctx.db
+        .query("systemConfig")
+        .withIndex("by_key", (q) => q.eq("key", "app_url"))
+        .first();
+
+      const emailConfig = {
+        apiKey: apiKeyConfig.value,
+        fromEmail: fromEmailConfig?.value,
+        fromName: fromNameConfig?.value,
+      };
+
+      for (const mission of expiredMissions) {
+        const client = await ctx.db.get(mission.clientId);
+        const announcer = await ctx.db.get(mission.announcerId);
+
+        const announcerName = announcer
+          ? `${announcer.firstName} ${announcer.lastName.charAt(0)}.`
+          : "Le prestataire";
+        const clientName = client
+          ? `${client.firstName} ${client.lastName.charAt(0)}.`
+          : "Le client";
+
+        // Email au client
+        if (client?.email) {
+          await ctx.scheduler.runAfter(
+            0,
+            internal.api.email.sendMissionAutoExpiredClientEmail,
+            {
+              clientEmail: client.email,
+              clientName: client.firstName,
+              announcerName,
+              serviceName: mission.serviceName,
+              startDate: mission.startDate,
+              endDate: mission.endDate,
+              emailConfig,
+              appUrl: appUrlConfig?.value || undefined,
+            }
+          );
+        }
+
+        // Email à l'annonceur
+        if (announcer?.email) {
+          await ctx.scheduler.runAfter(
+            0,
+            internal.api.email.sendMissionAutoExpiredAnnouncerEmail,
+            {
+              announcerEmail: announcer.email,
+              announcerName: announcer.firstName,
+              clientName,
+              serviceName: mission.serviceName,
+              startDate: mission.startDate,
+              endDate: mission.endDate,
+              emailConfig,
+              appUrl: appUrlConfig?.value || undefined,
+            }
+          );
+        }
+      }
+    }
+
     console.log(`[autoExpirePendingPayments] ${expiredCount} mission(s) auto-expirée(s) pour délai de paiement dépassé`);
 
     return {

@@ -240,6 +240,57 @@ export const autoRefuseExpiredMissions = internalMutation({
       );
     }
 
+    // Envoyer les emails d'auto-refus aux clients
+    // Récupérer la config email depuis la DB
+    const apiKeyConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "resend_api_key"))
+      .first();
+
+    if (apiKeyConfig?.value) {
+      const fromEmailConfig = await ctx.db
+        .query("systemConfig")
+        .withIndex("by_key", (q) => q.eq("key", "resend_from_email"))
+        .first();
+      const fromNameConfig = await ctx.db
+        .query("systemConfig")
+        .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
+        .first();
+      const appUrlConfig = await ctx.db
+        .query("systemConfig")
+        .withIndex("by_key", (q) => q.eq("key", "app_url"))
+        .first();
+
+      for (const mission of expiredMissions) {
+        const client = await ctx.db.get(mission.clientId);
+        const announcer = await ctx.db.get(mission.announcerId);
+        if (client?.email) {
+          const announcerName = announcer
+            ? `${announcer.firstName} ${announcer.lastName.charAt(0)}.`
+            : "Le prestataire";
+
+          await ctx.scheduler.runAfter(
+            0,
+            internal.api.email.sendMissionAutoRefusedEmail,
+            {
+              clientEmail: client.email,
+              clientName: client.firstName,
+              announcerName,
+              serviceName: mission.serviceName,
+              startDate: mission.startDate,
+              endDate: mission.endDate,
+              emailConfig: {
+                apiKey: apiKeyConfig.value,
+                fromEmail: fromEmailConfig?.value,
+                fromName: fromNameConfig?.value,
+              },
+              appUrl: appUrlConfig?.value || undefined,
+            }
+          );
+        }
+      }
+    }
+
     console.log(`[autoRefuseExpiredMissions] ${refusedCount} mission(s) auto-refusée(s)`);
 
     return {
