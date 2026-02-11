@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAdminAuth } from "@/app/hooks/useAdminAuth";
@@ -21,6 +21,17 @@ import {
   Copy,
   Sparkles,
   X,
+  Bold,
+  Italic,
+  Heading2,
+  Type,
+  Link2,
+  MousePointerClick,
+  ImageIcon,
+  Minus,
+  Info,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 
 interface TemplateVariable {
@@ -41,6 +52,85 @@ interface EmailTemplate {
   isSystem: boolean;
 }
 
+type Snippet = {
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  snippet: string;
+  group: "text" | "elements" | "encarts";
+};
+
+const SNIPPETS: Snippet[] = [
+  // Groupe Texte
+  {
+    label: "Gras",
+    icon: Bold,
+    snippet: "<strong>texte</strong>",
+    group: "text",
+  },
+  {
+    label: "Italique",
+    icon: Italic,
+    snippet: "<em>texte</em>",
+    group: "text",
+  },
+  {
+    label: "Titre H2",
+    icon: Heading2,
+    snippet: '<h2 style="margin:0 0 20px 0;color:#1e293b;font-size:24px;">Titre</h2>',
+    group: "text",
+  },
+  {
+    label: "Paragraphe",
+    icon: Type,
+    snippet: '<p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">Texte</p>',
+    group: "text",
+  },
+  // Groupe Éléments
+  {
+    label: "Lien",
+    icon: Link2,
+    snippet: '<a href="{{url}}" style="color:#FF6B6B;text-decoration:underline;">Lien</a>',
+    group: "elements",
+  },
+  {
+    label: "Bouton CTA",
+    icon: MousePointerClick,
+    snippet: '<div style="text-align:center;margin:30px 0;"><a href="{{url}}" style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#FF6B6B 0%,#ee5a5a 100%);color:#ffffff;text-decoration:none;border-radius:50px;font-weight:700;font-size:16px;box-shadow:0 4px 15px rgba(255,107,107,0.4);">Cliquez ici</a></div>',
+    group: "elements",
+  },
+  {
+    label: "Image",
+    icon: ImageIcon,
+    snippet: '<img src="https://..." alt="Description" style="max-width:100%;border-radius:12px;" />',
+    group: "elements",
+  },
+  {
+    label: "Séparateur",
+    icon: Minus,
+    snippet: '<hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0;" />',
+    group: "elements",
+  },
+  // Groupe Encarts
+  {
+    label: "Encart info",
+    icon: Info,
+    snippet: '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:16px 20px;margin:20px 0;color:#1e40af;font-size:14px;line-height:1.5;">ℹ️ Information importante ici.</div>',
+    group: "encarts",
+  },
+  {
+    label: "Encart warning",
+    icon: AlertTriangle,
+    snippet: '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:16px 20px;margin:20px 0;color:#92400e;font-size:14px;line-height:1.5;">⚠️ Attention : message d\'avertissement.</div>',
+    group: "encarts",
+  },
+  {
+    label: "Encart succès",
+    icon: CheckCircle2,
+    snippet: '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:16px 20px;margin:20px 0;color:#166534;font-size:14px;line-height:1.5;">✅ Opération réussie.</div>',
+    group: "encarts",
+  },
+];
+
 export default function EmailTemplatesPage() {
   const { token } = useAdminAuth();
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
@@ -52,7 +142,11 @@ export default function EmailTemplatesPage() {
   const [error, setError] = useState<string | null>(null);
   const [showVariables, setShowVariables] = useState(true);
   const [seeding, setSeeding] = useState(false);
+  const [editorTab, setEditorTab] = useState<"rich" | "html">("rich");
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const richEditorRef = useRef<HTMLIFrameElement>(null);
+  const editedHtmlRef = useRef(editedHtml);
+  editedHtmlRef.current = editedHtml;
 
   const toggleCategory = (label: string) => {
     setCollapsedCategories((prev) => {
@@ -183,21 +277,67 @@ export default function EmailTemplatesPage() {
     }
   };
 
-  const insertVariable = (variable: string) => {
+  // Charger le contenu dans l'iframe designMode
+  const loadRichEditor = useCallback(() => {
+    const iframe = richEditorRef.current;
+    if (!iframe) return;
+    const doc = iframe.contentDocument;
+    if (!doc) return;
+
+    doc.open();
+    doc.write(editedHtmlRef.current || "<html><body></body></html>");
+    doc.close();
+    doc.designMode = "on";
+
+    // Style du curseur d'édition
+    const style = doc.createElement("style");
+    style.textContent = "body { cursor: text; min-height: 300px; }";
+    doc.head?.appendChild(style);
+
+    doc.addEventListener("input", () => {
+      setEditedHtml(doc.documentElement.outerHTML);
+    });
+  }, []);
+
+  // Recharger l'éditeur riche au changement d'onglet ou de template
+  useEffect(() => {
+    if (editorTab !== "rich") return;
+    const timer = setTimeout(loadRichEditor, 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editorTab, currentTemplate?.slug, loadRichEditor]);
+
+  // Insertion dans le mode actif (rich iframe ou textarea)
+  const insertAtCursor = (text: string) => {
+    if (editorTab === "rich") {
+      const doc = richEditorRef.current?.contentDocument;
+      if (doc) {
+        doc.body.focus();
+        doc.execCommand("insertHTML", false, text);
+        setEditedHtml(doc.documentElement.outerHTML);
+      }
+      return;
+    }
     const textarea = document.getElementById("html-editor") as HTMLTextAreaElement;
     if (textarea) {
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
       const newValue =
-        editedHtml.substring(0, start) +
-        `{{${variable}}}` +
-        editedHtml.substring(end);
+        editedHtml.substring(0, start) + text + editedHtml.substring(end);
       setEditedHtml(newValue);
       setTimeout(() => {
         textarea.focus();
-        textarea.setSelectionRange(start + variable.length + 4, start + variable.length + 4);
+        textarea.setSelectionRange(start + text.length, start + text.length);
       }, 0);
     }
+  };
+
+  const insertVariable = (variable: string) => {
+    insertAtCursor(`{{${variable}}}`);
+  };
+
+  const insertSnippet = (snippet: string) => {
+    insertAtCursor(snippet);
   };
 
   const copyVariable = (variable: string) => {
@@ -593,18 +733,94 @@ export default function EmailTemplatesPage() {
                   />
                 </div>
 
-                {/* Contenu HTML */}
+                {/* Onglets Édition enrichie / HTML brut */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Contenu HTML
-                  </label>
-                  <textarea
-                    id="html-editor"
-                    value={editedHtml}
-                    onChange={(e) => setEditedHtml(e.target.value)}
-                    className="w-full h-80 px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-primary font-mono text-sm resize-none"
-                    placeholder="Contenu HTML de l'email..."
-                  />
+                  <div className="flex items-center gap-1 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditorTab("rich")}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                        editorTab === "rich"
+                          ? "bg-primary/20 text-primary"
+                          : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                      }`}
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Contenu enrichi
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditorTab("html")}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                        editorTab === "html"
+                          ? "bg-primary/20 text-primary"
+                          : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                      }`}
+                    >
+                      <Code className="w-3.5 h-3.5" />
+                      HTML brut
+                    </button>
+                  </div>
+
+                  {editorTab === "rich" ? (
+                    <div>
+                      {/* Barre d'outils */}
+                      <div className="bg-slate-800/50 border border-slate-700 border-b-0 rounded-t-lg p-2 flex flex-wrap items-center gap-1">
+                        {SNIPPETS.filter((s) => s.group === "text").map((s) => (
+                          <button
+                            key={s.label}
+                            type="button"
+                            onClick={() => insertSnippet(s.snippet)}
+                            title={s.label}
+                            className="p-1.5 rounded bg-slate-700/50 hover:bg-slate-600 text-slate-300 hover:text-white transition-colors"
+                          >
+                            <s.icon className="w-4 h-4" />
+                          </button>
+                        ))}
+                        <div className="w-px h-5 bg-slate-600 mx-1" />
+                        {SNIPPETS.filter((s) => s.group === "elements").map((s) => (
+                          <button
+                            key={s.label}
+                            type="button"
+                            onClick={() => insertSnippet(s.snippet)}
+                            title={s.label}
+                            className="p-1.5 rounded bg-slate-700/50 hover:bg-slate-600 text-slate-300 hover:text-white transition-colors"
+                          >
+                            <s.icon className="w-4 h-4" />
+                          </button>
+                        ))}
+                        <div className="w-px h-5 bg-slate-600 mx-1" />
+                        {SNIPPETS.filter((s) => s.group === "encarts").map((s) => (
+                          <button
+                            key={s.label}
+                            type="button"
+                            onClick={() => insertSnippet(s.snippet)}
+                            title={s.label}
+                            className="p-1.5 rounded bg-slate-700/50 hover:bg-slate-600 text-slate-300 hover:text-white transition-colors"
+                          >
+                            <s.icon className="w-4 h-4" />
+                          </button>
+                        ))}
+                      </div>
+                      {/* Éditeur visuel WYSIWYG (iframe designMode) */}
+                      <div className="border border-slate-700 border-t-0 rounded-b-lg overflow-hidden bg-white">
+                        <iframe
+                          ref={richEditorRef}
+                          className="w-full h-[500px] border-0"
+                          title="Éditeur enrichi"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <textarea
+                      id="html-editor"
+                      value={editedHtml}
+                      onChange={(e) => setEditedHtml(e.target.value)}
+                      className="w-full h-[500px] px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-primary font-mono text-xs resize-none leading-relaxed"
+                      placeholder="Contenu HTML de l'email..."
+                      spellCheck={false}
+                    />
+                  )}
                 </div>
 
                 {/* Error */}
