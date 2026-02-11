@@ -1206,7 +1206,7 @@ export function MissionSplitView({
             <span className="text-xl">{mission.animal.emoji}</span>
           )}
         </div>
-        <div>
+        <div className="flex-1">
           <h2 className="text-lg font-bold text-foreground">{firstName} — {mission.serviceName}</h2>
           <p className="text-sm text-text-light">
             {mission.animals && mission.animals.length > 1
@@ -1214,6 +1214,9 @@ export function MissionSplitView({
               : mission.animal.name}
           </p>
         </div>
+        <span className="text-xs font-mono text-text-light bg-slate-100 px-2 py-1 rounded-lg shrink-0">
+          Réf: {String(mission.id).slice(-8).toUpperCase()}
+        </span>
       </div>
 
       {/* MOBILE : onglets */}

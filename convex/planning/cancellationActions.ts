@@ -72,6 +72,8 @@ export const cancelStripePaymentIntent = internalAction({
   args: {
     paymentIntentId: v.string(),
     stripeSecretKey: v.string(),
+    missionId: v.optional(v.id("missions")),
+    refundAmount: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     try {
@@ -80,15 +82,49 @@ export const cancelStripePaymentIntent = internalAction({
         apiVersion: "2024-12-18.acacia",
       });
 
-      await stripe.paymentIntents.cancel(args.paymentIntentId);
-      return { success: true };
+      // Vérifier le vrai statut du PI côté Stripe avant d'agir
+      const pi = await stripe.paymentIntents.retrieve(args.paymentIntentId);
+
+      if (pi.status === "requires_capture") {
+        // PI en pré-autorisation → annuler (libère le hold)
+        await stripe.paymentIntents.cancel(args.paymentIntentId);
+        console.log("PaymentIntent annulé (requires_capture):", args.paymentIntentId);
+        return { success: true };
+      } else if (pi.status === "succeeded") {
+        // PI déjà capturé (paiement immédiat) → créer un remboursement
+        const refundAmount = args.refundAmount || pi.amount;
+        const refund = await stripe.refunds.create({
+          payment_intent: args.paymentIntentId,
+          amount: refundAmount,
+        });
+        console.log("Refund créé (PI succeeded):", refund.id, "montant:", refundAmount);
+
+        // Mettre à jour la mission avec l'ID du refund
+        if (args.missionId) {
+          await ctx.runMutation(
+            internal.planning.cancellation.markRefundProcessed,
+            { missionId: args.missionId, refundStripeId: refund.id }
+          );
+        }
+        return { success: true, refundId: refund.id };
+      } else if (pi.status === "canceled") {
+        console.log("PaymentIntent déjà annulé:", args.paymentIntentId);
+        return { success: true };
+      } else {
+        console.warn("PaymentIntent dans un état inattendu:", pi.status);
+        return { success: false, error: `État inattendu: ${pi.status}` };
+      }
     } catch (error) {
-      console.error("Failed to cancel PaymentIntent:", error);
+      console.error("Failed to cancel/refund PaymentIntent:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
     }
   },
 });
 
+/**
+ * @deprecated Utiliser sendCancellationAnnouncerEmail et sendCancellationClientEmail dans convex/api/email.ts
+ * Conservé pour rétrocompatibilité uniquement.
+ */
 export const sendCancellationEmail = internalAction({
   args: {
     recipientEmail: v.string(),

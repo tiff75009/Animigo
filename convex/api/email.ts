@@ -624,6 +624,149 @@ const DEFAULT_TEMPLATES: Record<string, { subject: string; html: string }> = {
 </body>
 </html>`,
   },
+  mission_cancelled_by_client: {
+    subject: "Une réservation a été annulée - {{siteName}}",
+    html: `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Réservation annulée</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+<tr><td align="center" style="padding:40px 20px;">
+  <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+    <tr>
+      <td align="center" style="background-color:#EF4444;padding:40px 30px;">
+        <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:bold;">Réservation annulée</h1>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:40px 30px;">
+        <h2 style="margin:0 0 20px 0;color:#1e293b;font-size:24px;">Bonjour {{announcerName}},</h2>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          {{clientName}} a annulé sa réservation pour "{{serviceName}}".
+        </p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#f0f9ff;border-left:4px solid #0ea5e9;border-radius:8px;">
+              <p style="margin:0 0 10px 0;font-weight:bold;color:#0369a1;">Détails de la réservation</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Animal :</strong> {{animalName}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Montant total :</strong> {{totalAmount}}</p>
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#ecfdf5;border-left:4px solid #10b981;border-radius:8px;">
+              <p style="margin:0 0 10px 0;font-weight:bold;color:#065f46;">Récapitulatif financier</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Remboursement client :</strong> {{refundAmount}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Montant conservé :</strong> {{announcerRetained}}</p>
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:15px;background-color:#f0f9ff;border-left:4px solid #0ea5e9;border-radius:8px;">
+              <p style="margin:0;color:#0369a1;font-size:14px;"><strong>Règle appliquée :</strong> {{cancellationRule}}</p>
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#fef3c7;border-left:4px solid #f59e0b;border-radius:8px;">
+              <p style="margin:0 0 5px 0;font-weight:bold;color:#92400e;">Raison :</p>
+              <p style="margin:0;color:#78350f;">{{cancellationReason}}</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="background-color:#f8fafc;padding:30px;border-top:1px solid #e2e8f0;">
+        <p style="margin:0;color:#94a3b8;font-size:12px;">&copy; 2025 {{siteName}}. Tous droits réservés.</p>
+      </td>
+    </tr>
+  </table>
+  <!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
+</body>
+</html>`,
+  },
+  mission_cancelled_by_client_confirmation: {
+    subject: "Votre réservation a été annulée - {{siteName}}",
+    html: `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Annulation confirmée</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+<tr><td align="center" style="padding:40px 20px;">
+  <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+    <tr>
+      <td align="center" style="background-color:#EF4444;padding:40px 30px;">
+        <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:bold;">Annulation confirmée</h1>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:40px 30px;">
+        <h2 style="margin:0 0 20px 0;color:#1e293b;font-size:24px;">Bonjour {{clientName}},</h2>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          Votre réservation pour "{{serviceName}}" a bien été annulée.
+        </p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#f0f9ff;border-left:4px solid #0ea5e9;border-radius:8px;">
+              <p style="margin:0 0 10px 0;font-weight:bold;color:#0369a1;">Détails</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Animal :</strong> {{animalName}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Montant total :</strong> {{totalAmount}}</p>
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#ecfdf5;border-left:4px solid #10b981;border-radius:8px;">
+              <p style="margin:0 0 10px 0;font-weight:bold;color:#065f46;">Remboursement</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Montant remboursé :</strong> {{refundAmount}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Commission retenue :</strong> {{platformFeeRetained}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Délai estimé :</strong> {{refundDelay}}</p>
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:15px;background-color:#f0f9ff;border-left:4px solid #0ea5e9;border-radius:8px;">
+              <p style="margin:0;color:#0369a1;font-size:14px;"><strong>Règle appliquée :</strong> {{cancellationRule}}</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="background-color:#f8fafc;padding:30px;border-top:1px solid #e2e8f0;">
+        <p style="margin:0;color:#94a3b8;font-size:12px;">&copy; 2025 {{siteName}}. Tous droits réservés.</p>
+      </td>
+    </tr>
+  </table>
+  <!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
+</body>
+</html>`,
+  },
   payment_receipt: {
     subject: "Votre reçu de paiement - {{serviceName}} - {{siteName}}",
     html: `<!DOCTYPE html>
@@ -1682,6 +1825,181 @@ export const sendPaymentReceiptEmail = internalAction({
       return { success: true, id: result.id };
     } catch (error) {
       console.error("Failed to send payment receipt email:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  },
+});
+
+// Email à l'annonceur quand le client annule
+export const sendCancellationAnnouncerEmail = internalAction({
+  args: {
+    announcerEmail: v.string(),
+    announcerName: v.string(),
+    clientName: v.string(),
+    serviceName: v.string(),
+    animalName: v.string(),
+    startDate: v.string(),
+    endDate: v.string(),
+    totalAmount: v.number(),
+    refundAmount: v.number(),
+    announcerRetained: v.number(),
+    cancellationReason: v.string(),
+    cancellationRule: v.string(),
+    emailConfig: v.object({
+      apiKey: v.string(),
+      fromEmail: v.optional(v.string()),
+      fromName: v.optional(v.string()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const fromEmail = args.emailConfig.fromEmail || "onboarding@resend.dev";
+      const fromName = args.emailConfig.fromName || "Animigo";
+      const siteName = "Animigo";
+
+      const template = getTemplate("mission_cancelled_by_client");
+      if (!template) {
+        return { success: false, error: "Template not found" };
+      }
+
+      const variables = {
+        announcerName: args.announcerName,
+        clientName: args.clientName,
+        serviceName: args.serviceName,
+        animalName: args.animalName,
+        startDate: formatDate(args.startDate),
+        endDate: formatDate(args.endDate),
+        totalAmount: formatPrice(args.totalAmount),
+        refundAmount: formatPrice(args.refundAmount),
+        announcerRetained: formatPrice(args.announcerRetained),
+        cancellationReason: args.cancellationReason,
+        cancellationRule: args.cancellationRule,
+        siteName,
+      };
+
+      const subject = replaceVariables(template.subject, variables);
+      const html = replaceVariables(template.htmlContent, variables);
+
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${args.emailConfig.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: `${fromName} <${fromEmail}>`,
+          to: [args.announcerEmail],
+          subject,
+          html,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Resend API error: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log("Cancellation announcer email sent:", result);
+
+      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+        to: args.announcerEmail,
+        from: `${fromName} <${fromEmail}>`,
+        subject,
+        template: "mission_cancelled_by_client",
+        status: "sent",
+        resendId: result.id,
+      });
+
+      return { success: true, id: result.id };
+    } catch (error) {
+      console.error("Failed to send cancellation announcer email:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  },
+});
+
+// Email au client pour confirmer l'annulation de sa réservation
+export const sendCancellationClientEmail = internalAction({
+  args: {
+    clientEmail: v.string(),
+    clientName: v.string(),
+    serviceName: v.string(),
+    animalName: v.string(),
+    startDate: v.string(),
+    endDate: v.string(),
+    totalAmount: v.number(),
+    refundAmount: v.number(),
+    platformFeeRetained: v.number(),
+    cancellationRule: v.string(),
+    emailConfig: v.object({
+      apiKey: v.string(),
+      fromEmail: v.optional(v.string()),
+      fromName: v.optional(v.string()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const fromEmail = args.emailConfig.fromEmail || "onboarding@resend.dev";
+      const fromName = args.emailConfig.fromName || "Animigo";
+      const siteName = "Animigo";
+
+      const template = getTemplate("mission_cancelled_by_client_confirmation");
+      if (!template) {
+        return { success: false, error: "Template not found" };
+      }
+
+      const variables = {
+        clientName: args.clientName,
+        serviceName: args.serviceName,
+        animalName: args.animalName,
+        startDate: formatDate(args.startDate),
+        endDate: formatDate(args.endDate),
+        totalAmount: formatPrice(args.totalAmount),
+        refundAmount: formatPrice(args.refundAmount),
+        platformFeeRetained: formatPrice(args.platformFeeRetained),
+        cancellationRule: args.cancellationRule,
+        refundDelay: "5-10 jours ouvrés",
+        siteName,
+      };
+
+      const subject = replaceVariables(template.subject, variables);
+      const html = replaceVariables(template.htmlContent, variables);
+
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${args.emailConfig.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: `${fromName} <${fromEmail}>`,
+          to: [args.clientEmail],
+          subject,
+          html,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Resend API error: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log("Cancellation client email sent:", result);
+
+      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+        to: args.clientEmail,
+        from: `${fromName} <${fromEmail}>`,
+        subject,
+        template: "mission_cancelled_by_client_confirmation",
+        status: "sent",
+        resendId: result.id,
+      });
+
+      return { success: true, id: result.id };
+    } catch (error) {
+      console.error("Failed to send cancellation client email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
     }
   },

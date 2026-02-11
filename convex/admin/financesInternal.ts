@@ -43,6 +43,28 @@ export const getStripeSecretKey = internalQuery({
   },
 });
 
+// Query interne pour récupérer les infos mission pour le remboursement admin
+export const getMissionForRefund = internalQuery({
+  args: { missionId: v.id("missions") },
+  handler: async (ctx, args) => {
+    const mission = await ctx.db.get(args.missionId);
+    if (!mission) return null;
+
+    let payment = mission.stripePaymentId ? await ctx.db.get(mission.stripePaymentId) : null;
+
+    return {
+      _id: mission._id,
+      totalAmount: mission.amount,
+      platformFee: mission.platformFee || 0,
+      stripeFee: mission.stripeFee || 0,
+      announcerEarnings: mission.announcerEarnings || 0,
+      paymentStatus: mission.paymentStatus,
+      paymentIntentId: payment?.paymentIntentId || null,
+      stripePaymentStatus: payment?.status || null,
+    };
+  },
+});
+
 // Mutation interne pour marquer le transfert comme complété
 export const markMissionTransferCompleted = internalMutation({
   args: {

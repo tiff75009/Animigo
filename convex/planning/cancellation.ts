@@ -247,6 +247,12 @@ async function calculateRefund(
   const counterPeriodMonths = parseInt(
     await getConfigValue(ctx, "cancellation_counter_period_months", "12"), 10
   );
+  const lastMinuteThresholdHours = parseInt(
+    await getConfigValue(ctx, "cancellation_last_minute_threshold_hours", "24"), 10
+  );
+  const lastMinuteGraceHours = parseInt(
+    await getConfigValue(ctx, "cancellation_last_minute_grace_hours", "6"), 10
+  );
 
   const now = Date.now();
   const paidAt = payment.paidAt || payment.capturedAt || payment.authorizedAt || payment.createdAt;
@@ -254,6 +260,11 @@ async function calculateRefund(
 
   const startDateTime = new Date(`${mission.startDate}T${mission.startTime || "00:00"}`).getTime();
   const hoursBeforeStart = (startDateTime - now) / (1000 * 60 * 60);
+
+  // Déterminer si réservation last-minute (payé < Xh avant le début)
+  const hoursBeforeStartAtBooking = (startDateTime - paidAt) / (1000 * 60 * 60);
+  const isLastMinuteBooking = hoursBeforeStartAtBooking < lastMinuteThresholdHours;
+  const effectiveGracePeriodHours = isLastMinuteBooking ? lastMinuteGraceHours : gracePeriodHours;
 
   const cancellationCount = await getClientCancellationCount(
     ctx, mission.clientId, counterPeriodMonths
@@ -263,14 +274,16 @@ async function calculateRefund(
   const platformFee = mission.platformFee || payment.platformFee || 0;
   const announcerEarnings = mission.announcerEarnings || payment.announcerEarnings || 0;
 
-  // 1. Grâce post-paiement → remboursement 100%
-  if (hoursSincePaid <= gracePeriodHours) {
+  // 1. Grâce post-paiement → remboursement 100% (réduite si last-minute)
+  if (hoursSincePaid <= effectiveGracePeriodHours) {
     return {
       canCancel: true,
       refundAmount: totalAmount,
       platformFeeRetained: 0,
       announcerRetained: 0,
-      reason: `Remboursement intégral (dans les ${gracePeriodHours}h après paiement)`,
+      reason: isLastMinuteBooking
+        ? `Remboursement intégral (grâce last-minute : ${effectiveGracePeriodHours}h après paiement)`
+        : `Remboursement intégral (dans les ${effectiveGracePeriodHours}h après paiement)`,
       cancellationCount,
     };
   }
@@ -561,19 +574,30 @@ export const cancelMissionByClient = mutation({
                 stripeSecretKey: stripeSecretKeyConfig.value,
               }
             );
+
+            // Marquer le paiement comme en cours de remboursement
+            // (markRefundProcessed finalisera le statut "refunded" après confirmation Stripe)
+            await ctx.db.patch(payment._id, {
+              refundedAmount: refundResult.refundAmount,
+              updatedAt: now,
+            });
           }
         } else if (payment.status === "authorized") {
-          // Paiement pré-autorisé (fonds bloqués, pas encore capturés)
+          // Paiement marqué "authorized" en base
+          // Note : avec le paiement immédiat, le PI peut être "succeeded" côté Stripe
+          // cancelStripePaymentIntent gère les deux cas (cancel ou refund selon le vrai statut)
           const retainedAmount = (payment.amount || 0) - refundResult.refundAmount;
 
           if (retainedAmount <= 0) {
-            // Remboursement total → annuler le PaymentIntent (libère le hold)
+            // Remboursement total → cancel ou refund selon le vrai statut Stripe
             await ctx.scheduler.runAfter(
               0,
               internal.planning.cancellationActions.cancelStripePaymentIntent,
               {
                 paymentIntentId: payment.paymentIntentId,
                 stripeSecretKey: stripeSecretKeyConfig.value,
+                missionId: args.missionId,
+                refundAmount: refundResult.refundAmount,
               }
             );
           } else {
@@ -628,11 +652,14 @@ export const cancelMissionByClient = mutation({
       : "Annonceur";
 
     if (announcer) {
+      const announcerNotifMessage = refundResult.announcerRetained > 0
+        ? `${clientName} a annulé "${mission.serviceName}". Vous conservez ${formatPriceCents(refundResult.announcerRetained)}. Règle : ${refundResult.reason}`
+        : `${clientName} a annulé "${mission.serviceName}". ${refundResult.refundAmount > 0 ? `Remboursement client : ${formatPriceCents(refundResult.refundAmount)}.` : ""} Règle : ${refundResult.reason}`;
       await ctx.db.insert("notifications", {
         userId: mission.announcerId,
         type: "mission_cancelled",
         title: "Réservation annulée par le client",
-        message: `${clientName} a annulé "${mission.serviceName}"${refundResult.refundAmount > 0 ? ` (remboursement ${formatPriceCents(refundResult.refundAmount)})` : ""}`,
+        message: announcerNotifMessage,
         linkType: "mission",
         linkId: args.missionId,
         linkUrl: "/dashboard/missions",
@@ -645,13 +672,13 @@ export const cancelMissionByClient = mutation({
     if (client) {
       const refundMessage =
         refundResult.refundAmount > 0
-          ? `Remboursement de ${formatPriceCents(refundResult.refundAmount)} en cours.`
+          ? `Remboursement de ${formatPriceCents(refundResult.refundAmount)} en cours (délai : 5-10 jours ouvrés).${refundResult.platformFeeRetained > 0 ? ` Commission retenue : ${formatPriceCents(refundResult.platformFeeRetained)}.` : ""}`
           : "Aucun remboursement applicable.";
       await ctx.db.insert("notifications", {
         userId: mission.clientId,
         type: "mission_cancelled",
         title: "Votre réservation a été annulée",
-        message: `Votre réservation "${mission.serviceName}" avec ${announcerName} a été annulée. ${refundMessage}`,
+        message: `Votre réservation "${mission.serviceName}" avec ${announcerName} a été annulée. ${refundMessage} Règle : ${refundResult.reason}`,
         linkType: "mission",
         linkId: args.missionId,
         linkUrl: "/client/missions",
@@ -661,46 +688,68 @@ export const cancelMissionByClient = mutation({
       });
     }
 
-    // Email à l'annonceur
-    if (announcer) {
-      const emailApiKeyConfig = await ctx.db
-        .query("systemConfig")
-        .withIndex("by_key", (q) => q.eq("key", "resend_api_key"))
-        .first();
-      const emailFromConfig = await ctx.db
-        .query("systemConfig")
-        .withIndex("by_key", (q) => q.eq("key", "resend_from_email"))
-        .first();
-      const emailFromNameConfig = await ctx.db
-        .query("systemConfig")
-        .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
-        .first();
+    // Emails d'annulation (via templates)
+    const emailApiKeyConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "resend_api_key"))
+      .first();
+    const emailFromConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "resend_from_email"))
+      .first();
+    const emailFromNameConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
+      .first();
 
-      if (emailApiKeyConfig?.value) {
-        await ctx.scheduler.runAfter(
-          0,
-          internal.planning.cancellationActions.sendCancellationEmail,
-          {
-            recipientEmail: announcer.email,
-            recipientName: announcer.firstName,
-            clientName,
-            serviceName: mission.serviceName,
-            animalName: mission.animal?.name || "Animal",
-            startDate: mission.startDate,
-            endDate: mission.endDate,
-            totalAmount: mission.amount,
-            refundAmount: refundResult.refundAmount,
-            announcerRetained: refundResult.announcerRetained,
-            cancellationReason: args.reason,
-            isAnnouncer: true,
-            emailConfig: {
-              apiKey: emailApiKeyConfig.value,
-              fromEmail: emailFromConfig?.value,
-              fromName: emailFromNameConfig?.value,
-            },
-          }
-        );
-      }
+    const emailConfig = emailApiKeyConfig?.value ? {
+      apiKey: emailApiKeyConfig.value,
+      fromEmail: emailFromConfig?.value,
+      fromName: emailFromNameConfig?.value,
+    } : null;
+
+    // Email à l'annonceur
+    if (announcer && emailConfig) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.api.email.sendCancellationAnnouncerEmail,
+        {
+          announcerEmail: announcer.email,
+          announcerName: announcer.firstName,
+          clientName,
+          serviceName: mission.serviceName,
+          animalName: mission.animal?.name || "Animal",
+          startDate: mission.startDate,
+          endDate: mission.endDate,
+          totalAmount: mission.amount,
+          refundAmount: refundResult.refundAmount,
+          announcerRetained: refundResult.announcerRetained,
+          cancellationReason: args.reason,
+          cancellationRule: refundResult.reason,
+          emailConfig,
+        }
+      );
+    }
+
+    // Email au client (NOUVEAU)
+    if (client && emailConfig) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.api.email.sendCancellationClientEmail,
+        {
+          clientEmail: client.email,
+          clientName: client.firstName,
+          serviceName: mission.serviceName,
+          animalName: mission.animal?.name || "Animal",
+          startDate: mission.startDate,
+          endDate: mission.endDate,
+          totalAmount: mission.amount,
+          refundAmount: refundResult.refundAmount,
+          platformFeeRetained: refundResult.platformFeeRetained,
+          cancellationRule: refundResult.reason,
+          emailConfig,
+        }
+      );
     }
 
     return {
@@ -767,9 +816,43 @@ export const markRefundProcessed = internalMutation({
     refundStripeId: v.string(),
   },
   handler: async (ctx, args) => {
+    const now = Date.now();
+    const mission = await ctx.db.get(args.missionId);
+
     await ctx.db.patch(args.missionId, {
       refundStripeId: args.refundStripeId,
-      updatedAt: Date.now(),
+      updatedAt: now,
     });
+
+    // Mettre à jour le statut du paiement en "refunded"
+    if (mission?.stripePaymentId) {
+      const payment = await ctx.db.get(mission.stripePaymentId);
+      if (payment) {
+        await ctx.db.patch(payment._id, {
+          status: "refunded",
+          refundedAt: now,
+          refundedAmount: mission.refundAmount || payment.amount,
+          updatedAt: now,
+        });
+      }
+    }
+
+    // Notification au client : remboursement traité
+    if (mission?.clientId) {
+      const refundedAmount = mission.refundAmount || 0;
+      const formatCents = (c: number) => (c / 100).toFixed(2).replace(".", ",") + " \u20ac";
+      await ctx.db.insert("notifications", {
+        userId: mission.clientId,
+        type: "payment_refunded",
+        title: "Remboursement effectué",
+        message: `Votre remboursement de ${formatCents(refundedAmount)} pour "${mission.serviceName}" a été traité. Il apparaîtra sur votre relevé sous 5-10 jours ouvrés.`,
+        linkType: "mission",
+        linkId: args.missionId,
+        linkUrl: "/client/missions",
+        isRead: false,
+        createdAt: now,
+        expiresAt: now + 30 * 24 * 60 * 60 * 1000,
+      });
+    }
   },
 });

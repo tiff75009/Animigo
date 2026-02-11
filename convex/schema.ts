@@ -704,6 +704,7 @@ export default defineSchema({
 
     // Timestamps
     bookedAt: v.optional(v.number()), // Date/heure de la réservation par le client
+    acceptedAt: v.optional(v.number()), // Date/heure d'acceptation par l'annonceur
     createdAt: v.number(),
     updatedAt: v.number(),
 
@@ -728,6 +729,10 @@ export default defineSchema({
     hasReview: v.optional(v.boolean()),
     hasDispute: v.optional(v.boolean()),
     disputeId: v.optional(v.id("disputes")),
+
+    // Archivage (soft-delete)
+    isArchived: v.optional(v.boolean()),
+    archivedAt: v.optional(v.number()),
   })
     .index("by_announcer", ["announcerId"])
     .index("by_client", ["clientId"])
@@ -1240,6 +1245,7 @@ export default defineSchema({
       v.literal("payment_authorized"),    // Client: paiement pré-autorisé
       v.literal("payment_captured"),      // Annonceur: paiement capturé
       v.literal("payout_sent"),           // Annonceur: virement envoyé
+      v.literal("payment_refunded"),     // Client: remboursement effectué
 
       // Avis
       v.literal("review_received"),       // Annonceur: nouvel avis

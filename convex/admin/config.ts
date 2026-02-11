@@ -825,6 +825,8 @@ export const getCancellationSettings = query({
       secondCancellationAnnouncerPercent: parseInt(configMap.get("cancellation_2nd_announcer_percent") || "") || 50,
       thirdCancellationAnnouncerPercent: parseInt(configMap.get("cancellation_3rd_announcer_percent") || "") || 100,
       counterPeriodMonths: parseInt(configMap.get("cancellation_counter_period_months") || "") || 12,
+      lastMinuteThresholdHours: parseInt(configMap.get("cancellation_last_minute_threshold_hours") || "") || 24,
+      lastMinuteGraceHours: parseInt(configMap.get("cancellation_last_minute_grace_hours") || "") || 6,
     };
   },
 });
@@ -837,6 +839,8 @@ export const updateCancellationSettings = mutation({
     secondCancellationAnnouncerPercent: v.number(),
     thirdCancellationAnnouncerPercent: v.number(),
     counterPeriodMonths: v.number(),
+    lastMinuteThresholdHours: v.number(),
+    lastMinuteGraceHours: v.number(),
   },
   handler: async (ctx, args) => {
     const { user } = await requireAdmin(ctx, args.token);
@@ -846,6 +850,8 @@ export const updateCancellationSettings = mutation({
     const secondPercent = Math.min(100, Math.max(0, args.secondCancellationAnnouncerPercent));
     const thirdPercent = Math.min(100, Math.max(0, args.thirdCancellationAnnouncerPercent));
     const counterPeriodMonths = Math.min(24, Math.max(1, args.counterPeriodMonths));
+    const lastMinuteThresholdHours = Math.min(72, Math.max(1, args.lastMinuteThresholdHours));
+    const lastMinuteGraceHours = Math.min(24, Math.max(1, args.lastMinuteGraceHours));
 
     const configsToUpdate = [
       { key: "cancellation_grace_period_hours", value: gracePeriodHours.toString() },
@@ -853,6 +859,8 @@ export const updateCancellationSettings = mutation({
       { key: "cancellation_2nd_announcer_percent", value: secondPercent.toString() },
       { key: "cancellation_3rd_announcer_percent", value: thirdPercent.toString() },
       { key: "cancellation_counter_period_months", value: counterPeriodMonths.toString() },
+      { key: "cancellation_last_minute_threshold_hours", value: lastMinuteThresholdHours.toString() },
+      { key: "cancellation_last_minute_grace_hours", value: lastMinuteGraceHours.toString() },
     ];
 
     for (const config of configsToUpdate) {
@@ -886,6 +894,8 @@ export const updateCancellationSettings = mutation({
       secondCancellationAnnouncerPercent: secondPercent,
       thirdCancellationAnnouncerPercent: thirdPercent,
       counterPeriodMonths,
+      lastMinuteThresholdHours,
+      lastMinuteGraceHours,
     };
   },
 });

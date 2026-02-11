@@ -73,6 +73,12 @@ export function AdminSidebar() {
     token ? { sessionToken: token } : "skip"
   );
 
+  // Récupérer les réservations nécessitant une action
+  const reservationsNeedingAction = useQuery(
+    api.admin.reservations.getReservationsNeedingAction,
+    token ? { token } : "skip"
+  );
+
   // Récupérer les réclamations ouvertes
   const openDisputes = useQuery(
     api.admin.disputes.getOpenDisputesCount,
@@ -126,6 +132,7 @@ export function AdminSidebar() {
           label: "Réservations",
           href: "/admin/reservations",
           icon: CalendarCheck,
+          badge: reservationsNeedingAction || 0,
         },
         {
           label: "Déclarations SAP",

@@ -181,6 +181,7 @@ const DEFAULT_TEMPLATES = [
       { key: "refundAmount", description: "Montant remboursé au client", example: "120,00 €" },
       { key: "announcerRetained", description: "Montant conservé par l'annonceur", example: "30,00 €" },
       { key: "cancellationReason", description: "Raison de l'annulation", example: "Changement de programme" },
+      { key: "cancellationRule", description: "Règle d'annulation appliquée", example: "Remboursement intégral (dans les 24h après paiement)" },
       { key: "siteName", description: "Nom du site", example: "Animigo" },
     ],
     isSystem: true,
@@ -198,6 +199,8 @@ const DEFAULT_TEMPLATES = [
       { key: "endDate", description: "Date de fin", example: "17/03/2025" },
       { key: "totalAmount", description: "Montant total payé", example: "150,00 €" },
       { key: "refundAmount", description: "Montant remboursé", example: "120,00 €" },
+      { key: "platformFeeRetained", description: "Commission plateforme retenue", example: "15,00 €" },
+      { key: "cancellationRule", description: "Règle d'annulation appliquée", example: "Remboursement intégral (dans les 24h après paiement)" },
       { key: "refundDelay", description: "Délai estimé du remboursement", example: "5-10 jours ouvrés" },
       { key: "siteName", description: "Nom du site", example: "Animigo" },
     ],
@@ -651,6 +654,9 @@ const getDefaultHtmlContent = (slug: string): string => {
         <p style="margin: 5px 0; color: #475569;"><strong>Remboursement client :</strong> {{refundAmount}}</p>
         <p style="margin: 5px 0; color: #475569;"><strong>Montant conservé :</strong> {{announcerRetained}}</p>
       </div>
+      <div style="margin: 20px 0; padding: 15px; background-color: #f0f9ff; border-radius: 12px; border-left: 4px solid #0ea5e9;">
+        <p style="margin: 0; color: #0369a1; font-size: 14px;"><strong>Règle appliquée :</strong> {{cancellationRule}}</p>
+      </div>
       <div style="margin: 20px 0; padding: 20px; background-color: #fef3c7; border-radius: 12px; border-left: 4px solid #f59e0b;">
         <p style="margin: 0 0 5px 0; font-weight: bold; color: #92400e;">Raison :</p>
         <p style="margin: 0; color: #78350f;">{{cancellationReason}}</p>
@@ -685,7 +691,11 @@ const getDefaultHtmlContent = (slug: string): string => {
       <div style="margin: 20px 0; padding: 20px; background-color: #ecfdf5; border-radius: 12px; border-left: 4px solid #10b981;">
         <p style="margin: 0 0 10px 0; font-weight: bold; color: #065f46;">Remboursement</p>
         <p style="margin: 5px 0; color: #475569;"><strong>Montant remboursé :</strong> {{refundAmount}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Commission retenue :</strong> {{platformFeeRetained}}</p>
         <p style="margin: 5px 0; color: #475569;"><strong>Délai estimé :</strong> {{refundDelay}}</p>
+      </div>
+      <div style="margin: 20px 0; padding: 15px; background-color: #f0f9ff; border-radius: 12px; border-left: 4px solid #0ea5e9;">
+        <p style="margin: 0; color: #0369a1; font-size: 14px;"><strong>Règle appliquée :</strong> {{cancellationRule}}</p>
       </div>
     </div>
     <div class="footer">

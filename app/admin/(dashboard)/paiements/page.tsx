@@ -59,6 +59,8 @@ export default function PaiementsPage() {
   const [cancellation2ndAnnouncerPercent, setCancellation2ndAnnouncerPercent] = useState(50);
   const [cancellation3rdAnnouncerPercent, setCancellation3rdAnnouncerPercent] = useState(100);
   const [cancellationCounterPeriodMonths, setCancellationCounterPeriodMonths] = useState(12);
+  const [lastMinuteThresholdHours, setLastMinuteThresholdHours] = useState(24);
+  const [lastMinuteGraceHours, setLastMinuteGraceHours] = useState(6);
 
   // Queries
   const deadlineSettings = useQuery(
@@ -123,6 +125,8 @@ export default function PaiementsPage() {
       setCancellation2ndAnnouncerPercent(cancellationSettings.secondCancellationAnnouncerPercent);
       setCancellation3rdAnnouncerPercent(cancellationSettings.thirdCancellationAnnouncerPercent);
       setCancellationCounterPeriodMonths(cancellationSettings.counterPeriodMonths);
+      setLastMinuteThresholdHours(cancellationSettings.lastMinuteThresholdHours);
+      setLastMinuteGraceHours(cancellationSettings.lastMinuteGraceHours);
     }
   }, [cancellationSettings]);
 
@@ -164,6 +168,8 @@ export default function PaiementsPage() {
         secondCancellationAnnouncerPercent: cancellation2ndAnnouncerPercent,
         thirdCancellationAnnouncerPercent: cancellation3rdAnnouncerPercent,
         counterPeriodMonths: cancellationCounterPeriodMonths,
+        lastMinuteThresholdHours,
+        lastMinuteGraceHours,
       });
 
       setSaveSuccess(true);
@@ -787,6 +793,48 @@ export default function PaiementsPage() {
               </p>
             </div>
 
+            {/* Seuil réservation last-minute */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-slate-300">
+                  Seuil réservation last-minute
+                </label>
+                <span className="text-sm font-mono text-amber-400">{lastMinuteThresholdHours}h</span>
+              </div>
+              <input
+                type="range"
+                min={6}
+                max={72}
+                value={lastMinuteThresholdHours}
+                onChange={(e) => setLastMinuteThresholdHours(Number(e.target.value))}
+                className="w-full accent-amber-500"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Si le client réserve moins de {lastMinuteThresholdHours}h avant le début, la grâce est réduite
+              </p>
+            </div>
+
+            {/* Grâce réduite last-minute */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-slate-300">
+                  Grâce réduite last-minute
+                </label>
+                <span className="text-sm font-mono text-amber-400">{lastMinuteGraceHours}h</span>
+              </div>
+              <input
+                type="range"
+                min={1}
+                max={24}
+                value={lastMinuteGraceHours}
+                onChange={(e) => setLastMinuteGraceHours(Number(e.target.value))}
+                className="w-full accent-amber-500"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Délai de grâce réduit à {lastMinuteGraceHours}h au lieu de {cancellationGracePeriodHours}h pour les réservations last-minute
+              </p>
+            </div>
+
             {/* Info box exemple */}
             <div className="bg-slate-700/50 rounded-xl p-4 border border-slate-600">
               <div className="flex items-start gap-3">
@@ -796,6 +844,7 @@ export default function PaiementsPage() {
                   <p>1ère annulation &lt;{cancellationThresholdHours}h : remboursement total moins commission plateforme</p>
                   <p>2ème annulation &lt;{cancellationThresholdHours}h : l&apos;annonceur conserve {cancellation2ndAnnouncerPercent}% de ses gains</p>
                   <p>3ème+ annulation &lt;{cancellationThresholdHours}h : l&apos;annonceur conserve {cancellation3rdAnnouncerPercent}% de ses gains</p>
+                  <p className="text-amber-400">Réservation last-minute (&lt;{lastMinuteThresholdHours}h avant début) : grâce de {lastMinuteGraceHours}h seulement</p>
                 </div>
               </div>
             </div>

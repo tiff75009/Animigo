@@ -205,29 +205,31 @@ export const confirmPaymentSuccess = mutation({
       return { success: false, error: "Paiement non trouvé" };
     }
 
-    // Si le paiement est déjà autorisé, ne rien faire
-    if (payment.status === "authorized") {
+    // Si le paiement est déjà autorisé ou capturé, ne rien faire
+    // (le webhook markPaymentPaid peut avoir déjà mis à jour le statut)
+    if (["authorized", "captured"].includes(payment.status)) {
       return { success: true, message: "Paiement déjà confirmé" };
     }
 
-    // Si le status Stripe est requires_capture ou succeeded, mettre à jour
-    // C'est un fallback si le webhook n'est pas configuré
-    if (args.paymentStatus === "requires_capture" || args.paymentStatus === "succeeded") {
-      const now = Date.now();
-      const autoCaptureTime = now + 48 * 60 * 60 * 1000; // +48h
+    // Déterminer le bon statut selon le mode de capture Stripe
+    const isCaptured = args.paymentStatus === "succeeded"; // Paiement immédiat (automatic capture)
+    const isAuthorized = args.paymentStatus === "requires_capture"; // Pré-autorisation (manual capture)
 
-      // Mettre à jour le paiement
+    if (isCaptured || isAuthorized) {
+      const now = Date.now();
+
+      // Mettre à jour le paiement avec le bon statut
       await ctx.db.patch(payment._id, {
-        status: "authorized",
-        authorizedAt: now,
+        status: isCaptured ? "captured" : "authorized",
+        ...(isCaptured ? { capturedAt: now } : { authorizedAt: now }),
         updatedAt: now,
       });
 
       // Mettre à jour la mission: passer en "upcoming"
       await ctx.db.patch(args.missionId, {
         status: "upcoming",
-        paymentStatus: "pending", // Fonds bloqués mais pas encore capturés
-        autoCaptureScheduledAt: autoCaptureTime,
+        paymentStatus: isCaptured ? "paid" : "pending",
+        ...(isAuthorized ? { autoCaptureScheduledAt: now + 48 * 60 * 60 * 1000 } : {}),
         updatedAt: now,
       });
 

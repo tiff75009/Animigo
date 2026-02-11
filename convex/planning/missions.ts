@@ -561,6 +561,7 @@ export const acceptMission = mutation({
     await ctx.db.patch(args.missionId, {
       status: "pending_confirmation",
       stripePaymentId: paymentId,
+      acceptedAt: now,
       paymentDeadline,
       updatedAt: now,
     });
