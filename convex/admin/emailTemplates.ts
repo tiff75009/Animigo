@@ -251,6 +251,37 @@ const DEFAULT_TEMPLATES = [
     ],
     isSystem: true,
   },
+  {
+    slug: "payment_receipt",
+    name: "Reçu de paiement",
+    description: "Reçu envoyé au client après un paiement réussi. Contient le détail des prix, infos du prestataire et mentions légales.",
+    subject: "Votre reçu de paiement - {{serviceName}} - {{siteName}}",
+    availableVariables: [
+      { key: "clientName", description: "Prénom du client", example: "Jean" },
+      { key: "serviceName", description: "Nom du service", example: "Garde de chien" },
+      { key: "announcerName", description: "Nom du prestataire", example: "Marie D." },
+      { key: "announcerStatus", description: "Statut du prestataire (Pro ou Particulier)", example: "Professionnel" },
+      { key: "announcerCompany", description: "Nom entreprise (si pro)", example: "Marie Pet Services" },
+      { key: "announcerSiret", description: "SIRET (si pro)", example: "123 456 789 00012" },
+      { key: "startDate", description: "Date de début", example: "15/03/2025" },
+      { key: "endDate", description: "Date de fin", example: "17/03/2025" },
+      { key: "prestationHT", description: "Montant HT de la prestation", example: "125,00 €" },
+      { key: "tvaRate", description: "Taux de TVA", example: "20" },
+      { key: "tvaAmount", description: "Montant de la TVA", example: "25,00 €" },
+      { key: "sapBadge", description: "Badge SAP si applicable", example: "(taux réduit SAP)" },
+      { key: "commissionRate", description: "Taux de commission", example: "15" },
+      { key: "commissionAmount", description: "Montant de la commission", example: "22,50 €" },
+      { key: "stripeFeeRate", description: "Taux frais de paiement", example: "3" },
+      { key: "stripeFeeAmount", description: "Montant frais de paiement", example: "5,18 €" },
+      { key: "totalAmount", description: "Total TTC payé", example: "177,68 €" },
+      { key: "paymentDate", description: "Date et heure du paiement", example: "10/02/2025 à 14h35" },
+      { key: "paymentRef", description: "Référence du paiement", example: "pi_3Abc123..." },
+      { key: "siteName", description: "Nom du site", example: "Animigo" },
+      { key: "paymentMethod", description: "Moyen de paiement (marque + 4 derniers chiffres)", example: "Visa •••• 4242" },
+      { key: "reservationsUrl", description: "Lien vers les réservations", example: "https://..." },
+    ],
+    isSystem: true,
+  },
 ];
 
 // HTML par défaut pour les templates
@@ -760,6 +791,73 @@ const getDefaultHtmlContent = (slug: string): string => {
     </div>
     <div class="footer">
       <p>&copy; 2025 {{siteName}}. Tous droits réservés.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+
+    case "payment_receipt":
+      return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>${baseStyle}</style></head>
+<body>
+<div style="padding: 40px 20px; background-color: #f4f4f5;">
+  <div class="container">
+    <div style="background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%); padding: 40px 30px; text-align: center;">
+      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">Reçu de paiement</h1>
+      <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">Réf. {{paymentRef}}</p>
+    </div>
+    <div class="content">
+      <h2>Bonjour {{clientName}},</h2>
+      <p>Votre paiement a bien été enregistré. Voici le détail de votre transaction.</p>
+
+      <div class="info-box">
+        <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">Détails de la prestation</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Service :</strong> {{serviceName}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Prestataire :</strong> {{announcerName}} — {{announcerStatus}}</p>
+        <p style="margin: 5px 0; color: #475569;">{{announcerCompany}}{{announcerSiret}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Date de paiement :</strong> {{paymentDate}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Moyen de paiement :</strong> {{paymentMethod}}</p>
+      </div>
+
+      <div style="margin: 20px 0; padding: 20px; background-color: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0;">
+        <p style="margin: 0 0 15px 0; font-weight: bold; color: #1e293b; font-size: 16px;">Détail des prix</p>
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 6px 0; color: #475569; font-size: 14px;">Prestation HT</td>
+            <td style="padding: 6px 0; color: #1e293b; font-size: 14px; text-align: right;">{{prestationHT}}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #475569; font-size: 14px;">TVA ({{tvaRate}}%) {{sapBadge}}</td>
+            <td style="padding: 6px 0; color: #1e293b; font-size: 14px; text-align: right;">{{tvaAmount}}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #475569; font-size: 14px;">Commission plateforme ({{commissionRate}}%)</td>
+            <td style="padding: 6px 0; color: #1e293b; font-size: 14px; text-align: right;">{{commissionAmount}}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #475569; font-size: 14px;">Frais de paiement ({{stripeFeeRate}}%)</td>
+            <td style="padding: 6px 0; color: #1e293b; font-size: 14px; text-align: right;">{{stripeFeeAmount}}</td>
+          </tr>
+          <tr style="border-top: 2px solid #e2e8f0;">
+            <td style="padding: 12px 0 6px 0; color: #1e293b; font-size: 16px; font-weight: bold;">Total payé</td>
+            <td style="padding: 12px 0 6px 0; color: #1e293b; font-size: 18px; font-weight: bold; text-align: right;">{{totalAmount}}</td>
+          </tr>
+        </table>
+      </div>
+
+      <div class="warning-box">
+        <p style="margin: 0; color: #92400e; font-size: 13px;">Ce document est un reçu de paiement émis par {{siteName}}, plateforme intermédiaire de mise en relation. Il ne constitue pas une facture. La facture sera générée une fois la prestation terminée.</p>
+      </div>
+
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="{{reservationsUrl}}" class="btn">Voir mes réservations</a>
+      </div>
+    </div>
+    <div class="footer">
+      <p>&copy; 2025 {{siteName}}. Tous droits réservés.</p>
+      <p style="margin: 5px 0 0 0; color: #94a3b8; font-size: 11px;">{{siteName}} — Plateforme de mise en relation pour services animaliers</p>
     </div>
   </div>
 </div>

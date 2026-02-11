@@ -348,6 +348,21 @@ export default function ReservationDetailPage() {
             </div>
           )}
 
+          {/* TVA */}
+          {mission.vatRate != null && (
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-500 flex items-center gap-1.5">
+                TVA ({mission.vatRate}%)
+                {mission.isSapApplied && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700">
+                    SAP
+                  </span>
+                )}
+              </span>
+              <span className="text-gray-500">incluse</span>
+            </div>
+          )}
+
           {/* Total */}
           <div className="flex justify-between items-center pt-2 border-t border-gray-200 mt-2">
             <span className="font-semibold text-foreground">Total à payer</span>
@@ -563,17 +578,32 @@ export default function ReservationDetailPage() {
         className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100"
       >
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0">
-            {mission.animal?.emoji || "🐾"}
+          <div className={cn(
+            "w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center flex-shrink-0",
+            mission.animals && mission.animals.length > 1 ? "text-lg gap-0.5" : "text-2xl"
+          )}>
+            {mission.animals && mission.animals.length > 1
+              ? mission.animals.slice(0, 3).map((a: { emoji: string }, i: number) => (
+                  <span key={i}>{a.emoji}</span>
+                ))
+              : (mission.animal?.emoji || "🐾")
+            }
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="font-bold text-foreground truncate">
               {mission.serviceName}
             </h3>
-            <p className="text-gray-500 text-sm">
-              Pour {mission.animal?.name || "votre animal"}
-              {mission.animal?.type && ` (${mission.animal.type})`}
-            </p>
+            {mission.animals && mission.animals.length > 1 ? (
+              <p className="text-gray-500 text-sm">
+                Pour {mission.animals.map((a: { name: string }) => a.name).join(", ")}
+                <span className="text-gray-400 ml-1">({mission.animals.length} animaux)</span>
+              </p>
+            ) : (
+              <p className="text-gray-500 text-sm">
+                Pour {mission.animal?.name || "votre animal"}
+                {mission.animal?.type && ` (${mission.animal.type})`}
+              </p>
+            )}
           </div>
         </div>
 

@@ -279,6 +279,8 @@ export const markPaymentPaid = internalMutation({
   args: {
     paymentIntentId: v.string(),
     stripeCustomerId: v.optional(v.string()),
+    cardBrand: v.optional(v.string()),
+    cardLast4: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Chercher le paiement par payment intent
@@ -326,6 +328,75 @@ export const markPaymentPaid = internalMutation({
           serviceName: mission.serviceName,
           startDate: mission.startDate,
           missionId: payment.missionId,
+        });
+      }
+
+      // Envoyer le reçu de paiement par email au client
+      // Vérifier si le reçu n'a pas déjà été envoyé par confirmPaymentSuccess (frontend)
+      const freshPayment = await ctx.db.get(payment._id);
+      const receiptAlreadySent = freshPayment?.receiptEmailSent === true;
+
+      const announcer = await ctx.db.get(mission.announcerId);
+      const apiKeyConfig = await ctx.db
+        .query("systemConfig")
+        .withIndex("by_key", (q) => q.eq("key", "resend_api_key"))
+        .first();
+
+      if (apiKeyConfig?.value && client?.email && !receiptAlreadySent) {
+        const fromEmailConfig = await ctx.db
+          .query("systemConfig")
+          .withIndex("by_key", (q) => q.eq("key", "resend_from_email"))
+          .first();
+        const fromNameConfig = await ctx.db
+          .query("systemConfig")
+          .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
+          .first();
+        const appUrlConfig = await ctx.db
+          .query("systemConfig")
+          .withIndex("by_key", (q) => q.eq("key", "app_url"))
+          .first();
+
+        const isPro = announcer?.accountType === "annonceur_pro" && !!announcer?.siret;
+        const announcerDisplayName = announcer
+          ? `${announcer.firstName} ${announcer.lastName.charAt(0)}.`
+          : "Le prestataire";
+
+        await ctx.scheduler.runAfter(
+          0,
+          internal.api.email.sendPaymentReceiptEmail,
+          {
+            clientEmail: client.email,
+            clientName: client.firstName,
+            serviceName: mission.serviceName,
+            announcerName: announcerDisplayName,
+            announcerStatus: isPro ? "Professionnel" : "Particulier",
+            announcerCompany: isPro && announcer?.companyName ? announcer.companyName : "",
+            announcerSiret: isPro && announcer?.siret ? announcer.siret : "",
+            startDate: mission.startDate,
+            endDate: mission.endDate,
+            announcerEarnings: mission.announcerEarnings || mission.amount || 0,
+            vatRate: mission.vatRate || 0,
+            isSapApplied: mission.isSapApplied || false,
+            platformFee: mission.platformFee || 0,
+            commissionRate: mission.commissionRate || 0,
+            stripeFee: mission.stripeFee || 0,
+            stripeFeeRate: mission.stripeFeeRate || 0,
+            totalAmount: payment.amount || mission.amount || 0,
+            paymentRef: args.paymentIntentId,
+            cardBrand: args.cardBrand || "",
+            cardLast4: args.cardLast4 || "",
+            emailConfig: {
+              apiKey: apiKeyConfig.value,
+              fromEmail: fromEmailConfig?.value,
+              fromName: fromNameConfig?.value,
+            },
+            appUrl: appUrlConfig?.value || undefined,
+          }
+        );
+
+        // Marquer que le reçu a été envoyé pour éviter un double envoi
+        await ctx.db.patch(payment._id, {
+          receiptEmailSent: true,
         });
       }
     }

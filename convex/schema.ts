@@ -69,6 +69,10 @@ export default defineSchema({
       v.literal("scheduled"),    // Ponctuel mensuel (défaut, gratuit)
       v.literal("instant")       // Instantané avec frais (%)
     )),
+
+    // Stripe Customer (pour paiements + cartes sauvegardées côté client)
+    stripeCustomerId: v.optional(v.string()), // cus_xxx
+    pendingSetupIntentSecret: v.optional(v.string()), // Temporaire, nettoyé après usage
   })
     .index("by_email", ["email"])
     .index("by_slug", ["slug"])
@@ -76,7 +80,8 @@ export default defineSchema({
     .index("by_account_type", ["accountType"])
     .index("by_siret", ["siret"])
     .index("by_role", ["role"])
-    .index("by_stripe_account", ["stripeAccountId"]),
+    .index("by_stripe_account", ["stripeAccountId"])
+    .index("by_stripe_customer", ["stripeCustomerId"]),
 
   sessions: defineTable({
     userId: v.id("users"),
@@ -1188,6 +1193,9 @@ export default defineSchema({
     stripeCustomerId: v.optional(v.string()),
     receiptUrl: v.optional(v.string()),
 
+    // Flag pour éviter double envoi du reçu (frontend + webhook)
+    receiptEmailSent: v.optional(v.boolean()),
+
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1196,6 +1204,21 @@ export default defineSchema({
     .index("by_payment_intent", ["paymentIntentId"])
     .index("by_status", ["status"])
     .index("by_expires", ["expiresAt"]),
+
+  // Cartes bancaires sauvegardées (tokenisées via Stripe)
+  savedPaymentMethods: defineTable({
+    userId: v.id("users"),
+    stripePaymentMethodId: v.string(), // pm_xxx
+    brand: v.string(),       // "visa", "mastercard", "amex"
+    last4: v.string(),       // "4242"
+    expMonth: v.number(),    // 12
+    expYear: v.number(),     // 2027
+    isDefault: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_stripe_pm", ["stripePaymentMethodId"]),
 
   // Notifications in-app
   notifications: defineTable({

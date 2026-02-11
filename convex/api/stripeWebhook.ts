@@ -122,6 +122,24 @@ export const handleStripeWebhook = internalAction({
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
         console.log(`Paiement réussi: ${paymentIntent.id}`);
 
+        // Récupérer les détails du moyen de paiement (marque + 4 derniers chiffres)
+        let cardBrand: string | undefined;
+        let cardLast4: string | undefined;
+        try {
+          if (paymentIntent.latest_charge) {
+            const chargeId = typeof paymentIntent.latest_charge === "string"
+              ? paymentIntent.latest_charge
+              : paymentIntent.latest_charge.id;
+            const charge = await stripe.charges.retrieve(chargeId);
+            if (charge.payment_method_details?.card) {
+              cardBrand = charge.payment_method_details.card.brand || undefined;
+              cardLast4 = charge.payment_method_details.card.last4 || undefined;
+            }
+          }
+        } catch (e) {
+          console.error("Erreur récupération détails carte:", e);
+        }
+
         // Avec le nouveau système de paiement immédiat, on marque le paiement comme payé
         // et la mission passe en "upcoming"
         await ctx.runMutation(
@@ -132,9 +150,77 @@ export const handleStripeWebhook = internalAction({
               typeof paymentIntent.customer === "string"
                 ? paymentIntent.customer
                 : undefined,
+            cardBrand,
+            cardLast4,
           }
         );
         console.log(`Paiement marqué comme payé pour PaymentIntent: ${paymentIntent.id}`);
+
+        // Si le client a demandé à sauvegarder la carte (metadata.saveCard === "true")
+        if (
+          paymentIntent.metadata?.saveCard === "true" &&
+          paymentIntent.payment_method &&
+          typeof paymentIntent.customer === "string"
+        ) {
+          try {
+            const pmId = typeof paymentIntent.payment_method === "string"
+              ? paymentIntent.payment_method
+              : paymentIntent.payment_method.id;
+            const pm = await stripe.paymentMethods.retrieve(pmId);
+            if (pm.card) {
+              await ctx.runMutation(
+                internal.api.savedCardsInternal.savePaymentMethodByCustomer,
+                {
+                  stripeCustomerId: paymentIntent.customer as string,
+                  stripePaymentMethodId: pm.id,
+                  brand: pm.card.brand || "unknown",
+                  last4: pm.card.last4 || "????",
+                  expMonth: pm.card.exp_month,
+                  expYear: pm.card.exp_year,
+                }
+              );
+              console.log(`Carte sauvegardée via payment_intent.succeeded: ${pm.id}`);
+            }
+          } catch (e) {
+            console.error("Erreur sauvegarde carte via PI:", e);
+          }
+        }
+        break;
+      }
+
+      case "setup_intent.succeeded": {
+        const setupIntent = event.data.object as Stripe.SetupIntent;
+        console.log(`SetupIntent réussi: ${setupIntent.id}`);
+
+        const pmId = typeof setupIntent.payment_method === "string"
+          ? setupIntent.payment_method
+          : setupIntent.payment_method?.id;
+
+        const customerId = typeof setupIntent.customer === "string"
+          ? setupIntent.customer
+          : setupIntent.customer?.id;
+
+        if (pmId && customerId) {
+          try {
+            const pm = await stripe.paymentMethods.retrieve(pmId);
+            if (pm.card) {
+              await ctx.runMutation(
+                internal.api.savedCardsInternal.savePaymentMethodByCustomer,
+                {
+                  stripeCustomerId: customerId,
+                  stripePaymentMethodId: pm.id,
+                  brand: pm.card.brand || "unknown",
+                  last4: pm.card.last4 || "????",
+                  expMonth: pm.card.exp_month,
+                  expYear: pm.card.exp_year,
+                }
+              );
+              console.log(`Carte sauvegardée via setup_intent.succeeded: ${pm.id}`);
+            }
+          } catch (e) {
+            console.error("Erreur sauvegarde carte via SI:", e);
+          }
+        }
         break;
       }
 

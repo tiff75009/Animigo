@@ -157,6 +157,8 @@ interface EnrichedReservation {
   status: string;
   amount: number;
   animal?: { name: string; emoji: string };
+  animals?: Array<{ name: string; type: string; emoji: string }>;
+  animalCount?: number;
   // Nouveaux champs
   sessionType?: "individual" | "collective";
   numberOfSessions?: number;
@@ -357,11 +359,17 @@ export default function ReservationsPage() {
                         {/* Avatar animal avec badge statut */}
                         <div className="relative flex-shrink-0">
                           <div className={cn(
-                            "w-14 h-14 rounded-2xl flex items-center justify-center text-2xl",
+                            "w-14 h-14 rounded-2xl flex items-center justify-center",
                             "bg-gradient-to-br from-primary/5 to-primary/15",
-                            "ring-2 ring-white shadow-sm"
+                            "ring-2 ring-white shadow-sm",
+                            reservation.animals && reservation.animals.length > 1 ? "text-lg gap-0.5" : "text-2xl"
                           )}>
-                            {reservation.animal?.emoji || "🐾"}
+                            {reservation.animals && reservation.animals.length > 1
+                              ? reservation.animals.slice(0, 3).map((a, i) => (
+                                  <span key={i}>{a.emoji}</span>
+                                ))
+                              : (reservation.animal?.emoji || "🐾")
+                            }
                           </div>
                           {/* Mini badge statut sur l'avatar */}
                           <div className={cn(
@@ -383,13 +391,17 @@ export default function ReservationsPage() {
                                 {reservation.serviceName}
                               </h3>
                               <p className="text-sm text-text-light mt-0.5">
-                                {reservation.animal?.name || "Votre animal"} • {reservation.announcerName}
+                                {reservation.animals && reservation.animals.length > 1
+                                  ? `${reservation.animals.map(a => a.name).join(", ")} (${reservation.animals.length})`
+                                  : (reservation.animal?.name || "Votre animal")
+                                }
+                                {" "}• {reservation.announcerName}
                               </p>
                             </div>
                             {/* Prix */}
                             <div className="text-right flex-shrink-0">
                               <p className="text-xl font-bold text-foreground">
-                                {(reservation.amount / 100).toFixed(0)}<span className="text-sm font-semibold text-gray-400">,{(reservation.amount % 100).toString().padStart(2, '0')}€</span>
+                                {Math.floor(reservation.amount / 100)}<span className="text-sm font-semibold text-gray-400">,{(reservation.amount % 100).toString().padStart(2, '0')}€</span>
                               </p>
                             </div>
                           </div>

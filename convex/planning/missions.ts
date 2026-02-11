@@ -591,6 +591,8 @@ export const acceptMission = mutation({
             fromName: emailFromNameConfig?.value,
           }
         : undefined,
+      // Stripe Customer (pour cartes sauvegardées)
+      stripeCustomerId: client.stripeCustomerId || undefined,
     });
 
     // Envoyer la notification push au client (mission acceptée)
@@ -1215,6 +1217,8 @@ export const getClientMissions = query({
             : "Annonceur",
           announcerPhone: announcer?.phone,
           animal: m.animal,
+          animals: m.animals,
+          animalCount: m.animalCount,
           serviceName: m.serviceName,
           serviceCategory: m.serviceCategory,
           startDate: m.startDate,
@@ -1330,7 +1334,10 @@ export const getClientMissionById = query({
       announcerPhotoUrl,
       announcerSlug: announcer?.username || announcer?.slug,
       animal: mission.animal,
+      animals: mission.animals,
       animalId: mission.animalId,
+      animalIds: mission.animalIds,
+      animalCount: mission.animalCount,
       serviceName: mission.serviceName,
       serviceCategory: mission.serviceCategory,
       // Formule et options
@@ -1372,6 +1379,9 @@ export const getClientMissionById = query({
       numberOfSessions: mission.numberOfSessions,
       // Lieu de prestation
       serviceLocation: mission.serviceLocation,
+      // TVA
+      vatRate: mission.vatRate,
+      isSapApplied: mission.isSapApplied,
       // Paiement
       paymentDetails,
       // Délai de paiement

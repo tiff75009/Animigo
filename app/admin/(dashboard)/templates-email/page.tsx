@@ -245,6 +245,11 @@ export default function EmailTemplatesPage() {
       ],
     },
     {
+      label: "Paiements",
+      icon: "💳",
+      slugs: ["payment_receipt"],
+    },
+    {
       label: "Réclamations",
       icon: "⚠️",
       slugs: ["dispute_opened"],

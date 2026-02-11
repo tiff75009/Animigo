@@ -624,6 +624,111 @@ const DEFAULT_TEMPLATES: Record<string, { subject: string; html: string }> = {
 </body>
 </html>`,
   },
+  payment_receipt: {
+    subject: "Votre reçu de paiement - {{serviceName}} - {{siteName}}",
+    html: `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Reçu de paiement</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;-webkit-font-smoothing:antialiased;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+<tr><td align="center" style="padding:40px 20px;">
+  <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+    <!-- Header -->
+    <tr>
+      <td align="center" style="background-color:#4ECDC4;padding:40px 30px;">
+        <!--[if mso]><v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px;height:100px;"><v:fill type="gradient" color="#4ECDC4" color2="#44A08D" angle="135"/><v:textbox inset="0,0,0,0" style="v-text-anchor:middle;"><![endif]-->
+        <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:bold;">Reçu de paiement</h1>
+        <p style="margin:10px 0 0 0;color:rgba(255,255,255,0.9);font-size:14px;">Réf. {{paymentRef}}</p>
+        <!--[if mso]></v:textbox></v:rect><![endif]-->
+      </td>
+    </tr>
+    <!-- Body -->
+    <tr>
+      <td style="padding:40px 30px;">
+        <h2 style="margin:0 0 20px 0;color:#1e293b;font-size:24px;">Bonjour {{clientName}},</h2>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">Votre paiement a bien été enregistré. Voici le détail de votre transaction.</p>
+        <!-- Détails prestation -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#f0f9ff;border-left:4px solid #0ea5e9;border-radius:8px;">
+              <p style="margin:0 0 10px 0;font-weight:bold;color:#0369a1;">Détails de la prestation</p>
+              <p style="margin:5px 0;color:#475569;font-size:14px;"><strong>Service :</strong> {{serviceName}}</p>
+              <p style="margin:5px 0;color:#475569;font-size:14px;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
+              <p style="margin:5px 0;color:#475569;font-size:14px;"><strong>Prestataire :</strong> {{announcerName}} — {{announcerStatus}}</p>
+              <p style="margin:5px 0;color:#475569;font-size:14px;">{{announcerCompany}}{{announcerSiret}}</p>
+              <p style="margin:5px 0;color:#475569;font-size:14px;"><strong>Date de paiement :</strong> {{paymentDate}}</p>
+              <p style="margin:5px 0;color:#475569;font-size:14px;"><strong>Moyen de paiement :</strong> {{paymentMethod}}</p>
+            </td>
+          </tr>
+        </table>
+        <!-- Détail prix -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td colspan="2" style="padding:15px 20px;background-color:#f8fafc;border-bottom:1px solid #e2e8f0;">
+              <p style="margin:0;font-weight:bold;color:#1e293b;font-size:16px;">Détail des prix</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:10px 20px;color:#475569;font-size:14px;">Prestation HT</td>
+            <td style="padding:10px 20px;color:#1e293b;font-size:14px;text-align:right;">{{prestationHT}}</td>
+          </tr>
+          <tr>
+            <td style="padding:10px 20px;color:#475569;font-size:14px;">TVA ({{tvaRate}}%) {{sapBadge}}</td>
+            <td style="padding:10px 20px;color:#1e293b;font-size:14px;text-align:right;">{{tvaAmount}}</td>
+          </tr>
+          <tr>
+            <td style="padding:10px 20px;color:#475569;font-size:14px;">Commission plateforme ({{commissionRate}}%)</td>
+            <td style="padding:10px 20px;color:#1e293b;font-size:14px;text-align:right;">{{commissionAmount}}</td>
+          </tr>
+          <tr>
+            <td style="padding:10px 20px;color:#475569;font-size:14px;">Frais de paiement ({{stripeFeeRate}}%)</td>
+            <td style="padding:10px 20px;color:#1e293b;font-size:14px;text-align:right;">{{stripeFeeAmount}}</td>
+          </tr>
+          <tr style="border-top:2px solid #e2e8f0;">
+            <td style="padding:15px 20px;color:#1e293b;font-size:16px;font-weight:bold;background-color:#f0fdf4;">Total payé</td>
+            <td style="padding:15px 20px;color:#1e293b;font-size:18px;font-weight:bold;text-align:right;background-color:#f0fdf4;">{{totalAmount}}</td>
+          </tr>
+        </table>
+        <!-- Mention légale -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td style="padding:15px 20px;background-color:#fef3c7;border-left:4px solid #f59e0b;border-radius:8px;">
+              <p style="margin:0;color:#92400e;font-size:13px;">Ce document est un reçu de paiement émis par {{siteName}}, plateforme intermédiaire de mise en relation. Il ne constitue pas une facture. La facture sera générée une fois la prestation terminée.</p>
+            </td>
+          </tr>
+        </table>
+        <!-- CTA -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center" style="padding:30px 0;">
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{reservationsUrl}}" style="height:52px;width:250px;v-text-anchor:middle;" arcsize="50%" fillcolor="#4ECDC4" stroke="false"><v:textbox><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Voir mes réservations</center></v:textbox></v:roundrect><![endif]-->
+              <!--[if !mso]><!--><a href="{{reservationsUrl}}" style="display:inline-block;background-color:#4ECDC4;color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:bold;font-size:16px;">Voir mes réservations</a><!--<![endif]-->
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <!-- Footer -->
+    <tr>
+      <td align="center" style="background-color:#f8fafc;padding:30px;border-top:1px solid #e2e8f0;">
+        <p style="margin:0;color:#94a3b8;font-size:12px;">&copy; 2025 {{siteName}}. Tous droits réservés.</p>
+        <p style="margin:5px 0 0 0;color:#94a3b8;font-size:11px;">{{siteName}} — Plateforme de mise en relation pour services animaliers</p>
+      </td>
+    </tr>
+  </table>
+  <!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
+</body>
+</html>`,
+  },
 };
 
 // Helper pour récupérer un template (utilise les templates par défaut - bypass database pour éviter le bug des appels internes)
@@ -1444,6 +1549,139 @@ export const sendMissionAutoExpiredAnnouncerEmail = internalAction({
       return { success: true, id: result.id };
     } catch (error) {
       console.error("Failed to send mission auto-expired announcer email:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  },
+});
+
+/**
+ * Envoyer le reçu de paiement au client après un paiement réussi
+ */
+export const sendPaymentReceiptEmail = internalAction({
+  args: {
+    clientEmail: v.string(),
+    clientName: v.string(),
+    serviceName: v.string(),
+    announcerName: v.string(),
+    announcerStatus: v.string(),
+    announcerCompany: v.string(),
+    announcerSiret: v.string(),
+    startDate: v.string(),
+    endDate: v.string(),
+    announcerEarnings: v.number(),
+    vatRate: v.number(),
+    isSapApplied: v.boolean(),
+    platformFee: v.number(),
+    commissionRate: v.number(),
+    stripeFee: v.number(),
+    stripeFeeRate: v.number(),
+    totalAmount: v.number(),
+    paymentRef: v.string(),
+    cardBrand: v.optional(v.string()),
+    cardLast4: v.optional(v.string()),
+    emailConfig: v.object({
+      apiKey: v.string(),
+      fromEmail: v.optional(v.string()),
+      fromName: v.optional(v.string()),
+    }),
+    appUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const fromEmail = args.emailConfig.fromEmail || "onboarding@resend.dev";
+      const fromName = args.emailConfig.fromName || "Animigo";
+      const siteName = "Animigo";
+      const appUrl = args.appUrl || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+      const template = getTemplate("payment_receipt");
+      if (!template) {
+        return { success: false, error: "Template payment_receipt not found" };
+      }
+
+      // Calcul HT et TVA sur le prix du service uniquement
+      const prestationHT = args.vatRate > 0
+        ? Math.round((args.announcerEarnings * 100) / (100 + args.vatRate))
+        : args.announcerEarnings;
+      const tvaAmount = args.announcerEarnings - prestationHT;
+
+      const now = new Date();
+      const paymentDate = `${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()} à ${String(now.getHours()).padStart(2, "0")}h${String(now.getMinutes()).padStart(2, "0")}`;
+
+      // Formater le moyen de paiement
+      const brandNames: Record<string, string> = {
+        visa: "Visa",
+        mastercard: "Mastercard",
+        amex: "American Express",
+        cb: "CB",
+        cartes_bancaires: "CB",
+      };
+      const brandDisplay = args.cardBrand ? (brandNames[args.cardBrand] || args.cardBrand.toUpperCase()) : "Carte bancaire";
+      const paymentMethod = args.cardLast4
+        ? `${brandDisplay} - xxxx xxxx xxxx ${args.cardLast4}`
+        : "Carte bancaire";
+
+      const variables = {
+        clientName: args.clientName,
+        serviceName: args.serviceName,
+        announcerName: args.announcerName,
+        announcerStatus: args.announcerStatus,
+        announcerCompany: args.announcerCompany ? `<strong>Entreprise :</strong> ${args.announcerCompany}<br/>` : "",
+        announcerSiret: args.announcerSiret ? `<strong>SIRET :</strong> ${args.announcerSiret}` : "",
+        startDate: formatDate(args.startDate),
+        endDate: formatDate(args.endDate),
+        prestationHT: formatPrice(prestationHT),
+        tvaRate: String(args.vatRate),
+        tvaAmount: formatPrice(tvaAmount),
+        sapBadge: args.isSapApplied ? "(taux réduit SAP)" : "",
+        commissionRate: String(args.commissionRate),
+        commissionAmount: formatPrice(args.platformFee),
+        stripeFeeRate: String(args.stripeFeeRate),
+        stripeFeeAmount: formatPrice(args.stripeFee),
+        totalAmount: formatPrice(args.totalAmount),
+        paymentDate,
+        paymentRef: args.paymentRef,
+        paymentMethod,
+        siteName,
+        reservationsUrl: `${appUrl}/client/reservations`,
+      };
+
+      const subject = replaceVariables(template.subject, variables);
+      const html = replaceVariables(template.htmlContent, variables);
+
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${args.emailConfig.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: `${fromName} <${fromEmail}>`,
+          to: [args.clientEmail],
+          subject,
+          html,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Resend API error: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log("Payment receipt email sent:", result);
+
+      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+        to: args.clientEmail,
+        from: `${fromName} <${fromEmail}>`,
+        subject,
+        template: "payment_receipt",
+        status: "sent",
+        resendId: result.id,
+      });
+
+      return { success: true, id: result.id };
+    } catch (error) {
+      console.error("Failed to send payment receipt email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
     }
   },

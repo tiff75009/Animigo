@@ -48,6 +48,8 @@ export const createPaymentIntent = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     })),
+    // Cartes sauvegardées
+    stripeCustomerId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     console.log("=== createPaymentIntent START ===");
@@ -57,10 +59,10 @@ export const createPaymentIntent = internalAction({
       const appUrl = args.appUrl || "http://localhost:3000";
 
       // Créer le PaymentIntent avec paiement immédiat (plus de pré-autorisation)
-      const paymentIntent = await stripe.paymentIntents.create({
+      const piCreateParams: any = {
         amount: args.amount,
         currency: "eur",
-        // Plus de capture_method: "manual" - paiement immédiat
+        payment_method_types: ["card"],
         receipt_email: args.clientEmail,
         metadata: {
           missionId: args.missionId,
@@ -68,7 +70,14 @@ export const createPaymentIntent = internalAction({
           announcerEarnings: args.announcerEarnings.toString(),
         },
         description: `${args.serviceName} - ${args.animalName || "Service"} avec ${args.announcerName}`,
-      });
+      };
+
+      // Si le client a un Stripe Customer, l'attacher au PI
+      if (args.stripeCustomerId) {
+        piCreateParams.customer = args.stripeCustomerId;
+      }
+
+      const paymentIntent = await stripe.paymentIntents.create(piCreateParams);
 
       console.log("PaymentIntent created:", paymentIntent.id);
 
