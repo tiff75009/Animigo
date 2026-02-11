@@ -175,8 +175,13 @@ const integrations: IntegrationSection[] = [
         { event: "payment_intent.succeeded", description: "Capture du paiement réussie" },
         { event: "payment_intent.canceled", description: "Paiement annulé" },
         { event: "payment_intent.payment_failed", description: "Échec du paiement" },
+        { event: "payment_intent.amount_capturable_updated", description: "Pré-autorisation réussie (Stripe Elements)" },
+        // Carte sauvegardée
+        { event: "setup_intent.succeeded", description: "Carte bancaire sauvegardée avec succès" },
         // Remboursements
         { event: "charge.refunded", description: "Remboursement effectué au client" },
+        { event: "refund.created", description: "Remboursement créé (suivi du statut)" },
+        { event: "refund.updated", description: "Statut du remboursement mis à jour" },
         { event: "refund.failed", description: "Échec du remboursement" },
         // Virements aux annonceurs (Stripe Connect)
         { event: "transfer.created", description: "Transfert vers annonceur créé" },

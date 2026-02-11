@@ -1234,6 +1234,7 @@ export const getClientMissions = query({
           clientNotes: m.clientNotes,
           announcerNotes: m.announcerNotes,
           cancellationReason: m.cancellationReason,
+          refundAmount: m.refundAmount,
           createdAt: m.createdAt,
           // Nouveaux champs pour filtres et affichage
           sessionType: m.sessionType,           // "individual" | "collective"
@@ -1311,6 +1312,9 @@ export const getClientMissionById = query({
           platformFee: payment.platformFee,
           paymentUrl: payment.paymentUrl,
           expiresAt: payment.expiresAt,
+          refundedAmount: payment.refundedAmount,
+          refundedAt: payment.refundedAt,
+          refundStatus: payment.refundStatus,
         };
       }
     }
@@ -1366,6 +1370,11 @@ export const getClientMissionById = query({
       clientNotes: mission.clientNotes,
       announcerNotes: mission.announcerNotes,
       cancellationReason: mission.cancellationReason,
+      cancelledBy: mission.cancelledBy,
+      cancelledAt: mission.cancelledAt,
+      refundAmount: mission.refundAmount,
+      announcerRetainedAmount: mission.announcerRetainedAmount,
+      refundStripeId: mission.refundStripeId,
       createdAt: mission.createdAt,
       updatedAt: mission.updatedAt,
       // Garde de nuit

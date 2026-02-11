@@ -1188,6 +1188,15 @@ export default defineSchema({
     // Remboursement
     refundedAt: v.optional(v.number()), // Date remboursement
     refundedAmount: v.optional(v.number()), // Montant remboursé (centimes)
+    refundStatus: v.optional(v.union(
+      v.literal("pending"),
+      v.literal("succeeded"),
+      v.literal("failed"),
+      v.literal("requires_action"),
+      v.literal("canceled"),
+    )),
+    refundStripeId: v.optional(v.string()), // re_xxx
+    refundFailureReason: v.optional(v.string()),
 
     // Transfert vers annonceur (Stripe Connect)
     transferId: v.optional(v.string()), // tr_xxx

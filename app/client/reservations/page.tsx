@@ -166,6 +166,8 @@ interface EnrichedReservation {
   serviceTypeSlug?: string;
   serviceLocation?: "announcer_home" | "client_home";
   paymentDeadline?: number;
+  paymentStatus?: string;
+  refundAmount?: number;
 }
 
 export default function ReservationsPage() {
@@ -407,13 +409,27 @@ export default function ReservationsPage() {
                           </div>
 
                           {/* Badge statut texte (visible sur mobile) */}
-                          <div className={cn(
-                            "inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full text-xs font-semibold",
-                            status.bgColor,
-                            status.color
-                          )}>
-                            {status.icon}
-                            {status.label}
+                          <div className="flex flex-wrap items-center gap-2 mt-2">
+                            <div className={cn(
+                              "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold",
+                              status.bgColor,
+                              status.color
+                            )}>
+                              {status.icon}
+                              {status.label}
+                            </div>
+                            {/* Badge remboursement pour missions annulées */}
+                            {isCancelled && reservation.refundAmount != null && reservation.refundAmount > 0 && (
+                              <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600">
+                                <CheckCircle className="w-3 h-3" />
+                                Remboursé {(reservation.refundAmount / 100).toLocaleString("fr-FR", { style: "currency", currency: "EUR" })}
+                              </div>
+                            )}
+                            {isCancelled && (reservation.refundAmount == null || reservation.refundAmount === 0) && reservation.paymentStatus === "paid" && (
+                              <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">
+                                Non remboursé
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>

@@ -264,10 +264,58 @@ export const handleStripeWebhook = internalAction({
         break;
       }
 
+      case "refund.created": {
+        const refund = event.data.object as Stripe.Refund;
+        console.log(`Refund créé: ${refund.id} - statut: ${refund.status}`);
+
+        const piId = typeof refund.payment_intent === "string"
+          ? refund.payment_intent
+          : refund.payment_intent?.id;
+
+        if (piId) {
+          await ctx.runMutation(internal.api.stripeInternal.updateRefundStatus, {
+            paymentIntentId: piId,
+            refundStatus: (refund.status as any) || "pending",
+            refundStripeId: refund.id,
+          });
+        }
+        break;
+      }
+
+      case "refund.updated": {
+        const refund = event.data.object as Stripe.Refund;
+        console.log(`Refund mis à jour: ${refund.id} - statut: ${refund.status}`);
+
+        const piId = typeof refund.payment_intent === "string"
+          ? refund.payment_intent
+          : refund.payment_intent?.id;
+
+        if (piId) {
+          await ctx.runMutation(internal.api.stripeInternal.updateRefundStatus, {
+            paymentIntentId: piId,
+            refundStatus: (refund.status as any) || "pending",
+            refundStripeId: refund.id,
+          });
+        }
+        break;
+      }
+
       case "refund.failed": {
         const refund = event.data.object as Stripe.Refund;
         console.error(`Échec du remboursement: ${refund.id}`);
-        // TODO: Notifier l'admin
+
+        const piId = typeof refund.payment_intent === "string"
+          ? refund.payment_intent
+          : refund.payment_intent?.id;
+
+        if (piId) {
+          await ctx.runMutation(internal.api.stripeInternal.updateRefundStatus, {
+            paymentIntentId: piId,
+            refundStatus: "failed",
+            refundStripeId: refund.id,
+            failureReason: refund.failure_reason || undefined,
+          });
+        }
         break;
       }
 

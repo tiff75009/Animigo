@@ -679,6 +679,46 @@ export const markPaymentRefunded = internalMutation({
 });
 
 /**
+ * Mettre à jour le statut du remboursement Stripe (refund.created/updated/failed)
+ */
+export const updateRefundStatus = internalMutation({
+  args: {
+    paymentIntentId: v.string(),
+    refundStatus: v.union(
+      v.literal("pending"),
+      v.literal("succeeded"),
+      v.literal("failed"),
+      v.literal("requires_action"),
+      v.literal("canceled"),
+    ),
+    refundStripeId: v.optional(v.string()),
+    failureReason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const payment = await ctx.db
+      .query("stripePayments")
+      .withIndex("by_payment_intent", (q) =>
+        q.eq("paymentIntentId", args.paymentIntentId)
+      )
+      .first();
+
+    if (!payment) {
+      console.log("Paiement non trouvé pour updateRefundStatus:", args.paymentIntentId);
+      return;
+    }
+
+    const now = Date.now();
+
+    await ctx.db.patch(payment._id, {
+      refundStatus: args.refundStatus,
+      ...(args.refundStripeId && { refundStripeId: args.refundStripeId }),
+      ...(args.failureReason && { refundFailureReason: args.failureReason }),
+      updatedAt: now,
+    });
+  },
+});
+
+/**
  * Marquer le transfert comme créé (virement vers annonceur initié)
  */
 export const markTransferCreated = internalMutation({
