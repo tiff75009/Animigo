@@ -65,7 +65,7 @@ export function setInCache<T>(key: string, data: T): void {
   // Nettoyer le cache si trop gros
   if (searchCache.size >= MAX_CACHE_SIZE) {
     // Supprimer les entrées les plus anciennes
-    const entries = Array.from(searchCache.entries());
+    const entries = Array.from(searchCache.entries()) as [string, CacheEntry<unknown>][];
     entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
 
     // Supprimer la moitié des entrées les plus anciennes

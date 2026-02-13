@@ -242,7 +242,9 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
 
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2.5 group shrink-0">
-              {siteLogo ? (
+              {siteLogo === undefined ? (
+                <div className="w-12 h-12" />
+              ) : siteLogo ? (
                 <Image
                   src={siteLogo}
                   alt={siteName}

@@ -4,11 +4,20 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 // Paths exclus du mode maintenance (toujours accessibles)
-const EXCLUDED_PATHS = [
-  "/maintenance",
-  "/admin",
-  "/api",
-];
+const EXCLUDED_PATHS = ["/maintenance", "/admin", "/api"];
+
+// Détecter si on est en environnement local
+function isLocalhost(): boolean {
+  if (typeof window === "undefined") return false;
+  const hostname = window.location.hostname;
+  return (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "0.0.0.0" ||
+    hostname.startsWith("192.168.") ||
+    hostname === "::1"
+  );
+}
 
 export default function MaintenanceGuard({
   children,
@@ -21,6 +30,13 @@ export default function MaintenanceGuard({
   const [isAllowed, setIsAllowed] = useState(false);
 
   useEffect(() => {
+    // Bypass total en dev local
+    if (isLocalhost()) {
+      setIsAllowed(true);
+      setIsChecking(false);
+      return;
+    }
+
     // Vérifier si le path est exclu
     const isExcluded = EXCLUDED_PATHS.some(
       (excluded) =>
@@ -35,31 +51,35 @@ export default function MaintenanceGuard({
 
     const checkAccess = async () => {
       try {
-        // 1. Obtenir l'IP publique via ipify
+        // 1. Vérifier d'abord si la maintenance est activée (appel léger)
+        const maintenanceResponse = await fetch("/api/maintenance/status");
+        const maintenanceData = await maintenanceResponse.json();
+
+        // Si maintenance désactivée → autoriser directement
+        if (!maintenanceData.maintenanceEnabled) {
+          setIsAllowed(true);
+          setIsChecking(false);
+          return;
+        }
+
+        // 2. Maintenance activée → vérifier l'IP
         const ipResponse = await fetch("https://api.ipify.org?format=json");
         const ipData = await ipResponse.json();
         const clientIp = ipData.ip;
 
-        // 2. Vérifier le statut maintenance et si l'IP est approuvée
         const statusResponse = await fetch(
           `/api/maintenance/check-ip?ip=${clientIp}`
         );
         const statusData = await statusResponse.json();
 
-        // 3. Vérifier si le mode maintenance est activé
-        const maintenanceResponse = await fetch("/api/maintenance/status");
-        const maintenanceData = await maintenanceResponse.json();
-
-        // Si maintenance désactivée OU IP approuvée → autoriser
-        if (!maintenanceData.maintenanceEnabled || statusData.isApproved) {
+        if (statusData.isApproved) {
           setIsAllowed(true);
         } else {
-          // Rediriger vers /maintenance
           router.replace("/maintenance");
           return;
         }
       } catch (error) {
-        // En cas d'erreur, autoriser (fail-open)
+        // Fail-open en cas d'erreur
         console.error("MaintenanceGuard error:", error);
         setIsAllowed(true);
       } finally {
@@ -70,12 +90,10 @@ export default function MaintenanceGuard({
     checkAccess();
   }, [pathname, router]);
 
-  // Pendant la vérification, on peut afficher un loader ou rien
+  // Pendant la vérification, afficher un écran neutre (pas le contenu)
   if (isChecking) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
+      <div className="min-h-screen bg-background" />
     );
   }
 

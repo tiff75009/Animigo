@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { Check, Shield, Calendar, CreditCard, Loader2, Home, PartyPopper } from "lucide-react";
@@ -34,6 +35,7 @@ const features = [
 ];
 
 export default function MaintenanceClient() {
+  const router = useRouter();
   const [name, setName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -49,6 +51,29 @@ export default function MaintenanceClient() {
   useEffect(() => {
     const fetchIp = async () => {
       try {
+        // En dev local → pas de maintenance, rediriger vers l'accueil
+        const hostname = window.location.hostname;
+        if (
+          hostname === "localhost" ||
+          hostname === "127.0.0.1" ||
+          hostname === "0.0.0.0" ||
+          hostname.startsWith("192.168.") ||
+          hostname === "::1"
+        ) {
+          router.replace("/");
+          return;
+        }
+
+        // Vérifier d'abord si la maintenance est encore active
+        const maintenanceRes = await fetch("/api/maintenance/status");
+        const maintenanceData = await maintenanceRes.json();
+
+        // Si maintenance désactivée → rediriger vers l'accueil
+        if (!maintenanceData.maintenanceEnabled) {
+          router.replace("/");
+          return;
+        }
+
         const response = await fetch("https://api.ipify.org?format=json");
         const data = await response.json();
         setClientIp(data.ip);
@@ -57,7 +82,14 @@ export default function MaintenanceClient() {
         setIsCheckingApproval(true);
         const statusResponse = await fetch(`/api/maintenance/check-ip?ip=${data.ip}`);
         const statusData = await statusResponse.json();
-        setIsApproved(statusData.isApproved);
+
+        // Si IP approuvée → rediriger automatiquement vers l'accueil
+        if (statusData.isApproved) {
+          router.replace("/");
+          return;
+        }
+
+        setIsApproved(false);
       } catch (err) {
         console.error("Erreur lors de la récupération de l'IP:", err);
         setClientIp(null);
@@ -68,7 +100,7 @@ export default function MaintenanceClient() {
     };
 
     fetchIp();
-  }, []);
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
