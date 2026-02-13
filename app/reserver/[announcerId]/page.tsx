@@ -835,33 +835,37 @@ export default function ReserverPage({
   const overnightAmount = priceCalculation?.nightsAmount ?? 0;
   const nights = priceCalculation?.nights ?? 0;
 
+  // Nombre effectif d'animaux (pour multiplier le prix)
+  const effectiveAnimalCount = useMemo(() => {
+    return bookingData.selectedAnimalIds.length > 0
+      ? bookingData.selectedAnimalIds.length
+      : 1;
+  }, [bookingData.selectedAnimalIds.length]);
+
   // Calculer le montant total selon le type de formule
+  // Ce montant = serviceAmount (ce que l'annonceur reçoit), SANS commission/frais
+  // Le backend ajoute commission + frais Stripe par-dessus
   const totalAmount = useMemo(() => {
     if (!selectedVariant) return 0;
-
-    // Prix avec commission
-    const commissionMultiplier = 1 + commissionRate / 100;
 
     if (isCollectiveFormula) {
       // Formule collective: prix × créneaux sélectionnés × animaux
       const actualSlots = bookingData.selectedSlotIds.length || 1;
-      const effectiveAnimalCount = bookingData.selectedAnimalIds.length > 0
+      const collectiveAnimalCount = bookingData.selectedAnimalIds.length > 0
         ? bookingData.selectedAnimalIds.length
         : bookingData.animalCount;
-      const basePrice = selectedVariant.price * actualSlots * effectiveAnimalCount;
-      return Math.round((basePrice + optionsTotal) * commissionMultiplier);
+      return Math.round(selectedVariant.price * actualSlots * collectiveAnimalCount);
     }
 
     if (isMultiSessionIndividual) {
-      // Formule multi-séances individuelle: prix × séances
+      // Formule multi-séances individuelle: prix × séances × animaux
       const nSessions = selectedVariant.numberOfSessions || 1;
-      const basePrice = selectedVariant.price * nSessions;
-      return Math.round((basePrice + optionsTotal) * commissionMultiplier);
+      return Math.round(selectedVariant.price * nSessions * effectiveAnimalCount);
     }
 
-    // Formule uni-séance: utiliser le calcul standard
-    return priceCalculation?.totalAmount ?? 0;
-  }, [selectedVariant, isCollectiveFormula, isMultiSessionIndividual, bookingData.animalCount, bookingData.selectedSlotIds.length, bookingData.selectedAnimalIds.length, optionsTotal, commissionRate, priceCalculation?.totalAmount]);
+    // Formule uni-séance: calcul standard × animaux
+    return Math.round((priceCalculation?.totalAmount ?? 0) * effectiveAnimalCount);
+  }, [selectedVariant, isCollectiveFormula, isMultiSessionIndividual, bookingData.animalCount, bookingData.selectedSlotIds.length, bookingData.selectedAnimalIds.length, effectiveAnimalCount, priceCalculation?.totalAmount]);
 
   // Compute billing info for display in FormulaStep
   const billingInfo = useMemo(() => {
@@ -995,6 +999,7 @@ export default function ReserverPage({
           : undefined,
         animalCount: isCollectiveFormula ? bookingData.animalCount : undefined,
         selectedAnimalType: isCollectiveFormula ? bookingData.selectedAnimalType : undefined,
+        effectiveAnimalCount,
         // Séances multi-sessions
         sessions: isMultiSessionIndividual && bookingData.selectedSessions.length > 0
           ? bookingData.selectedSessions
@@ -1026,6 +1031,7 @@ export default function ReserverPage({
           : undefined,
         animalCount: isCollectiveFormula ? bookingData.animalCount : undefined,
         selectedAnimalType: isCollectiveFormula ? bookingData.selectedAnimalType : undefined,
+        effectiveAnimalCount,
         // Animaux sélectionnés par l'utilisateur
         selectedAnimalIds: bookingData.selectedAnimalIds.length > 0 ? bookingData.selectedAnimalIds : undefined,
         // Séances multi-sessions

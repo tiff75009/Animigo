@@ -616,6 +616,9 @@ export default defineSchema({
     vatRate: v.optional(v.number()),         // Taux TVA appliqué (10 ou 20)
     isSapApplied: v.optional(v.boolean()),   // true si taux réduit SAP
     announcerEarnings: v.optional(v.number()), // Revenus annonceur après commission (centimes)
+    serviceAmount: v.optional(v.number()),     // Montant prestation (base + options) × animaux — ce que l'annonceur reçoit
+    vatAmount: v.optional(v.number()),          // Montant TVA prestation (pro uniquement, sinon 0)
+    vatOnCommission: v.optional(v.number()),    // Montant TVA sur la commission plateforme
 
     // Dates
     startDate: v.string(), // "YYYY-MM-DD"
@@ -906,6 +909,7 @@ export default defineSchema({
 
     // Prix calculé
     calculatedAmount: v.number(),
+    effectiveAnimalCount: v.optional(v.number()),  // Nombre effectif d'animaux
 
     // Si utilisateur connecté
     userId: v.optional(v.id("users")),

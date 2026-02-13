@@ -66,6 +66,8 @@ export const createPendingBooking = mutation({
     selectedAnimalType: v.optional(v.string()),
     // Animaux sélectionnés par l'utilisateur
     selectedAnimalIds: v.optional(v.array(v.string())),
+    // Nombre effectif d'animaux (pour le calcul du prix)
+    effectiveAnimalCount: v.optional(v.number()),
     // Séances multi-sessions (pour formules individuelles multi-séances)
     sessions: v.optional(v.array(v.object({
       date: v.string(),
@@ -257,6 +259,7 @@ export const createPendingBooking = mutation({
       selectedAnimalType: args.selectedAnimalType,
       // Animaux sélectionnés
       selectedAnimalIds: args.selectedAnimalIds,
+      effectiveAnimalCount: args.effectiveAnimalCount,
       // Séances multi-sessions
       sessions: args.sessions,
       // Garde de nuit
@@ -894,6 +897,32 @@ export const finalizeBooking = mutation({
     const announcerEarnings = serviceAmount;
     const totalAmount = serviceAmount + platformFee + stripeFee;
 
+    // Calculer le breakdown détaillé des prix
+    // Charger les options sélectionnées depuis la pendingBooking
+    const finalOptionIds = args.updatedOptionIds ?? pendingBooking.optionIds;
+    let optionsPrice = 0;
+    const optionNames: string[] = [];
+    if (finalOptionIds && finalOptionIds.length > 0) {
+      for (const optionId of finalOptionIds) {
+        const option = await ctx.db.get(optionId as Id<"serviceOptions">);
+        if (option) {
+          optionsPrice += option.price;
+          optionNames.push(option.name);
+        }
+      }
+    }
+    const basePrice = serviceAmount - optionsPrice;
+
+    // TVA sur la prestation (uniquement si annonceur pro assujetti, pas micro-entreprise)
+    const isVatSubject = announcerForCommission?.companyType !== "micro_enterprise"
+      && announcerForCommission?.accountType === "annonceur_pro";
+    const vatAmount = isVatSubject
+      ? Math.round(serviceAmount - serviceAmount / (1 + vatRate / 100))
+      : 0;
+
+    // TVA sur la commission (toujours 20%)
+    const vatOnCommission = Math.round(platformFee * 20 / 100);
+
     // Créer la mission
     const missionId = await ctx.db.insert("missions", {
       announcerId: pendingBooking.announcerId,
@@ -911,6 +940,10 @@ export const finalizeBooking = mutation({
       animals: allAnimals,
       serviceName: `${category?.name ?? service.category} - ${variant.name}`,
       serviceCategory: service.category,
+      variantId: pendingBooking.variantId,
+      variantName: variant.name,
+      optionIds: finalOptionIds,
+      optionNames: optionNames.length > 0 ? optionNames : undefined,
       startDate: pendingBooking.startDate,
       endDate: pendingBooking.endDate,
       startTime: pendingBooking.startTime,
@@ -924,6 +957,11 @@ export const finalizeBooking = mutation({
       vatRate, // Taux TVA appliqué (10 si SAP, 20 sinon)
       isSapApplied, // true si taux réduit SAP appliqué
       announcerEarnings, // Ce que l'annonceur reçoit (prix du service)
+      basePrice,          // Prix formule pur (sans options)
+      optionsPrice,       // Prix des options
+      serviceAmount,      // Montant prestation total (base + options) × animaux
+      vatAmount,          // TVA sur prestation (pro assujetti uniquement)
+      vatOnCommission,    // TVA sur commission plateforme
       paymentStatus: "not_due",
       location: args.location,
       city: args.city,
