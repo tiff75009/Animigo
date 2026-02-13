@@ -23,7 +23,8 @@
       "mcp__jina__read_url",
       "mcp__jina__search_images",
       "Bash(find:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(npx next lint:*)"
     ]
   }
 }

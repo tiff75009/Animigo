@@ -1,10 +1,10 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Home, Briefcase, Users, User, X, CreditCard, Clock } from "lucide-react";
+import { Home, Briefcase, Users, User, X, CreditCard, Clock, Play } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 
-export type StatusFilter = "all" | "pending_acceptance" | "pending_payment" | "upcoming" | "completed" | "cancelled";
+export type StatusFilter = "all" | "pending_acceptance" | "pending_payment" | "upcoming" | "in_progress" | "completed" | "cancelled";
 export type ServiceTypeFilter = "all" | "garde" | "service";
 export type SessionTypeFilter = "all" | "individual" | "collective";
 
@@ -24,6 +24,7 @@ interface ReservationsFiltersProps {
     pendingAcceptance: number;
     pendingPayment: number;
     upcoming: number;
+    inProgress: number;
     completed: number;
     cancelled: number;
     garde: number;
@@ -85,6 +86,14 @@ export function ReservationsFilters({
           label="À venir"
           count={counts.upcoming}
           color="green"
+        />
+        <FilterChip
+          active={statusFilter === "in_progress"}
+          onClick={() => onStatusChange("in_progress")}
+          label="En cours"
+          icon={<Play className="w-3.5 h-3.5" />}
+          count={counts.inProgress}
+          color="blue"
         />
         <FilterChip
           active={statusFilter === "completed"}

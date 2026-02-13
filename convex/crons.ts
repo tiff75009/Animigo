@@ -61,6 +61,28 @@ crons.interval(
 );
 
 /**
+ * Auto-démarrage des missions à venir
+ * Exécuté toutes les 15 minutes pour passer en "in_progress"
+ * les missions dont la date/heure de début est atteinte
+ */
+crons.interval(
+  "auto-start-missions",
+  { minutes: 15 },
+  internal.planning.missions.autoStartMissions
+);
+
+/**
+ * Auto-complétion des missions en cours
+ * Exécuté toutes les 15 minutes pour passer en "completed"
+ * les missions dont la date/heure de fin est dépassée
+ */
+crons.interval(
+  "auto-complete-missions",
+  { minutes: 15 },
+  internal.planning.missions.autoCompleteMissions
+);
+
+/**
  * Auto-confirmation des missions terminées
  * Exécuté toutes les heures pour confirmer automatiquement
  * les missions dont le délai de confirmation client est dépassé

@@ -369,6 +369,7 @@ export const createPayout = mutation({
 
     // Vérifier que les missions appartiennent à cet annonceur et sont éligibles
     let totalAmount = 0;
+    let totalGross = 0;
     for (const missionId of args.missionIds) {
       const mission = await ctx.db.get(missionId);
       if (!mission) throw new ConvexError(`Mission ${missionId} non trouvée`);
@@ -382,12 +383,15 @@ export const createPayout = mutation({
         throw new ConvexError(`Mission ${missionId} a déjà été payée`);
       }
       totalAmount += mission.announcerEarnings || 0;
+      totalGross += mission.amount || 0;
     }
 
     // Créer le virement
     const payoutId = await ctx.db.insert("announcerPayouts", {
       announcerId: args.announcerId,
       amount: totalAmount,
+      grossAmount: totalGross,
+      commissionAmount: totalGross - totalAmount,
       missions: args.missionIds,
       status: "pending",
       scheduledAt: args.scheduledAt,

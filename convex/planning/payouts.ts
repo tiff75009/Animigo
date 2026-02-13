@@ -53,8 +53,8 @@ export const confirmMissionEnd = mutation({
       throw new ConvexError("La mission n'est pas terminée");
     }
 
-    // Vérifier que le paiement a été effectué
-    if (mission.paymentStatus !== "paid") {
+    // Vérifier que le paiement a été effectué (accepte "paid" et "pending" pour encaissement immédiat)
+    if (mission.paymentStatus !== "paid" && mission.paymentStatus !== "pending") {
       throw new ConvexError("Le paiement n'a pas été effectué");
     }
 
@@ -185,7 +185,7 @@ export const autoConfirmMissions = internalMutation({
 
     const eligibleMissions = missions.filter((m) =>
       m.status === "completed" &&
-      m.paymentStatus === "paid" &&
+      (m.paymentStatus === "paid" || m.paymentStatus === "pending") &&
       !m.clientConfirmedAt &&
       !m.autoConfirmedAt &&
       m.updatedAt && // Date de passage en "completed"
@@ -402,9 +402,13 @@ export const processScheduledPayouts = internalMutation({
           continue;
         }
 
-        // Calculer le montant total
+        // Calculer le montant total NET (annonceur) et BRUT (client)
         const totalAmount = announcerMissions.reduce(
           (sum, m) => sum + (m.announcerEarnings || m.amount),
+          0
+        );
+        const totalGross = announcerMissions.reduce(
+          (sum, m) => sum + (m.amount || 0),
           0
         );
 
@@ -414,6 +418,7 @@ export const processScheduledPayouts = internalMutation({
           stripeAccountId: announcer.stripeAccountId,
           missionIds: announcerMissions.map((m) => m._id),
           totalAmount,
+          totalGross,
           stripeSecretKey: stripeSecretKeyConfig.value,
         });
 
@@ -436,6 +441,7 @@ export const processScheduledPayoutAction = internalAction({
     stripeAccountId: v.string(),
     missionIds: v.array(v.id("missions")),
     totalAmount: v.number(),
+    totalGross: v.optional(v.number()),
     stripeSecretKey: v.string(),
   },
   handler: async (ctx, args) => {
@@ -444,10 +450,14 @@ export const processScheduledPayoutAction = internalAction({
 
     try {
       // Créer un enregistrement de payout
+      const grossAmount = args.totalGross || args.totalAmount;
+      const commissionAmount = grossAmount - args.totalAmount;
       const payoutId = await ctx.runMutation(internal.planning.payouts.createPayoutRecord, {
         announcerId: args.announcerId,
         missionIds: args.missionIds,
         amount: args.totalAmount,
+        grossAmount,
+        commissionAmount,
       });
 
       // Créer le transfert vers le compte Connect
@@ -493,6 +503,8 @@ export const createPayoutRecord = internalMutation({
     announcerId: v.id("users"),
     missionIds: v.array(v.id("missions")),
     amount: v.number(),
+    grossAmount: v.optional(v.number()),
+    commissionAmount: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -500,6 +512,8 @@ export const createPayoutRecord = internalMutation({
     const payoutId = await ctx.db.insert("announcerPayouts", {
       announcerId: args.announcerId,
       amount: args.amount,
+      grossAmount: args.grossAmount,
+      commissionAmount: args.commissionAmount,
       missions: args.missionIds,
       status: "processing",
       scheduledAt: now,

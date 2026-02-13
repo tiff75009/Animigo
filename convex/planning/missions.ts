@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { mutation, query } from "../_generated/server";
+import { mutation, query, internalMutation } from "../_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { internal } from "../_generated/api";
@@ -716,7 +716,11 @@ export const cancelMission = mutation({
 
     await ctx.db.patch(args.missionId, {
       status: "cancelled",
+      cancelledBy: "announcer",
+      cancelledAt: Date.now(),
       cancellationReason: args.reason,
+      refundAmount: mission.amount,
+      announcerRetainedAmount: 0,
       updatedAt: Date.now(),
     });
 
@@ -752,16 +756,20 @@ export const completeMission = mutation({
       throw new ConvexError("Vous ne pouvez pas modifier cette mission");
     }
 
-    if (mission.status !== "in_progress") {
-      throw new ConvexError("Seules les missions en cours peuvent être terminées");
+    if (mission.status !== "in_progress" && mission.status !== "upcoming") {
+      throw new ConvexError("Seules les missions en cours ou à venir peuvent être terminées");
     }
 
-    await ctx.db.patch(args.missionId, {
+    // Ne pas écraser paymentStatus si déjà "paid" (capture immédiate Stripe)
+    const patch: Record<string, any> = {
       status: "completed",
       announcerNotes: args.notes || mission.announcerNotes,
-      paymentStatus: "pending",
       updatedAt: Date.now(),
-    });
+    };
+    if (mission.paymentStatus !== "paid") {
+      patch.paymentStatus = "pending";
+    }
+    await ctx.db.patch(args.missionId, patch);
 
     return { success: true };
   },
@@ -1234,8 +1242,11 @@ export const getClientMissions = query({
           clientNotes: m.clientNotes,
           announcerNotes: m.announcerNotes,
           cancellationReason: m.cancellationReason,
+          cancelledBy: m.cancelledBy,
           refundAmount: m.refundAmount,
           createdAt: m.createdAt,
+          // Formule et options
+          variantName: m.variantName,
           // Nouveaux champs pour filtres et affichage
           sessionType: m.sessionType,           // "individual" | "collective"
           numberOfSessions: m.numberOfSessions, // Nombre de séances
@@ -1245,6 +1256,13 @@ export const getClientMissions = query({
           serviceLocation: m.serviceLocation,   // "announcer_home" | "client_home"
           // Délai de paiement
           paymentDeadline: m.paymentDeadline,   // Timestamp deadline
+          // Infos supplémentaires
+          acceptanceDeadline: m.acceptanceDeadline,
+          hasReview: m.hasReview,
+          hasDispute: m.hasDispute,
+          // Confirmation fin de service
+          clientConfirmedAt: m.clientConfirmedAt,
+          autoConfirmedAt: m.autoConfirmedAt,
         };
       })
     );
@@ -1396,6 +1414,11 @@ export const getClientMissionById = query({
       paymentDetails,
       // Délai de paiement
       paymentDeadline: mission.paymentDeadline,
+      // Confirmation fin de service
+      clientConfirmedAt: mission.clientConfirmedAt,
+      autoConfirmedAt: mission.autoConfirmedAt,
+      readyForPayout: mission.readyForPayout,
+      payoutScheduledFor: mission.payoutScheduledFor,
     };
   },
 });
@@ -1693,5 +1716,108 @@ export const getAnnouncerMissionsWithStats = query({
       stats,
       announcerCoordinates,
     };
+  },
+});
+
+/**
+ * Auto-démarrage des missions à venir
+ * Cron toutes les 15 min : passe les missions "upcoming" en "in_progress"
+ * quand leur date/heure de début est atteinte
+ */
+export const autoStartMissions = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+
+    const missions = await ctx.db
+      .query("missions")
+      .filter((q) => q.eq(q.field("status"), "upcoming"))
+      .collect();
+
+    let started = 0;
+    for (const mission of missions) {
+      try {
+        let shouldStart = false;
+
+        // Multi-sessions : démarrer à la 1ère session
+        if (mission.sessions && mission.sessions.length > 0) {
+          const firstSession = mission.sessions[0];
+          const sessionStartStr = `${firstSession.date}T${firstSession.startTime || "00:00"}`;
+          shouldStart = now >= new Date(sessionStartStr).getTime();
+        } else {
+          // Garde ou session unique : utiliser startDate + startTime
+          const startStr = mission.startTime
+            ? `${mission.startDate}T${mission.startTime}`
+            : `${mission.startDate}T00:00`;
+          shouldStart = now >= new Date(startStr).getTime();
+        }
+
+        if (shouldStart) {
+          await ctx.db.patch(mission._id, {
+            status: "in_progress",
+            updatedAt: now,
+          });
+          started++;
+        }
+      } catch (error) {
+        console.error(`Erreur auto-start mission ${mission._id}:`, error);
+      }
+    }
+
+    return { started, total: missions.length };
+  },
+});
+
+/**
+ * Auto-complétion des missions en cours
+ * Cron toutes les 15 min : passe les missions "in_progress" en "completed"
+ * quand leur date/heure de fin est dépassée
+ */
+export const autoCompleteMissions = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+
+    const missions = await ctx.db
+      .query("missions")
+      .filter((q) => q.eq(q.field("status"), "in_progress"))
+      .collect();
+
+    let completed = 0;
+    for (const mission of missions) {
+      try {
+        let shouldComplete = false;
+
+        // Multi-sessions : terminer après la dernière session
+        if (mission.sessions && mission.sessions.length > 0) {
+          const lastSession = mission.sessions[mission.sessions.length - 1];
+          const sessionEndStr = `${lastSession.date}T${lastSession.endTime || "23:59"}`;
+          shouldComplete = now >= new Date(sessionEndStr).getTime();
+        } else {
+          // Garde ou session unique : utiliser endDate + endTime
+          const endStr = mission.endTime
+            ? `${mission.endDate}T${mission.endTime}`
+            : `${mission.endDate}T23:59`;
+          shouldComplete = now >= new Date(endStr).getTime();
+        }
+
+        if (shouldComplete) {
+          // Ne pas écraser paymentStatus si déjà "paid" (capture immédiate Stripe)
+          const patch: Record<string, any> = {
+            status: "completed",
+            updatedAt: now,
+          };
+          if (mission.paymentStatus !== "paid") {
+            patch.paymentStatus = "pending";
+          }
+          await ctx.db.patch(mission._id, patch);
+          completed++;
+        }
+      } catch (error) {
+        console.error(`Erreur auto-complete mission ${mission._id}:`, error);
+      }
+    }
+
+    return { completed, total: missions.length };
   },
 });

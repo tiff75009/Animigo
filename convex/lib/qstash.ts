@@ -40,11 +40,12 @@ export interface NotificationPayload {
 // Client QStash (initialisé une fois)
 let qstashClient: Client | null = null;
 
-function getQStashClient(): Client {
+function getQStashClient(): Client | null {
   if (!qstashClient) {
     const token = process.env.QSTASH_TOKEN;
     if (!token) {
-      throw new Error("QSTASH_TOKEN not configured");
+      console.warn("[QStash] QSTASH_TOKEN non configuré, notifications désactivées");
+      return null;
     }
     qstashClient = new Client({ token });
   }
@@ -59,6 +60,8 @@ export async function queueNotification(
   payload: NotificationPayload
 ): Promise<{ messageId: string }> {
   const client = getQStashClient();
+  if (!client) return { messageId: "skipped" };
+
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "http://localhost:3000";
 
   const response = await client.publishJSON({
@@ -80,6 +83,8 @@ export async function queueDelayedNotification(
   delaySeconds: number
 ): Promise<{ messageId: string }> {
   const client = getQStashClient();
+  if (!client) return { messageId: "skipped" };
+
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "http://localhost:3000";
 
   const response = await client.publishJSON({
@@ -102,6 +107,8 @@ export async function scheduleNotification(
   cron: string
 ): Promise<{ scheduleId: string }> {
   const client = getQStashClient();
+  if (!client) return { scheduleId: "skipped" };
+
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "http://localhost:3000";
 
   const response = await client.schedules.create({

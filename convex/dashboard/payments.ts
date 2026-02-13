@@ -27,83 +27,6 @@ async function validateAnnouncerSession(ctx: any, sessionToken: string) {
   return { user, session };
 }
 
-// Helper pour obtenir l'emoji de l'espèce animale
-function getAnimalEmoji(species: string): string {
-  const emojiMap: Record<string, string> = {
-    chien: "🐕",
-    chat: "🐈",
-    lapin: "🐰",
-    oiseau: "🦜",
-    perruche: "🦜",
-    perroquet: "🦜",
-    rongeur: "🐹",
-    hamster: "🐹",
-    cobaye: "🐹",
-    reptile: "🦎",
-    poisson: "🐠",
-    furet: "🦡",
-    cheval: "🐴",
-    poney: "🐴",
-  };
-  return emojiMap[species.toLowerCase()] || "🐾";
-}
-
-/**
- * Obtenir les missions terminées avec paiement en attente d'encaissement
- */
-export const getAnnouncerPendingPayments = query({
-  args: { sessionToken: v.string() },
-  handler: async (ctx, args) => {
-    const { user } = await validateAnnouncerSession(ctx, args.sessionToken);
-
-    // Récupérer les missions de l'annonceur
-    const missions = await ctx.db
-      .query("missions")
-      .withIndex("by_announcer", (q) => q.eq("announcerId", user._id))
-      .collect();
-
-    // Filtrer les missions completed avec paymentStatus = "pending"
-    const pendingPayments = missions.filter(
-      (m) => m.status === "completed" && m.paymentStatus === "pending"
-    );
-
-    // Enrichir avec infos client et service
-    return Promise.all(
-      pendingPayments.map(async (m) => {
-        const client = await ctx.db.get(m.clientId);
-        const service = m.serviceId ? await ctx.db.get(m.serviceId) : null;
-        const animal = m.animalId ? await ctx.db.get(m.animalId) : null;
-
-        // Montant net (ce que l'annonceur reçoit après commission)
-        const announcerEarnings = m.announcerEarnings || Math.round((m.amount || 0) * 0.85);
-
-        return {
-          id: m._id,
-          clientId: m.clientId,
-          clientName: client ? `${client.firstName} ${client.lastName}` : m.clientName,
-          clientAvatar: "👤", // Placeholder
-          animal: m.animal || (animal
-            ? {
-                name: animal.name,
-                type: animal.type,
-                emoji: getAnimalEmoji(animal.type),
-              }
-            : { name: "Animal", type: "inconnu", emoji: "🐾" }),
-          service: m.serviceName,
-          serviceName: m.serviceName,
-          serviceCategory: m.serviceCategory,
-          startDate: m.startDate,
-          endDate: m.endDate,
-          amount: Math.round((m.amount || 0) / 100), // Montant brut client en euros
-          announcerEarnings: Math.round(announcerEarnings / 100), // Montant net annonceur en euros
-          paymentStatus: m.paymentStatus,
-          location: m.location || "",
-        };
-      })
-    );
-  },
-});
-
 /**
  * Obtenir les statistiques de paiement de l'annonceur
  */
@@ -118,11 +41,18 @@ export const getAnnouncerPaymentStats = query({
       .collect();
 
     const completed = missions.filter((m) => m.status === "completed");
+    const cancelled = missions.filter((m) => m.status === "cancelled");
     const pending = completed.filter((m) => m.paymentStatus === "pending");
     const paid = completed.filter((m) => m.paymentStatus === "paid");
 
     // Helper pour obtenir le montant net de l'annonceur (après commission)
     const getNetAmount = (m: any) => m.announcerEarnings || Math.round((m.amount || 0) * 0.85);
+
+    // Stats annulations
+    const cancelledByClient = cancelled.filter((m) => m.cancelledBy === "client");
+    const cancelledByAnnouncer = cancelled.filter(
+      (m) => m.cancelledBy === "announcer" || m.cancelledBy === undefined
+    );
 
     return {
       // Montants NETS en euros (ce que l'annonceur reçoit après commission)
@@ -137,6 +67,20 @@ export const getAnnouncerPaymentStats = query({
       // Total brut pour référence (ce que les clients ont payé)
       totalGross: Math.round(
         completed.reduce((sum, m) => sum + (m.amount || 0), 0) / 100
+      ),
+      // Annulations par le client
+      cancelledByClientCount: cancelledByClient.length,
+      cancelledByClientLost: Math.round(
+        cancelledByClient.reduce((sum, m) => sum + getNetAmount(m) - (m.announcerRetainedAmount || 0), 0) / 100
+      ),
+      // Annulations par l'annonceur
+      cancelledByAnnouncerCount: cancelledByAnnouncer.length,
+      cancelledByAnnouncerLost: Math.round(
+        cancelledByAnnouncer.reduce((sum, m) => sum + getNetAmount(m), 0) / 100
+      ),
+      // Montant retenu suite aux annulations client
+      announcerRetainedFromCancellations: Math.round(
+        cancelledByClient.reduce((sum, m) => sum + (m.announcerRetainedAmount || 0), 0) / 100
       ),
     };
   },
@@ -177,8 +121,15 @@ export const getAnnouncerPayoutHistory = query({
         return {
           id: payout._id,
           date: payout.processedAt || payout.createdAt,
-          // Montant en euros
+          // Montant NET en euros
           amount: Math.round(payout.amount / 100),
+          // Montant BRUT et commission (stockés directement, fallback calcul inverse)
+          grossAmount: payout.grossAmount
+            ? Math.round(payout.grossAmount / 100)
+            : undefined,
+          commissionAmount: payout.commissionAmount
+            ? Math.round(payout.commissionAmount / 100)
+            : undefined,
           status: payout.status,
           missions: missionDetails.filter(Boolean).map((m) =>
             `${m!.serviceName} - ${m!.clientName}`
@@ -191,8 +142,8 @@ export const getAnnouncerPayoutHistory = query({
 });
 
 /**
- * Obtenir les missions avec paiement autorisé en attente de capture
- * Ce sont les missions "upcoming" ou "in_progress" où le paiement a été autorisé
+ * Obtenir les missions avec paiement confirmé (client a payé)
+ * Inclut : upcoming, in_progress (à venir / en cours) ET completed en attente de versement
  */
 export const getAuthorizedPayments = query({
   args: { sessionToken: v.string() },
@@ -205,10 +156,16 @@ export const getAuthorizedPayments = query({
       .withIndex("by_announcer", (q) => q.eq("announcerId", user._id))
       .collect();
 
-    // Filtrer les missions upcoming ou in_progress avec paymentStatus = "pending"
-    // Ce sont les missions où le paiement est autorisé mais pas encore capturé
+    // Missions confirmées (client a payé) : upcoming/in_progress + completed en attente de versement
     const authorizedPayments = missions.filter(
-      (m) => (m.status === "upcoming" || m.status === "in_progress") && m.paymentStatus === "pending"
+      (m) =>
+        // Missions à venir ou en cours avec paiement autorisé ou capturé
+        ((m.status === "upcoming" || m.status === "in_progress") &&
+          (m.paymentStatus === "pending" || m.paymentStatus === "paid")) ||
+        // Missions terminées en attente de versement annonceur
+        (m.status === "completed" &&
+          (m.paymentStatus === "pending" || m.paymentStatus === "paid") &&
+          m.announcerPaymentStatus !== "paid")
     );
 
     // Enrichir avec infos client et paiement
@@ -229,9 +186,15 @@ export const getAuthorizedPayments = query({
           status: m.status,
           amount: Math.round((m.amount || 0) / 100),
           announcerEarnings: Math.round((m.announcerEarnings || m.amount * 0.85) / 100),
-          paymentStatus: payment?.status || "pending",
+          paymentStatus: payment?.status || m.paymentStatus || "pending",
           authorizedAt: payment?.authorizedAt,
           autoCaptureScheduledAt: m.autoCaptureScheduledAt,
+          sessionType: m.sessionType,
+          serviceLocation: m.serviceLocation,
+          // Infos confirmation (pour missions terminées)
+          clientConfirmedAt: m.clientConfirmedAt,
+          autoConfirmedAt: m.autoConfirmedAt,
+          readyForPayout: m.readyForPayout,
         };
       })
     );
@@ -267,6 +230,54 @@ export const getCompletedMissions = query({
           endDate: m.endDate,
           amount: Math.round((m.amount || 0) / 100),
           paymentStatus: m.paymentStatus,
+        };
+      })
+    );
+  },
+});
+
+/**
+ * Obtenir les missions annulées de l'annonceur (pour suivi des pertes)
+ */
+export const getAnnouncerCancelledMissions = query({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, args) => {
+    const { user } = await validateAnnouncerSession(ctx, args.sessionToken);
+
+    const missions = await ctx.db
+      .query("missions")
+      .withIndex("by_announcer_status", (q) =>
+        q.eq("announcerId", user._id).eq("status", "cancelled")
+      )
+      .order("desc")
+      .collect();
+
+    return Promise.all(
+      missions.map(async (m) => {
+        const client = await ctx.db.get(m.clientId);
+
+        return {
+          id: m._id,
+          cancelledBy: m.cancelledBy ?? "announcer",
+          cancelledAt: m.cancelledAt ?? m._creationTime,
+          amount: Math.round((m.amount || 0) / 100),
+          announcerEarnings: Math.round(
+            (m.announcerEarnings || (m.amount || 0) * 0.85) / 100
+          ),
+          refundAmount: m.refundAmount
+            ? Math.round(m.refundAmount / 100)
+            : undefined,
+          announcerRetainedAmount: m.announcerRetainedAmount
+            ? Math.round(m.announcerRetainedAmount / 100)
+            : 0,
+          clientName: client
+            ? `${client.firstName} ${client.lastName}`
+            : m.clientName || "Client",
+          serviceName: m.serviceName,
+          startDate: m.startDate,
+          endDate: m.endDate,
+          animal: m.animal || { name: "Animal", type: "inconnu", emoji: "🐾" },
+          cancellationReason: m.cancellationReason,
         };
       })
     );

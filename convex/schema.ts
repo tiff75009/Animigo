@@ -1436,7 +1436,9 @@ export default defineSchema({
   // Virements annonceurs
   announcerPayouts: defineTable({
     announcerId: v.id("users"),
-    amount: v.number(),                    // Montant en centimes
+    amount: v.number(),                    // Montant NET en centimes (reçu par l'annonceur)
+    grossAmount: v.optional(v.number()),   // Montant BRUT en centimes (payé par les clients)
+    commissionAmount: v.optional(v.number()), // Commission prélevée en centimes
     missions: v.array(v.id("missions")),   // Missions incluses
     status: v.union(
       v.literal("pending"),                // En attente
