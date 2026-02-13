@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { Check, Shield, Calendar, CreditCard, Loader2, Home, PartyPopper } from "lucide-react";
+import { Check, Shield, Calendar, CreditCard, Loader2, Home, PartyPopper, Clock } from "lucide-react";
 
 const floatingEmojis = [
   { emoji: "🐕", delay: 0, x: "10%", y: "20%" },
@@ -44,8 +46,31 @@ export default function MaintenanceClient() {
   // États pour la détection d'IP
   const [clientIp, setClientIp] = useState<string | null>(null);
   const [isLoadingIp, setIsLoadingIp] = useState(true);
-  const [isApproved, setIsApproved] = useState(false);
-  const [isCheckingApproval, setIsCheckingApproval] = useState(false);
+
+  // Subscription temps réel Convex : se met à jour instantanément quand l'admin approuve
+  const isApprovedRealtime = useQuery(
+    api.maintenance.visitRequests.isIpApproved,
+    clientIp ? { ipAddress: clientIp } : "skip"
+  );
+
+  // Statut de la demande existante (temps réel) — pour détecter "pending"
+  const requestStatus = useQuery(
+    api.maintenance.visitRequests.getRequestStatusByIp,
+    clientIp ? { ipAddress: clientIp } : "skip"
+  );
+
+  // Maintenance activée ? (temps réel aussi)
+  const isMaintenanceEnabled = useQuery(api.admin.config.isMaintenanceModeEnabled);
+
+  // Demande déjà envoyée (pending en BDD ou soumise localement)
+  const hasPendingRequest = requestStatus?.status === "pending" || submitted;
+
+  // Redirection automatique dès que l'IP est approuvée ou la maintenance désactivée
+  useEffect(() => {
+    if (isApprovedRealtime === true || isMaintenanceEnabled === false) {
+      router.replace("/");
+    }
+  }, [isApprovedRealtime, isMaintenanceEnabled, router]);
 
   // Récupérer l'IP publique via ipify
   useEffect(() => {
@@ -64,38 +89,14 @@ export default function MaintenanceClient() {
           return;
         }
 
-        // Vérifier d'abord si la maintenance est encore active
-        const maintenanceRes = await fetch("/api/maintenance/status");
-        const maintenanceData = await maintenanceRes.json();
-
-        // Si maintenance désactivée → rediriger vers l'accueil
-        if (!maintenanceData.maintenanceEnabled) {
-          router.replace("/");
-          return;
-        }
-
         const response = await fetch("https://api.ipify.org?format=json");
         const data = await response.json();
         setClientIp(data.ip);
-
-        // Vérifier si l'IP est approuvée
-        setIsCheckingApproval(true);
-        const statusResponse = await fetch(`/api/maintenance/check-ip?ip=${data.ip}`);
-        const statusData = await statusResponse.json();
-
-        // Si IP approuvée → rediriger automatiquement vers l'accueil
-        if (statusData.isApproved) {
-          router.replace("/");
-          return;
-        }
-
-        setIsApproved(false);
       } catch (err) {
         console.error("Erreur lors de la récupération de l'IP:", err);
         setClientIp(null);
       } finally {
         setIsLoadingIp(false);
-        setIsCheckingApproval(false);
       }
     };
 
@@ -234,19 +235,19 @@ export default function MaintenanceClient() {
           className="mb-8"
         >
           <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border ${
-            isApproved
+            isApprovedRealtime
               ? "bg-secondary/10 text-secondary border-secondary/20"
               : "bg-primary/10 text-primary border-primary/20"
           }`}>
             <span className={`w-2 h-2 rounded-full animate-pulse ${
-              isApproved ? "bg-secondary" : "bg-primary"
+              isApprovedRealtime ? "bg-secondary" : "bg-primary"
             }`} />
-            {isApproved ? "Accès autorisé" : "Site en construction"}
+            {isApprovedRealtime ? "Accès autorisé" : "Site en construction"}
           </span>
         </motion.div>
 
         {/* Si IP approuvée, afficher le message de bienvenue */}
-        {isApproved ? (
+        {isApprovedRealtime ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -329,19 +330,61 @@ export default function MaintenanceClient() {
               ))}
             </motion.div>
 
-            {/* Form */}
+            {/* Form / Pending / Loading */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.8 }}
               className="w-full max-w-md"
             >
-              {isLoadingIp || isCheckingApproval ? (
+              {isLoadingIp || (clientIp && requestStatus === undefined) ? (
                 <div className="bg-card p-6 rounded-2xl border border-primary/10 shadow-lg text-center">
                   <Loader2 className="w-8 h-8 text-primary animate-spin mx-auto mb-4" />
                   <p className="text-text-light">Détection de votre adresse IP...</p>
                 </div>
-              ) : !submitted ? (
+              ) : hasPendingRequest ? (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="bg-card p-8 rounded-2xl border border-amber-200 shadow-lg text-center"
+                >
+                  <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Clock className="w-8 h-8 text-amber-600" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-foreground mb-2">
+                    Demande en attente
+                  </h3>
+                  <p className="text-text-light mb-6">
+                    {requestStatus?.name
+                      ? `${requestStatus.name}, votre demande d'accès est en cours d'examen.`
+                      : "Votre demande d'accès est en cours d'examen."}
+                    <br />
+                    <span className="text-sm">
+                      Vous serez redirigé automatiquement dès l'approbation.
+                    </span>
+                  </p>
+
+                  {/* Barre de progression animée */}
+                  <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden mb-4">
+                    <motion.div
+                      className="h-full bg-gradient-to-r from-amber-400 via-primary to-secondary rounded-full"
+                      animate={{ x: ["-100%", "100%"] }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                      style={{ width: "50%" }}
+                    />
+                  </div>
+
+                  {clientIp && (
+                    <p className="text-xs text-text-light/60 font-mono">
+                      IP : {clientIp}
+                    </p>
+                  )}
+                </motion.div>
+              ) : (
                 <div className="bg-card p-6 rounded-2xl border border-primary/10 shadow-lg">
                   <h3 className="text-lg font-semibold text-foreground text-center mb-4">
                     Demander un accès anticipé
@@ -397,23 +440,6 @@ export default function MaintenanceClient() {
                     Votre demande sera examinée par notre équipe.
                   </p>
                 </div>
-              ) : (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="bg-card p-8 rounded-2xl border border-secondary/20 shadow-lg text-center"
-                >
-                  <div className="w-16 h-16 bg-secondary/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Check className="w-8 h-8 text-secondary" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-foreground mb-2">
-                    Demande envoyée !
-                  </h3>
-                  <p className="text-text-light">
-                    Nous avons bien reçu votre demande d'accès. Un administrateur
-                    l'examinera prochainement.
-                  </p>
-                </motion.div>
               )}
             </motion.div>
           </>

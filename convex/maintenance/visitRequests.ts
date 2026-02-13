@@ -85,6 +85,27 @@ export const isIpApproved = query({
   },
 });
 
+/**
+ * Récupérer le statut d'une demande par IP (publique, temps réel)
+ */
+export const getRequestStatusByIp = query({
+  args: { ipAddress: v.string() },
+  handler: async (ctx, args) => {
+    const request = await ctx.db
+      .query("visitRequests")
+      .withIndex("by_ip", (q) => q.eq("ipAddress", args.ipAddress))
+      .first();
+
+    if (!request) return null;
+
+    return {
+      status: request.status,
+      name: request.name,
+      createdAt: request.createdAt,
+    };
+  },
+});
+
 // ==========================================
 // MUTATIONS ADMIN
 // ==========================================
