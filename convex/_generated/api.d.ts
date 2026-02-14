@@ -60,6 +60,7 @@ import type * as client_favorites from "../client/favorites.js";
 import type * as client_profile from "../client/profile.js";
 import type * as config from "../config.js";
 import type * as crons from "../crons.js";
+import type * as dashboard_extras from "../dashboard/extras.js";
 import type * as dashboard_fiscalSummary from "../dashboard/fiscalSummary.js";
 import type * as dashboard_payments from "../dashboard/payments.js";
 import type * as http from "../http.js";
@@ -182,6 +183,7 @@ declare const fullApi: ApiFromModules<{
   "client/profile": typeof client_profile;
   config: typeof config;
   crons: typeof crons;
+  "dashboard/extras": typeof dashboard_extras;
   "dashboard/fiscalSummary": typeof dashboard_fiscalSummary;
   "dashboard/payments": typeof dashboard_payments;
   http: typeof http;

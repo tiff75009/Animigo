@@ -1473,16 +1473,24 @@ export const getAnnouncerDashboardStats = query({
       0
     );
 
-    // Missions actives pour l'affichage (les 4 plus proches)
+    // Missions actives pour l'affichage (les 6 plus proches, enrichies)
     const activeMissions = [...pendingAcceptance, ...inProgress, ...upcoming]
       .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
-      .slice(0, 4)
+      .slice(0, 6)
       .map((m) => ({
         id: m._id,
         animal: m.animal,
+        animals: m.animals,
         serviceName: m.serviceName,
         startDate: m.startDate,
+        endDate: m.endDate,
+        startTime: m.startTime,
+        endTime: m.endTime,
         status: m.status,
+        clientName: m.clientName,
+        announcerEarnings: m.announcerEarnings ?? Math.round(m.amount * 0.85),
+        serviceLocation: m.serviceLocation,
+        city: m.city,
       }));
 
     return {
@@ -1496,6 +1504,149 @@ export const getAnnouncerDashboardStats = query({
       upcomingRevenue,
       completedRevenue,
       activeMissions,
+
+      // KPIs de performance
+      // Pool = missions acceptées (tout sauf pending_acceptance et refused)
+      // Réalisation + Annulation = 100%
+      kpis: {
+        totalMissions: missions.length,
+        acceptanceRate: (() => {
+          const accepted = pendingConfirmation.length + upcoming.length + inProgress.length + completed.length;
+          const pool = accepted + cancelled.length;
+          if (pool === 0) return 100;
+          return Math.round((accepted / pool) * 100);
+        })(),
+        cancellationRate: (() => {
+          const accepted = pendingConfirmation.length + upcoming.length + inProgress.length + completed.length;
+          const pool = accepted + cancelled.length;
+          if (pool === 0) return 0;
+          return Math.round((cancelled.length / pool) * 100);
+        })(),
+        refusalRate: (() => {
+          const decided = pendingConfirmation.length + upcoming.length + inProgress.length + completed.length + cancelled.length + refused.length;
+          if (decided === 0) return 0;
+          return Math.round((refused.length / decided) * 100);
+        })(),
+      },
+
+      // Sparkline revenus - 6 derniers mois
+      monthlySparkline: (() => {
+        const now = new Date();
+        return Array.from({ length: 6 }, (_, i) => {
+          const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+          const year = d.getFullYear();
+          const month = d.getMonth();
+          const monthMissions = completed.filter((m) => {
+            const sd = new Date(m.startDate);
+            return sd.getFullYear() === year && sd.getMonth() === month;
+          });
+          return {
+            month: d.toLocaleDateString("fr-FR", { month: "short" }),
+            earnings: monthMissions.reduce(
+              (sum, m) => sum + (m.announcerEarnings ?? Math.round(m.amount * 0.85)),
+              0
+            ),
+            count: monthMissions.length,
+          };
+        });
+      })(),
+
+      // Prochain virement estimé
+      nextPayout: (() => {
+        const readyMissions = completed.filter(
+          (m) => m.readyForPayout === true && m.announcerPaymentStatus !== "paid"
+        );
+        if (readyMissions.length === 0) return null;
+        const amount = readyMissions.reduce(
+          (sum, m) => sum + (m.announcerEarnings ?? Math.round(m.amount * 0.85)),
+          0
+        );
+        const now = new Date();
+        const day = now.getDate();
+        const scheduledDate = day >= 25
+          ? new Date(now.getFullYear(), now.getMonth() + 1, 25).getTime()
+          : new Date(now.getFullYear(), now.getMonth(), 25).getTime();
+        return { amount, missionsCount: readyMissions.length, scheduledDate };
+      })(),
+    };
+  },
+});
+
+/**
+ * Récupère les services les plus réservés (top 5) pour l'annonceur
+ * avec panier moyen par service et global
+ */
+export const getAnnouncerTopServices = query({
+  args: {
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+
+    if (!session || session.expiresAt < Date.now()) {
+      return null;
+    }
+
+    const missions = await ctx.db
+      .query("missions")
+      .withIndex("by_announcer", (q) => q.eq("announcerId", session.userId))
+      .collect();
+
+    const completedMissions = missions.filter((m) => m.status === "completed");
+
+    if (completedMissions.length === 0) {
+      return {
+        topServices: [],
+        overallAverageBasket: 0,
+        totalCompleted: 0,
+      };
+    }
+
+    // Grouper par serviceCategory::serviceName
+    const serviceMap = new Map<string, { count: number; totalEarnings: number; name: string; category: string }>();
+
+    for (const m of completedMissions) {
+      const key = `${m.serviceCategory}::${m.serviceName}`;
+      const existing = serviceMap.get(key);
+      const earnings = m.announcerEarnings ?? Math.round(m.amount * 0.85);
+
+      if (existing) {
+        existing.count++;
+        existing.totalEarnings += earnings;
+      } else {
+        serviceMap.set(key, {
+          count: 1,
+          totalEarnings: earnings,
+          name: m.serviceName,
+          category: m.serviceCategory,
+        });
+      }
+    }
+
+    // Top 5 triés par count desc
+    const topServices = Array.from(serviceMap.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5)
+      .map((s) => ({
+        name: s.name,
+        category: s.category,
+        missionCount: s.count,
+        totalEarnings: s.totalEarnings,
+        averageEarnings: Math.round(s.totalEarnings / s.count),
+      }));
+
+    const totalEarnings = completedMissions.reduce(
+      (sum, m) => sum + (m.announcerEarnings ?? Math.round(m.amount * 0.85)),
+      0
+    );
+
+    return {
+      topServices,
+      overallAverageBasket: Math.round(totalEarnings / completedMissions.length),
+      totalCompleted: completedMissions.length,
     };
   },
 });

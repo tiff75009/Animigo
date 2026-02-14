@@ -19,7 +19,7 @@ function DashboardContent({ children }: { children: ReactNode }) {
         "pt-8 pb-8 md:pl-24 transition-all duration-300",
         isCollapsed ? "lg:pl-24" : "lg:pl-80"
       )}>
-        <div className="px-4 lg:px-6 max-w-6xl">
+        <div className="px-4 lg:px-8 max-w-7xl">
           {children}
         </div>
       </main>
