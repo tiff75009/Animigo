@@ -104,6 +104,7 @@ export const getMissionsByDateRange = query({
         clientName: m.clientName,
         clientPhone: m.clientPhone,
         animal: m.animal,
+        animals: m.animals,
         serviceName: m.serviceName,
         serviceCategory: m.serviceCategory,
         startDate: m.startDate,
@@ -123,6 +124,8 @@ export const getMissionsByDateRange = query({
         collectiveSlotIds: m.collectiveSlotIds,
         collectiveSlotDates,
         animalCount: m.animalCount,
+        serviceAmount: m.serviceAmount,
+        isSapApplied: m.isSapApplied,
         serviceLocation: m.serviceLocation,
         clientHistory: clientHistoryMap[m.clientId as string] || { previousMissionsCount: 0, isNewClient: true },
       };

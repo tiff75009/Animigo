@@ -390,8 +390,16 @@ export function MonthView({
                         )}
                         whileHover={{ scale: 1.05 }}
                       >
-                        <span className="sm:hidden">{mission.animal.emoji}</span>
-                        <span className="hidden sm:inline">{mission.animal.emoji} {mission.animal.name}</span>
+                        <span className="sm:hidden">
+                          {mission.animals && mission.animals.length > 1
+                            ? mission.animals.map((a) => a.emoji).join("")
+                            : mission.animal.emoji}
+                        </span>
+                        <span className="hidden sm:inline">
+                          {mission.animals && mission.animals.length > 1
+                            ? `${mission.animals.map((a) => a.emoji).join("")} ${mission.animals.map((a) => a.name).join(", ")}`
+                            : `${mission.animal.emoji} ${mission.animal.name}`}
+                        </span>
                       </motion.div>
                     ));
                 })()}

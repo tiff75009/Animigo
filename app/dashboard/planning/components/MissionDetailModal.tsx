@@ -149,15 +149,24 @@ export function MissionDetailModal({
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="w-14 h-14 bg-primary/10 rounded-full flex items-center justify-center text-3xl">
-                {mission.animal.emoji}
+                {mission.animals && mission.animals.length > 1
+                  ? mission.animals.map((a) => a.emoji).join("")
+                  : mission.animal.emoji}
               </div>
               <div>
                 <h3 className="font-bold text-foreground text-lg">
                   {mission.serviceName}
                 </h3>
                 <p className="text-sm text-text-light">
-                  {mission.animal.name} ({mission.animal.type})
+                  {mission.animals && mission.animals.length > 1
+                    ? mission.animals.map((a) => a.name).join(", ")
+                    : `${mission.animal.name} (${mission.animal.type})`}
                 </p>
+                {mission.animalCount && mission.animalCount > 1 && (
+                  <p className="text-xs text-primary font-medium">
+                    {mission.animalCount} animaux
+                  </p>
+                )}
               </div>
             </div>
             <button
@@ -237,7 +246,7 @@ export function MissionDetailModal({
             <div className="flex items-center gap-3 text-sm">
               <Euro className="w-4 h-4 text-text-light flex-shrink-0" />
               <span className="text-foreground font-semibold">
-                {formatPrice(mission.amount)}
+                {formatPrice(mission.serviceAmount ?? mission.amount)}
               </span>
               <span
                 className={cn(
@@ -250,11 +259,16 @@ export function MissionDetailModal({
                 )}
               >
                 {mission.paymentStatus === "paid"
-                  ? "Paye"
+                  ? "Payé"
                   : mission.paymentStatus === "pending"
                     ? "En attente"
-                    : "Non du"}
+                    : "Non dû"}
               </span>
+              {mission.isSapApplied && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+                  SAP
+                </span>
+              )}
             </div>
           </div>
 

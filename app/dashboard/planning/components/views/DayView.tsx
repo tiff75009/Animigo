@@ -290,9 +290,15 @@ export function DayView({
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xl">{mission.animal.emoji}</span>
+                      <span className="text-xl">
+                        {mission.animals && mission.animals.length > 1
+                          ? mission.animals.map((a) => a.emoji).join("")
+                          : mission.animal.emoji}
+                      </span>
                       <span className="font-bold truncate">
-                        {mission.animal.name}
+                        {mission.animals && mission.animals.length > 1
+                          ? mission.animals.map((a) => a.name).join(", ")
+                          : mission.animal.name}
                       </span>
                     </div>
                     <p className="text-sm opacity-90 truncate">
@@ -325,7 +331,7 @@ export function DayView({
                         </div>
                         <div className="flex items-center gap-1">
                           <Euro className="w-3 h-3" />
-                          <span>{formatPrice(mission.amount)}</span>
+                          <span>{formatPrice(mission.serviceAmount ?? mission.amount)}</span>
                         </div>
                       </>
                     )}

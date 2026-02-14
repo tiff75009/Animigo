@@ -416,7 +416,9 @@ export function WeekView({
                   whileHover={{ scale: 1.02, zIndex: 50 }}
                 >
                   <div className="font-medium truncate">
-                    {mission.animal.emoji} {mission.animal.name}
+                    {mission.animals && mission.animals.length > 1
+                      ? `${mission.animals.map((a) => a.emoji).join("")} ${mission.animals.map((a) => a.name).join(", ")}`
+                      : `${mission.animal.emoji} ${mission.animal.name}`}
                   </div>
                   <div className="truncate opacity-80">{mission.serviceName}</div>
                 </motion.div>

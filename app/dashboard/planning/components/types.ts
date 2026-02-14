@@ -21,6 +21,11 @@ export interface Mission {
     type: string;
     emoji: string;
   };
+  animals?: Array<{
+    name: string;
+    type: string;
+    emoji: string;
+  }>;
   serviceName: string;
   serviceCategory: string;
   startDate: string;
@@ -42,6 +47,8 @@ export interface Mission {
   collectiveSlotIds?: string[];
   collectiveSlotDates?: string[]; // Dates des créneaux pour les formules collectives
   animalCount?: number;
+  serviceAmount?: number;
+  isSapApplied?: boolean;
   // Lieu de prestation
   serviceLocation?: "announcer_home" | "client_home";
   // Historique client avec cet annonceur
