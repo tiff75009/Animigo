@@ -9,7 +9,7 @@
 
 import { DatabaseReader } from "../_generated/server";
 import { Id, Doc } from "../_generated/dataModel";
-import { missionsOverlapWithBuffers } from "./timeUtils";
+import { missionsOverlap, missionsOverlapWithBuffers } from "./timeUtils";
 
 // Type pour un créneau de mission
 interface MissionTimeSlot {
@@ -377,4 +377,144 @@ export async function checkBookingConflict(
     hasConflict: false,
     isCapacityBased: false,
   };
+}
+
+/**
+ * Vérifie si un ou plusieurs animaux du client sont déjà réservés
+ * sur un créneau qui chevauche la nouvelle réservation.
+ *
+ * Cela empêche un client de réserver deux services différents
+ * pour le MÊME animal au même moment.
+ *
+ * @param db - Le contexte de base de données
+ * @param clientId - L'ID du client propriétaire des animaux
+ * @param animalIds - Les IDs des animaux de la nouvelle réservation
+ * @param newSlot - Le créneau de la nouvelle réservation
+ * @param sessions - Les séances (pour formules multi-sessions)
+ * @param collectiveSlotIds - Les IDs des créneaux collectifs (pour formules collectives)
+ * @returns Un objet indiquant s'il y a un conflit et un message d'erreur
+ */
+export async function checkAnimalBookingConflict(
+  db: DatabaseReader,
+  clientId: Id<"users">,
+  animalIds: Id<"animals">[],
+  newSlot: MissionTimeSlot,
+  sessions?: Array<{ date: string; startTime: string; endTime: string }>,
+  collectiveSlotIds?: Id<"collectiveSlots">[],
+): Promise<{
+  hasConflict: boolean;
+  conflictMessage?: string;
+}> {
+  if (animalIds.length === 0) return { hasConflict: false };
+
+  // Récupérer toutes les missions actives du client
+  const existingMissions = await db
+    .query("missions")
+    .withIndex("by_client", (q) => q.eq("clientId", clientId))
+    .filter((q) =>
+      q.and(
+        q.neq(q.field("status"), "cancelled"),
+        q.neq(q.field("status"), "refused"),
+        q.neq(q.field("status"), "completed")
+      )
+    )
+    .collect();
+
+  for (const mission of existingMissions) {
+    // Vérifier si un animal de la nouvelle réservation est dans cette mission
+    const missionAnimalIds: string[] = mission.animalIds
+      ? mission.animalIds.map(String)
+      : mission.animalId
+        ? [String(mission.animalId)]
+        : [];
+
+    const conflictingAnimalId = animalIds.find((id) =>
+      missionAnimalIds.includes(String(id))
+    );
+
+    if (!conflictingAnimalId) continue;
+
+    // Il y a un animal en commun — vérifier le chevauchement temporel
+    // Récupérer le nom de l'animal conflictuel
+    const conflictAnimal = await db.get(conflictingAnimalId);
+    const animalName = conflictAnimal?.name ?? "votre animal";
+
+    // Construire les créneaux de la mission existante
+    const existingSlots: MissionTimeSlot[] = [];
+
+    if (mission.sessions && mission.sessions.length > 0) {
+      // Mission multi-sessions : chaque session est un créneau
+      for (const s of mission.sessions) {
+        existingSlots.push({
+          startDate: s.date,
+          endDate: s.date,
+          startTime: s.startTime,
+          endTime: s.endTime,
+        });
+      }
+    } else if (mission.collectiveSlotIds && mission.collectiveSlotIds.length > 0) {
+      // Mission collective : lire les créneaux collectifs
+      for (const slotId of mission.collectiveSlotIds) {
+        const slot = await db.get(slotId);
+        if (slot) {
+          existingSlots.push({
+            startDate: slot.date,
+            endDate: slot.date,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+          });
+        }
+      }
+    } else {
+      // Mission standard
+      existingSlots.push({
+        startDate: mission.startDate,
+        endDate: mission.endDate,
+        startTime: mission.startTime,
+        endTime: mission.endTime,
+      });
+    }
+
+    // Construire les créneaux de la nouvelle réservation
+    const newSlots: MissionTimeSlot[] = [];
+
+    if (sessions && sessions.length > 0) {
+      for (const s of sessions) {
+        newSlots.push({
+          startDate: s.date,
+          endDate: s.date,
+          startTime: s.startTime,
+          endTime: s.endTime,
+        });
+      }
+    } else if (collectiveSlotIds && collectiveSlotIds.length > 0) {
+      for (const slotId of collectiveSlotIds) {
+        const slot = await db.get(slotId);
+        if (slot) {
+          newSlots.push({
+            startDate: slot.date,
+            endDate: slot.date,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+          });
+        }
+      }
+    } else {
+      newSlots.push(newSlot);
+    }
+
+    // Vérifier le chevauchement entre chaque paire de créneaux
+    for (const existingS of existingSlots) {
+      for (const newS of newSlots) {
+        if (missionsOverlap(existingS, newS)) {
+          return {
+            hasConflict: true,
+            conflictMessage: `${animalName} est déjà réservé(e) sur ce créneau (${existingS.startDate}${existingS.startTime ? ` ${existingS.startTime}` : ""}). Veuillez choisir un autre créneau ou un autre animal.`,
+          };
+        }
+      }
+    }
+  }
+
+  return { hasConflict: false };
 }

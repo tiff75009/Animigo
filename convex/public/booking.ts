@@ -5,7 +5,7 @@ import { ConvexError } from "convex/values";
 import { ANIMAL_TYPES } from "../animals";
 import { internal } from "../_generated/api";
 import { missionsOverlap, missionsOverlapWithBuffers, addMinutesToTime } from "../lib/timeUtils";
-import { checkBookingConflict } from "../lib/capacityUtils";
+import { checkBookingConflict, checkAnimalBookingConflict } from "../lib/capacityUtils";
 import { hashPassword, generateUniqueSlug } from "../auth/utils";
 import {
   calculateAcceptanceDeadline,
@@ -236,6 +236,31 @@ export const createPendingBooking = mutation({
 
       if (conflictCheck.hasConflict) {
         throw new ConvexError(conflictCheck.conflictMessage || "L'annonceur n'est pas disponible sur ce créneau");
+      }
+    }
+
+    // Vérifier les doublons d'animaux si l'utilisateur est connecté et a sélectionné des animaux
+    if (userId && args.selectedAnimalIds && args.selectedAnimalIds.length > 0) {
+      const typedAnimalIds = args.selectedAnimalIds.map(
+        (id) => id as Id<"animals">
+      );
+
+      const animalConflict = await checkAnimalBookingConflict(
+        ctx.db,
+        userId,
+        typedAnimalIds,
+        {
+          startDate: args.startDate,
+          endDate: args.endDate,
+          startTime: args.startTime,
+          endTime,
+        },
+        args.sessions,
+        args.collectiveSlotIds,
+      );
+
+      if (animalConflict.hasConflict) {
+        throw new ConvexError(animalConflict.conflictMessage || "Un de vos animaux est déjà réservé sur ce créneau");
       }
     }
 
@@ -588,6 +613,25 @@ export const finalizeBooking = mutation({
       allAnimals.push({ name: a.name, type: a.type, emoji: aType?.emoji ?? "🐾" });
     }
     console.log("[finalizeBooking] All animals resolved:", allAnimals.length);
+
+    // Vérifier que les animaux ne sont pas déjà réservés sur le même créneau
+    const animalConflict = await checkAnimalBookingConflict(
+      ctx.db,
+      session.userId,
+      allAnimalIds,
+      {
+        startDate: pendingBooking.startDate,
+        endDate: pendingBooking.endDate,
+        startTime: pendingBooking.startTime,
+        endTime: pendingBooking.endTime,
+      },
+      pendingBooking.sessions,
+      pendingBooking.collectiveSlotIds,
+    );
+
+    if (animalConflict.hasConflict) {
+      throw new ConvexError(animalConflict.conflictMessage || "Un de vos animaux est déjà réservé sur ce créneau");
+    }
 
     // Récupérer l'utilisateur client
     const client = await ctx.db.get(session.userId);
