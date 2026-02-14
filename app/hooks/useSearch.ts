@@ -1123,6 +1123,13 @@ export function useFormuleSearch() {
       time?: string;
       sessionType?: "individual" | "collective";
       serviceLocation?: ("announcer_home" | "client_home")[];
+      accountTypes?: string[];
+      verifiedOnly?: boolean;
+      withPhotoOnly?: boolean;
+      hasGarden?: boolean;
+      hasVehicle?: boolean;
+      ownsAnimals?: string[];
+      noAnimals?: boolean;
       priceMin?: number;
       priceMax?: number;
       sortBy?: string;
@@ -1169,6 +1176,27 @@ export function useFormuleSearch() {
     }
     if (advancedFilters.serviceLocation && advancedFilters.serviceLocation.length > 0) {
       args.serviceLocation = advancedFilters.serviceLocation;
+    }
+    if (advancedFilters.accountTypes && advancedFilters.accountTypes.length > 0) {
+      args.accountTypes = advancedFilters.accountTypes;
+    }
+    if (advancedFilters.verifiedOnly) {
+      args.verifiedOnly = true;
+    }
+    if (advancedFilters.withPhotoOnly) {
+      args.withPhotoOnly = true;
+    }
+    if (advancedFilters.hasGarden === true) {
+      args.hasGarden = true;
+    }
+    if (advancedFilters.hasVehicle === true) {
+      args.hasVehicle = true;
+    }
+    if (advancedFilters.ownsAnimals && advancedFilters.ownsAnimals.length > 0) {
+      args.ownsAnimals = advancedFilters.ownsAnimals;
+    }
+    if (advancedFilters.noAnimals) {
+      args.noAnimals = true;
     }
 
     return args;

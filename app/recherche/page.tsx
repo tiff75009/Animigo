@@ -3,10 +3,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { useQueryStates, parseAsString, parseAsInteger, parseAsStringLiteral } from "nuqs";
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/app/hooks/useAuth";
+import { useGeolocation } from "@/app/hooks/useGeolocation";
 import {
   Search,
   MapPin,
@@ -19,6 +20,8 @@ import {
   List,
   Home,
   Scissors,
+  LocateFixed,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { useFormuleSearch, type FormuleResult } from "@/app/hooks/useSearch";
@@ -73,7 +76,7 @@ const searchParamsParsers = {
   mode: parseAsStringLiteral(["garde", "services"] as const).withDefault("garde"),
   animal: parseAsString,
   category: parseAsString,
-  radius: parseAsInteger.withDefault(10),
+  radius: parseAsInteger.withDefault(50),
   date: parseAsString,
   startDate: parseAsString,
   endDate: parseAsString,
@@ -84,6 +87,11 @@ export default function RecherchePage() {
   // Auth pour récupérer l'adresse du profil
   const { token, isAuthenticated, user: authUser } = useAuth();
   const isAnnouncer = authUser?.accountType === "annonceur_pro" || authUser?.accountType === "annonceur_particulier";
+
+  // Géolocalisation
+  const { coordinates: geoCoords, isLoading: isGeoLoading, error: geoError, requestLocation } = useGeolocation();
+  const reverseGeocode = useAction(api.api.googleMaps.reverseGeocode);
+  const [isReverseGeocoding, setIsReverseGeocoding] = useState(false);
 
   // URL state with nuqs
   const [urlParams, setUrlParams] = useQueryStates(searchParamsParsers, {
@@ -192,7 +200,7 @@ export default function RecherchePage() {
       mode: "garde",
       animal: null,
       category: null,
-      radius: 10,
+      radius: 50,
       date: null,
       startDate: null,
       endDate: null,
@@ -277,8 +285,22 @@ export default function RecherchePage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const heroSearchRef = useRef<HTMLDivElement>(null);
   const filtersRef = useRef<HTMLDivElement>(null);
   const datePickerRef = useRef<HTMLDivElement>(null);
+
+  // Détecter quand la barre de recherche hero sort de la vue
+  useEffect(() => {
+    const target = heroSearchRef.current;
+    if (!target) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsScrolled(!entry.isIntersecting),
+      { threshold: 0, rootMargin: "-80px 0px 0px 0px" }
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
 
   // Flatten categories from hierarchical structure
   const flattenedCategories: ServiceCategory[] = (() => {
@@ -363,11 +385,26 @@ export default function RecherchePage() {
   ].filter(Boolean).length;
 
 
-  // Déterminer si on doit afficher l'icône de localisation
-  // Cacher si : utilisateur connecté avec adresse dans son profil
-  // Afficher si : pas connecté OU pas d'adresse dans le profil
-  const hasProfileLocation = isAuthenticated && userLocation?.coordinates;
-  const showLocationIcon = !hasProfileLocation;
+  // Géolocalisation : handler pour le bouton "Me localiser"
+  const handleGeolocate = useCallback(async () => {
+    await requestLocation();
+  }, [requestLocation]);
+
+  // Reverse geocode quand on obtient les coordonnées GPS
+  useEffect(() => {
+    if (geoCoords && !geoError && !isReverseGeocoding) {
+      setIsReverseGeocoding(true);
+      reverseGeocode({ lat: geoCoords.lat, lng: geoCoords.lng })
+        .then((result) => {
+          const addressText = result.success && result.address ? result.address : "Ma position";
+          setLocation({ text: addressText, coordinates: geoCoords });
+        })
+        .catch(() => {
+          setLocation({ text: "Ma position", coordinates: geoCoords });
+        })
+        .finally(() => setIsReverseGeocoding(false));
+    }
+  }, [geoCoords, geoError]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="min-h-screen bg-gray-50/50">
@@ -375,7 +412,7 @@ export default function RecherchePage() {
       <Navbar />
 
       {/* Hero Section with Mode Toggle */}
-      <section className="pt-4 pb-6 bg-gradient-to-b from-primary/5 via-background to-background relative overflow-hidden">
+      <section className="pt-4 pb-6 bg-gradient-to-b from-primary/5 via-background to-background relative">
         {/* Decorative elements */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           {/* Gradient orbs */}
@@ -489,30 +526,173 @@ export default function RecherchePage() {
               </motion.div>
             </div>
 
-            {/* Barre de recherche de localisation */}
+            {/* Barre de recherche + Rayon + Me localiser */}
             <motion.div
+              ref={heroSearchRef}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.15 }}
-              className="mt-4 sm:mt-6 max-w-xl mx-auto px-4 sm:px-0"
+              className="mt-4 sm:mt-6 max-w-2xl mx-auto px-4 sm:px-0 relative z-40"
             >
-              <LocationSearchBar
-                value={filters.location}
-                onChange={setLocation}
-                placeholder="Rechercher une ville..."
-                showGeolocationButton={showLocationIcon}
-              />
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <LocationSearchBar
+                    value={filters.location}
+                    onChange={setLocation}
+                    placeholder="Rechercher une ville..."
+                    showGeolocationButton={false}
+                  />
+                </div>
+                {/* Bouton Me localiser */}
+                <motion.button
+                  type="button"
+                  onClick={handleGeolocate}
+                  disabled={isGeoLoading || isReverseGeocoding}
+                  className={cn(
+                    "flex items-center justify-center w-12 h-12 rounded-xl border-2 transition-all flex-shrink-0",
+                    filters.location.coordinates
+                      ? "border-primary bg-primary text-white"
+                      : "border-foreground/10 bg-white text-foreground hover:border-primary hover:text-primary",
+                    (isGeoLoading || isReverseGeocoding) && "opacity-50 cursor-not-allowed"
+                  )}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  title="Me localiser"
+                >
+                  {isGeoLoading || isReverseGeocoding ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <LocateFixed className="w-5 h-5" />
+                  )}
+                </motion.button>
+                {/* Radius selector */}
+                <div className="relative flex-shrink-0">
+                  <button
+                    onClick={() => setOpenDropdown(openDropdown === "radius" ? null : "radius")}
+                    className="flex items-center gap-1.5 px-3 sm:px-4 py-3 bg-white border-2 border-foreground/10 rounded-xl text-sm font-medium text-gray-700 hover:border-primary transition-all whitespace-nowrap"
+                  >
+                    <MapPin className="w-4 h-4 text-primary" />
+                    <span>{filters.radius} km</span>
+                    <ChevronDown className={cn("w-3.5 h-3.5 text-gray-400 transition-transform", openDropdown === "radius" && "rotate-180")} />
+                  </button>
+                  <AnimatePresence>
+                    {openDropdown === "radius" && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 4 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute top-full right-0 mt-2 py-2 bg-white rounded-xl shadow-xl border border-gray-200 z-[100] min-w-[140px]"
+                      >
+                        {radiusOptions.map((r) => (
+                          <button
+                            key={r}
+                            onClick={() => {
+                              setRadius(r);
+                              setOpenDropdown(null);
+                            }}
+                            className={cn(
+                              "w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 transition-colors",
+                              filters.radius === r && "bg-primary/5 text-primary font-medium"
+                            )}
+                          >
+                            {r} km
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
             </motion.div>
           </motion.div>
         </div>
       </section>
 
-      {/* Filters Section - Mobile optimized */}
-      <section className="sticky top-16 z-30 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-sm overflow-visible">
-        <div ref={filtersRef} className="overflow-visible">
-          {/* Animal Type Pills - Horizontal scroll on mobile */}
-          <div className="overflow-x-auto scrollbar-hide">
-            <div className="flex items-center gap-1 p-2 sm:p-3 sm:justify-center min-w-max sm:min-w-0">
+      {/* Sticky bar : recherche compacte (au scroll) + types d'animaux + catégorie */}
+      <section className="sticky top-16 z-30 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-sm">
+        {/* Barre de recherche compacte visible au scroll - transition CSS fluide */}
+        <div
+          className={cn(
+            "grid transition-all duration-200 ease-out border-b border-gray-100",
+            isScrolled ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+          )}
+        >
+          <div className="overflow-hidden">
+            <div className="max-w-2xl mx-auto px-3 py-2 flex items-center gap-2">
+              <div className="flex-1 relative z-40">
+                <LocationSearchBar
+                  value={filters.location}
+                  onChange={setLocation}
+                  placeholder="Rechercher une ville..."
+                  showGeolocationButton={false}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleGeolocate}
+                disabled={isGeoLoading || isReverseGeocoding}
+                className={cn(
+                  "flex items-center justify-center w-10 h-10 rounded-xl border-2 transition-all flex-shrink-0",
+                  filters.location.coordinates
+                    ? "border-primary bg-primary text-white"
+                    : "border-foreground/10 bg-white text-foreground hover:border-primary hover:text-primary",
+                  (isGeoLoading || isReverseGeocoding) && "opacity-50 cursor-not-allowed"
+                )}
+                title="Me localiser"
+              >
+                {isGeoLoading || isReverseGeocoding ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <LocateFixed className="w-4 h-4" />
+                )}
+              </button>
+              <div className="relative flex-shrink-0">
+                <button
+                  onClick={() => setOpenDropdown(openDropdown === "radius-sticky" ? null : "radius-sticky")}
+                  className="flex items-center gap-1 px-2.5 py-2 bg-white border-2 border-foreground/10 rounded-xl text-sm font-medium text-gray-700 hover:border-primary transition-all whitespace-nowrap"
+                >
+                  <MapPin className="w-3.5 h-3.5 text-primary" />
+                  <span>{filters.radius} km</span>
+                  <ChevronDown className={cn("w-3 h-3 text-gray-400 transition-transform", openDropdown === "radius-sticky" && "rotate-180")} />
+                </button>
+                <AnimatePresence>
+                  {openDropdown === "radius-sticky" && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 4 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute top-full right-0 mt-2 py-2 bg-white rounded-xl shadow-xl border border-gray-200 z-[100] min-w-[140px]"
+                    >
+                      {radiusOptions.map((r) => (
+                        <button
+                          key={r}
+                          onClick={() => {
+                            setRadius(r);
+                            setOpenDropdown(null);
+                          }}
+                          className={cn(
+                            "w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 transition-colors",
+                            filters.radius === r && "bg-primary/5 text-primary font-medium"
+                          )}
+                        >
+                          {r} km
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Ligne animaux + catégorie + reset */}
+        <div className="flex items-center gap-1 p-2 sm:p-3">
+          {/* Pilules animaux - scrollable */}
+          <div className="overflow-x-auto scrollbar-hide flex-1">
+            <div className="flex items-center gap-1 min-w-max sm:min-w-0 sm:justify-center">
               <button
                 onClick={() => setAnimalType(null)}
                 className={cn(
@@ -543,212 +723,184 @@ export default function RecherchePage() {
             </div>
           </div>
 
-          {/* Other Filters - Compact on mobile */}
-          <div className="flex items-center gap-2 px-3 sm:px-4 pb-3 sm:justify-center overflow-visible">
-            {/* Service Category - Only show in "services" mode */}
-            {filters.searchMode === "services" && (
-              <FilterDropdown
-                label={filters.category?.name || "Type de service"}
-                icon={filters.category?.icon || "✨"}
-                isActive={!!filters.category}
-                isOpen={openDropdown === "category"}
-                onToggle={() => setOpenDropdown(openDropdown === "category" ? null : "category")}
+          {/* Catégorie de service - EN DEHORS de overflow pour que le dropdown ne soit pas coupé */}
+          {filters.searchMode === "services" && (
+            <FilterDropdown
+              label={filters.category?.name || "Type de service"}
+              icon={filters.category?.icon || "✨"}
+              isActive={!!filters.category}
+              isOpen={openDropdown === "category"}
+              onToggle={() => setOpenDropdown(openDropdown === "category" ? null : "category")}
+            >
+              <button
+                onClick={() => {
+                  setCategory(null);
+                  setOpenDropdown(null);
+                }}
+                className={cn(
+                  "w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 hover:bg-gray-50 transition-colors rounded-lg",
+                  !filters.category && "bg-secondary/5 text-secondary font-medium"
+                )}
               >
+                <span>✨</span>
+                <span>Tous les services</span>
+              </button>
+              <div className="h-px bg-gray-100 my-1" />
+              {filteredCategories?.map((cat: ServiceCategory) => (
                 <button
+                  key={cat.id}
                   onClick={() => {
-                    setCategory(null);
+                    setCategory({
+                      id: cat.id,
+                      slug: cat.slug,
+                      name: cat.name,
+                      icon: cat.icon,
+                      imageUrl: cat.imageUrl,
+                      billingType: cat.billingType as "hourly" | "daily" | "flexible" | undefined,
+                    });
                     setOpenDropdown(null);
                   }}
                   className={cn(
                     "w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 hover:bg-gray-50 transition-colors rounded-lg",
-                    !filters.category && "bg-secondary/5 text-secondary font-medium"
+                    filters.category?.slug === cat.slug && "bg-secondary/5 text-secondary font-medium"
                   )}
                 >
-                  <span>✨</span>
-                  <span>Tous les services</span>
-                </button>
-                <div className="h-px bg-gray-100 my-1" />
-                {filteredCategories?.map((cat: ServiceCategory) => (
-                  <button
-                    key={cat.id}
-                    onClick={() => {
-                      setCategory({
-                        id: cat.id,
-                        slug: cat.slug,
-                        name: cat.name,
-                        icon: cat.icon,
-                        imageUrl: cat.imageUrl,
-                        billingType: cat.billingType as "hourly" | "daily" | "flexible" | undefined,
-                      });
-                      setOpenDropdown(null);
-                    }}
-                    className={cn(
-                      "w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 hover:bg-gray-50 transition-colors rounded-lg",
-                      filters.category?.slug === cat.slug && "bg-secondary/5 text-secondary font-medium"
-                    )}
-                  >
-                    <span>{cat.icon}</span>
-                    <span>{cat.name}</span>
-                  </button>
-                ))}
-              </FilterDropdown>
-            )}
-
-            {/* Radius Filter - Always visible but compact */}
-            <FilterDropdown
-              label={`${filters.radius} km`}
-              icon={<MapPin className="w-3.5 h-3.5" />}
-              isActive={false}
-              isOpen={openDropdown === "radius"}
-              onToggle={() => setOpenDropdown(openDropdown === "radius" ? null : "radius")}
-              minWidth="min-w-[140px]"
-            >
-              {radiusOptions.map((r) => (
-                <button
-                  key={r}
-                  onClick={() => {
-                    setRadius(r);
-                    setOpenDropdown(null);
-                  }}
-                  className={cn(
-                    "w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 transition-colors",
-                    filters.radius === r && "bg-primary/5 text-primary font-medium"
-                  )}
-                >
-                  {r} km
+                  <span>{cat.icon}</span>
+                  <span>{cat.name}</span>
                 </button>
               ))}
             </FilterDropdown>
+          )}
 
-            {/* Date Filter */}
-            <div className="relative" ref={datePickerRef}>
-              <button
-                onClick={() => setShowDatePicker(!showDatePicker)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all",
-                  filters.date || filters.startDate
-                    ? filters.searchMode === "garde" ? "bg-primary text-white" : "bg-secondary text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                )}
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                <span>
-                  {filters.date
-                    ? new Date(filters.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
-                    : filters.startDate && filters.endDate
-                    ? `${new Date(filters.startDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} - ${new Date(filters.endDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}`
-                    : "Dates"}
-                </span>
-                {(filters.date || filters.startDate) && (
-                  <span
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      resetDateFilters();
-                    }}
-                    className="ml-1 p-0.5 hover:bg-white/20 rounded-full cursor-pointer"
-                  >
-                    <X className="w-3 h-3" />
-                  </span>
-                )}
-                <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", showDatePicker && "rotate-180")} />
-              </button>
-
-              <DatePickerDropdown
-                isOpen={showDatePicker}
-                mode={filters.searchMode === "garde" ? "range" : "single"}
-                selectedDate={filters.date}
-                startDate={filters.startDate}
-                endDate={filters.endDate}
-                onDateSelect={(date) => {
-                  setDate(date);
-                  setShowDatePicker(false);
-                }}
-                onRangeSelect={(start, end) => {
-                  setDateRange(start, end);
-                  setShowDatePicker(false);
-                }}
-                onClose={() => setShowDatePicker(false)}
-                accentColor={filters.searchMode === "garde" ? "primary" : "secondary"}
-              />
-            </div>
-
-            {/* Main Filters Button - Opens drawer */}
+          {hasAnyFilter && (
             <button
-              onClick={() => setShowFilters(true)}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all",
-                hasAdvancedFilters
-                  ? filters.searchMode === "garde" ? "bg-primary text-white" : "bg-secondary text-white"
-                  : "bg-gray-100 text-gray-700"
-              )}
+              onClick={resetAllFilters}
+              className="flex items-center gap-1 px-2 py-1.5 text-sm font-medium text-gray-400 hover:text-primary transition-colors flex-shrink-0"
             >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              <span>Filtres</span>
-              {activeFiltersCount > 0 && (
-                <span className="w-5 h-5 bg-white/20 rounded-full text-xs flex items-center justify-center">
-                  {activeFiltersCount}
-                </span>
-              )}
+              <X className="w-4 h-4" />
             </button>
-
-            {hasAnyFilter && (
-              <button
-                onClick={resetAllFilters}
-                className="flex items-center gap-1 px-2 py-1.5 text-sm font-medium text-gray-400 hover:text-primary transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
+          )}
         </div>
       </section>
 
       {/* Results Section */}
       <section className="py-4 sm:py-8 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
-          {/* Results Header - Compact on mobile */}
-          <div className="flex items-center justify-between gap-2 mb-4 sm:mb-8">
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-              <div className={cn(
-                "hidden sm:flex p-2.5 rounded-xl",
-                filters.searchMode === "garde"
-                  ? "bg-gradient-to-br from-primary/10 to-secondary/10"
-                  : "bg-gradient-to-br from-secondary/10 to-purple/10"
-              )}>
-                <Sparkles className={cn("w-5 h-5", filters.searchMode === "garde" ? "text-primary" : "text-secondary")} />
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-base sm:text-xl font-bold text-gray-900 truncate">
-                  {isLoading ? (
-                    <span className="flex items-center gap-2">
-                      <span className={cn(
-                        "w-3 h-3 sm:w-4 sm:h-4 border-2 border-t-transparent rounded-full animate-spin",
-                        filters.searchMode === "garde" ? "border-primary" : "border-secondary"
-                      )} />
-                      <span className="sm:hidden">Recherche...</span>
-                      <span className="hidden sm:inline">Recherche en cours...</span>
-                    </span>
-                  ) : (
-                    <>
-                      <span className="sm:hidden">{results.length} prestation{results.length > 1 ? "s" : ""}</span>
-                      <span className="hidden sm:inline">
-                        {results.length} prestation{results.length > 1 ? "s" : ""}
-                        <span className="text-gray-400 font-normal"> disponible{results.length > 1 ? "s" : ""}</span>
+          {/* Results Header avec filtres Date + Filtres avancés */}
+          <div className="flex flex-col gap-3 mb-4 sm:mb-6">
+            {/* Ligne 1 : compteur + vue */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <div className={cn(
+                  "hidden sm:flex p-2.5 rounded-xl",
+                  filters.searchMode === "garde"
+                    ? "bg-gradient-to-br from-primary/10 to-secondary/10"
+                    : "bg-gradient-to-br from-secondary/10 to-purple/10"
+                )}>
+                  <Sparkles className={cn("w-5 h-5", filters.searchMode === "garde" ? "text-primary" : "text-secondary")} />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-base sm:text-xl font-bold text-gray-900 truncate">
+                    {isLoading ? (
+                      <span className="flex items-center gap-2">
+                        <span className={cn(
+                          "w-3 h-3 sm:w-4 sm:h-4 border-2 border-t-transparent rounded-full animate-spin",
+                          filters.searchMode === "garde" ? "border-primary" : "border-secondary"
+                        )} />
+                        <span className="sm:hidden">Recherche...</span>
+                        <span className="hidden sm:inline">Recherche en cours...</span>
                       </span>
-                    </>
-                  )}
-                </h2>
-                {!isLoading && results.length > 0 && (
-                  <p className="hidden sm:block text-sm text-gray-500 mt-0.5">
-                    Services disponibles dans votre zone
-                  </p>
-                )}
+                    ) : (
+                      <>
+                        <span className="sm:hidden">{results.length} prestation{results.length > 1 ? "s" : ""}</span>
+                        <span className="hidden sm:inline">
+                          {results.length} prestation{results.length > 1 ? "s" : ""}
+                          <span className="text-gray-400 font-normal"> disponible{results.length > 1 ? "s" : ""}</span>
+                        </span>
+                      </>
+                    )}
+                  </h2>
+                </div>
+              </div>
+
+              {/* View toggle - Hidden on mobile */}
+              <div className="hidden sm:block">
+                <ViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
               </div>
             </div>
 
-            {/* View toggle - Hidden on mobile */}
-            <div className="hidden sm:block">
-              <ViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
+            {/* Ligne 2 : Date + Filtres avancés */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Date Filter */}
+              <div className="relative" ref={datePickerRef}>
+                <button
+                  onClick={() => setShowDatePicker(!showDatePicker)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all",
+                    filters.date || filters.startDate
+                      ? filters.searchMode === "garde" ? "bg-primary text-white" : "bg-secondary text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  )}
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>
+                    {filters.date
+                      ? new Date(filters.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
+                      : filters.startDate && filters.endDate
+                      ? `${new Date(filters.startDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} - ${new Date(filters.endDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}`
+                      : "Dates"}
+                  </span>
+                  {(filters.date || filters.startDate) && (
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        resetDateFilters();
+                      }}
+                      className="ml-1 p-0.5 hover:bg-white/20 rounded-full cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </span>
+                  )}
+                  <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", showDatePicker && "rotate-180")} />
+                </button>
+
+                <DatePickerDropdown
+                  isOpen={showDatePicker}
+                  mode={filters.searchMode === "garde" ? "range" : "single"}
+                  selectedDate={filters.date}
+                  startDate={filters.startDate}
+                  endDate={filters.endDate}
+                  onDateSelect={(date) => {
+                    setDate(date);
+                    setShowDatePicker(false);
+                  }}
+                  onRangeSelect={(start, end) => {
+                    setDateRange(start, end);
+                    setShowDatePicker(false);
+                  }}
+                  onClose={() => setShowDatePicker(false)}
+                  accentColor={filters.searchMode === "garde" ? "primary" : "secondary"}
+                />
+              </div>
+
+              {/* Main Filters Button */}
+              <button
+                onClick={() => setShowFilters(true)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all",
+                  hasAdvancedFilters
+                    ? filters.searchMode === "garde" ? "bg-primary text-white" : "bg-secondary text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                )}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span>Filtres</span>
+                {activeFiltersCount > 0 && (
+                  <span className="w-5 h-5 bg-white/20 rounded-full text-xs flex items-center justify-center">
+                    {activeFiltersCount}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
 

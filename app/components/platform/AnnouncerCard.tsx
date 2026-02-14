@@ -13,6 +13,9 @@ import {
   Calendar,
   Clock,
   Users,
+  Building2,
+  Briefcase,
+  User,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { type AnnouncerResult, type NextSlot, type CollectiveSlotInfo } from "@/app/hooks/useSearch";
@@ -61,6 +64,30 @@ const availabilityConfig = {
   partial: { color: "bg-amber-500", text: "Partiellement dispo", textColor: "text-amber-700", bg: "bg-amber-50" },
   unavailable: { color: "bg-gray-400", text: "Indisponible", textColor: "text-gray-600", bg: "bg-gray-100" },
 };
+
+const statusTypeConfig = {
+  professionnel: {
+    label: "Pro",
+    icon: Building2,
+    bg: "bg-blue-50",
+    text: "text-blue-700",
+    border: "border-blue-200",
+  },
+  micro_entrepreneur: {
+    label: "Auto-entrepreneur",
+    icon: Briefcase,
+    bg: "bg-purple-50",
+    text: "text-purple-700",
+    border: "border-purple-200",
+  },
+  particulier: {
+    label: "Particulier",
+    icon: User,
+    bg: "bg-amber-50",
+    text: "text-amber-700",
+    border: "border-amber-200",
+  },
+} as const;
 
 // Grid View Card
 export function AnnouncerCardGrid({ announcer, onShowFormulas, index }: AnnouncerCardProps) {
@@ -114,10 +141,26 @@ export function AnnouncerCardGrid({ announcer, onShowFormulas, index }: Announce
         {/* Top badges */}
         <div className="absolute top-3 left-3 right-3 flex items-start justify-between">
           <div className="flex flex-col gap-2">
-            {announcer.verified && (
+            {/* Badge statut (Pro / Auto-entrepreneur / Particulier) */}
+            {(() => {
+              const statusConfig = statusTypeConfig[announcer.statusType];
+              const StatusIcon = statusConfig.icon;
+              return (
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-full shadow-sm border", statusConfig.bg, statusConfig.border)}
+                >
+                  <StatusIcon className={cn("w-3.5 h-3.5", statusConfig.text)} />
+                  <span className={cn("text-xs font-semibold", statusConfig.text)}>{statusConfig.label}</span>
+                </motion.div>
+              );
+            })()}
+            {announcer.isIdentityVerified && (
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
+                transition={{ delay: 0.05 }}
                 className="flex items-center gap-1.5 px-2.5 py-1 bg-white/95 backdrop-blur-sm rounded-full shadow-sm"
               >
                 <Shield className="w-3.5 h-3.5 text-secondary" />
@@ -201,28 +244,16 @@ export function AnnouncerCardGrid({ announcer, onShowFormulas, index }: Announce
           </div>
         )}
 
-        {/* Tags */}
+        {/* Tags services */}
         <div className="flex flex-wrap gap-2 mb-4">
-          <span
-            className={cn(
-              "px-2.5 py-1 text-xs font-medium rounded-lg",
-              announcer.statusType === "professionnel"
-                ? "bg-blue-50 text-blue-600"
-                : announcer.statusType === "micro_entrepreneur"
-                ? "bg-purple-50 text-purple-600"
-                : "bg-gray-100 text-gray-600"
-            )}
-          >
-            {announcer.statusType === "professionnel" ? "Professionnel" : announcer.statusType === "micro_entrepreneur" ? "Auto-entrepreneur" : "Particulier"}
-          </span>
-          {announcer.services.slice(0, 2).map((service, i) => (
+          {announcer.services.slice(0, 3).map((service, i) => (
             <span key={i} className="px-2.5 py-1 text-xs font-medium bg-primary/5 text-primary rounded-lg">
               {service}
             </span>
           ))}
-          {announcer.services.length > 2 && (
+          {announcer.services.length > 3 && (
             <span className="px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded-lg">
-              +{announcer.services.length - 2}
+              +{announcer.services.length - 3}
             </span>
           )}
         </div>
@@ -353,7 +384,18 @@ export function AnnouncerCardList({ announcer, onShowFormulas, index }: Announce
 
           {/* Badges on image */}
           <div className="absolute top-3 left-3 flex flex-col gap-1.5">
-            {announcer.verified && (
+            {/* Badge statut */}
+            {(() => {
+              const statusConfig = statusTypeConfig[announcer.statusType];
+              const StatusIcon = statusConfig.icon;
+              return (
+                <div className={cn("flex items-center gap-1 px-2 py-0.5 rounded-full shadow-sm border", statusConfig.bg, statusConfig.border)}>
+                  <StatusIcon className={cn("w-3 h-3", statusConfig.text)} />
+                  <span className={cn("text-[10px] font-semibold", statusConfig.text)}>{statusConfig.label}</span>
+                </div>
+              );
+            })()}
+            {announcer.isIdentityVerified && (
               <div className="flex items-center gap-1 px-2 py-0.5 bg-white/95 backdrop-blur-sm rounded-full shadow-sm">
                 <Shield className="w-3 h-3 text-secondary" />
                 <span className="text-[10px] font-medium text-gray-700">Vérifié</span>
@@ -444,18 +486,6 @@ export function AnnouncerCardList({ announcer, onShowFormulas, index }: Announce
 
           {/* Middle: Tags & Services */}
           <div className="flex flex-wrap items-center gap-2 mb-3">
-            <span
-              className={cn(
-                "px-2 py-0.5 text-xs font-medium rounded-md",
-                announcer.statusType === "professionnel"
-                  ? "bg-blue-50 text-blue-600"
-                  : announcer.statusType === "micro_entrepreneur"
-                  ? "bg-purple-50 text-purple-600"
-                  : "bg-gray-100 text-gray-600"
-              )}
-            >
-              {announcer.statusType === "professionnel" ? "Pro" : announcer.statusType === "micro_entrepreneur" ? "Auto-entrepreneur" : "Particulier"}
-            </span>
             {announcer.services.slice(0, 3).map((service, i) => (
               <span key={i} className="px-2 py-0.5 text-xs font-medium bg-primary/5 text-primary rounded-md">
                 {service}

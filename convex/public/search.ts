@@ -77,6 +77,29 @@ function getDatesBetween(startDate: string, endDate: string): string[] {
   return dates;
 }
 
+/**
+ * Vérifie si un créneau respecte le délai minimum de réservation à l'avance.
+ * Retourne true si le créneau est assez loin dans le futur.
+ */
+function isSlotAfterMinimumAdvance(
+  date: string,
+  startTime: string | undefined,
+  minBookingTimestamp: number
+): boolean {
+  const [year, month, day] = date.split("-").map(Number);
+  const slotDate = new Date(year, month - 1, day);
+
+  if (startTime) {
+    const [hours, minutes] = startTime.split(":").map(Number);
+    slotDate.setHours(hours, minutes, 0, 0);
+  } else {
+    // Par défaut 08:00 si pas d'heure précisée
+    slotDate.setHours(8, 0, 0, 0);
+  }
+
+  return slotDate.getTime() >= minBookingTimestamp;
+}
+
 // Types pour les résultats
 interface NextSlot {
   date: string;
@@ -178,6 +201,16 @@ export const searchAnnouncers = query({
     const radius = args.radiusKm ?? 20;
     const limit = args.limit ?? 50;
     const offset = args.offset ?? 0;
+
+    // 0. Lire le délai minimum de réservation à l'avance
+    const minAdvanceConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "minimum_booking_advance_hours"))
+      .first();
+    const minimumBookingAdvanceHours = minAdvanceConfig
+      ? parseInt(minAdvanceConfig.value) || 24
+      : 24;
+    const minBookingTimestamp = Date.now() + minimumBookingAdvanceHours * 60 * 60 * 1000;
 
     // 1. Récupérer tous les annonceurs actifs (pas les utilisateurs simples)
     const announcers = await ctx.db
@@ -502,11 +535,11 @@ export const searchAnnouncers = query({
       // 10.1 Récupérer les créneaux collectifs depuis le cache (Phase 2 batch loading)
       const collectiveSlots = collectiveSlotsMap.get(announcer._id) ?? [];
 
-      // Filtrer les créneaux avec places disponibles et récupérer les infos des formules
+      // Filtrer les créneaux avec places disponibles, respectant le délai minimum de réservation
       const collectiveSlotsInfo: CollectiveSlotInfo[] = [];
       for (const slot of collectiveSlots) {
         const spotsLeft = slot.maxAnimals - slot.bookedAnimals;
-        if (spotsLeft > 0) {
+        if (spotsLeft > 0 && isSlotAfterMinimumAdvance(slot.date, slot.startTime, minBookingTimestamp)) {
           // Récupérer le nom de la formule depuis le cache (Phase 2)
           const variant = variantsMap.get(slot.variantId);
           collectiveSlotsInfo.push({
@@ -548,14 +581,19 @@ export const searchAnnouncers = query({
         );
 
         if (partialAvail?.status === "partial" && partialAvail.timeSlots && partialAvail.timeSlots.length > 0) {
-          // Prendre le premier créneau du jour
+          // Prendre le premier créneau du jour qui respecte le délai minimum
           const sortedSlots = [...partialAvail.timeSlots].sort((a, b) => a.startTime.localeCompare(b.startTime));
-          nextSlot = {
-            date: nextAvailDate,
-            startTime: sortedSlots[0].startTime,
-            endTime: sortedSlots[0].endTime,
-          };
-        } else {
+          const validSlot = sortedSlots.find((s) =>
+            isSlotAfterMinimumAdvance(nextAvailDate, s.startTime, minBookingTimestamp)
+          );
+          if (validSlot) {
+            nextSlot = {
+              date: nextAvailDate,
+              startTime: validSlot.startTime,
+              endTime: validSlot.endTime,
+            };
+          }
+        } else if (isSlotAfterMinimumAdvance(nextAvailDate, "09:00", minBookingTimestamp)) {
           // Jour complet disponible, mettre 09:00 par défaut
           nextSlot = {
             date: nextAvailDate,
@@ -700,56 +738,22 @@ export const searchAnnouncersInternal = query({
     const limit = args.limit ?? 50;
     const offset = args.offset ?? 0;
 
-    // Si Redis a fourni des profils pré-filtrés, les utiliser
-    const useRedisFilter = args.redisProfileIds && args.redisProfileIds.length > 0;
+    // Redis: utiliser les distances pré-calculées comme optimisation (pas comme filtre exclusif)
     const redisDistanceMap = args.redisDistances ? new Map(Object.entries(args.redisDistances)) : null;
 
-    // 1. Récupérer les annonceurs
-    let announcers;
-    if (useRedisFilter) {
-      // Récupérer uniquement les annonceurs dont les profils sont dans Redis
-      const allAnnouncers = await ctx.db
-        .query("users")
-        .filter((q) =>
-          q.and(
-            q.eq(q.field("isActive"), true),
-            q.or(
-              q.eq(q.field("accountType"), "annonceur_pro"),
-              q.eq(q.field("accountType"), "annonceur_particulier")
-            )
+    // 1. Récupérer TOUS les annonceurs actifs (Redis = optimisation distance, pas filtre)
+    const announcers = await ctx.db
+      .query("users")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("isActive"), true),
+          q.or(
+            q.eq(q.field("accountType"), "annonceur_pro"),
+            q.eq(q.field("accountType"), "annonceur_particulier")
           )
         )
-        .collect();
-
-      // Filtrer par les profils Redis (on a les profileIds, pas les userIds)
-      // On doit d'abord récupérer les profiles pour faire le mapping
-      const profiles = await ctx.db.query("profiles").collect();
-      const profileIdToUserId = new Map<string, Id<"users">>();
-      for (const p of profiles) {
-        profileIdToUserId.set(p._id, p.userId);
-      }
-
-      const validUserIds = new Set<string>();
-      for (const profileId of args.redisProfileIds!) {
-        const userId = profileIdToUserId.get(profileId as Id<"profiles">);
-        if (userId) validUserIds.add(userId);
-      }
-
-      announcers = allAnnouncers.filter((a) => validUserIds.has(a._id));
-    } else {
-      announcers = await ctx.db
-        .query("users")
-        .filter((q) =>
-          q.and(
-            q.eq(q.field("isActive"), true),
-            q.or(
-              q.eq(q.field("accountType"), "annonceur_pro"),
-              q.eq(q.field("accountType"), "annonceur_particulier")
-            )
-          )
-        )
-        .collect();
-    }
+      )
+      .collect();
 
     // Le reste du code est identique à searchAnnouncers
     const announcerIds = announcers.map((a) => a._id);
@@ -825,13 +829,13 @@ export const searchAnnouncersInternal = query({
         if (!hasMatchingAnimal) continue;
       }
 
-      // Distance: utiliser Redis si disponible, sinon calculer
+      // Distance: Redis si disponible, sinon Haversine
       let distance: number | undefined;
-      if (useRedisFilter && redisDistanceMap) {
+      if (redisDistanceMap && redisDistanceMap.has(profile._id)) {
         // Distance pré-calculée par Redis
         distance = redisDistanceMap.get(profile._id);
       } else if (args.coordinates && profile.coordinates) {
-        // Fallback: calcul Haversine
+        // Fallback: calcul Haversine (profils non indexés dans Redis)
         if (!isInBoundingBox(
           args.coordinates.lat,
           args.coordinates.lng,
@@ -1054,6 +1058,13 @@ const searchFormulesArgs = {
   time: v.optional(v.string()),
   sessionType: v.optional(v.union(v.literal("individual"), v.literal("collective"))),
   serviceLocation: v.optional(v.array(v.union(v.literal("announcer_home"), v.literal("client_home")))),
+  accountTypes: v.optional(v.array(v.string())),
+  verifiedOnly: v.optional(v.boolean()),
+  withPhotoOnly: v.optional(v.boolean()),
+  hasGarden: v.optional(v.boolean()),
+  hasVehicle: v.optional(v.boolean()),
+  ownsAnimals: v.optional(v.array(v.string())),
+  noAnimals: v.optional(v.boolean()),
   priceMin: v.optional(v.number()),
   priceMax: v.optional(v.number()),
   sortBy: v.optional(v.string()),
@@ -1068,6 +1079,16 @@ export const searchFormules = query({
     const limit = args.limit ?? 100;
     const offset = args.offset ?? 0;
     const results: FormuleResult[] = [];
+
+    // 0. Lire le délai minimum de réservation à l'avance
+    const minAdvanceConfigFormules = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "minimum_booking_advance_hours"))
+      .first();
+    const minAdvanceHours = minAdvanceConfigFormules
+      ? parseInt(minAdvanceConfigFormules.value) || 24
+      : 24;
+    const minBookingTs = Date.now() + minAdvanceHours * 60 * 60 * 1000;
 
     // Récupérer les services actifs avec index optimisé (Phase 1 optimisation)
     let services;
@@ -1193,8 +1214,30 @@ export const searchFormules = query({
         statusType = announcer.companyType === "micro_enterprise" ? "micro_entrepreneur" : "professionnel";
       }
 
+      // Filtre par type d'annonceur
+      if (args.accountTypes && args.accountTypes.length > 0) {
+        const mappedType = statusType === "professionnel" ? "pro" : statusType;
+        if (!args.accountTypes.includes(mappedType)) continue;
+      }
+
+      // Filtres avancés profil
+      if (args.verifiedOnly && !announcer.emailVerified) continue;
+      if (args.hasGarden === true && !profile.hasGarden) continue;
+      if (args.hasVehicle === true && !profile.hasVehicle) continue;
+      if (args.noAnimals) {
+        if (profile.ownedAnimals && profile.ownedAnimals.length > 0) continue;
+      }
+      if (args.ownsAnimals && args.ownsAnimals.length > 0) {
+        const ownedAnimals = profile.ownedAnimals ?? [];
+        const hasMatchingAnimal = args.ownsAnimals.some((animal: string) => {
+          return ownedAnimals.some((oa: { type?: string }) => oa.type === animal);
+        });
+        if (!hasMatchingAnimal) continue;
+      }
+
       // Photo de profil depuis le cache (Phase 2 batch loading)
       const profileImageUrl = photoUrlsMap.get(announcer._id) ?? null;
+      if (args.withPhotoOnly && !profileImageUrl) continue;
 
       for (const variant of variants) {
         // Filtrer par type de séance si spécifié
@@ -1251,7 +1294,7 @@ export const searchFormules = query({
 
           for (const slot of slots) {
             const remaining = slot.maxAnimals - slot.bookedAnimals;
-            if (remaining > 0) {
+            if (remaining > 0 && isSlotAfterMinimumAdvance(slot.date, slot.startTime, minBookingTs)) {
               collectiveSlots.push({
                 id: slot._id,
                 date: slot.date,
@@ -1286,9 +1329,9 @@ export const searchFormules = query({
           if (collectiveSlots.length === 0) continue;
         } else {
           // Formule individuelle: chercher le prochain créneau disponible
-          // Vérifier la disponibilité des 3 prochains jours (optimisation Phase 1)
+          // Vérifier la disponibilité des 7 prochains jours (élargi pour tenir compte du délai 24h)
           const nextDays: string[] = [];
-          for (let i = 0; i <= 3; i++) {
+          for (let i = 0; i <= 7; i++) {
             const d = new Date(today);
             d.setDate(d.getDate() + i);
             nextDays.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
@@ -1308,18 +1351,25 @@ export const searchFormules = query({
 
               if (partial?.status === "partial" && partial.timeSlots && partial.timeSlots.length > 0) {
                 const sortedSlots = [...partial.timeSlots].sort((a, b) => a.startTime.localeCompare(b.startTime));
-                nextSlot = {
-                  date: day,
-                  startTime: sortedSlots[0].startTime,
-                  endTime: sortedSlots[0].endTime,
-                };
-              } else {
+                // Trouver le premier créneau qui respecte le délai minimum de réservation
+                const validSlot = sortedSlots.find((s) =>
+                  isSlotAfterMinimumAdvance(day, s.startTime, minBookingTs)
+                );
+                if (validSlot) {
+                  nextSlot = {
+                    date: day,
+                    startTime: validSlot.startTime,
+                    endTime: validSlot.endTime,
+                  };
+                  break;
+                }
+              } else if (isSlotAfterMinimumAdvance(day, "09:00", minBookingTs)) {
                 nextSlot = {
                   date: day,
                   startTime: "09:00",
                 };
+                break;
               }
-              break;
             }
           }
         }
@@ -1426,10 +1476,18 @@ export const searchFormulesInternal = query({
     const offset = args.offset ?? 0;
     const results: FormuleResult[] = [];
 
-    const useRedisFilter = args.redisProfileIds && args.redisProfileIds.length > 0;
+    // Redis: distances pré-calculées comme optimisation (pas filtre exclusif)
     const redisDistanceMap = args.redisDistances ? new Map(Object.entries(args.redisDistances)) : null;
 
-    // Récupérer les services actifs
+    // 0. Lire le délai minimum de réservation à l'avance
+    const minAdvanceCfg = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "minimum_booking_advance_hours"))
+      .first();
+    const minAdvHours = minAdvanceCfg ? parseInt(minAdvanceCfg.value) || 24 : 24;
+    const minBookingTsInternal = Date.now() + minAdvHours * 60 * 60 * 1000;
+
+    // Récupérer TOUS les services actifs (Redis = optimisation distance, pas filtre)
     let services;
     if (args.categorySlug) {
       services = await ctx.db
@@ -1450,20 +1508,6 @@ export const searchFormulesInternal = query({
       if (args.animalType && !s.animalTypes?.includes(args.animalType)) return false;
       return true;
     });
-
-    // Si Redis filter, récupérer le mapping profileId -> userId
-    let validUserIds: Set<string> | null = null;
-    if (useRedisFilter) {
-      const profiles = await ctx.db.query("profiles").collect();
-      validUserIds = new Set();
-      for (const p of profiles) {
-        if (args.redisProfileIds!.includes(p._id)) {
-          validUserIds.add(p.userId);
-        }
-      }
-      // Filtrer les services par users valides
-      services = services.filter((s) => validUserIds!.has(s.userId));
-    }
 
     // Dates
     const today = new Date();
@@ -1518,11 +1562,12 @@ export const searchFormulesInternal = query({
       const profile = profilesMap.get(announcer._id);
       if (!profile) continue;
 
-      // Distance: Redis ou calcul
+      // Distance: Redis si disponible, sinon Haversine
       let distance: number | undefined;
-      if (useRedisFilter && redisDistanceMap) {
+      if (redisDistanceMap && redisDistanceMap.has(profile._id)) {
         distance = redisDistanceMap.get(profile._id);
       } else if (args.coordinates && profile.coordinates) {
+        // Fallback Haversine pour profils non indexés dans Redis
         if (!isInBoundingBox(
           args.coordinates.lat,
           args.coordinates.lng,
@@ -1549,7 +1594,29 @@ export const searchFormulesInternal = query({
         statusType = announcer.companyType === "micro_enterprise" ? "micro_entrepreneur" : "professionnel";
       }
 
+      // Filtre par type d'annonceur
+      if (args.accountTypes && args.accountTypes.length > 0) {
+        const mappedType = statusType === "professionnel" ? "pro" : statusType;
+        if (!args.accountTypes.includes(mappedType)) continue;
+      }
+
+      // Filtres avancés profil
+      if (args.verifiedOnly && !announcer.emailVerified) continue;
+      if (args.hasGarden === true && !profile.hasGarden) continue;
+      if (args.hasVehicle === true && !profile.hasVehicle) continue;
+      if (args.noAnimals) {
+        if (profile.ownedAnimals && profile.ownedAnimals.length > 0) continue;
+      }
+      if (args.ownsAnimals && args.ownsAnimals.length > 0) {
+        const ownedAnimals = profile.ownedAnimals ?? [];
+        const hasMatchingAnimal = args.ownsAnimals.some((animal: string) => {
+          return ownedAnimals.some((oa: { type?: string }) => oa.type === animal);
+        });
+        if (!hasMatchingAnimal) continue;
+      }
+
       const profileImageUrl = photoUrlsMap.get(announcer._id) ?? null;
+      if (args.withPhotoOnly && !profileImageUrl) continue;
 
       for (const variant of variants) {
         const isCollective = variant.sessionType === "collective";
@@ -1599,7 +1666,7 @@ export const searchFormulesInternal = query({
           const slots = collectiveSlotsByVariantMap.get(variant._id) ?? [];
           for (const slot of slots) {
             const remaining = slot.maxAnimals - slot.bookedAnimals;
-            if (remaining > 0) {
+            if (remaining > 0 && isSlotAfterMinimumAdvance(slot.date, slot.startTime, minBookingTsInternal)) {
               collectiveSlots.push({
                 id: slot._id,
                 date: slot.date,
@@ -1619,7 +1686,7 @@ export const searchFormulesInternal = query({
           if (collectiveSlots.length === 0) continue;
         } else {
           const nextDays: string[] = [];
-          for (let i = 0; i <= 3; i++) {
+          for (let i = 0; i <= 7; i++) {
             const d = new Date(today);
             d.setDate(d.getDate() + i);
             nextDays.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
@@ -1631,11 +1698,17 @@ export const searchFormulesInternal = query({
               const partial = userAvailability.find((a) => a.date === day && a.status === "partial");
               if (partial?.status === "partial" && partial.timeSlots && partial.timeSlots.length > 0) {
                 const sortedSlots = [...partial.timeSlots].sort((a, b) => a.startTime.localeCompare(b.startTime));
-                nextSlot = { date: day, startTime: sortedSlots[0].startTime, endTime: sortedSlots[0].endTime };
-              } else {
+                const validSlot = sortedSlots.find((s) =>
+                  isSlotAfterMinimumAdvance(day, s.startTime, minBookingTsInternal)
+                );
+                if (validSlot) {
+                  nextSlot = { date: day, startTime: validSlot.startTime, endTime: validSlot.endTime };
+                  break;
+                }
+              } else if (isSlotAfterMinimumAdvance(day, "09:00", minBookingTsInternal)) {
                 nextSlot = { date: day, startTime: "09:00" };
+                break;
               }
-              break;
             }
           }
         }
@@ -2757,16 +2830,15 @@ export const searchServices = query({
     const limit = args.limit ?? 100;
     const offset = args.offset ?? 0;
 
-    // Support Redis: vérifier si on a des données pré-calculées
-    const useRedisFilter = args.redisProfileIds && args.redisProfileIds.length > 0;
+    // Redis: distances pré-calculées comme optimisation (pas filtre exclusif)
     const redisDistanceMap = args.redisDistances ? new Map(Object.entries(args.redisDistances)) : null;
 
     // ============================================================
     // PHASE 2 OPTIMISATION: Batch Loading (élimination N+1)
     // ============================================================
 
-    // 1. Récupérer tous les annonceurs actifs
-    let announcers = await ctx.db
+    // 1. Récupérer TOUS les annonceurs actifs (Redis = optimisation distance, pas filtre)
+    const announcers = await ctx.db
       .query("users")
       .filter((q) =>
         q.and(
@@ -2778,22 +2850,6 @@ export const searchServices = query({
         )
       )
       .collect();
-
-    // 1.1 Si Redis a fourni des profils, filtrer les annonceurs
-    if (useRedisFilter) {
-      const profiles = await ctx.db.query("profiles").collect();
-      const profileIdToUserId = new Map<string, Id<"users">>();
-      for (const p of profiles) {
-        profileIdToUserId.set(p._id, p.userId);
-      }
-
-      const validUserIds = new Set<string>();
-      for (const profileId of args.redisProfileIds!) {
-        const userId = profileIdToUserId.get(profileId as Id<"profiles">);
-        if (userId) validUserIds.add(userId);
-      }
-      announcers = announcers.filter((a) => validUserIds.has(a._id));
-    }
 
     // 2. Extraire les IDs des annonceurs
     const announcerIds = announcers.map((a) => a._id);

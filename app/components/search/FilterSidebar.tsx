@@ -139,10 +139,14 @@ function FilterCheckbox({
   icon?: React.ReactNode;
 }) {
   return (
-    <label className="flex items-center gap-3 py-1.5 cursor-pointer group">
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className="flex items-center gap-3 py-1.5 cursor-pointer group w-full text-left"
+    >
       <div
         className={cn(
-          "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all",
+          "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all flex-shrink-0",
           checked
             ? "bg-primary border-primary"
             : "border-foreground/20 group-hover:border-foreground/40"
@@ -164,7 +168,7 @@ function FilterCheckbox({
       </div>
       {icon}
       <span className="text-sm text-foreground/80">{label}</span>
-    </label>
+    </button>
   );
 }
 
@@ -179,10 +183,14 @@ function FilterRadio({
   onChange: () => void;
 }) {
   return (
-    <label className="flex items-center gap-3 py-1.5 cursor-pointer group">
+    <button
+      type="button"
+      onClick={onChange}
+      className="flex items-center gap-3 py-1.5 cursor-pointer group w-full text-left"
+    >
       <div
         className={cn(
-          "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
+          "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0",
           checked
             ? "border-primary"
             : "border-foreground/20 group-hover:border-foreground/40"
@@ -197,7 +205,7 @@ function FilterRadio({
         )}
       </div>
       <span className="text-sm text-foreground/80">{label}</span>
-    </label>
+    </button>
   );
 }
 
