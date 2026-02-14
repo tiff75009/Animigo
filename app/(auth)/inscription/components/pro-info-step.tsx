@@ -127,6 +127,14 @@ export function ProInfoStep({
           updates.legalForm = result.legalForm;
         }
 
+        // Données entreprise supplémentaires
+        if (result.address) updates.companyAddress = result.address;
+        if (result.postalCode) updates.companyPostalCode = result.postalCode;
+        if (result.city) updates.companyCity = result.city;
+        if (result.activityCode) updates.activityCode = result.activityCode;
+        if (result.activityLabel) updates.activityLabel = result.activityLabel;
+        if (result.creationDate) updates.companyCreationDate = result.creationDate;
+
         if (Object.keys(updates).length > 0) {
           onChange(updates);
         }

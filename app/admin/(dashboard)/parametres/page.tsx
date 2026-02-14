@@ -15,6 +15,7 @@ import {
   Upload,
   ImageIcon,
   Trash2,
+  Building2,
 } from "lucide-react";
 import { uploadToCloudinary } from "@/app/lib/cloudinary";
 import Image from "next/image";
@@ -40,15 +41,36 @@ export default function ParametresPage() {
   const [siteLogo, setSiteLogo] = useState<string | null>(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
+  // États pour les champs entreprise éditables
+  const COMPANY_FIELDS = [
+    { key: "companyName", label: "Raison sociale" },
+    { key: "legalForm", label: "Forme juridique" },
+    { key: "companyAddress", label: "Adresse du siège" },
+    { key: "companyPostalCode", label: "Code postal" },
+    { key: "companyCity", label: "Ville" },
+    { key: "activityCode", label: "Code NAF/APE" },
+    { key: "activityLabel", label: "Libellé activité" },
+    { key: "companyCreationDate", label: "Date de création" },
+    { key: "capital", label: "Capital social (activé par défaut)" },
+  ] as const;
+
+  const [companyEditableFields, setCompanyEditableFields] = useState<Record<string, boolean>>({
+    companyName: false, companyAddress: false, companyPostalCode: false,
+    companyCity: false, activityCode: false, activityLabel: false,
+    companyCreationDate: false, capital: true, legalForm: false,
+  });
+
   // Queries
   const allConfigs = useQuery(
     api.admin.config.getAllConfigs,
     token ? { token } : "skip"
   );
   const cloudinaryConfig = useQuery(api.config.getCloudinaryConfig);
+  const companyEditableFieldsConfig = useQuery(api.admin.config.getCompanyEditableFields);
 
   // Mutations
   const updateConfig = useMutation(api.admin.config.updateConfig);
+  const updateCompanyEditableFieldsMutation = useMutation(api.admin.config.updateCompanyEditableFields);
 
   // Charger les configs existantes
   useEffect(() => {
@@ -80,6 +102,13 @@ export default function ParametresPage() {
       }
     }
   }, [allConfigs]);
+
+  // Charger la config des champs entreprise éditables
+  useEffect(() => {
+    if (companyEditableFieldsConfig) {
+      setCompanyEditableFields(companyEditableFieldsConfig);
+    }
+  }, [companyEditableFieldsConfig]);
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -149,6 +178,16 @@ export default function ParametresPage() {
           value: config.value,
         });
       }
+
+      // Sauvegarder les champs entreprise éditables
+      await updateCompanyEditableFieldsMutation({
+        token,
+        fields: companyEditableFields as {
+          companyName: boolean; companyAddress: boolean; companyPostalCode: boolean;
+          companyCity: boolean; activityCode: boolean; activityLabel: boolean;
+          companyCreationDate: boolean; capital: boolean; legalForm: boolean;
+        },
+      });
 
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -338,6 +377,45 @@ export default function ParametresPage() {
                 className="w-5 h-5 rounded bg-slate-700 border-slate-600 text-blue-500 focus:ring-blue-500"
               />
             </label>
+          </div>
+        </motion.div>
+
+        {/* Company Editable Fields */}
+        <motion.div
+          className="bg-slate-900 rounded-xl p-6 border border-slate-800 md:col-span-2"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-purple-500/20 rounded-lg">
+              <Building2 className="w-5 h-5 text-purple-400" />
+            </div>
+            <h2 className="text-lg font-semibold text-white">Champs entreprise éditables</h2>
+          </div>
+          <p className="text-slate-400 text-sm mb-6">
+            Contrôlez quels champs les pros peuvent modifier. SIRET, type et TVA ne sont jamais modifiables.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {COMPANY_FIELDS.map((field) => (
+              <label
+                key={field.key}
+                className="flex items-center justify-between p-3 bg-slate-800 rounded-lg cursor-pointer hover:bg-slate-750 transition-colors"
+              >
+                <span className="text-slate-300 text-sm">{field.label}</span>
+                <input
+                  type="checkbox"
+                  checked={companyEditableFields[field.key] ?? false}
+                  onChange={(e) =>
+                    setCompanyEditableFields((prev) => ({
+                      ...prev,
+                      [field.key]: e.target.checked,
+                    }))
+                  }
+                  className="w-5 h-5 rounded bg-slate-700 border-slate-600 text-purple-500 focus:ring-purple-500"
+                />
+              </label>
+            ))}
           </div>
         </motion.div>
       </div>

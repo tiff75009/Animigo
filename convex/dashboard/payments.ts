@@ -1,13 +1,16 @@
-// @ts-nocheck
-import { query } from "../_generated/server";
-import { v } from "convex/values";
-import { ConvexError } from "convex/values";
+import { query, QueryCtx } from "../_generated/server";
+import { Doc, Id } from "../_generated/dataModel";
+import { v, ConvexError } from "convex/values";
 
-// Helper pour valider la session et obtenir l'utilisateur (annonceur)
-async function validateAnnouncerSession(ctx: any, sessionToken: string) {
+// ─── Helpers ──────────────────────────────────────────
+
+async function validateAnnouncerSession(
+  ctx: QueryCtx,
+  sessionToken: string
+): Promise<{ user: Doc<"users">; session: Doc<"sessions"> }> {
   const session = await ctx.db
     .query("sessions")
-    .withIndex("by_token", (q: any) => q.eq("token", sessionToken))
+    .withIndex("by_token", (q) => q.eq("token", sessionToken))
     .first();
 
   if (!session || session.expiresAt < Date.now()) {
@@ -19,267 +22,378 @@ async function validateAnnouncerSession(ctx: any, sessionToken: string) {
     throw new ConvexError("Utilisateur non trouvé ou inactif");
   }
 
-  // Vérifier que c'est un annonceur
-  if (user.accountType !== "annonceur_pro" && user.accountType !== "annonceur_particulier") {
+  if (
+    user.accountType !== "annonceur_pro" &&
+    user.accountType !== "annonceur_particulier"
+  ) {
     throw new ConvexError("Accès réservé aux annonceurs");
   }
 
   return { user, session };
 }
 
-/**
- * Obtenir les statistiques de paiement de l'annonceur
- */
-export const getAnnouncerPaymentStats = query({
-  args: { sessionToken: v.string() },
+function centsToEuros(cents: number): number {
+  return Math.round(cents) / 100;
+}
+
+// Taux de commission par défaut si systemConfig absent
+const DEFAULT_COMMISSIONS: Record<string, number> = {
+  particulier: 15,
+  micro_entrepreneur: 12,
+  professionnel: 10,
+};
+
+function getCommissionType(user: Doc<"users">): string {
+  if (user.accountType === "annonceur_particulier") return "particulier";
+  if (user.companyType === "micro_enterprise") return "micro_entrepreneur";
+  return "professionnel";
+}
+
+function getCommissionLabel(type: string): string {
+  switch (type) {
+    case "particulier":
+      return "Particulier";
+    case "micro_entrepreneur":
+      return "Micro-entrepreneur";
+    case "professionnel":
+      return "Professionnel";
+    default:
+      return type;
+  }
+}
+
+const MONTH_LABELS = [
+  "Jan",
+  "Fév",
+  "Mar",
+  "Avr",
+  "Mai",
+  "Juin",
+  "Juil",
+  "Août",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Déc",
+];
+
+// ─── Query unique ──────────────────────────────────────
+
+export const getAnnouncerPaymentsData = query({
+  args: {
+    sessionToken: v.string(),
+    year: v.optional(v.number()),
+  },
   handler: async (ctx, args) => {
     const { user } = await validateAnnouncerSession(ctx, args.sessionToken);
 
-    const missions = await ctx.db
+    const selectedYear = args.year || new Date().getFullYear();
+    const currentMonth = new Date().getMonth(); // 0-indexed
+
+    // 1. Taux de commission réel depuis systemConfig
+    const commissionType = getCommissionType(user);
+    const commissionConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", `commission_${commissionType}`))
+      .first();
+    const commissionRate = commissionConfig
+      ? parseFloat(commissionConfig.value)
+      : DEFAULT_COMMISSIONS[commissionType] || 15;
+
+    // 2. Charger toutes les missions de l'annonceur
+    const allMissions = await ctx.db
       .query("missions")
       .withIndex("by_announcer", (q) => q.eq("announcerId", user._id))
       .collect();
 
-    const completed = missions.filter((m) => m.status === "completed");
-    const cancelled = missions.filter((m) => m.status === "cancelled");
-    const pending = completed.filter((m) => m.paymentStatus === "pending");
-    const paid = completed.filter((m) => m.paymentStatus === "paid");
+    // 3. Enrichir chaque mission avec client name + stripePayment
+    const enrichedMissions = await Promise.all(
+      allMissions.map(async (m) => {
+        const client = await ctx.db.get(m.clientId);
+        const clientName = client
+          ? `${client.firstName} ${client.lastName}`
+          : m.clientName || "Client";
 
-    // Helper pour obtenir le montant net de l'annonceur (après commission)
-    const getNetAmount = (m: any) => m.announcerEarnings || Math.round((m.amount || 0) * 0.85);
+        // Charger le paiement Stripe pour obtenir capturedAt/paidAt
+        let paidAt: number | undefined;
+        if (m.stripePaymentId) {
+          const stripePayment = await ctx.db.get(m.stripePaymentId);
+          if (stripePayment) {
+            paidAt = stripePayment.capturedAt || stripePayment.paidAt;
+          }
+        }
 
-    // Stats annulations
-    const cancelledByClient = cancelled.filter((m) => m.cancelledBy === "client");
-    const cancelledByAnnouncer = cancelled.filter(
-      (m) => m.cancelledBy === "announcer" || m.cancelledBy === undefined
+        const announcerEarnings = m.announcerEarnings || 0;
+        const isVatSubject = user.isVatSubject === true;
+        const vatRate = m.vatRate || 20;
+        const vatAmount = isVatSubject ? (m.vatAmount || 0) : 0;
+        const vatOnCommission = isVatSubject ? (m.vatOnCommission || 0) : 0;
+        const earningsHT = isVatSubject
+          ? announcerEarnings - vatAmount
+          : announcerEarnings;
+
+        return {
+          _id: m._id,
+          // Dates
+          bookedAt: m.bookedAt || m.createdAt || m._creationTime,
+          paidAt,
+          startDate: m.startDate,
+          endDate: m.endDate,
+          startTime: m.startTime,
+          endTime: m.endTime,
+          completedAt: m.clientConfirmedAt || m.autoConfirmedAt,
+          // Montants (euros)
+          serviceAmount: centsToEuros(m.serviceAmount || m.amount || 0),
+          basePrice: centsToEuros(m.basePrice || 0),
+          optionsPrice: centsToEuros(m.optionsPrice || 0),
+          platformFee: centsToEuros(m.platformFee || 0),
+          stripeFee: centsToEuros(m.stripeFee || 0),
+          amount: centsToEuros(m.amount || 0),
+          announcerEarnings: centsToEuros(announcerEarnings),
+          commissionRate: m.commissionRate || commissionRate,
+          // Pro TVA
+          vatAmount: centsToEuros(vatAmount),
+          vatOnCommission: centsToEuros(vatOnCommission),
+          earningsHT: centsToEuros(earningsHT),
+          // Infos
+          clientName,
+          animal: m.animal || { name: "Animal", type: "inconnu", emoji: "🐾" },
+          animals: m.animals,
+          serviceName: m.serviceName || "",
+          serviceCategory: m.serviceCategory || "",
+          sessionType: m.sessionType,
+          serviceLocation: m.serviceLocation,
+          // Statuts
+          status: m.status,
+          paymentStatus: m.paymentStatus,
+          announcerPaymentStatus: m.announcerPaymentStatus,
+          readyForPayout: m.readyForPayout,
+          payoutScheduledFor: m.payoutScheduledFor,
+          // Annulations
+          cancelledBy: m.cancelledBy,
+          cancelledAt: m.cancelledAt,
+          cancellationReason: m.cancellationReason,
+          refundAmount: m.refundAmount ? centsToEuros(m.refundAmount) : undefined,
+          announcerRetainedAmount: m.announcerRetainedAmount
+            ? centsToEuros(m.announcerRetainedAmount)
+            : 0,
+        };
+      })
     );
 
-    return {
-      // Montants NETS en euros (ce que l'annonceur reçoit après commission)
-      totalPending: Math.round(pending.reduce((sum, m) => sum + getNetAmount(m), 0) / 100),
-      totalCollected: Math.round(paid.reduce((sum, m) => sum + getNetAmount(m), 0) / 100),
-      pendingCount: pending.length,
-      paidCount: paid.length,
-      // Total net cumulé (revenus réels de l'annonceur)
-      totalEarned: Math.round(
-        completed.reduce((sum, m) => sum + getNetAmount(m), 0) / 100
-      ),
-      // Total brut pour référence (ce que les clients ont payé)
-      totalGross: Math.round(
-        completed.reduce((sum, m) => sum + (m.amount || 0), 0) / 100
-      ),
-      // Annulations par le client
-      cancelledByClientCount: cancelledByClient.length,
-      cancelledByClientLost: Math.round(
-        cancelledByClient.reduce((sum, m) => sum + getNetAmount(m) - (m.announcerRetainedAmount || 0), 0) / 100
-      ),
-      // Annulations par l'annonceur
-      cancelledByAnnouncerCount: cancelledByAnnouncer.length,
-      cancelledByAnnouncerLost: Math.round(
-        cancelledByAnnouncer.reduce((sum, m) => sum + getNetAmount(m), 0) / 100
-      ),
-      // Montant retenu suite aux annulations client
-      announcerRetainedFromCancellations: Math.round(
-        cancelledByClient.reduce((sum, m) => sum + (m.announcerRetainedAmount || 0), 0) / 100
-      ),
+    // 4. Regrouper par statut
+    const awaitingPayment = enrichedMissions.filter(
+      (m) =>
+        m.status === "pending_confirmation" &&
+        (m.paymentStatus === "not_due" || m.paymentStatus === "pending")
+    );
+
+    const paid = enrichedMissions.filter(
+      (m) =>
+        (m.status === "upcoming" || m.status === "in_progress") &&
+        (m.paymentStatus === "paid" || m.paymentStatus === "pending")
+    );
+
+    const completed = enrichedMissions.filter(
+      (m) => m.status === "completed"
+    );
+
+    const cancelled = enrichedMissions.filter(
+      (m) => m.status === "cancelled"
+    );
+
+    // 5. Stats globales
+    const totalEarnings = completed.reduce(
+      (sum, m) => sum + m.announcerEarnings,
+      0
+    );
+    const totalPending = completed
+      .filter((m) => m.announcerPaymentStatus !== "paid")
+      .reduce((sum, m) => sum + m.announcerEarnings, 0);
+    const totalCollected = completed
+      .filter((m) => m.announcerPaymentStatus === "paid")
+      .reduce((sum, m) => sum + m.announcerEarnings, 0);
+    const pendingCount = completed.filter(
+      (m) => m.announcerPaymentStatus !== "paid"
+    ).length;
+    const collectedCount = completed.filter(
+      (m) => m.announcerPaymentStatus === "paid"
+    ).length;
+
+    const totalVatCollected = completed.reduce(
+      (sum, m) => sum + m.vatAmount,
+      0
+    );
+    const totalVatOnCommission = completed.reduce(
+      (sum, m) => sum + m.vatOnCommission,
+      0
+    );
+
+    // 6. Ventilation mensuelle (12 mois pour l'année sélectionnée)
+    const monthlyRevenue = Array.from({ length: 12 }, (_, i) => {
+      const monthMissions = completed.filter((m) => {
+        if (!m.startDate) return false;
+        const d = new Date(m.startDate);
+        return d.getFullYear() === selectedYear && d.getMonth() === i;
+      });
+
+      const earnings = monthMissions.reduce(
+        (sum, m) => sum + m.announcerEarnings,
+        0
+      );
+      const earningsHT = monthMissions.reduce(
+        (sum, m) => sum + m.earningsHT,
+        0
+      );
+      const vat = monthMissions.reduce((sum, m) => sum + m.vatAmount, 0);
+      const vatOnComm = monthMissions.reduce(
+        (sum, m) => sum + m.vatOnCommission,
+        0
+      );
+      const commissions = monthMissions.reduce(
+        (sum, m) => sum + m.platformFee,
+        0
+      );
+
+      return {
+        month: i,
+        monthLabel: MONTH_LABELS[i],
+        earnings: Math.round(earnings * 100) / 100,
+        earningsHT: Math.round(earningsHT * 100) / 100,
+        vatAmount: Math.round(vat * 100) / 100,
+        vatOnCommission: Math.round(vatOnComm * 100) / 100,
+        missionsCount: monthMissions.length,
+        commissionsTotal: Math.round(commissions * 100) / 100,
+      };
+    });
+
+    // 7. Revenus annuels (année courante + précédente)
+    const computeAnnualRevenue = (year: number) => {
+      const yearMissions = completed.filter((m) => {
+        if (!m.startDate) return false;
+        return new Date(m.startDate).getFullYear() === year;
+      });
+      const total = yearMissions.reduce(
+        (sum, m) => sum + m.announcerEarnings,
+        0
+      );
+      const totalHT = yearMissions.reduce((sum, m) => sum + m.earningsHT, 0);
+      const vat = yearMissions.reduce((sum, m) => sum + m.vatAmount, 0);
+      return {
+        year,
+        total: Math.round(total * 100) / 100,
+        totalHT: Math.round(totalHT * 100) / 100,
+        vat: Math.round(vat * 100) / 100,
+        count: yearMissions.length,
+      };
     };
-  },
-});
 
-/**
- * Obtenir l'historique des virements de l'annonceur
- */
-export const getAnnouncerPayoutHistory = query({
-  args: {
-    sessionToken: v.string(),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const { user } = await validateAnnouncerSession(ctx, args.sessionToken);
+    const annualRevenue = {
+      currentYear: computeAnnualRevenue(selectedYear),
+      previousYear: computeAnnualRevenue(selectedYear - 1),
+    };
 
+    // 8. Charger les payouts
     const payouts = await ctx.db
       .query("announcerPayouts")
       .withIndex("by_announcer", (q) => q.eq("announcerId", user._id))
       .order("desc")
-      .take(args.limit || 10);
+      .take(12);
 
-    return Promise.all(
+    const payoutHistory = await Promise.all(
       payouts.map(async (payout) => {
-        // Récupérer les missions associées pour le détail
         const missionDetails = await Promise.all(
           payout.missions.map(async (mId) => {
             const m = await ctx.db.get(mId);
             if (!m) return null;
-            const client = await ctx.db.get(m.clientId);
-            return {
-              serviceName: m.serviceName,
-              clientName: client ? `${client.firstName} ${client.lastName}` : "Client",
-            };
+            return m.serviceName || "Mission";
           })
         );
 
         return {
           id: payout._id,
           date: payout.processedAt || payout.createdAt,
-          // Montant NET en euros
-          amount: Math.round(payout.amount / 100),
-          // Montant BRUT et commission (stockés directement, fallback calcul inverse)
+          amount: centsToEuros(payout.amount),
           grossAmount: payout.grossAmount
-            ? Math.round(payout.grossAmount / 100)
+            ? centsToEuros(payout.grossAmount)
             : undefined,
           commissionAmount: payout.commissionAmount
-            ? Math.round(payout.commissionAmount / 100)
+            ? centsToEuros(payout.commissionAmount)
             : undefined,
           status: payout.status,
-          missions: missionDetails.filter(Boolean).map((m) =>
-            `${m!.serviceName} - ${m!.clientName}`
-          ),
           missionsCount: payout.missions.length,
+          missionNames: missionDetails.filter(Boolean) as string[],
         };
       })
     );
-  },
-});
 
-/**
- * Obtenir les missions avec paiement confirmé (client a payé)
- * Inclut : upcoming, in_progress (à venir / en cours) ET completed en attente de versement
- */
-export const getAuthorizedPayments = query({
-  args: { sessionToken: v.string() },
-  handler: async (ctx, args) => {
-    const { user } = await validateAnnouncerSession(ctx, args.sessionToken);
-
-    // Récupérer les missions de l'annonceur
-    const missions = await ctx.db
-      .query("missions")
-      .withIndex("by_announcer", (q) => q.eq("announcerId", user._id))
-      .collect();
-
-    // Missions confirmées (client a payé) : upcoming/in_progress + completed en attente de versement
-    const authorizedPayments = missions.filter(
+    // 9. Prochain virement
+    const readyMissions = completed.filter(
       (m) =>
-        // Missions à venir ou en cours avec paiement autorisé ou capturé
-        ((m.status === "upcoming" || m.status === "in_progress") &&
-          (m.paymentStatus === "pending" || m.paymentStatus === "paid")) ||
-        // Missions terminées en attente de versement annonceur
-        (m.status === "completed" &&
-          (m.paymentStatus === "pending" || m.paymentStatus === "paid") &&
-          m.announcerPaymentStatus !== "paid")
+        m.readyForPayout === true && m.announcerPaymentStatus !== "paid"
     );
+    const nextPayout =
+      readyMissions.length > 0
+        ? {
+            amount: Math.round(
+              readyMissions.reduce(
+                (sum, m) => sum + m.announcerEarnings,
+                0
+              ) * 100
+            ) / 100,
+            missionsCount: readyMissions.length,
+            scheduledDate: (() => {
+              const now = new Date();
+              const day = now.getDate();
+              if (day >= 25) {
+                return new Date(
+                  now.getFullYear(),
+                  now.getMonth() + 1,
+                  25
+                ).getTime();
+              }
+              return new Date(
+                now.getFullYear(),
+                now.getMonth(),
+                25
+              ).getTime();
+            })(),
+          }
+        : null;
 
-    // Enrichir avec infos client et paiement
-    return Promise.all(
-      authorizedPayments.map(async (m) => {
-        const client = await ctx.db.get(m.clientId);
-        const payment = m.stripePaymentId ? await ctx.db.get(m.stripePaymentId) : null;
-
-        return {
-          id: m._id,
-          clientId: m.clientId,
-          clientName: client ? `${client.firstName} ${client.lastName}` : m.clientName,
-          animal: m.animal || { name: "Animal", type: "inconnu", emoji: "🐾" },
-          serviceName: m.serviceName,
-          serviceCategory: m.serviceCategory,
-          startDate: m.startDate,
-          endDate: m.endDate,
-          status: m.status,
-          amount: Math.round((m.amount || 0) / 100),
-          announcerEarnings: Math.round((m.announcerEarnings || m.amount * 0.85) / 100),
-          paymentStatus: payment?.status || m.paymentStatus || "pending",
-          authorizedAt: payment?.authorizedAt,
-          autoCaptureScheduledAt: m.autoCaptureScheduledAt,
-          sessionType: m.sessionType,
-          serviceLocation: m.serviceLocation,
-          // Infos confirmation (pour missions terminées)
-          clientConfirmedAt: m.clientConfirmedAt,
-          autoConfirmedAt: m.autoConfirmedAt,
-          readyForPayout: m.readyForPayout,
-        };
-      })
-    );
-  },
-});
-
-/**
- * Obtenir les missions complétées de l'annonceur avec tous les statuts de paiement
- */
-export const getCompletedMissions = query({
-  args: { sessionToken: v.string() },
-  handler: async (ctx, args) => {
-    const { user } = await validateAnnouncerSession(ctx, args.sessionToken);
-
-    const missions = await ctx.db
-      .query("missions")
-      .withIndex("by_announcer", (q) => q.eq("announcerId", user._id))
-      .order("desc")
-      .collect();
-
-    const completed = missions.filter((m) => m.status === "completed");
-
-    return Promise.all(
-      completed.map(async (m) => {
-        const client = await ctx.db.get(m.clientId);
-
-        return {
-          id: m._id,
-          clientName: client ? `${client.firstName} ${client.lastName}` : m.clientName,
-          animal: m.animal || { name: "Animal", type: "inconnu", emoji: "🐾" },
-          service: m.serviceName,
-          startDate: m.startDate,
-          endDate: m.endDate,
-          amount: Math.round((m.amount || 0) / 100),
-          paymentStatus: m.paymentStatus,
-        };
-      })
-    );
-  },
-});
-
-/**
- * Obtenir les missions annulées de l'annonceur (pour suivi des pertes)
- */
-export const getAnnouncerCancelledMissions = query({
-  args: { sessionToken: v.string() },
-  handler: async (ctx, args) => {
-    const { user } = await validateAnnouncerSession(ctx, args.sessionToken);
-
-    const missions = await ctx.db
-      .query("missions")
-      .withIndex("by_announcer_status", (q) =>
-        q.eq("announcerId", user._id).eq("status", "cancelled")
-      )
-      .order("desc")
-      .collect();
-
-    return Promise.all(
-      missions.map(async (m) => {
-        const client = await ctx.db.get(m.clientId);
-
-        return {
-          id: m._id,
-          cancelledBy: m.cancelledBy ?? "announcer",
-          cancelledAt: m.cancelledAt ?? m._creationTime,
-          amount: Math.round((m.amount || 0) / 100),
-          announcerEarnings: Math.round(
-            (m.announcerEarnings || (m.amount || 0) * 0.85) / 100
-          ),
-          refundAmount: m.refundAmount
-            ? Math.round(m.refundAmount / 100)
-            : undefined,
-          announcerRetainedAmount: m.announcerRetainedAmount
-            ? Math.round(m.announcerRetainedAmount / 100)
-            : 0,
-          clientName: client
-            ? `${client.firstName} ${client.lastName}`
-            : m.clientName || "Client",
-          serviceName: m.serviceName,
-          startDate: m.startDate,
-          endDate: m.endDate,
-          animal: m.animal || { name: "Animal", type: "inconnu", emoji: "🐾" },
-          cancellationReason: m.cancellationReason,
-        };
-      })
-    );
+    // 10. Retour
+    return {
+      userInfo: {
+        accountType: user.accountType,
+        companyType: user.companyType,
+        isVatSubject: user.isVatSubject === true,
+        siret: user.siret,
+        companyName: user.companyName,
+        commissionRate,
+        commissionType,
+        commissionLabel: getCommissionLabel(commissionType),
+      },
+      stats: {
+        totalEarnings: Math.round(totalEarnings * 100) / 100,
+        totalPending: Math.round(totalPending * 100) / 100,
+        totalCollected: Math.round(totalCollected * 100) / 100,
+        pendingCount,
+        collectedCount,
+        totalVatCollected: Math.round(totalVatCollected * 100) / 100,
+        totalVatOnCommission: Math.round(totalVatOnCommission * 100) / 100,
+      },
+      monthlyRevenue,
+      annualRevenue,
+      currentMonth,
+      selectedYear,
+      missionsByStatus: {
+        awaitingPayment,
+        paid,
+        completed,
+        cancelled,
+      },
+      payoutHistory,
+      nextPayout,
+    };
   },
 });

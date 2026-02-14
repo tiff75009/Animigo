@@ -83,6 +83,13 @@ export const registerPro = mutation({
     )),
     isVatSubject: v.optional(v.boolean()),
     legalForm: v.optional(v.string()),
+    // Données entreprise (de l'API société.com)
+    companyAddress: v.optional(v.string()),
+    companyPostalCode: v.optional(v.string()),
+    companyCity: v.optional(v.string()),
+    activityCode: v.optional(v.string()),
+    activityLabel: v.optional(v.string()),
+    companyCreationDate: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<RegisterResult> => {
     // Validations
@@ -165,6 +172,13 @@ export const registerPro = mutation({
       companyType: args.companyType || "unknown",
       isVatSubject: args.isVatSubject ?? false,
       legalForm: args.legalForm,
+      // Données entreprise
+      companyAddress: args.companyAddress,
+      companyPostalCode: args.companyPostalCode,
+      companyCity: args.companyCity,
+      activityCode: args.activityCode,
+      activityLabel: args.activityLabel,
+      companyCreationDate: args.companyCreationDate,
       cguAcceptedAt: now,
       createdAt: now,
       updatedAt: now,

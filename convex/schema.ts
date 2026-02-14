@@ -36,6 +36,15 @@ export default defineSchema({
     isVatSubject: v.optional(v.boolean()),  // Assujetti TVA
     legalForm: v.optional(v.string()),       // Forme juridique brute (catjurlib)
 
+    // Données entreprise (de l'API société.com)
+    companyAddress: v.optional(v.string()),      // Adresse voie
+    companyPostalCode: v.optional(v.string()),   // Code postal
+    companyCity: v.optional(v.string()),         // Ville
+    activityCode: v.optional(v.string()),        // Code NAF/APE
+    activityLabel: v.optional(v.string()),       // Libellé activité
+    companyCreationDate: v.optional(v.string()), // Date de création
+    capital: v.optional(v.number()),             // Capital social en euros
+
     // Metadata
     cguAcceptedAt: v.number(),
     createdAt: v.number(),

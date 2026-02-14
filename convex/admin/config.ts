@@ -808,6 +808,87 @@ export const updatePayoutSettings = mutation({
 });
 
 // ==========================================
+// CHAMPS ENTREPRISE ÉDITABLES
+// ==========================================
+
+// Query publique: Récupérer quels champs entreprise sont éditables par les pros
+export const getCompanyEditableFields = query({
+  args: {},
+  handler: async (ctx) => {
+    const config = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "company_editable_fields"))
+      .first();
+
+    const defaults: Record<string, boolean> = {
+      companyName: false,
+      companyAddress: false,
+      companyPostalCode: false,
+      companyCity: false,
+      activityCode: false,
+      activityLabel: false,
+      companyCreationDate: false,
+      capital: true,
+      legalForm: false,
+    };
+
+    if (!config?.value) return defaults;
+    try {
+      return { ...defaults, ...JSON.parse(config.value) };
+    } catch {
+      return defaults;
+    }
+  },
+});
+
+// Mutation admin: Mettre à jour les champs entreprise éditables
+export const updateCompanyEditableFields = mutation({
+  args: {
+    token: v.string(),
+    fields: v.object({
+      companyName: v.boolean(),
+      companyAddress: v.boolean(),
+      companyPostalCode: v.boolean(),
+      companyCity: v.boolean(),
+      activityCode: v.boolean(),
+      activityLabel: v.boolean(),
+      companyCreationDate: v.boolean(),
+      capital: v.boolean(),
+      legalForm: v.boolean(),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireAdmin(ctx, args.token);
+
+    const existing = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "company_editable_fields"))
+      .first();
+
+    const value = JSON.stringify(args.fields);
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        value,
+        updatedAt: Date.now(),
+        updatedBy: user._id,
+      });
+    } else {
+      await ctx.db.insert("systemConfig", {
+        key: "company_editable_fields",
+        value,
+        isSecret: false,
+        environment: "production",
+        updatedAt: Date.now(),
+        updatedBy: user._id,
+      });
+    }
+
+    return { success: true };
+  },
+});
+
+// ==========================================
 // POLITIQUE D'ANNULATION CLIENT
 // ==========================================
 

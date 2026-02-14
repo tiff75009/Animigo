@@ -1,86 +1,132 @@
 import type { Id } from "@/convex/_generated/dataModel";
 
-// ─── Interfaces ──────────────────────────────────────────
+// ─── Types retournés par la query backend ──────────────
 
-export interface PayoutHistoryItem {
+export interface UserInfo {
+  accountType: string;
+  companyType?: string;
+  isVatSubject: boolean;
+  siret?: string;
+  companyName?: string;
+  commissionRate: number;
+  commissionType: string;
+  commissionLabel: string;
+}
+
+export interface PaymentStats {
+  totalEarnings: number;
+  totalPending: number;
+  totalCollected: number;
+  pendingCount: number;
+  collectedCount: number;
+  totalVatCollected: number;
+  totalVatOnCommission: number;
+}
+
+export interface MonthlyRevenueItem {
+  month: number;
+  monthLabel: string;
+  earnings: number;
+  earningsHT: number;
+  vatAmount: number;
+  vatOnCommission: number;
+  missionsCount: number;
+  commissionsTotal: number;
+}
+
+export interface AnnualRevenueItem {
+  year: number;
+  total: number;
+  totalHT: number;
+  vat: number;
+  count: number;
+}
+
+export interface MissionDetail {
+  _id: Id<"missions">;
+  // Dates
+  bookedAt: number;
+  paidAt?: number;
+  startDate: string;
+  endDate: string;
+  startTime?: string;
+  endTime?: string;
+  completedAt?: number;
+  // Montants (euros)
+  serviceAmount: number;
+  basePrice: number;
+  optionsPrice: number;
+  platformFee: number;
+  stripeFee: number;
+  amount: number;
+  announcerEarnings: number;
+  commissionRate: number;
+  // Pro TVA
+  vatAmount: number;
+  vatOnCommission: number;
+  earningsHT: number;
+  // Infos
+  clientName: string;
+  animal: { name: string; type: string; emoji: string };
+  animals?: Array<{ name: string; type: string; emoji: string }>;
+  serviceName: string;
+  serviceCategory: string;
+  sessionType?: "individual" | "collective";
+  serviceLocation?: "announcer_home" | "client_home";
+  // Statuts
+  status: string;
+  paymentStatus: string;
+  announcerPaymentStatus?: string;
+  readyForPayout?: boolean;
+  payoutScheduledFor?: number;
+  // Annulations
+  cancelledBy?: string;
+  cancelledAt?: number;
+  cancellationReason?: string;
+  refundAmount?: number;
+  announcerRetainedAmount: number;
+}
+
+export interface PayoutDetail {
   id: Id<"announcerPayouts">;
   date: number;
   amount: number;
   grossAmount?: number;
   commissionAmount?: number;
   status: string;
-  missions: string[];
   missionsCount: number;
+  missionNames: string[];
 }
 
-export interface AuthorizedPayment {
-  id: Id<"missions">;
-  clientId: Id<"users">;
-  clientName: string;
-  animal: { name: string; type: string; emoji: string };
-  serviceName: string;
-  serviceCategory: string;
-  startDate: string;
-  endDate: string;
-  status: string;
+export interface NextPayoutInfo {
   amount: number;
-  announcerEarnings: number;
-  paymentStatus: string;
-  authorizedAt?: number;
-  autoCaptureScheduledAt?: number;
-  sessionType?: "individual" | "collective";
-  serviceLocation?: "announcer_home" | "client_home";
-  clientConfirmedAt?: number;
-  autoConfirmedAt?: number;
-  readyForPayout?: boolean;
+  missionsCount: number;
+  scheduledDate: number;
 }
 
-export interface CancelledMission {
-  id: Id<"missions">;
-  cancelledBy: "client" | "announcer" | "system";
-  cancelledAt: number;
-  amount: number;
-  announcerEarnings: number;
-  refundAmount?: number;
-  announcerRetainedAmount: number;
-  clientName: string;
-  serviceName: string;
-  startDate: string;
-  endDate: string;
-  animal: { name: string; type: string; emoji: string };
-  cancellationReason?: string;
+export interface AnnouncerPaymentsData {
+  userInfo: UserInfo;
+  stats: PaymentStats;
+  monthlyRevenue: MonthlyRevenueItem[];
+  annualRevenue: {
+    currentYear: AnnualRevenueItem;
+    previousYear: AnnualRevenueItem;
+  };
+  currentMonth: number;
+  selectedYear: number;
+  missionsByStatus: {
+    awaitingPayment: MissionDetail[];
+    paid: MissionDetail[];
+    completed: MissionDetail[];
+    cancelled: MissionDetail[];
+  };
+  payoutHistory: PayoutDetail[];
+  nextPayout: NextPayoutInfo | null;
 }
 
-export interface PaymentStats {
-  totalPending: number;
-  totalCollected: number;
-  pendingCount: number;
-  paidCount: number;
-  totalEarned: number;
-  totalGross: number;
-  cancelledByClientCount: number;
-  cancelledByClientLost: number;
-  cancelledByAnnouncerCount: number;
-  cancelledByAnnouncerLost: number;
-  announcerRetainedFromCancellations: number;
-}
+export type PaymentTab = "awaitingPayment" | "paid" | "completed" | "cancelled";
 
-// ─── Constantes ──────────────────────────────────────────
-
-export const commissionTiers = [
-  { min: 0, max: 149.99, rate: 15, label: "0 - 149\u20AC" },
-  { min: 150, max: 499.99, rate: 10, label: "150 - 499\u20AC" },
-  { min: 500, max: 999.99, rate: 7, label: "500 - 999\u20AC" },
-  { min: 1000, max: 1499.99, rate: 5, label: "1000 - 1499\u20AC" },
-  { min: 1500, max: Infinity, rate: 3, label: "1500\u20AC et +" },
-];
-
-// ─── Helpers ─────────────────────────────────────────────
-
-export function getCommissionRate(amount: number): number {
-  const tier = commissionTiers.find((t) => amount >= t.min && amount <= t.max);
-  return tier?.rate || 15;
-}
+// ─── Helpers de formatage ──────────────────────────────
 
 export function formatPrice(euros: number): string {
   return euros.toLocaleString("fr-FR", {
@@ -96,80 +142,17 @@ export function formatDateShort(dateStr: string): string {
   });
 }
 
-export function getNextPayoutDate(): {
-  date: Date;
-  daysUntil: number;
-  formatted: string;
-} {
-  const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
-  const currentDay = now.getDate();
-
-  let payoutDate: Date;
-  if (currentDay >= 25) {
-    payoutDate = new Date(currentYear, currentMonth + 1, 25);
-  } else {
-    payoutDate = new Date(currentYear, currentMonth, 25);
-  }
-
-  const diffTime = payoutDate.getTime() - now.getTime();
-  const daysUntil = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-  return {
-    date: payoutDate,
-    daysUntil,
-    formatted: payoutDate.toLocaleDateString("fr-FR", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-    }),
-  };
+export function formatTimestamp(ts: number): string {
+  return new Date(ts).toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
-export function getDaysUntilMission(startDate: string): number {
-  const start = new Date(startDate);
-  const now = new Date();
-  start.setHours(0, 0, 0, 0);
-  now.setHours(0, 0, 0, 0);
-  return Math.ceil(
-    (start.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-  );
-}
-
-export function getAvailableMonths(): { value: string; label: string }[] {
-  const months = [];
-  const now = new Date();
-
-  for (let i = 0; i < 12; i++) {
-    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    months.push({
-      value: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`,
-      label: date.toLocaleDateString("fr-FR", {
-        month: "long",
-        year: "numeric",
-      }),
-    });
-  }
-
-  return months;
-}
-
-export function isInMonth(dateStr: string, monthValue: string): boolean {
-  const date = new Date(dateStr);
-  const [year, month] = monthValue.split("-").map(Number);
-  return date.getFullYear() === year && date.getMonth() + 1 === month;
-}
-
-export function missionOverlapsMonth(
-  startDate: string,
-  endDate: string,
-  monthValue: string
-): boolean {
-  const [year, month] = monthValue.split("-").map(Number);
-  const monthStart = new Date(year, month - 1, 1);
-  const monthEnd = new Date(year, month, 0, 23, 59, 59);
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  return start <= monthEnd && end >= monthStart;
+export function formatTimestampShort(ts: number): string {
+  return new Date(ts).toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+  });
 }

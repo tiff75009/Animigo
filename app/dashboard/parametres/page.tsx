@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Settings,
@@ -35,6 +35,12 @@ import {
   FileCheck,
   Upload,
   ExternalLink,
+  Briefcase,
+  BadgeCheck,
+  Receipt,
+  Save,
+  Hash,
+  RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/app/lib/utils";
@@ -105,6 +111,403 @@ function SectionCard({
       </div>
       {children}
     </div>
+  );
+}
+
+// Section Entreprise (pour les annonceurs pro)
+function CompanyInfoSection({
+  token,
+  sessionData,
+}: {
+  token: string | null;
+  sessionData: {
+    user: {
+      siret?: string;
+      companyName?: string;
+      companyType?: string;
+      isVatSubject?: boolean;
+      legalForm?: string;
+      companyAddress?: string;
+      companyPostalCode?: string;
+      companyCity?: string;
+      activityCode?: string;
+      activityLabel?: string;
+      companyCreationDate?: string;
+      capital?: number;
+    };
+  } | null | undefined;
+}) {
+  const user = sessionData?.user;
+  const updateCompanyInfo = useMutation(api.auth.username.updateCompanyInfo);
+  const syncCompanyFromSiret = useMutation(api.auth.username.syncCompanyFromSiret);
+  const verifySiret = useAction(api.api.societe.verifySiret);
+  const editableFieldsConfig = useQuery(api.admin.config.getCompanyEditableFields);
+
+  // État re-sync SIRET
+  const [syncing, setSyncing] = useState(false);
+  const [syncSuccess, setSyncSuccess] = useState(false);
+  const [syncError, setSyncError] = useState("");
+
+  // Form data pour tous les champs
+  const [formData, setFormData] = useState({
+    companyName: "",
+    legalForm: "",
+    companyAddress: "",
+    companyPostalCode: "",
+    companyCity: "",
+    activityCode: "",
+    activityLabel: "",
+    companyCreationDate: "",
+    capital: "",
+  });
+
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  // Sync form data depuis session
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        companyName: user.companyName || "",
+        legalForm: user.legalForm || "",
+        companyAddress: user.companyAddress || "",
+        companyPostalCode: user.companyPostalCode || "",
+        companyCity: user.companyCity || "",
+        activityCode: user.activityCode || "",
+        activityLabel: user.activityLabel || "",
+        companyCreationDate: user.companyCreationDate || "",
+        capital: user.capital !== undefined && user.capital !== null ? String(user.capital) : "",
+      });
+    }
+  }, [user]);
+
+  // Re-vérifier le SIRET et synchroniser les données manquantes
+  const handleResync = async () => {
+    if (!token || !user?.siret) return;
+    setSyncing(true);
+    setSyncError("");
+    setSyncSuccess(false);
+    try {
+      const result = await verifySiret({ siret: user.siret });
+      if (!result.valid) {
+        setSyncError(result.error || "SIRET non vérifié");
+        return;
+      }
+      await syncCompanyFromSiret({
+        sessionToken: token,
+        companyName: result.companyName,
+        companyAddress: result.address,
+        companyPostalCode: result.postalCode,
+        companyCity: result.city,
+        activityCode: result.activityCode,
+        activityLabel: result.activityLabel,
+        companyCreationDate: result.creationDate,
+        legalForm: result.legalForm,
+        companyType: result.companyType,
+        isVatSubject: result.isVatSubject,
+      });
+      setSyncSuccess(true);
+      setTimeout(() => setSyncSuccess(false), 4000);
+    } catch (error: unknown) {
+      setSyncError(error instanceof Error ? error.message : "Erreur lors de la synchronisation");
+      setTimeout(() => setSyncError(""), 5000);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const editableFields = editableFieldsConfig ?? {
+    companyName: false, companyAddress: false, companyPostalCode: false,
+    companyCity: false, activityCode: false, activityLabel: false,
+    companyCreationDate: false, capital: true, legalForm: false,
+  };
+
+  // Détection des changements (uniquement sur champs éditables)
+  const hasChanges = useMemo(() => {
+    if (!user) return false;
+    for (const key of Object.keys(editableFields) as (keyof typeof editableFields)[]) {
+      if (!editableFields[key]) continue;
+      if (key === "capital") {
+        const original = user.capital !== undefined && user.capital !== null ? String(user.capital) : "";
+        if (formData.capital !== original) return true;
+      } else {
+        const original = (user as Record<string, unknown>)[key] ?? "";
+        if (formData[key] !== original) return true;
+      }
+    }
+    return false;
+  }, [user, formData, editableFields]);
+
+  // Formater SIRET en groupes 3-3-3-5
+  const formatSiret = (siret: string) => {
+    const digits = siret.replace(/\D/g, "");
+    if (digits.length !== 14) return siret;
+    return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 9)} ${digits.slice(9, 14)}`;
+  };
+
+  // Formater date en français (YYYY-MM-DD ou YYYYMMDD → JJ/MM/AAAA)
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return "";
+    if (dateStr.includes("-")) {
+      const [y, m, d] = dateStr.split("-");
+      return `${d}/${m}/${y}`;
+    }
+    // Format YYYYMMDD (sans tirets)
+    if (/^\d{8}$/.test(dateStr)) {
+      return `${dateStr.slice(6, 8)}/${dateStr.slice(4, 6)}/${dateStr.slice(0, 4)}`;
+    }
+    return dateStr;
+  };
+
+  // Badge companyType
+  const getCompanyTypeBadge = () => {
+    if (!user?.companyType || user.companyType === "unknown") return null;
+    if (user.companyType === "micro_enterprise") {
+      return { label: "Micro-entreprise", color: "bg-blue-100 text-blue-700" };
+    }
+    return { label: "Société", color: "bg-purple-100 text-purple-700" };
+  };
+
+  const handleSave = async () => {
+    if (!token) return;
+    setSaving(true);
+    setSaveError("");
+    try {
+      const payload: Record<string, unknown> = { sessionToken: token };
+
+      // N'envoyer que les champs éditables
+      for (const key of Object.keys(editableFields) as (keyof typeof editableFields)[]) {
+        if (!editableFields[key]) continue;
+        if (key === "capital") {
+          const val = formData.capital.trim() ? parseFloat(formData.capital) : undefined;
+          if (val !== undefined && isNaN(val)) {
+            setSaveError("Capital : montant invalide");
+            setSaving(false);
+            return;
+          }
+          payload.capital = val;
+        } else {
+          payload[key] = formData[key];
+        }
+      }
+
+      await updateCompanyInfo(payload as Parameters<typeof updateCompanyInfo>[0]);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (error: unknown) {
+      setSaveError(error instanceof Error ? error.message : "Erreur lors de la sauvegarde");
+      setTimeout(() => setSaveError(""), 5000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const badge = getCompanyTypeBadge();
+
+  // Helper : rendu champ éditable ou lecture seule (fonction, pas composant)
+  const renderField = (
+    fieldKey: keyof typeof formData,
+    label: string,
+    FieldIcon: React.ElementType,
+    opts?: { type?: string; suffix?: string; displayValue?: string },
+  ) => {
+    const isEditable = editableFields[fieldKey] ?? false;
+    const { type = "text", suffix, displayValue } = opts ?? {};
+
+    if (isEditable) {
+      return (
+        <div key={fieldKey}>
+          <label className="flex items-center gap-2 text-sm font-medium text-foreground mb-2">
+            <FieldIcon className="w-4 h-4 text-text-light" />
+            {label}
+          </label>
+          <div className="relative">
+            <input
+              type={type}
+              value={formData[fieldKey]}
+              onChange={(e) => setFormData((prev) => ({ ...prev, [fieldKey]: e.target.value }))}
+              className="w-full px-4 py-3 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
+            />
+            {suffix && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-light text-sm">
+                {suffix}
+              </span>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div key={fieldKey} className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <FieldIcon className="w-4 h-4 text-text-light" />
+          <span className="text-sm text-text-light">{label}</span>
+        </div>
+        <span className="text-sm font-medium text-foreground">
+          {displayValue || formData[fieldKey] || "—"}
+        </span>
+      </div>
+    );
+  };
+
+  return (
+    <SectionCard title="Mon entreprise" icon={Building}>
+      <div className="space-y-5">
+        {/* SIRET - toujours lecture seule */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Hash className="w-4 h-4 text-text-light" />
+            <span className="text-sm text-text-light">SIRET</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-foreground font-mono">
+              {user?.siret ? formatSiret(user.siret) : "—"}
+            </span>
+            <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">
+              Vérifié
+            </span>
+          </div>
+        </div>
+
+        {/* Séparateur identité */}
+        <div className="border-t border-gray-100" />
+
+        {/* Identité */}
+        {renderField("companyName", "Raison sociale", Building)}
+        {renderField("legalForm", "Forme juridique", BadgeCheck, {
+          displayValue: formData.legalForm
+            ? `${formData.legalForm}${badge ? ` · ${badge.label}` : ""}`
+            : "—",
+        })}
+
+        {/* Séparateur adresse */}
+        <div className="border-t border-gray-100" />
+
+        {/* Adresse */}
+        {renderField("companyAddress", "Adresse du siège", MapPin)}
+        {renderField("companyPostalCode", "Code postal", MapPin)}
+        {renderField("companyCity", "Ville", MapPin)}
+
+        {/* Séparateur activité */}
+        <div className="border-t border-gray-100" />
+
+        {/* Activité */}
+        {renderField("activityCode", "Code NAF/APE", Briefcase)}
+        {renderField("activityLabel", "Libellé activité", Briefcase)}
+        {renderField("companyCreationDate", "Date de création", CalendarIcon, {
+          displayValue: formData.companyCreationDate ? formatDate(formData.companyCreationDate) : "—",
+        })}
+
+        {/* Séparateur capital */}
+        <div className="border-t border-gray-100" />
+
+        {/* Capital */}
+        {renderField("capital", "Capital social", Euro, { type: "number", suffix: "€" })}
+
+        {/* TVA - toujours lecture seule */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Receipt className="w-4 h-4 text-text-light" />
+            <span className="text-sm text-text-light">Assujetti TVA</span>
+          </div>
+          <span className={cn(
+            "px-2 py-0.5 text-xs rounded-full font-medium",
+            user?.isVatSubject ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-600"
+          )}>
+            {user?.isVatSubject ? "Oui" : "Non"}
+          </span>
+        </div>
+
+        {/* Bouton Enregistrer */}
+        {hasChanges && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <motion.button
+              onClick={handleSave}
+              disabled={saving}
+              className={cn(
+                "w-full py-3 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2",
+                saved
+                  ? "bg-green-500 text-white"
+                  : "bg-primary text-white hover:bg-primary/90 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              )}
+              whileHover={{ scale: saved ? 1 : 1.01 }}
+              whileTap={{ scale: 0.99 }}
+            >
+              {saved ? (
+                <>
+                  <Check className="w-5 h-5" />
+                  Modifications enregistrées
+                </>
+              ) : saving ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Enregistrement...
+                </>
+              ) : (
+                <>
+                  <Save className="w-5 h-5" />
+                  Enregistrer les modifications
+                </>
+              )}
+            </motion.button>
+          </motion.div>
+        )}
+
+        {saveError && (
+          <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" />
+            {saveError}
+          </p>
+        )}
+
+        {/* Re-vérifier SIRET */}
+        <div className="border-t border-gray-100 pt-4">
+          <motion.button
+            onClick={handleResync}
+            disabled={syncing || !user?.siret}
+            className={cn(
+              "w-full py-2.5 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2",
+              syncSuccess
+                ? "bg-green-50 text-green-600 border border-green-200"
+                : "bg-gray-50 text-text-light hover:bg-gray-100 hover:text-foreground border border-gray-200"
+            )}
+            whileHover={{ scale: syncSuccess ? 1 : 1.01 }}
+            whileTap={{ scale: 0.99 }}
+          >
+            {syncSuccess ? (
+              <>
+                <Check className="w-4 h-4" />
+                Données mises à jour
+              </>
+            ) : syncing ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Vérification en cours...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-4 h-4" />
+                Re-vérifier mon SIRET
+              </>
+            )}
+          </motion.button>
+          {syncError && (
+            <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" />
+              {syncError}
+            </p>
+          )}
+          <p className="text-xs text-text-light mt-2">
+            Re-synchronise les données officielles (adresse, activité, forme juridique...) depuis votre SIRET.
+          </p>
+        </div>
+      </div>
+    </SectionCard>
   );
 }
 
@@ -350,6 +753,11 @@ function InformationTab() {
           </motion.button>
         </div>
       </SectionCard>
+
+      {/* Section Entreprise - uniquement pour les pros */}
+      {sessionData?.user?.accountType === "annonceur_pro" && (
+        <CompanyInfoSection token={token} sessionData={sessionData} />
+      )}
 
       <SectionCard title="Modifier le mot de passe" icon={Lock}>
         <div className="space-y-4">
@@ -2340,15 +2748,15 @@ export default function ParametresPage() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 max-w-6xl mx-auto">
+    <div className="flex flex-col lg:flex-row gap-4">
       {/* Sidebar */}
       <motion.aside
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
-        className="lg:w-64 flex-shrink-0"
+        className="lg:w-56 flex-shrink-0"
       >
-        <div className="bg-white rounded-2xl shadow-lg p-4 sticky top-4">
-          <div className="flex items-center gap-3 mb-6 px-2">
+        <div className="bg-white rounded-2xl shadow-lg p-3 sticky top-4">
+          <div className="flex items-center gap-3 mb-5 px-2">
             <div className="p-2 bg-primary/10 rounded-xl">
               <Settings className="w-5 h-5 text-primary" />
             </div>
@@ -2361,7 +2769,7 @@ export default function ParametresPage() {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-colors",
+                  "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-left transition-colors",
                   activeTab === tab.id
                     ? "bg-primary text-white"
                     : "text-foreground hover:bg-gray-100"

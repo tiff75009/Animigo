@@ -64,6 +64,13 @@ export interface RegistrationData {
   companyType?: "micro_enterprise" | "regular_company" | "unknown";
   isVatSubject?: boolean;
   legalForm?: string;
+  // Données entreprise (de l'API société.com)
+  companyAddress?: string;
+  companyPostalCode?: string;
+  companyCity?: string;
+  activityCode?: string;
+  activityLabel?: string;
+  companyCreationDate?: string;
   phoneVerified: boolean;
   acceptCgu: boolean;
 }
@@ -193,6 +200,13 @@ export default function InscriptionPage() {
           companyType: data.companyType,
           isVatSubject: data.isVatSubject,
           legalForm: data.legalForm,
+          // Données entreprise
+          companyAddress: data.companyAddress,
+          companyPostalCode: data.companyPostalCode,
+          companyCity: data.companyCity,
+          activityCode: data.activityCode,
+          activityLabel: data.activityLabel,
+          companyCreationDate: data.companyCreationDate,
           phoneVerified: data.phoneVerified,
           acceptCgu: data.acceptCgu,
         });
