@@ -66,6 +66,7 @@ export interface InvoiceData {
   recipientAddress?: InvoiceAddress;
   mission?: InvoiceMission;
   serviceTypeSlug?: string | null;
+  emitterLogoUrl?: string;   // URL du logo entreprise
   // Frais client (ajoutés uniquement côté client)
   platformFee?: number;      // Commission Animigo en centimes
   stripeFee?: number;        // Frais de paiement Stripe en centimes
@@ -121,6 +122,38 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Blob> {
   doc.setFillColor(accent.r, accent.g, accent.b);
   doc.rect(0, 0, pageWidth, 4, "F");
   y = 18;
+
+  // ── Logo entreprise (gauche) ──
+  if (data.emitterLogoUrl) {
+    try {
+      const logoResponse = await fetch(data.emitterLogoUrl);
+      const logoBlob = await logoResponse.blob();
+      const logoBase64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(logoBlob);
+      });
+
+      const img = new Image();
+      img.src = logoBase64;
+      await new Promise((resolve) => { img.onload = resolve; });
+
+      const maxLogoMm = 25;
+      const ratio = img.width / img.height;
+      let logoW = maxLogoMm;
+      let logoH = maxLogoMm;
+      if (ratio > 1) {
+        logoH = maxLogoMm / ratio;
+      } else {
+        logoW = maxLogoMm * ratio;
+      }
+
+      const format = logoBase64.includes("data:image/png") ? "PNG" : "JPEG";
+      doc.addImage(logoBase64, format, margin, 8, logoW, logoH);
+    } catch {
+      // Si le chargement échoue, on continue sans logo
+    }
+  }
 
   // ── FACTURE titre (droite) ──
   doc.setFontSize(22);

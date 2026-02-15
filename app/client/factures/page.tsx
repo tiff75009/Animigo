@@ -135,6 +135,7 @@ function ClientInvoiceRow({
           overnightNights: invoiceDetails.mission.overnightNights,
         } : undefined,
         serviceTypeSlug: invoiceDetails.serviceTypeSlug,
+        emitterLogoUrl: invoiceDetails.emitterLogoUrl || undefined,
         platformFee: invoiceDetails.mission?.platformFee,
         stripeFee: invoiceDetails.mission?.stripeFee,
         commissionRate: invoiceDetails.mission?.commissionRate,

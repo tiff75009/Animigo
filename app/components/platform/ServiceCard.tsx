@@ -42,6 +42,7 @@ export interface ServiceSearchResult {
   lastName: string;
   username?: string;
   profileImage: string | null;
+  isDisplayingLogo?: boolean;
   coverImage: string | null;
   location: string;
   coordinates: { lat: number; lng: number } | null;
@@ -483,7 +484,7 @@ export function ServiceCardGrid({ service, onViewService, index, hasDateFilter =
                   alt={service.firstName}
                   width={56}
                   height={56}
-                  className="w-full h-full object-cover"
+                  className={cn("w-full h-full", service.isDisplayingLogo ? "object-contain p-1" : "object-cover")}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20">
@@ -689,7 +690,7 @@ export function ServiceCardList({ service, onViewService, index, hasDateFilter =
                     alt={service.firstName}
                     width={48}
                     height={48}
-                    className="w-full h-full object-cover"
+                    className={cn("w-full h-full", service.isDisplayingLogo ? "object-contain p-1" : "object-cover")}
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20">

@@ -121,6 +121,8 @@ export default defineSchema({
     userId: v.id("users"),
     profileImageUrl: v.optional(v.string()), // URL Cloudinary de la photo de profil
     coverImageUrl: v.optional(v.string()), // URL Cloudinary de la photo de couverture/bannière
+    companyLogoUrl: v.optional(v.string()), // URL Cloudinary du logo entreprise
+    listingDisplayImage: v.optional(v.union(v.literal("profile"), v.literal("logo"))), // Image affichée sur les annonces
     bio: v.optional(v.string()), // Description courte
     description: v.optional(v.string()), // Description détaillée
     experience: v.optional(v.string()), // Années d'expérience, formations

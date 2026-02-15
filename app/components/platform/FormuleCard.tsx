@@ -154,6 +154,7 @@ export interface FormuleResult {
   announcerLastName: string;
   announcerUsername?: string;
   announcerProfileImage?: string | null;
+  announcerIsDisplayingLogo?: boolean;
   announcerRating: number;
   announcerReviewCount: number;
   announcerLocation: string;
@@ -343,7 +344,7 @@ export function FormuleCardGrid({
                     alt={formule.announcerFirstName}
                     width={44}
                     height={44}
-                    className="w-full h-full object-cover"
+                    className={cn("w-full h-full", formule.announcerIsDisplayingLogo ? "object-contain p-0.5" : "object-cover")}
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20">
@@ -565,7 +566,7 @@ export function FormuleCardList({
                     alt={formule.announcerFirstName}
                     width={56}
                     height={56}
-                    className="w-full h-full object-cover"
+                    className={cn("w-full h-full", formule.announcerIsDisplayingLogo ? "object-contain p-1" : "object-cover")}
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20">

@@ -68,6 +68,8 @@ export const upsertProfile = mutation({
     token: v.string(),
     profileImageUrl: v.optional(v.union(v.string(), v.null())),
     coverImageUrl: v.optional(v.union(v.string(), v.null())),
+    companyLogoUrl: v.optional(v.union(v.string(), v.null())),
+    listingDisplayImage: v.optional(v.union(v.literal("profile"), v.literal("logo"), v.null())),
     bio: v.optional(v.union(v.string(), v.null())),
     description: v.optional(v.union(v.string(), v.null())),
     experience: v.optional(v.union(v.string(), v.null())),
@@ -174,6 +176,8 @@ export const upsertProfile = mutation({
     // Champs simples
     addIfDefined(profileData, "profileImageUrl", args.profileImageUrl);
     addIfDefined(profileData, "coverImageUrl", args.coverImageUrl);
+    addIfDefined(profileData, "companyLogoUrl", args.companyLogoUrl);
+    addIfDefined(profileData, "listingDisplayImage", args.listingDisplayImage);
     addIfDefined(profileData, "bio", args.bio);
     addIfDefined(profileData, "description", args.description);
     addIfDefined(profileData, "experience", args.experience);
@@ -275,6 +279,8 @@ export const upsertProfile = mutation({
         updatedAt: number;
         profileImageUrl?: string;
         coverImageUrl?: string;
+        companyLogoUrl?: string;
+        listingDisplayImage?: "profile" | "logo";
         bio?: string;
         description?: string;
         experience?: string;
@@ -329,6 +335,8 @@ export const upsertProfile = mutation({
       // Copier les valeurs définies
       if (profileData.profileImageUrl !== undefined) newProfile.profileImageUrl = profileData.profileImageUrl as string | undefined;
       if (profileData.coverImageUrl !== undefined) newProfile.coverImageUrl = profileData.coverImageUrl as string | undefined;
+      if (profileData.companyLogoUrl !== undefined) newProfile.companyLogoUrl = profileData.companyLogoUrl as string | undefined;
+      if (profileData.listingDisplayImage !== undefined) newProfile.listingDisplayImage = profileData.listingDisplayImage as "profile" | "logo" | undefined;
       if (profileData.bio !== undefined) newProfile.bio = profileData.bio as string | undefined;
       if (profileData.description !== undefined) newProfile.description = profileData.description as string | undefined;
       if (profileData.experience !== undefined) newProfile.experience = profileData.experience as string | undefined;

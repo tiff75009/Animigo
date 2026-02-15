@@ -232,7 +232,10 @@ export const getAnnouncerProfile = query({
       statusType: getStatusType(),
 
       // Infos profil
-      profileImage: profile?.profileImageUrl || null,
+      profileImage: (profile?.listingDisplayImage === "logo" && profile?.companyLogoUrl)
+        ? profile.companyLogoUrl
+        : (profile?.profileImageUrl || null),
+      isDisplayingLogo: !!(profile?.listingDisplayImage === "logo" && profile?.companyLogoUrl),
       coverImage: profile?.coverImageUrl || null,
       bio: profile?.description || null,
       location: buildDisplayLocation(),
@@ -553,7 +556,10 @@ export const getAnnouncerBySlug = query({
       statusType: getStatusType(),
 
       // Infos profil
-      profileImage: profile?.profileImageUrl || null,
+      profileImage: (profile?.listingDisplayImage === "logo" && profile?.companyLogoUrl)
+        ? profile.companyLogoUrl
+        : (profile?.profileImageUrl || null),
+      isDisplayingLogo: !!(profile?.listingDisplayImage === "logo" && profile?.companyLogoUrl),
       coverImage: profile?.coverImageUrl || null,
       bio: profile?.description || null,
       location: buildDisplayLocation(),

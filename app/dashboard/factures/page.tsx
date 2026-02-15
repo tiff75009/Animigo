@@ -319,6 +319,7 @@ function InvoiceRow({
           overnightNights: invoiceDetails.mission.overnightNights,
         } : undefined,
         serviceTypeSlug: invoiceDetails.serviceTypeSlug,
+        emitterLogoUrl: invoiceDetails.emitterLogoUrl || undefined,
       };
 
       const blob = await generateInvoicePdf(pdfData);

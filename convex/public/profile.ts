@@ -177,7 +177,10 @@ export const getPublicProfileBySlug = query({
           ? "particulier"
           : "utilisateur",
       // Profil
-      profileImage: profile?.profileImageUrl || null,
+      profileImage: (profile?.listingDisplayImage === "logo" && profile?.companyLogoUrl)
+        ? profile.companyLogoUrl
+        : (profile?.profileImageUrl || null),
+      isDisplayingLogo: !!(profile?.listingDisplayImage === "logo" && profile?.companyLogoUrl),
       coverImage: profile?.coverImageUrl || null,
       bio: profile?.description || profile?.bio || null,
       location: profile?.location || profile?.city || null,

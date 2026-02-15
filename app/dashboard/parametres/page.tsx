@@ -41,11 +41,13 @@ import {
   Save,
   Hash,
   RefreshCw,
+  ImageIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/app/lib/utils";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import CompanyLogoUpload from "@/app/dashboard/components/CompanyLogoUpload";
 
 // Types
 type TabId = "information" | "paiement" | "notification" | "planning" | "sap";
@@ -142,6 +144,8 @@ function CompanyInfoSection({
   const syncCompanyFromSiret = useMutation(api.auth.username.syncCompanyFromSiret);
   const verifySiret = useAction(api.api.societe.verifySiret);
   const editableFieldsConfig = useQuery(api.admin.config.getCompanyEditableFields);
+  const profileData = useQuery(api.services.profile.getProfile, token ? { token } : "skip");
+  const upsertProfile = useMutation(api.services.profile.upsertProfile);
 
   // État re-sync SIRET
   const [syncing, setSyncing] = useState(false);
@@ -370,6 +374,86 @@ function CompanyInfoSection({
             </span>
           </div>
         </div>
+
+        {/* Logo entreprise */}
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <ImageIcon className="w-4 h-4 text-text-light" />
+            <span className="text-sm text-text-light">Logo de l&apos;entreprise</span>
+          </div>
+          <CompanyLogoUpload
+            currentLogoUrl={profileData?.profile?.companyLogoUrl}
+            onUploadComplete={async (url) => {
+              if (!token) return;
+              await upsertProfile({ token, companyLogoUrl: url });
+            }}
+            onRemove={async () => {
+              if (!token) return;
+              await upsertProfile({ token, companyLogoUrl: null });
+            }}
+          />
+          <p className="text-xs text-text-light mt-2">
+            Apparaîtra sur vos factures. JPG ou PNG, max 2 Mo.
+          </p>
+        </div>
+
+        {/* Choix image annonces */}
+        {profileData?.profile?.companyLogoUrl && (
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <ImageIcon className="w-4 h-4 text-text-light" />
+              <span className="text-sm text-text-light">Image sur les annonces</span>
+            </div>
+            <div className="flex gap-3">
+              <motion.button
+                type="button"
+                onClick={async () => {
+                  if (!token) return;
+                  await upsertProfile({ token, listingDisplayImage: "profile" });
+                }}
+                className={cn(
+                  "flex-1 flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-colors",
+                  (!profileData.profile.listingDisplayImage || profileData.profile.listingDisplayImage === "profile")
+                    ? "border-primary bg-primary/5"
+                    : "border-gray-200 hover:border-gray-300"
+                )}
+                whileTap={{ scale: 0.98 }}
+              >
+                <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
+                  {profileData.profile.profileImageUrl ? (
+                    <img src={profileData.profile.profileImageUrl} alt="Profil" className="w-full h-full object-cover" />
+                  ) : (
+                    <User className="w-5 h-5 text-gray-400" />
+                  )}
+                </div>
+                <span className="text-xs font-medium text-foreground">Photo de profil</span>
+              </motion.button>
+
+              <motion.button
+                type="button"
+                onClick={async () => {
+                  if (!token) return;
+                  await upsertProfile({ token, listingDisplayImage: "logo" });
+                }}
+                className={cn(
+                  "flex-1 flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-colors",
+                  profileData.profile.listingDisplayImage === "logo"
+                    ? "border-primary bg-primary/5"
+                    : "border-gray-200 hover:border-gray-300"
+                )}
+                whileTap={{ scale: 0.98 }}
+              >
+                <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
+                  <img src={profileData.profile.companyLogoUrl} alt="Logo" className="w-full h-full object-contain" />
+                </div>
+                <span className="text-xs font-medium text-foreground">Logo entreprise</span>
+              </motion.button>
+            </div>
+            <p className="text-xs text-text-light mt-2">
+              Choisissez l&apos;image affichée dans les résultats de recherche et sur votre profil public.
+            </p>
+          </div>
+        )}
 
         {/* Séparateur identité */}
         <div className="border-t border-gray-100" />

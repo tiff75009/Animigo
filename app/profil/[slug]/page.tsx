@@ -261,14 +261,14 @@ export default function PublicProfilePage() {
               <div className="flex flex-col sm:flex-row gap-5 sm:gap-6">
                 {/* Avatar */}
                 <div className="relative mx-auto sm:mx-0 flex-shrink-0">
-                  <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-3xl overflow-hidden bg-gray-100 ring-4 ring-white shadow-2xl">
+                  <div className={cn("w-28 h-28 sm:w-32 sm:h-32 rounded-3xl overflow-hidden ring-4 ring-white shadow-2xl", profileData.isDisplayingLogo ? "bg-white" : "bg-gray-100")}>
                     {profileData.profileImage ? (
                       <Image
                         src={profileData.profileImage}
                         alt={profileData.firstName}
                         width={128}
                         height={128}
-                        className="w-full h-full object-cover"
+                        className={cn("w-full h-full", profileData.isDisplayingLogo ? "object-contain p-2" : "object-cover")}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20">

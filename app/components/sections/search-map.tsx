@@ -321,7 +321,7 @@ function HomeServiceCard({
               src={service.profileImage}
               alt={service.firstName}
               fill
-              className="object-cover"
+              className={service.isDisplayingLogo ? "object-contain p-1" : "object-cover"}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
@@ -571,6 +571,7 @@ export function SearchMapSection() {
       firstName: string;
       lastName: string;
       profileImage: string | null;
+      isDisplayingLogo?: boolean;
       location: string;
       coordinates: { lat: number; lng: number };
       services: Array<{
@@ -621,6 +622,7 @@ export function SearchMapSection() {
           firstName: s.firstName,
           lastName: s.lastName,
           profileImage: s.profileImage,
+          isDisplayingLogo: s.isDisplayingLogo,
           location: s.location,
           coordinates: s.coordinates,
           services: [{

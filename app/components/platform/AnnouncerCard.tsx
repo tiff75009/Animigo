@@ -197,7 +197,7 @@ export function AnnouncerCardGrid({ announcer, onShowFormulas, index }: Announce
                 alt={announcer.firstName}
                 width={56}
                 height={56}
-                className="w-full h-full object-cover"
+                className={cn("w-full h-full", announcer.isDisplayingLogo ? "object-contain p-1" : "object-cover")}
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20">
@@ -412,7 +412,7 @@ export function AnnouncerCardList({ announcer, onShowFormulas, index }: Announce
                   alt={announcer.firstName}
                   width={48}
                   height={48}
-                  className="w-full h-full object-cover"
+                  className={cn("w-full h-full", announcer.isDisplayingLogo ? "object-contain p-1" : "object-cover")}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20">

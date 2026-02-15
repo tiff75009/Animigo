@@ -616,7 +616,10 @@ export const searchAnnouncers = query({
         firstName: announcer.firstName,
         lastName: announcer.lastName,
         username: announcer.username ?? undefined,
-        profileImage: profile.profileImageUrl ?? profileImageUrl,
+        profileImage: (profile.listingDisplayImage === "logo" && profile.companyLogoUrl)
+          ? profile.companyLogoUrl
+          : (profile.profileImageUrl ?? profileImageUrl),
+        isDisplayingLogo: !!(profile.listingDisplayImage === "logo" && profile.companyLogoUrl),
         coverImage: profile.coverImageUrl ?? null,
         location: profile.city ?? profile.location ?? "",
         coordinates: profile.coordinates,
@@ -949,7 +952,10 @@ export const searchAnnouncersInternal = query({
         firstName: announcer.firstName,
         lastName: announcer.lastName,
         username: announcer.username ?? undefined,
-        profileImage: profile.profileImageUrl ?? profileImageUrl,
+        profileImage: (profile.listingDisplayImage === "logo" && profile.companyLogoUrl)
+          ? profile.companyLogoUrl
+          : (profile.profileImageUrl ?? profileImageUrl),
+        isDisplayingLogo: !!(profile.listingDisplayImage === "logo" && profile.companyLogoUrl),
         coverImage: profile.coverImageUrl ?? null,
         location: profile.city ?? profile.location ?? "",
         coordinates: profile.coordinates,
@@ -1394,7 +1400,10 @@ export const searchFormules = query({
           announcerFirstName: announcer.firstName,
           announcerLastName: announcer.lastName,
           announcerUsername: announcer.username ?? undefined,
-          announcerProfileImage: profile.profileImageUrl ?? profileImageUrl,
+          announcerProfileImage: (profile.listingDisplayImage === "logo" && profile.companyLogoUrl)
+            ? profile.companyLogoUrl
+            : (profile.profileImageUrl ?? profileImageUrl),
+          announcerIsDisplayingLogo: !!(profile.listingDisplayImage === "logo" && profile.companyLogoUrl),
           announcerRating: 4.5, // TODO: calculer
           announcerReviewCount: 0,
           announcerLocation: profile.city ?? profile.location ?? "",
@@ -1733,7 +1742,10 @@ export const searchFormulesInternal = query({
           announcerFirstName: announcer.firstName,
           announcerLastName: announcer.lastName,
           announcerUsername: announcer.username ?? undefined,
-          announcerProfileImage: profile.profileImageUrl ?? profileImageUrl,
+          announcerProfileImage: (profile.listingDisplayImage === "logo" && profile.companyLogoUrl)
+            ? profile.companyLogoUrl
+            : (profile.profileImageUrl ?? profileImageUrl),
+          announcerIsDisplayingLogo: !!(profile.listingDisplayImage === "logo" && profile.companyLogoUrl),
           announcerRating: 4.5,
           announcerReviewCount: 0,
           announcerLocation: profile.city ?? profile.location ?? "",
@@ -2701,7 +2713,10 @@ export const getAnnouncerById = query({
       firstName: announcer.firstName,
       lastName: announcer.lastName,
       username: announcer.username ?? undefined,
-      profileImage: profileImageUrl,
+      profileImage: (profile?.listingDisplayImage === "logo" && profile?.companyLogoUrl)
+        ? profile.companyLogoUrl
+        : profileImageUrl,
+      isDisplayingLogo: !!(profile?.listingDisplayImage === "logo" && profile?.companyLogoUrl),
       location: profile?.city ?? profile?.location ?? "",
       city: profile?.city ?? null,
       postalCode: profile?.postalCode ?? null,
@@ -2723,6 +2738,7 @@ interface ServiceSearchResult {
   lastName: string;
   username?: string;
   profileImage: string | null;
+  isDisplayingLogo: boolean;
   coverImage: string | null;
   location: string;
   coordinates: { lat: number; lng: number } | null;
@@ -3207,7 +3223,10 @@ export const searchServices = query({
           firstName: announcer.firstName,
           lastName: announcer.lastName,
           username: announcer.username ?? undefined,
-          profileImage: profile.profileImageUrl ?? profileImageUrl,
+          profileImage: (profile.listingDisplayImage === "logo" && profile.companyLogoUrl)
+            ? profile.companyLogoUrl
+            : (profile.profileImageUrl ?? profileImageUrl),
+          isDisplayingLogo: !!(profile.listingDisplayImage === "logo" && profile.companyLogoUrl),
           coverImage: profile.coverImageUrl ?? null,
           location: profile.city ?? profile.location ?? "",
           coordinates: profile.coordinates ?? null,

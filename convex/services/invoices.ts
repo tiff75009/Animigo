@@ -497,6 +497,7 @@ export const getInvoiceDetails = query({
             legalForm: emitter.legalForm,
           }
         : null,
+      emitterLogoUrl: emitterProfile?.companyLogoUrl ?? null,
       emitterAddress: emitterProfile
         ? {
             location: emitterProfile.location,

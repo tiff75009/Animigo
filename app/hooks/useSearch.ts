@@ -124,6 +124,7 @@ export interface AnnouncerResult {
   firstName: string;
   lastName: string;
   profileImage?: string | null; // Avatar
+  isDisplayingLogo?: boolean; // true si profileImage contient le logo entreprise
   coverImage?: string | null; // Photo de couverture
   location: string;
   coordinates?: Coordinates;
@@ -167,6 +168,7 @@ export interface FormuleResult {
   announcerFirstName: string;
   announcerLastName: string;
   announcerProfileImage?: string | null;
+  announcerIsDisplayingLogo?: boolean;
   announcerRating: number;
   announcerReviewCount: number;
   announcerLocation: string;
