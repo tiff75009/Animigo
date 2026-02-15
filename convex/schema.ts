@@ -1483,6 +1483,7 @@ export default defineSchema({
     items: v.array(v.object({
       description: v.string(),
       quantity: v.number(),
+      unit: v.optional(v.string()), // "jour", "H", "séance", "forfait", "min", "nuit"
       unitPrice: v.number(),
       total: v.number(),
     })),

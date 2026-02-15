@@ -217,7 +217,7 @@ export default function FloatingSidebar() {
   const isCollapsed = isLgScreen ? isManuallyCollapsed : true;
 
   const mainNavItems: NavItem[] = [
-    { href: "/client", icon: <Home className="w-5 h-5" />, label: "Accueil" },
+    { href: "/client", icon: <Home className="w-5 h-5" />, label: "Dashboard" },
     { href: "/recherche", icon: <Search className="w-5 h-5" />, label: "Rechercher" },
     { href: "/client/messagerie", icon: <MessageCircle className="w-5 h-5" />, label: "Messages", badge: unreadCount },
     { href: "/client/notifications", icon: <Bell className="w-5 h-5" />, label: "Notifications" },

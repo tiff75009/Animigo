@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, Loader2, LayoutGrid, List } from "lucide-react";
+import { Search, Loader2, LayoutGrid, List, AlertCircle, CheckCircle2, ChevronRight } from "lucide-react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -112,8 +112,65 @@ export default function ReservationsPage() {
 
   const noFilters = statusFilter === "all" && serviceTypeFilter === "all" && sessionTypeFilter === "all";
 
+  // Missions terminées en attente de validation par le client
+  const pendingValidation = useMemo(() => {
+    if (!reservations) return [];
+    return reservations.filter(
+      (r) => r.status === "completed" && !r.clientConfirmedAt && !r.autoConfirmedAt
+    );
+  }, [reservations]);
+
   return (
     <div className="space-y-6">
+      {/* Bannière : missions à valider */}
+      {pendingValidation.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-r from-orange-500 to-amber-500 rounded-2xl p-5 text-white shadow-lg shadow-orange-500/20"
+        >
+          <div className="flex items-start gap-4">
+            <div className="w-11 h-11 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-lg font-bold mb-1">
+                {pendingValidation.length === 1
+                  ? "Garde terminée — validez la fin de mission"
+                  : `${pendingValidation.length} gardes terminées — à valider`}
+              </h2>
+              <p className="text-white/85 text-sm mb-4">
+                {pendingValidation.length === 1
+                  ? `La garde "${pendingValidation[0].serviceName}" avec ${pendingValidation[0].announcerName} est terminée. Confirmez que tout s'est bien passé pour finaliser le paiement du pet-sitter.`
+                  : "Vos gardes sont terminées. Confirmez que tout s'est bien passé pour finaliser le paiement des pet-sitters."}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {pendingValidation.slice(0, 3).map((r) => (
+                  <Link
+                    key={r.id}
+                    href={`/client/reservations/${r.id}`}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-white text-orange-600 rounded-xl font-semibold text-sm hover:bg-white/90 transition-colors"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    {r.serviceName}
+                    <ChevronRight className="w-3.5 h-3.5 opacity-60" />
+                  </Link>
+                ))}
+                {pendingValidation.length > 3 && (
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter("completed")}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-white/20 text-white rounded-xl font-semibold text-sm hover:bg-white/30 transition-colors"
+                  >
+                    +{pendingValidation.length - 3} autres
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

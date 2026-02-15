@@ -259,6 +259,19 @@ function ListCard({ reservation: r, index, isContacting, onContact }: Reservatio
             </div>
           )}
 
+          {/* Bannière validation fin de mission */}
+          {r.status === "completed" && !r.clientConfirmedAt && !r.autoConfirmedAt && (
+            <div className="px-5 py-2.5 bg-gradient-to-r from-orange-500 to-amber-400 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-white">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                <span className="text-[13px] font-semibold">Validez la fin de la garde</span>
+              </div>
+              <span className="bg-white/20 backdrop-blur-sm px-2.5 py-0.5 rounded-full text-white text-[11px] font-medium">
+                Action requise
+              </span>
+            </div>
+          )}
+
           <div className="p-5">
             {/* ── Header ── */}
             <div className="flex items-start gap-3.5">
@@ -463,6 +476,19 @@ function GridCard({ reservation: r, index, isContacting, onContact }: Reservatio
               <div className="bg-white/20 px-2 py-0.5 rounded-full text-white text-[11px]">
                 <PaymentCountdown deadline={r.paymentDeadline} />
               </div>
+            </div>
+          )}
+
+          {/* Bannière validation fin de mission */}
+          {r.status === "completed" && !r.clientConfirmedAt && !r.autoConfirmedAt && (
+            <div className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-400 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-white">
+                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="text-[12px] font-semibold">Validez la fin de la garde</span>
+              </div>
+              <span className="bg-white/20 px-2 py-0.5 rounded-full text-white text-[10px] font-medium">
+                Action requise
+              </span>
             </div>
           )}
 

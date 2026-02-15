@@ -172,6 +172,87 @@ export const getInvoiceableMissions = query({
 });
 
 // ============================================
+// HELPER - Résoudre le serviceTypeSlug
+// ============================================
+
+async function resolveServiceTypeSlug(ctx: any, serviceCategory: string): Promise<string | undefined> {
+  if (!serviceCategory) return undefined;
+
+  const category = await ctx.db
+    .query("serviceCategories")
+    .withIndex("by_slug", (q: any) => q.eq("slug", serviceCategory))
+    .first();
+
+  if (!category) return undefined;
+
+  let typeId = category.typeId;
+
+  // Si c'est une sous-catégorie, récupérer le typeId du parent
+  if (!typeId && category.parentCategoryId) {
+    const parentCat = await ctx.db.get(category.parentCategoryId);
+    if (parentCat?.typeId) {
+      typeId = parentCat.typeId;
+    }
+  }
+
+  if (!typeId) return undefined;
+
+  const catType = await ctx.db.get(typeId);
+  return catType?.slug;
+}
+
+// ============================================
+// HELPER - Calculer unité et quantité pour items facture
+// ============================================
+
+function computeInvoiceUnit(
+  mission: any,
+  serviceTypeSlug: string | undefined
+): { unit: string; quantity: number } {
+  const animalCount = mission.animalCount || (mission.animals?.length) || 1;
+
+  if (serviceTypeSlug === "garde") {
+    // Garde multi-jours
+    if (mission.startDate !== mission.endDate) {
+      const start = new Date(mission.startDate);
+      const end = new Date(mission.endDate);
+      const diffMs = end.getTime() - start.getTime();
+      const nbJours = Math.max(1, Math.round(diffMs / (1000 * 60 * 60 * 24)));
+      return { unit: "jour", quantity: nbJours * animalCount };
+    }
+    // Même jour avec horaires
+    if (mission.startTime && mission.endTime) {
+      const [sh, sm] = mission.startTime.split(":").map(Number);
+      const [eh, em] = mission.endTime.split(":").map(Number);
+      const hours = Math.max(1, Math.round(((eh * 60 + em) - (sh * 60 + sm)) / 60));
+      return { unit: "H", quantity: hours * animalCount };
+    }
+    // Fallback
+    return { unit: "jour", quantity: 1 * animalCount };
+  }
+
+  // Services
+  if (mission.numberOfSessions && mission.numberOfSessions > 1) {
+    return { unit: "séance", quantity: mission.numberOfSessions * animalCount };
+  }
+
+  // Séance unique avec horaires
+  if (mission.startTime && mission.endTime) {
+    const [sh, sm] = mission.startTime.split(":").map(Number);
+    const [eh, em] = mission.endTime.split(":").map(Number);
+    const totalMinutes = (eh * 60 + em) - (sh * 60 + sm);
+    if (totalMinutes >= 60) {
+      const hours = Math.max(1, Math.round(totalMinutes / 60));
+      return { unit: "H", quantity: hours * animalCount };
+    }
+    return { unit: "min", quantity: Math.max(1, totalMinutes) * animalCount };
+  }
+
+  // Fallback
+  return { unit: "séance", quantity: 1 * animalCount };
+}
+
+// ============================================
 // MUTATION ANNONCEUR - Créer une facture
 // ============================================
 
@@ -212,17 +293,34 @@ export const createAnnouncerInvoice = mutation({
     const client = await ctx.db.get(mission.clientId);
     if (!client) throw new ConvexError("Client non trouvé");
 
-    // Construire les items de la facture
-    // L'annonceur facture son service (announcerEarnings = basePrice + optionsPrice)
-    const items: { description: string; quantity: number; unitPrice: number; total: number }[] = [];
+    // Résoudre le type de service (garde / service)
+    const serviceTypeSlug = await resolveServiceTypeSlug(ctx, mission.serviceCategory);
 
-    // Prestation de base
+    // Calculer unité et quantité
+    const { unit, quantity } = computeInvoiceUnit(mission, serviceTypeSlug);
+
+    // Construire les items de la facture
+    const items: { description: string; quantity: number; unit?: string; unitPrice: number; total: number }[] = [];
+
+    // Montant de base de la prestation (hors options, hors nuit)
     const basePriceAmount = mission.basePrice || mission.announcerEarnings || mission.amount;
+    const baseTotal = basePriceAmount - (mission.optionsPrice || 0) - (mission.overnightAmount || 0);
+
+    // Description avec mention animaux si >1
+    const animalCount = mission.animalCount || (mission.animals?.length) || 1;
+    let description = `${mission.serviceName}${mission.variantName ? ` - ${mission.variantName}` : ""}`;
+    if (animalCount > 1) {
+      const animalNames = mission.animals?.map((a: any) => a.name).join(", ");
+      description += ` (${animalCount} animaux${animalNames ? ` : ${animalNames}` : ""})`;
+    }
+
+    const unitPrice = quantity > 0 ? Math.round(baseTotal / quantity) : baseTotal;
     items.push({
-      description: `${mission.serviceName}${mission.variantName ? ` - ${mission.variantName}` : ""}`,
-      quantity: 1,
-      unitPrice: basePriceAmount - (mission.optionsPrice || 0),
-      total: basePriceAmount - (mission.optionsPrice || 0),
+      description,
+      quantity,
+      unit,
+      unitPrice,
+      total: baseTotal,
     });
 
     // Options si présentes
@@ -230,8 +328,20 @@ export const createAnnouncerInvoice = mutation({
       items.push({
         description: `Options : ${mission.optionNames.join(", ")}`,
         quantity: 1,
+        unit: "forfait",
         unitPrice: mission.optionsPrice,
         total: mission.optionsPrice,
+      });
+    }
+
+    // Garde de nuit si applicable
+    if (mission.includeOvernightStay && mission.overnightAmount && mission.overnightNights) {
+      items.push({
+        description: "Garde de nuit",
+        quantity: mission.overnightNights,
+        unit: "nuit",
+        unitPrice: Math.round(mission.overnightAmount / mission.overnightNights),
+        total: mission.overnightAmount,
       });
     }
 
@@ -245,13 +355,11 @@ export const createAnnouncerInvoice = mutation({
     let amountTTC: number;
 
     if (isVatSubject) {
-      // Le prix du service est TTC, on en déduit le HT
       amountTTC = totalService;
       amountHT = Math.round(totalService / (1 + effectiveVatRate / 100));
       tva = amountTTC - amountHT;
     } else {
       amountTTC = totalService;
-      // Pas de TVA pour micro-entrepreneur
     }
 
     // Générer le numéro de facture
@@ -366,8 +474,15 @@ export const getInvoiceDetails = query({
     // Mission associée
     const mission = invoice.missionId ? await ctx.db.get(invoice.missionId) : null;
 
+    // Résoudre le serviceTypeSlug
+    let serviceTypeSlug: string | null = null;
+    if (mission?.serviceCategory) {
+      serviceTypeSlug = (await resolveServiceTypeSlug(ctx, mission.serviceCategory)) || null;
+    }
+
     return {
       ...invoice,
+      serviceTypeSlug,
       emitter: emitter
         ? {
             id: emitter._id,
@@ -414,6 +529,23 @@ export const getInvoiceDetails = query({
             endDate: mission.endDate,
             amount: mission.amount,
             serviceCategory: mission.serviceCategory,
+            startTime: mission.startTime,
+            endTime: mission.endTime,
+            animal: mission.animal,
+            animals: mission.animals,
+            animalCount: mission.animalCount,
+            sessions: mission.sessions,
+            sessionType: mission.sessionType,
+            numberOfSessions: mission.numberOfSessions,
+            serviceLocation: mission.serviceLocation,
+            basePrice: mission.basePrice,
+            optionsPrice: mission.optionsPrice,
+            serviceAmount: mission.serviceAmount,
+            announcerEarnings: mission.announcerEarnings,
+            includeOvernightStay: mission.includeOvernightStay,
+            overnightNights: mission.overnightNights,
+            overnightAmount: mission.overnightAmount,
+            optionNames: mission.optionNames,
           }
         : null,
     };

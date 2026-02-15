@@ -1,4 +1,4 @@
-// Génération de facture PDF conforme à la réglementation française
+// Génération de facture PDF professionnelle — conforme réglementation française
 // Utilise jsPDF (déjà installé dans le projet)
 
 interface InvoiceEmitter {
@@ -28,6 +28,7 @@ interface InvoiceRecipient {
 interface InvoiceItem {
   description: string;
   quantity: number;
+  unit?: string;
   unitPrice: number;
   total: number;
 }
@@ -38,6 +39,17 @@ interface InvoiceMission {
   startDate: string;
   endDate: string;
   serviceCategory?: string;
+  startTime?: string;
+  endTime?: string;
+  animal?: { name: string; type: string };
+  animals?: Array<{ name: string; type: string }>;
+  animalCount?: number;
+  sessions?: Array<{ date: string; startTime: string; endTime: string }>;
+  sessionType?: "individual" | "collective";
+  numberOfSessions?: number;
+  serviceLocation?: "announcer_home" | "client_home";
+  includeOvernightStay?: boolean;
+  overnightNights?: number;
 }
 
 export interface InvoiceData {
@@ -46,17 +58,22 @@ export interface InvoiceData {
   amount: number;
   amountHT?: number;
   tva?: number;
-  vatRate?: number; // Taux TVA appliqué (10 ou 20)
+  vatRate?: number;
   items: InvoiceItem[];
   emitter: InvoiceEmitter;
   emitterAddress?: InvoiceAddress;
   recipient: InvoiceRecipient;
   recipientAddress?: InvoiceAddress;
   mission?: InvoiceMission;
+  serviceTypeSlug?: string | null;
 }
 
+// ============================================
+// HELPERS
+// ============================================
+
 function formatPrice(cents: number): string {
-  return (cents / 100).toFixed(2).replace(".", ",") + " €";
+  return (cents / 100).toFixed(2).replace(".", ",") + " \u20AC";
 }
 
 function formatDate(timestamp: number): string {
@@ -72,69 +89,80 @@ function formatServiceDate(dateStr: string): string {
   return `${d}/${m}/${y}`;
 }
 
+function formatTime(time: string): string {
+  return time.replace(":", "h");
+}
+
+// ============================================
+// GÉNÉRATION PDF
+// ============================================
+
 export async function generateInvoicePdf(data: InvoiceData): Promise<Blob> {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageWidth = doc.internal.pageSize.getWidth(); // 210
+  const pageHeight = doc.internal.pageSize.getHeight(); // 297
   const margin = 20;
-  const contentWidth = pageWidth - margin * 2;
-  let y = 20;
+  const contentWidth = pageWidth - margin * 2; // 170
+  let y = 0;
 
-  // === EN-TÊTE ===
-  // Logo Animigo
-  doc.setFontSize(24);
+  // Couleurs
+  const accent = { r: 255, g: 107, b: 107 }; // #FF6B6B
+  const dark = { r: 45, g: 45, b: 45 };      // #2D2D2D
+  const gray = { r: 100, g: 100, b: 100 };
+  const lightGray = { r: 150, g: 150, b: 150 };
+
+  // ── Bande accent en haut ──
+  doc.setFillColor(accent.r, accent.g, accent.b);
+  doc.rect(0, 0, pageWidth, 4, "F");
+  y = 18;
+
+  // ── FACTURE titre (droite) ──
+  doc.setFontSize(22);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(255, 107, 107); // #FF6B6B
-  doc.text("Animigo", margin, y);
-
-  // Titre facture
-  doc.setFontSize(18);
-  doc.setTextColor(40, 40, 40);
+  doc.setTextColor(dark.r, dark.g, dark.b);
   doc.text("FACTURE", pageWidth - margin, y, { align: "right" });
-  y += 8;
+  y += 7;
 
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(100, 100, 100);
-  doc.text(`N° ${data.invoiceNumber}`, pageWidth - margin, y, { align: "right" });
+  doc.setTextColor(gray.r, gray.g, gray.b);
+  doc.text(`N\u00B0 ${data.invoiceNumber}`, pageWidth - margin, y, { align: "right" });
   y += 5;
+  doc.setFontSize(9);
   doc.text(`Date : ${formatDate(data.createdAt)}`, pageWidth - margin, y, { align: "right" });
-  y += 12;
+  y += 10;
 
-  // Ligne séparatrice
-  doc.setDrawColor(230, 230, 230);
-  doc.setLineWidth(0.5);
+  // ── Séparateur fin ──
+  doc.setDrawColor(220, 220, 220);
+  doc.setLineWidth(0.3);
   doc.line(margin, y, pageWidth - margin, y);
-  y += 12;
+  y += 10;
 
-  // === ÉMETTEUR (gauche) / DESTINATAIRE (droite) ===
-  const halfWidth = contentWidth / 2 - 5;
+  // ── ÉMETTEUR (gauche) / DESTINATAIRE (droite) ──
+  const halfWidth = contentWidth / 2 - 8;
+  const rightCol = margin + halfWidth + 16;
 
-  // Émetteur
-  doc.setFontSize(8);
+  // Labels
+  doc.setFontSize(7);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(120, 120, 120);
+  doc.setTextColor(lightGray.r, lightGray.g, lightGray.b);
   doc.text("ÉMETTEUR", margin, y);
-
-  // Destinataire
-  doc.text("DESTINATAIRE", margin + halfWidth + 10, y);
+  doc.text("DESTINATAIRE", rightCol, y);
   y += 6;
 
-  doc.setFontSize(10);
+  // Noms
+  doc.setFontSize(11);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(40, 40, 40);
-
-  // Nom émetteur
+  doc.setTextColor(dark.r, dark.g, dark.b);
   const emitterName = data.emitter.companyName || `${data.emitter.firstName} ${data.emitter.lastName}`;
   doc.text(emitterName, margin, y);
-
-  // Nom destinataire
-  doc.text(`${data.recipient.firstName} ${data.recipient.lastName}`, margin + halfWidth + 10, y);
+  doc.text(`${data.recipient.firstName} ${data.recipient.lastName}`, rightCol, y);
   y += 5;
 
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(80, 80, 80);
+  doc.setTextColor(gray.r, gray.g, gray.b);
 
   // Détails émetteur
   let emitterY = y;
@@ -160,80 +188,165 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Blob> {
   }
   doc.text(data.emitter.email, margin, emitterY);
   emitterY += 4;
-  doc.text(data.emitter.phone, margin, emitterY);
+  if (data.emitter.phone) {
+    doc.text(data.emitter.phone, margin, emitterY);
+    emitterY += 4;
+  }
 
   // Détails destinataire
   let recipientY = y;
-  doc.text(data.recipient.email, margin + halfWidth + 10, recipientY);
+  doc.text(data.recipient.email, rightCol, recipientY);
   recipientY += 4;
   if (data.recipient.phone) {
-    doc.text(data.recipient.phone, margin + halfWidth + 10, recipientY);
+    doc.text(data.recipient.phone, rightCol, recipientY);
     recipientY += 4;
   }
   if (data.recipientAddress?.location) {
-    doc.text(data.recipientAddress.location, margin + halfWidth + 10, recipientY);
+    doc.text(data.recipientAddress.location, rightCol, recipientY);
     recipientY += 4;
   }
   if (data.recipientAddress?.postalCode || data.recipientAddress?.city) {
-    doc.text(`${data.recipientAddress.postalCode || ""} ${data.recipientAddress.city || ""}`.trim(), margin + halfWidth + 10, recipientY);
+    doc.text(`${data.recipientAddress.postalCode || ""} ${data.recipientAddress.city || ""}`.trim(), rightCol, recipientY);
+    recipientY += 4;
   }
 
-  y = Math.max(emitterY, recipientY) + 12;
+  y = Math.max(emitterY, recipientY) + 10;
 
-  // === OBJET / MISSION ===
+  // ── ZONE OBJET (fond gris arrondi) ──
   if (data.mission) {
-    doc.setFillColor(250, 250, 250);
-    doc.roundedRect(margin, y, contentWidth, 16, 2, 2, "F");
-    y += 6;
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(60, 60, 60);
-    doc.text("Objet :", margin + 4, y);
-    doc.setFont("helvetica", "normal");
-    doc.text(
-      `${data.mission.serviceName}${data.mission.variantName ? ` - ${data.mission.variantName}` : ""}`,
-      margin + 25,
-      y
-    );
+    const objetLines: string[] = [];
+
+    // Titre
+    const serviceTitle = `${data.mission.serviceName}${data.mission.variantName ? ` - ${data.mission.variantName}` : ""}`;
+    objetLines.push(`Objet : ${serviceTitle}`);
+
+    // Période
+    if (data.mission.startDate === data.mission.endDate) {
+      objetLines.push(`Date : ${formatServiceDate(data.mission.startDate)}`);
+    } else {
+      objetLines.push(`Période : du ${formatServiceDate(data.mission.startDate)} au ${formatServiceDate(data.mission.endDate)}`);
+    }
+
+    // Horaires
+    if (data.mission.startTime && data.mission.endTime) {
+      objetLines.push(`Horaires : ${formatTime(data.mission.startTime)} \u2013 ${formatTime(data.mission.endTime)}`);
+    }
+
+    // Animaux
+    const animalCount = data.mission.animalCount || (data.mission.animals?.length) || 1;
+    if (data.mission.animals && data.mission.animals.length > 1) {
+      const animalNames = data.mission.animals.map((a) => a.name).join(", ");
+      objetLines.push(`Animaux : ${animalNames} (${animalCount} animaux)`);
+    } else if (data.mission.animal) {
+      objetLines.push(`Animal : ${data.mission.animal.name} (${data.mission.animal.type})`);
+    }
+
+    // Lieu
+    if (data.mission.serviceLocation) {
+      const lieuLabel = data.mission.serviceLocation === "client_home"
+        ? "Au domicile du client"
+        : "Au domicile du prestataire";
+      objetLines.push(`Lieu : ${lieuLabel}`);
+    }
+
+    // Garde de nuit
+    if (data.mission.includeOvernightStay && data.mission.overnightNights) {
+      objetLines.push(`Garde de nuit : ${data.mission.overnightNights} nuit${data.mission.overnightNights > 1 ? "s" : ""}`);
+    }
+
+    // Calcul hauteur zone
+    const lineHeight = 4.5;
+    let objetHeight = objetLines.length * lineHeight + 8;
+
+    // Multi-séances
+    const hasSessions = data.mission.sessions && data.mission.sessions.length > 1;
+    if (hasSessions) {
+      objetHeight += 5 + data.mission.sessions!.length * lineHeight;
+    }
+
+    // Dessiner le fond
+    doc.setFillColor(248, 248, 248);
+    doc.roundedRect(margin, y, contentWidth, objetHeight, 3, 3, "F");
+    doc.setDrawColor(235, 235, 235);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(margin, y, contentWidth, objetHeight, 3, 3, "S");
+
     y += 5;
-    doc.setFontSize(8);
-    doc.setTextColor(100, 100, 100);
-    doc.text(
-      `Période : du ${formatServiceDate(data.mission.startDate)} au ${formatServiceDate(data.mission.endDate)}`,
-      margin + 4,
-      y
-    );
-    y += 12;
+    doc.setFontSize(8.5);
+
+    for (const line of objetLines) {
+      if (line.startsWith("Objet :")) {
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(dark.r, dark.g, dark.b);
+        doc.text("Objet :", margin + 5, y);
+        doc.setFont("helvetica", "normal");
+        doc.text(line.replace("Objet : ", ""), margin + 5 + doc.getTextWidth("Objet :  "), y);
+      } else {
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(gray.r, gray.g, gray.b);
+        doc.text(line, margin + 5, y);
+      }
+      y += lineHeight;
+    }
+
+    // Multi-séances détaillées
+    if (hasSessions) {
+      y += 2;
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(dark.r, dark.g, dark.b);
+      doc.text(`Nombre de séances : ${data.mission.sessions!.length}`, margin + 5, y);
+      y += lineHeight;
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(gray.r, gray.g, gray.b);
+      for (const session of data.mission.sessions!) {
+        doc.text(
+          `  \u2022 ${formatServiceDate(session.date)} : ${formatTime(session.startTime)} \u2013 ${formatTime(session.endTime)}`,
+          margin + 5,
+          y
+        );
+        y += lineHeight;
+      }
+    }
+
+    y += 8;
   }
 
-  // === TABLEAU DES PRESTATIONS ===
-  // Header
-  const colX = {
-    description: margin,
-    qty: margin + contentWidth * 0.55,
-    unitPrice: margin + contentWidth * 0.68,
-    total: margin + contentWidth * 0.85,
-  };
+  // ── TABLEAU DES PRESTATIONS ──
+  // Colonnes : Description | Unité | Qté | P.U. HT | Total HT
+  const colDesc = margin + 4;
+  const colUnit = margin + contentWidth * 0.48;
+  const colQty = margin + contentWidth * 0.58;
+  const colUnitP = margin + contentWidth * 0.70;
+  const colTotal = margin + contentWidth * 0.87;
 
+  // Header du tableau
   doc.setFillColor(245, 245, 245);
   doc.rect(margin, y - 4, contentWidth, 8, "F");
-  doc.setFontSize(8);
+  doc.setFontSize(7.5);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(100, 100, 100);
-  doc.text("Description", colX.description + 4, y);
-  doc.text("Qté", colX.qty, y);
-  doc.text("Prix unit. HT", colX.unitPrice, y);
-  doc.text("Total HT", colX.total, y);
+  doc.setTextColor(gray.r, gray.g, gray.b);
+  doc.text("Description", colDesc, y);
+  doc.text("Unité", colUnit, y);
+  doc.text("Qté", colQty, y);
+  doc.text("P.U. HT", colUnitP, y);
+  doc.text("Total HT", colTotal, y);
   y += 8;
 
-  // Lignes
+  // Lignes du tableau
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(60, 60, 60);
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
+  const effectiveVatRate = data.vatRate ?? 20;
 
-  for (const item of data.items) {
-    // Prix HT de l'item
-    const effectiveVatRate = data.vatRate ?? 20;
+  for (let i = 0; i < data.items.length; i++) {
+    const item = data.items[i];
+
+    // Alternance de fond
+    if (i % 2 === 1) {
+      doc.setFillColor(252, 252, 252);
+      doc.rect(margin, y - 4, contentWidth, 7, "F");
+    }
+
+    // Calcul prix HT
     const itemUnitHT = data.emitter.isVatSubject
       ? Math.round(item.unitPrice / (1 + effectiveVatRate / 100))
       : item.unitPrice;
@@ -242,90 +355,109 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Blob> {
       : item.total;
 
     // Description (avec retour à la ligne si trop long)
-    const descLines = doc.splitTextToSize(item.description, contentWidth * 0.5);
-    doc.text(descLines, colX.description + 4, y);
-    doc.text(String(item.quantity), colX.qty, y);
-    doc.text(formatPrice(itemUnitHT), colX.unitPrice, y);
+    const maxDescWidth = (colUnit - colDesc) - 4;
+    const descLines = doc.splitTextToSize(item.description, maxDescWidth);
+    doc.setTextColor(dark.r, dark.g, dark.b);
+    doc.text(descLines, colDesc, y);
+
+    // Unité
+    doc.setTextColor(gray.r, gray.g, gray.b);
+    doc.text(item.unit || "-", colUnit, y);
+
+    // Quantité
+    doc.text(String(item.quantity), colQty, y);
+
+    // Prix unitaire HT
+    doc.text(formatPrice(itemUnitHT), colUnitP, y);
+
+    // Total HT
     doc.setFont("helvetica", "bold");
-    doc.text(formatPrice(itemTotalHT), colX.total, y);
+    doc.setTextColor(dark.r, dark.g, dark.b);
+    doc.text(formatPrice(itemTotalHT), colTotal, y);
     doc.setFont("helvetica", "normal");
 
-    y += Math.max(descLines.length * 5, 7);
+    y += Math.max(descLines.length * 4.5, 7);
 
-    if (y > 260) {
+    if (y > 250) {
       doc.addPage();
-      y = 20;
+      // Bande accent en haut de la nouvelle page
+      doc.setFillColor(accent.r, accent.g, accent.b);
+      doc.rect(0, 0, pageWidth, 2, "F");
+      y = 15;
     }
   }
 
-  // Ligne séparatrice
-  y += 2;
+  // Séparateur sous tableau
+  y += 3;
   doc.setDrawColor(200, 200, 200);
+  doc.setLineWidth(0.3);
   doc.line(margin, y, pageWidth - margin, y);
-  y += 8;
+  y += 10;
 
-  // === TOTAUX ===
-  const totalX = margin + contentWidth * 0.6;
+  // ── TOTAUX (alignés à droite) ──
+  const totalLabelX = margin + contentWidth * 0.58;
   const totalValueX = pageWidth - margin;
 
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(60, 60, 60);
+  doc.setTextColor(gray.r, gray.g, gray.b);
 
   if (data.emitter.isVatSubject && data.amountHT !== undefined && data.tva !== undefined) {
     // Total HT
-    doc.text("Total HT", totalX, y);
+    doc.text("Total HT :", totalLabelX, y);
     doc.text(formatPrice(data.amountHT), totalValueX, y, { align: "right" });
     y += 6;
 
     // TVA
-    doc.text("TVA (20%)", totalX, y);
+    doc.text(`TVA (${effectiveVatRate}%) :`, totalLabelX, y);
     doc.text(formatPrice(data.tva), totalValueX, y, { align: "right" });
+    y += 4;
+
+    // Séparateur
+    doc.setDrawColor(200, 200, 200);
+    doc.line(totalLabelX, y, pageWidth - margin, y);
     y += 6;
 
     // Total TTC
-    doc.setDrawColor(200, 200, 200);
-    doc.line(totalX, y - 2, pageWidth - margin, y - 2);
-    y += 2;
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.setTextColor(255, 107, 107);
-    doc.text("Total TTC", totalX, y);
+    doc.setFontSize(12);
+    doc.setTextColor(accent.r, accent.g, accent.b);
+    doc.text("Total TTC :", totalLabelX, y);
     doc.text(formatPrice(data.amount), totalValueX, y, { align: "right" });
   } else {
     // Pas de TVA (micro-entrepreneur)
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.setTextColor(255, 107, 107);
-    doc.text("Total", totalX, y);
+    doc.setFontSize(12);
+    doc.setTextColor(accent.r, accent.g, accent.b);
+    doc.text("Total :", totalLabelX, y);
     doc.text(formatPrice(data.amount), totalValueX, y, { align: "right" });
   }
 
   y += 15;
 
-  // === MENTIONS LÉGALES ===
-  if (y > 240) {
+  // ── MENTIONS LÉGALES ──
+  if (y > 245) {
     doc.addPage();
-    y = 20;
+    doc.setFillColor(accent.r, accent.g, accent.b);
+    doc.rect(0, 0, pageWidth, 2, "F");
+    y = 15;
   }
 
   doc.setDrawColor(230, 230, 230);
+  doc.setLineWidth(0.3);
   doc.line(margin, y, pageWidth - margin, y);
-  y += 8;
+  y += 6;
 
   doc.setFontSize(7);
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(130, 130, 130);
+  doc.setTextColor(lightGray.r, lightGray.g, lightGray.b);
 
   const mentions: string[] = [];
-
   if (!data.emitter.isVatSubject) {
     mentions.push("TVA non applicable, article 293 B du Code général des impôts.");
   }
-
   mentions.push(`Facture émise le ${formatDate(data.createdAt)} via la plateforme Animigo.`);
   mentions.push("Paiement effectué par l'intermédiaire de la plateforme Animigo.");
-
   if (data.emitter.siret) {
     mentions.push(`SIRET : ${data.emitter.siret}`);
   }
@@ -335,14 +467,44 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Blob> {
     y += 4;
   }
 
-  // Pied de page
-  y += 6;
-  doc.setFontSize(7);
-  doc.setTextColor(180, 180, 180);
-  doc.text("Animigo - Marketplace de services animaliers", pageWidth / 2, y, { align: "center" });
-  y += 3;
-  doc.text("www.animigo.fr", pageWidth / 2, y, { align: "center" });
+  // ── FOOTER ──
+  const footerY = pageHeight - 15;
 
-  // Retourner le Blob PDF
+  // Séparateur footer
+  doc.setDrawColor(230, 230, 230);
+  doc.line(margin, footerY - 6, pageWidth - margin, footerY - 6);
+
+  // "Animigo" en couleur accent + texte
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(accent.r, accent.g, accent.b);
+  const animigoText = "Animigo";
+  const animigoWidth = doc.getTextWidth(animigoText);
+  const suffixText = "  \u2014  Facture générée par Animigo";
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(lightGray.r, lightGray.g, lightGray.b);
+  const suffixWidth = doc.getTextWidth(suffixText);
+  const totalFooterWidth = animigoWidth + suffixWidth;
+  const footerStartX = (pageWidth - totalFooterWidth) / 2;
+
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(accent.r, accent.g, accent.b);
+  doc.text(animigoText, footerStartX, footerY);
+
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(lightGray.r, lightGray.g, lightGray.b);
+  doc.text(suffixText, footerStartX + animigoWidth, footerY);
+
+  // URL
+  doc.setFontSize(7);
+  doc.text("www.animigo.fr", pageWidth / 2, footerY + 4, { align: "center" });
+
+  // Pagination
+  doc.setFontSize(7);
+  doc.text(`Page 1/1`, pageWidth - margin, footerY + 4, { align: "right" });
+
   return doc.output("blob");
 }
