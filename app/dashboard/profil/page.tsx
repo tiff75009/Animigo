@@ -9,10 +9,7 @@ import {
   TreeDeciduous,
   Baby,
   Heart,
-  Clock,
   Calendar,
-  CalendarDays,
-  CalendarRange,
   Euro,
   Utensils,
   Star,
@@ -21,7 +18,7 @@ import {
   Ban,
   TrendingUp,
   TrendingDown,
-  Minus,
+  Check,
   X,
   ChevronLeft,
   ChevronRight,
@@ -31,17 +28,18 @@ import {
   Plus,
   Trash2,
   PawPrint,
-  type LucideIcon,
   Loader2,
+  ArrowUp,
 } from "lucide-react";
 import React, { useState, useEffect, useCallback } from "react";
 import { AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/app/hooks/useAuth";
-import { mockReviews, calculateStats, type PricingTier } from "@/app/lib/dashboard-data";
+import { mockReviews, calculateStats } from "@/app/lib/dashboard-data";
 import { cn } from "@/app/lib/utils";
 import Link from "next/link";
+import { Eye } from "lucide-react";
 import ProfileHeader from "../components/ProfileHeader";
 import ProfileCompletionBar from "../components/ProfileCompletionBar";
 import ProfileSettingsSection from "../components/ProfileSettingsSection";
@@ -49,164 +47,446 @@ import ActivitiesSection from "../components/ActivitiesSection";
 import EnvironmentPhotosSection from "../components/EnvironmentPhotosSection";
 import { Id } from "@/convex/_generated/dataModel";
 
-// Pricing Card Component
-interface PricingCardProps {
-  icon: LucideIcon;
-  label: string;
-  pricing: PricingTier;
-  color: "primary" | "secondary" | "purple" | "accent";
-}
-
-const colorClasses = {
-  primary: {
-    bg: "bg-primary/5",
-    text: "text-primary",
-    barBg: "bg-primary/20",
-    barFill: "bg-primary",
-  },
-  secondary: {
-    bg: "bg-secondary/5",
-    text: "text-secondary",
-    barBg: "bg-secondary/20",
-    barFill: "bg-secondary",
-  },
-  purple: {
-    bg: "bg-purple/5",
-    text: "text-purple",
-    barBg: "bg-purple/20",
-    barFill: "bg-purple",
-  },
-  accent: {
-    bg: "bg-accent/10",
-    text: "text-foreground",
-    barBg: "bg-accent/30",
-    barFill: "bg-accent",
-  },
+// Mapping des catégories de services
+const CATEGORY_INFO: Record<string, { name: string; emoji: string }> = {
+  garde: { name: "Garde", emoji: "🏠" },
+  promenade: { name: "Promenade", emoji: "🚶" },
+  toilettage: { name: "Toilettage", emoji: "🛁" },
+  dressage: { name: "Dressage", emoji: "🎓" },
+  agilite: { name: "Agilité", emoji: "🏃" },
+  transport: { name: "Transport", emoji: "🚗" },
+  pension: { name: "Pension", emoji: "🏨" },
+  visite: { name: "Visite", emoji: "👋" },
+  medical: { name: "Soins médicaux", emoji: "💊" },
+  autre: { name: "Autre", emoji: "✨" },
 };
 
-function PricingCard({ icon: Icon, label, pricing, color }: PricingCardProps) {
-  const colors = colorClasses[color];
-  const diff = pricing.price - pricing.average;
-  const diffPercent = Math.round((diff / pricing.average) * 100);
-  const position = ((pricing.price - pricing.min) / (pricing.max - pricing.min)) * 100;
+const PRICE_UNIT_LABELS: Record<string, string> = {
+  hour: "/h",
+  half_day: "/½j",
+  day: "/jour",
+  week: "/sem",
+  month: "/mois",
+  flat: "",
+};
+
+function formatPriceCents(cents: number): string {
+  return (cents / 100).toLocaleString("fr-FR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }) + " €";
+}
+
+// Détermine le prix d'affichage d'une variante à partir de l'objet pricing (multi-tarification)
+// Même logique que FormulasDropdown : daily > hourly > halfDaily > weekly > monthly > fallback price
+interface VariantPriceInfo {
+  name: string;
+  price: number; // variant.price brut (centimes) — souvent le tarif horaire dérivé
+  priceUnit: string;
+  pricing?: {
+    hourly?: number;
+    halfDaily?: number;
+    daily?: number;
+    weekly?: number;
+    monthly?: number;
+    nightly?: number;
+  };
+  numberOfSessions?: number;
+  sessionType?: string;
+}
+
+function getVariantDisplayPrice(variant: VariantPriceInfo): { price: number; unitLabel: string; unitKey: string } {
+  const p = variant.pricing;
+  if (p?.daily) return { price: p.daily, unitLabel: "/jour", unitKey: "day" };
+  if (p?.hourly) return { price: p.hourly, unitLabel: "/h", unitKey: "hour" };
+  if (p?.halfDaily) return { price: p.halfDaily, unitLabel: "/½j", unitKey: "half_day" };
+  if (p?.weekly) return { price: p.weekly, unitLabel: "/sem", unitKey: "week" };
+  if (p?.monthly) return { price: p.monthly, unitLabel: "/mois", unitKey: "month" };
+  return { price: variant.price, unitLabel: PRICE_UNIT_LABELS[variant.priceUnit] || "", unitKey: variant.priceUnit };
+}
+
+// Ligne de prix par catégorie avec comparaison au prix conseillé
+function CategoryPricingRow({ token, category, variants }: {
+  token: string;
+  category: string;
+  variants: VariantPriceInfo[];
+}) {
+  // Récupérer le prix d'affichage pour chaque variante (depuis pricing ou price)
+  const displayPrices = variants.map(v => ({
+    ...getVariantDisplayPrice(v),
+    sessions: v.numberOfSessions || 1,
+    sessionType: v.sessionType,
+  }));
+
+  const primaryDisplay = displayPrices[0];
+  const displayUnitKey = primaryDisplay.unitKey;
+  const displayUnitLabel = primaryDisplay.unitLabel;
+
+  // Moyenne des prix d'affichage (dans l'unité visuelle correcte)
+  const avgDisplayPrice = Math.round(
+    displayPrices.reduce((sum, d) => sum + d.price, 0) / displayPrices.length
+  );
+
+  // Info multi-séances / collectif
+  const hasMultiSession = displayPrices.some(d => d.sessions > 1);
+  const hasCollective = displayPrices.some(d => d.sessionType === "collective");
+
+  // Appeler la recommendation dans l'unité D'AFFICHAGE (pas l'unité brute variant.price)
+  // Le backend utilise maintenant pricing.daily/hourly/etc. selon l'unité demandée
+  const recommendation = useQuery(
+    api.services.pricing.getPriceRecommendation,
+    { token, category, priceUnit: displayUnitKey as "hour" | "half_day" | "day" | "week" | "month" | "flat" }
+  );
+
+  const catInfo = CATEGORY_INFO[category] || { name: category, emoji: "🐾" };
+
+  if (!recommendation) {
+    return (
+      <div className="p-3 rounded-xl bg-gray-50 animate-pulse h-24" />
+    );
+  }
+
+  // Les valeurs de recommendation sont maintenant dans la bonne unité (ex: €/jour pour garde)
+  const { recommendedRange, avgPrice: recAvg } = recommendation;
+
+  // Étendre la plage pour toujours inclure le prix de l'annonceur
+  const effectiveMin = Math.min(recommendation.minPrice, avgDisplayPrice);
+  const effectiveMax = Math.max(recommendation.maxPrice, avgDisplayPrice);
+
+  // Ajouter 10% de marge de chaque côté pour que le point ne colle pas aux bords
+  const padding = (effectiveMax - effectiveMin) * 0.1 || 1;
+  const barMin = effectiveMin - padding;
+  const barMax = effectiveMax + padding;
+  const barRange = barMax - barMin;
+
+  // Position précise du point (centré via translateX)
+  const dotPosition = barRange > 0 ? ((avgDisplayPrice - barMin) / barRange) * 100 : 50;
+
+  // Zone conseillée positionnée sur la même échelle
+  const zoneLeftPct = barRange > 0 ? ((recommendedRange.low - barMin) / barRange) * 100 : 10;
+  const zoneRightPct = barRange > 0 ? ((recommendedRange.high - barMin) / barRange) * 100 : 90;
+  const zoneWidthPct = zoneRightPct - zoneLeftPct;
+
+  // Marqueur de la moyenne conseillée
+  const avgMarkerPct = barRange > 0 ? ((recAvg - barMin) / barRange) * 100 : 50;
+
+  const isInRange = avgDisplayPrice >= recommendedRange.low && avgDisplayPrice <= recommendedRange.high;
+  const isBelow = avgDisplayPrice < recommendedRange.low;
+
+  const diffPercent = recAvg > 0
+    ? Math.round(((avgDisplayPrice - recAvg) / recAvg) * 100)
+    : 0;
+
+  const statusColor = isInRange ? "green" : isBelow ? "amber" : "orange";
+  const statusBg = { green: "bg-green-500", amber: "bg-amber-500", orange: "bg-orange-500" }[statusColor];
+  const statusBgLight = { green: "bg-green-100", amber: "bg-amber-100", orange: "bg-orange-100" }[statusColor];
+  const statusText = { green: "text-green-700", amber: "text-amber-700", orange: "text-orange-700" }[statusColor];
+  const statusBorder = { green: "border-green-500", amber: "border-amber-500", orange: "border-orange-500" }[statusColor];
 
   return (
-    <div className={cn("rounded-2xl p-4", colors.bg)}>
-      <div className="flex items-center justify-between mb-3">
-        <Icon className={cn("w-5 h-5", colors.text)} />
-        <span className="text-xs text-text-light">/ {label.toLowerCase()}</span>
+    <div className="p-4 rounded-xl bg-gray-50 space-y-3">
+      {/* En-tête : catégorie + badge statut */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">{catInfo.emoji}</span>
+          <div>
+            <span className="text-sm font-semibold text-foreground">{catInfo.name}</span>
+            <span className="text-[10px] text-text-light ml-1.5">
+              {variants.length} formule{variants.length > 1 ? "s" : ""}
+              {hasMultiSession && " · multi-séances"}
+              {hasCollective && " · collectif"}
+            </span>
+          </div>
+        </div>
+        <div className={cn("flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full", statusBgLight, statusText)}>
+          {isInRange ? (
+            <><Check className="w-3 h-3" /> Dans la fourchette</>
+          ) : isBelow ? (
+            <><TrendingDown className="w-3 h-3" /> {Math.abs(diffPercent)}% en dessous</>
+          ) : (
+            <><TrendingUp className="w-3 h-3" /> +{diffPercent}% au dessus</>
+          )}
+        </div>
       </div>
 
-      <p className={cn("text-2xl font-bold mb-1", colors.text)}>{pricing.price}€</p>
+      {/* Détail par formule si plusieurs */}
+      {variants.length > 1 && (
+        <div className="flex flex-wrap gap-1.5">
+          {displayPrices.map((d, i) => (
+            <span
+              key={i}
+              className="text-[10px] px-2 py-0.5 bg-white rounded-full text-text-light border border-gray-100"
+            >
+              {variants[i].name}: {formatPriceCents(d.price)}{d.unitLabel}
+              {d.sessions > 1 && ` ×${d.sessions}`}
+            </span>
+          ))}
+        </div>
+      )}
 
-      {/* Comparison badge */}
-      <div className="flex items-center gap-1 mb-3">
-        {diff === 0 ? (
-          <span className="flex items-center gap-1 text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">
-            <Minus className="w-3 h-3" />
-            Dans la moyenne
+      {/* Slider complet */}
+      <div className="relative pt-7 pb-5">
+        {/* Label prix annonceur — accroché au point */}
+        <div
+          className="absolute top-0 flex flex-col items-center z-20"
+          style={{ left: `${dotPosition}%`, transform: "translateX(-50%)" }}
+        >
+          <span className={cn("text-[11px] font-bold text-white px-2 py-0.5 rounded-md whitespace-nowrap", statusBg)}>
+            {formatPriceCents(avgDisplayPrice)}{displayUnitLabel}
           </span>
-        ) : diff > 0 ? (
-          <span className="flex items-center gap-1 text-xs text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">
-            <TrendingUp className="w-3 h-3" />
-            +{diffPercent}% vs moyenne
-          </span>
-        ) : (
-          <span className="flex items-center gap-1 text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
-            <TrendingDown className="w-3 h-3" />
-            {diffPercent}% vs moyenne
-          </span>
-        )}
-      </div>
-
-      {/* Price range bar */}
-      <div className="space-y-1">
-        <div className={cn("h-2 rounded-full relative", colors.barBg)}>
-          {/* Average marker */}
           <div
-            className="absolute top-1/2 -translate-y-1/2 w-0.5 h-4 bg-foreground/40 z-10"
-            style={{ left: `${((pricing.average - pricing.min) / (pricing.max - pricing.min)) * 100}%` }}
-          />
-          {/* Current price position */}
-          <motion.div
-            className={cn("absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-white shadow-md", colors.barFill)}
-            style={{ left: `${position}%` }}
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.3, type: "spring" }}
+            className="w-0 h-0 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent"
+            style={{ borderTopColor: isInRange ? "#22c55e" : isBelow ? "#f59e0b" : "#f97316" }}
           />
         </div>
-        <div className="flex justify-between text-[10px] text-text-light">
-          <span>{pricing.min}€</span>
-          <span className="font-medium">Moy. {pricing.average}€</span>
-          <span>{pricing.max}€</span>
+
+        {/* Barre */}
+        <div className="relative h-2.5">
+          {/* Fond gris + zone verte clippée */}
+          <div className="absolute inset-0 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className="absolute top-0 h-full bg-green-200"
+              style={{
+                left: `${Math.max(0, zoneLeftPct)}%`,
+                width: `${Math.min(100, zoneWidthPct)}%`,
+              }}
+            />
+            {/* Trait moyenne conseillée */}
+            <div
+              className="absolute top-0 h-full w-0.5 bg-green-400/70"
+              style={{ left: `${avgMarkerPct}%` }}
+            />
+          </div>
+          {/* Point annonceur */}
+          <motion.div
+            className={cn("absolute w-4 h-4 rounded-full border-2 border-white shadow-md z-10", statusBg)}
+            style={{
+              left: `calc(${dotPosition}% - 8px)`,
+              top: `calc(50% - 8px)`,
+            }}
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ delay: 0.2, type: "spring" }}
+          />
+        </div>
+
+        {/* Labels sous la barre : fourchette conseillée */}
+        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center">
+          <span className="text-[10px] text-green-600">
+            Fourchette : {formatPriceCents(recommendedRange.low)} — <span className="font-medium text-green-700">moy. {formatPriceCents(recAvg)}</span> — {formatPriceCents(recommendedRange.high)}
+          </span>
         </div>
       </div>
     </div>
   );
 }
 
-// Availability Calendar Component
-interface AvailabilityCalendarProps {
-  availability: { [key: string]: "available" | "partial" | "unavailable" };
+// Vue d'ensemble des tarifs par catégorie
+function ServicePricingOverview({ token }: { token: string }) {
+  const services = useQuery(api.services.services.getMyServices, { token });
+
+  if (services === undefined) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="w-5 h-5 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!services || services.length === 0) {
+    return (
+      <div className="text-center py-6 space-y-2">
+        <Euro className="w-8 h-8 text-gray-300 mx-auto" />
+        <p className="text-sm text-text-light">Aucun service configuré</p>
+        <Link href="/dashboard/services" className="text-xs text-primary font-medium hover:underline">
+          Ajouter des services
+        </Link>
+      </div>
+    );
+  }
+
+  // Grouper les variantes par catégorie avec toutes les infos de prix
+  const categoriesMap = new Map<string, VariantPriceInfo[]>();
+
+  for (const service of services) {
+    if (!service.isActive) continue;
+    const activeVariants = service.variants.filter((v: any) => v.isActive && v.price > 0);
+    if (activeVariants.length === 0) continue;
+
+    const existing = categoriesMap.get(service.category) || [];
+    existing.push(...activeVariants.map((v: any) => ({
+      name: v.name,
+      price: v.price,
+      priceUnit: v.priceUnit,
+      pricing: v.pricing,
+      numberOfSessions: v.numberOfSessions,
+      sessionType: v.sessionType,
+    })));
+    categoriesMap.set(service.category, existing);
+  }
+
+  const categories = Array.from(categoriesMap.entries());
+
+  if (categories.length === 0) {
+    return (
+      <div className="text-center py-6 space-y-2">
+        <Euro className="w-8 h-8 text-gray-300 mx-auto" />
+        <p className="text-sm text-text-light">Aucune formule active avec tarif</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {categories.map(([category, variants]) => (
+        <CategoryPricingRow
+          key={category}
+          token={token}
+          category={category}
+          variants={variants}
+        />
+      ))}
+    </div>
+  );
 }
 
-function AvailabilityCalendar({ availability }: AvailabilityCalendarProps) {
+// Mini-planning : même logique que MonthView mais en version compacte
+// Fond = disponibilité, barres = missions + créneaux collectifs
+interface AvailabilityCalendarProps {
+  token: string | null;
+}
+
+// Couleurs des statuts de mission (identiques à types.ts du planning)
+const missionStatusColors: Record<string, string> = {
+  completed: "bg-green-500",
+  in_progress: "bg-blue-500",
+  upcoming: "bg-purple",
+  pending_acceptance: "bg-amber-500",
+  pending_confirmation: "bg-orange-500",
+  refused: "bg-red-400",
+  cancelled: "bg-gray-400",
+};
+
+function AvailabilityCalendar({ token }: AvailabilityCalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
-  const daysInMonth = new Date(
-    currentMonth.getFullYear(),
-    currentMonth.getMonth() + 1,
-    0
-  ).getDate();
+  const year = currentMonth.getFullYear();
+  const month = currentMonth.getMonth();
 
-  const firstDayOfMonth = new Date(
-    currentMonth.getFullYear(),
-    currentMonth.getMonth(),
-    1
-  ).getDay();
-
-  // Adjust for Monday start (0 = Monday, 6 = Sunday)
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDayOfMonth = new Date(year, month, 1).getDay();
   const adjustedFirstDay = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
+
+  const startDate = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  const endDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`;
+
+  const formatDate = (d: number) =>
+    `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+  // 3 queries identiques au planning
+  const availabilityData = useQuery(
+    api.planning.availability.getAvailabilityByDateRange,
+    token ? { token, startDate, endDate } : "skip"
+  );
+
+  const missionsData = useQuery(
+    api.planning.missions.getMissionsByDateRange,
+    token ? { token, startDate, endDate } : "skip"
+  );
+
+  const collectiveSlotsRaw = useQuery(
+    api.planning.collectiveSlots.getSlotsByUser,
+    token ? { token, startDate, endDate } : "skip"
+  );
+
+  // Fond du jour selon la logique :
+  // Gris = indisponible (marqué par l'utilisateur)
+  // Vert = disponible, aucune réservation
+  // Orange = réservations mais encore des créneaux
+  // Rouge = complet, plus de créneaux
+  const getDayBg = React.useCallback((dateKey: string): { bg: string; status: "free" | "partial" | "full" | "unavailable" | "none" } => {
+    const dayAvails = availabilityData?.filter((a: { date: string }) => a.date === dateKey) || [];
+    const hasAvailable = dayAvails.some((a: { status: string }) => a.status === "available");
+    const hasPartial = dayAvails.some((a: { status: string }) => a.status === "partial");
+    const allUnavailable = dayAvails.length > 0 && dayAvails.every((a: { status: string }) => a.status === "unavailable");
+
+    // Pas de dispo renseignée → neutre
+    if (dayAvails.length === 0) return { bg: "", status: "none" };
+
+    // Indisponible explicite → gris
+    if (allUnavailable) return { bg: "bg-gray-100 border-gray-300", status: "unavailable" };
+
+    // Compter les réservations sur ce jour
+    const dayMissions = missionsData?.filter((m: { status: string; sessionType?: string; collectiveSlotDates?: string[]; sessions?: { date: string }[]; startDate: string; endDate: string }) => {
+      if (m.status === "cancelled" || m.status === "refused") return false;
+      if (m.sessionType === "collective" && m.collectiveSlotDates) return m.collectiveSlotDates.includes(dateKey);
+      if (m.sessions && m.sessions.length > 0) return m.sessions.some((s: { date: string }) => s.date === dateKey);
+      return m.startDate <= dateKey && m.endDate >= dateKey;
+    }) || [];
+
+    const daySlots = collectiveSlotsRaw?.filter(
+      (s: { date: string; isCancelled: boolean; isActive: boolean }) =>
+        s.date === dateKey && !s.isCancelled && s.isActive
+    ) || [];
+
+    const hasBookings = dayMissions.length > 0 || daySlots.some((s: { bookedAnimals: number }) => s.bookedAnimals > 0);
+
+    if (!hasBookings) {
+      // Aucune réservation → vert si dispo
+      if (hasAvailable) return { bg: "bg-green-50 border-green-200", status: "free" };
+      if (hasPartial) return { bg: "bg-orange-50 border-orange-200", status: "partial" };
+      return { bg: "", status: "none" };
+    }
+
+    // A des réservations : encore de la place ?
+    if (hasAvailable || hasPartial) {
+      // Encore des créneaux disponibles → orange
+      return { bg: "bg-orange-50 border-orange-200", status: "partial" };
+    }
+
+    // Plus de créneaux disponibles → rouge
+    return { bg: "bg-red-50 border-red-200", status: "full" };
+  }, [availabilityData, missionsData, collectiveSlotsRaw]);
+
+  // Missions par date (même logique que getMissionsForDate du MonthView)
+  const getMissionsForDate = React.useCallback((dateKey: string) => {
+    if (!missionsData) return [];
+    return missionsData.filter((m: { status: string; sessionType?: string; collectiveSlotDates?: string[]; sessions?: { date: string }[]; startDate: string; endDate: string }) => {
+      if (m.status === "cancelled" || m.status === "refused") return false;
+      if (m.sessionType === "collective" && m.collectiveSlotDates) {
+        return m.collectiveSlotDates.includes(dateKey);
+      }
+      if (m.sessions && m.sessions.length > 0) {
+        return m.sessions.some((s) => s.date === dateKey);
+      }
+      return m.startDate <= dateKey && m.endDate >= dateKey;
+    });
+  }, [missionsData]);
+
+  // Créneaux collectifs par date
+  const getSlotsForDate = React.useCallback((dateKey: string) => {
+    if (!collectiveSlotsRaw) return [];
+    return collectiveSlotsRaw.filter(
+      (s: { date: string; isCancelled: boolean; isActive: boolean }) =>
+        s.date === dateKey && !s.isCancelled && s.isActive
+    );
+  }, [collectiveSlotsRaw]);
+
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
   const monthNames = [
     "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
     "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
   ];
-
-  const dayNames = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
-
-  const prevMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
-  };
-
-  const nextMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
-  };
-
-  const getDateKey = (day: number) => {
-    const month = String(currentMonth.getMonth() + 1).padStart(2, "0");
-    const dayStr = String(day).padStart(2, "0");
-    return `${currentMonth.getFullYear()}-${month}-${dayStr}`;
-  };
-
-  const getAvailabilityForDay = (day: number) => {
-    const dateKey = getDateKey(day);
-    return availability[dateKey] || "available";
-  };
-
-  const availabilityColors = {
-    available: "bg-green-100 text-green-700",
-    partial: "bg-orange-100 text-orange-700",
-    unavailable: "bg-red-100 text-red-400",
-  };
+  const dayNames = ["L", "M", "M", "J", "V", "S", "D"];
 
   return (
     <div className="max-w-md mx-auto">
-      {/* Calendar Header */}
+      {/* Header navigation */}
       <div className="flex items-center justify-between mb-3">
         <motion.button
-          onClick={prevMonth}
+          onClick={() => setCurrentMonth(new Date(year, month - 1, 1))}
           className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
@@ -214,10 +494,10 @@ function AvailabilityCalendar({ availability }: AvailabilityCalendarProps) {
           <ChevronLeft className="w-4 h-4 text-foreground" />
         </motion.button>
         <h4 className="text-sm font-semibold text-foreground">
-          {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+          {monthNames[month]} {year}
         </h4>
         <motion.button
-          onClick={nextMonth}
+          onClick={() => setCurrentMonth(new Date(year, month + 1, 1))}
           className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
@@ -226,72 +506,144 @@ function AvailabilityCalendar({ availability }: AvailabilityCalendarProps) {
         </motion.button>
       </div>
 
-      {/* Day names */}
+      {/* Jours de la semaine */}
       <div className="grid grid-cols-7 gap-0.5 mb-1">
-        {dayNames.map((day) => (
-          <div
-            key={day}
-            className="text-center text-xs font-medium text-text-light py-1"
-          >
+        {dayNames.map((day, i) => (
+          <div key={i} className="text-center text-[11px] font-medium text-text-light py-1">
             {day}
           </div>
         ))}
       </div>
 
-      {/* Calendar Grid */}
+      {/* Grille du calendrier */}
       <div className="grid grid-cols-7 gap-0.5">
-        {/* Empty cells for days before the first day of month */}
-        {Array.from({ length: adjustedFirstDay }).map((_, index) => (
-          <div key={`empty-${index}`} className="h-8" />
+        {Array.from({ length: adjustedFirstDay }).map((_, i) => (
+          <div key={`empty-${i}`} className="h-14" />
         ))}
 
-        {/* Days of the month */}
         {Array.from({ length: daysInMonth }).map((_, index) => {
           const day = index + 1;
-          const status = getAvailabilityForDay(day);
+          const dateKey = formatDate(day);
+          const isToday = dateKey === todayKey;
+          const isPast = dateKey < todayKey;
+          const { bg: bgClass } = getDayBg(dateKey);
+          const dayMissions = getMissionsForDate(dateKey);
+          const daySlots = getSlotsForDate(dateKey);
+
+          // Nombre total d'événements
+          const nonCollectiveMissions = dayMissions.filter((m: { sessionType?: string }) => m.sessionType !== "collective");
+          const totalEvents = nonCollectiveMissions.length + daySlots.length;
 
           return (
             <div
               key={day}
               className={cn(
-                "h-8 rounded flex items-center justify-center text-xs font-medium",
-                availabilityColors[status]
+                "h-14 rounded-md border p-0.5 flex flex-col transition-colors overflow-hidden",
+                isPast
+                  ? "bg-gray-50 border-gray-100 opacity-50"
+                  : isToday
+                    ? "border-primary bg-primary/5"
+                    : bgClass
+                      ? bgClass
+                      : "border-gray-100"
               )}
             >
-              {day}
+              {/* Numéro du jour */}
+              <span className={cn(
+                "text-[10px] font-medium leading-none mb-0.5",
+                isPast ? "text-gray-400" : isToday ? "text-primary font-bold" : "text-foreground"
+              )}>
+                {day}
+              </span>
+
+              {/* Événements (max 2 barres) */}
+              <div className="flex-1 flex flex-col gap-px overflow-hidden">
+                {/* Créneaux collectifs en priorité */}
+                {daySlots.slice(0, 1).map((slot: { _id: string; bookings?: { animalEmoji: string }[]; bookedAnimals: number; maxAnimals: number; variantName?: string }) => (
+                  <div
+                    key={slot._id}
+                    className={cn(
+                      "h-2.5 rounded-sm text-white text-[7px] leading-[10px] px-0.5 truncate",
+                      slot.bookings && slot.bookings.length > 0 ? "bg-purple-600" : "bg-purple-400"
+                    )}
+                  >
+                    {slot.bookings && slot.bookings.length > 0
+                      ? `${slot.bookings[0].animalEmoji} ${slot.bookedAnimals}/${slot.maxAnimals}`
+                      : `${slot.bookedAnimals}/${slot.maxAnimals}`
+                    }
+                  </div>
+                ))}
+
+                {/* Missions (uni-séance, multi-séances - tout sauf collective) */}
+                {nonCollectiveMissions.slice(0, daySlots.length > 0 ? 1 : 2).map((mission: { id: string; status: string; animal: { emoji: string; name: string }; animals?: { emoji: string; name: string }[]; sessionType?: string; numberOfSessions?: number }) => (
+                  <div
+                    key={mission.id}
+                    className={cn(
+                      "h-2.5 rounded-sm text-white text-[7px] leading-[10px] px-0.5 truncate",
+                      missionStatusColors[mission.status] || "bg-gray-400"
+                    )}
+                  >
+                    {mission.animals && mission.animals.length > 1
+                      ? mission.animals.map((a) => a.emoji).join("")
+                      : `${mission.animal.emoji} ${mission.animal.name}`
+                    }
+                  </div>
+                ))}
+
+                {/* Indicateur +N si plus d'événements */}
+                {totalEvents > 2 && (
+                  <span className="text-[7px] text-text-light leading-none">+{totalEvents - 2}</span>
+                )}
+              </div>
             </div>
           );
         })}
       </div>
 
-      {/* Legend */}
-      <div className="flex items-center justify-center gap-4 mt-3 pt-3 border-t border-foreground/10">
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded bg-green-100 border border-green-300" />
-          <span className="text-xs text-text-light">Dispo</span>
+      {/* Légende */}
+      <div className="space-y-1.5 mt-3 pt-3 border-t border-foreground/10">
+        {/* Fond de cellule */}
+        <div className="flex items-center justify-center gap-2.5">
+          <div className="flex items-center gap-1">
+            <div className="w-2.5 h-2.5 rounded-sm bg-green-50 border border-green-200" />
+            <span className="text-[10px] text-text-light">Libre</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-2.5 h-2.5 rounded-sm bg-orange-50 border border-orange-200" />
+            <span className="text-[10px] text-text-light">Partiel</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-2.5 h-2.5 rounded-sm bg-red-50 border border-red-200" />
+            <span className="text-[10px] text-text-light">Complet</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-2.5 h-2.5 rounded-sm bg-gray-100 border border-gray-300" />
+            <span className="text-[10px] text-text-light">Indispo</span>
+          </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded bg-orange-100 border border-orange-300" />
-          <span className="text-xs text-text-light">Partiel</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded bg-red-100 border border-red-300" />
-          <span className="text-xs text-text-light">Indispo</span>
+        {/* Barres d'événements */}
+        <div className="flex items-center justify-center gap-2">
+          <div className="flex items-center gap-1">
+            <div className="w-4 h-2 rounded-sm bg-purple-600" />
+            <span className="text-[10px] text-text-light">Collectif</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-4 h-2 rounded-sm bg-purple" />
+            <span className="text-[10px] text-text-light">A venir</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-4 h-2 rounded-sm bg-blue-500" />
+            <span className="text-[10px] text-text-light">En cours</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-4 h-2 rounded-sm bg-amber-500" />
+            <span className="text-[10px] text-text-light">A traiter</span>
+          </div>
         </div>
       </div>
     </div>
   );
 }
-
-// Mock data pour les sections non encore connectées
-const mockPricing = {
-  hourly: { price: 15, average: 14, min: 10, max: 20 },
-  daily: { price: 35, average: 32, min: 25, max: 45 },
-  weekly: { price: 200, average: 190, min: 150, max: 280 },
-  monthly: { price: 700, average: 650, min: 500, max: 900 },
-};
-
-const mockAvailability: { [key: string]: "available" | "partial" | "unavailable" } = {};
 
 const mockAcceptedAnimalTypes = [
   { type: "Chien", emoji: "🐕", accepted: true },
@@ -317,6 +669,15 @@ const ANIMAL_TYPE_OPTIONS = [
 export default function ProfilePage() {
   const { user, token, isLoading: authLoading } = useAuth();
   const stats = calculateStats();
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 400);
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   // Récupérer le profil Convex
   const profileData = useQuery(
@@ -521,19 +882,32 @@ export default function ProfilePage() {
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
       >
-        <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-          Ma fiche
-        </h1>
-        <p className="text-text-light mt-1">
-          Votre annonce visible par les propriétaires d&apos;animaux
-        </p>
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+            Mon profil
+          </h1>
+          <p className="text-text-light mt-1">
+            Votre annonce visible par les propriétaires d&apos;animaux
+          </p>
+        </div>
+        {user?.username && (
+          <Link
+            href={`/profil/${user.username}`}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm w-fit"
+          >
+            <Eye className="w-4 h-4" />
+            Voir mon profil
+          </Link>
+        )}
       </motion.div>
 
       {/* Profile Completion Bar */}
       <ProfileCompletionBar profileData={profileCompletionData} />
 
       {/* Profile Header avec bannière */}
+      <div id="section-profile-header">
       <ProfileHeader
         firstName={userInfo.firstName}
         lastName={userInfo.lastName}
@@ -560,8 +934,10 @@ export default function ProfilePage() {
         onUploadCover={handleUploadCover}
         onRemoveCover={handleRemoveCover}
       />
+      </div>
 
       {/* Rayon d'intervention */}
+      <div id="section-radius">
       <ProfileSettingsSection
         radius={profile?.radius || 20}
         onRadiusChange={handleRadiusChange}
@@ -569,6 +945,7 @@ export default function ProfilePage() {
         isEditable={true}
         showOnlyRadius={true}
       />
+      </div>
 
       {/* Availability & Pricing - Side by side */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -579,11 +956,19 @@ export default function ProfilePage() {
           transition={{ delay: 0.12 }}
           className="bg-white rounded-3xl shadow-lg p-6"
         >
-          <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-primary" />
-            Mes disponibilités
-          </h3>
-          <AvailabilityCalendar availability={mockAvailability} />
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-primary" />
+              Mes disponibilités
+            </h3>
+            <Link
+              href="/dashboard/planning"
+              className="text-sm text-primary font-medium hover:underline"
+            >
+              Gérer
+            </Link>
+          </div>
+          <AvailabilityCalendar token={token} />
         </motion.div>
 
         {/* Pricing Card */}
@@ -593,45 +978,29 @@ export default function ProfilePage() {
           transition={{ delay: 0.15 }}
           className="bg-white rounded-3xl shadow-lg p-6"
         >
-          <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-            <Euro className="w-5 h-5 text-primary" />
-            Tarifs
-          </h3>
-          <div className="grid grid-cols-2 gap-3">
-            <PricingCard
-              icon={Clock}
-              label="Heure"
-              pricing={mockPricing.hourly}
-              color="primary"
-            />
-            <PricingCard
-              icon={Calendar}
-              label="Jour"
-              pricing={mockPricing.daily}
-              color="secondary"
-            />
-            <PricingCard
-              icon={CalendarDays}
-              label="Semaine"
-              pricing={mockPricing.weekly}
-              color="purple"
-            />
-            <PricingCard
-              icon={CalendarRange}
-              label="Mois"
-              pricing={mockPricing.monthly}
-              color="accent"
-            />
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+              <Euro className="w-5 h-5 text-primary" />
+              Tarifs
+            </h3>
+            <Link
+              href="/dashboard/services"
+              className="text-xs text-primary font-medium hover:underline"
+            >
+              Gérer
+            </Link>
           </div>
+          {token && <ServicePricingOverview token={token} />}
           <div className="mt-3 p-2 bg-blue-50 rounded-xl flex items-center gap-2 text-xs text-blue-700">
             <span>💡</span>
-            <span>Prix moyens basés sur votre zone géographique.</span>
+            <span>Vos tarifs comparés aux prix conseillés de la plateforme.</span>
           </div>
         </motion.div>
       </div>
 
       {/* Accepted Animals & Capacity & Equipment */}
       <motion.div
+        id="section-animaux"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
@@ -753,6 +1122,7 @@ export default function ProfilePage() {
 
       {/* Housing Conditions - Style Cards */}
       <motion.div
+        id="section-conditions"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.25 }}
@@ -1146,6 +1516,24 @@ export default function ProfilePage() {
           ))}
         </div>
       </motion.div>
+
+      {/* Bouton remonter en haut */}
+      <AnimatePresence>
+        {showScrollTop && (
+          <motion.button
+            type="button"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            className="fixed bottom-6 right-6 z-50 p-3 bg-primary text-white rounded-full shadow-lg hover:bg-primary/90 transition-colors"
+            aria-label="Remonter en haut de page"
+          >
+            <ArrowUp className="w-5 h-5" />
+          </motion.button>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

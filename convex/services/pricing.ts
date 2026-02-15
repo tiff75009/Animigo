@@ -31,8 +31,35 @@ function calculatePercentile(prices: number[], percentile: number): number {
 }
 
 /**
+ * Récupère le prix d'une variante pour une unité donnée.
+ * Priorité : objet pricing (multi-tarification) > price si priceUnit correspond.
+ * Retourne 0 si aucun prix n'est disponible pour cette unité.
+ */
+function getVariantPriceForUnit(variant: any, requestedUnit: PriceUnit): number {
+  const pricing = variant.pricing;
+
+  // 1. Vérifier la multi-tarification (mode automatique)
+  if (pricing) {
+    switch (requestedUnit) {
+      case "hour": if (pricing.hourly) return pricing.hourly; break;
+      case "half_day": if (pricing.halfDaily) return pricing.halfDaily; break;
+      case "day": if (pricing.daily) return pricing.daily; break;
+      case "week": if (pricing.weekly) return pricing.weekly; break;
+      case "month": if (pricing.monthly) return pricing.monthly; break;
+    }
+  }
+
+  // 2. Fallback : variant.price uniquement si l'unité correspond
+  if (variant.priceUnit === requestedUnit && variant.price > 0) {
+    return variant.price;
+  }
+
+  return 0;
+}
+
+/**
  * Récupère les prix conseillés pour une catégorie de service
- * Utilise les prix horaires des variantes des autres utilisateurs
+ * Utilise les prix des variantes des autres utilisateurs dans l'unité demandée
  * Fallback: prix par défaut défini par l'admin dans la catégorie
  */
 export const getPriceRecommendation = query({
@@ -80,8 +107,8 @@ export const getPriceRecommendation = query({
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .first();
 
-    // Récupérer les prix horaires des variantes des autres utilisateurs
-    let hourlyRates: number[] = [];
+    // Récupérer les prix des variantes des autres utilisateurs dans l'unité demandée
+    let rates: number[] = [];
     let scopeUsed: ScopeUsed = "national";
 
     // 1. Récupérer tous les services de cette catégorie (sauf ceux de l'utilisateur actuel)
@@ -95,7 +122,7 @@ export const getPriceRecommendation = query({
     // Filtrer pour exclure les services de l'utilisateur actuel
     const otherServices = services.filter(s => s.userId !== user._id);
 
-    // 2. Pour chaque service, récupérer les variantes et leurs prix horaires
+    // 2. Pour chaque service, récupérer les variantes et leurs prix dans l'unité demandée
     for (const service of otherServices) {
       const variants = await ctx.db
         .query("serviceVariants")
@@ -104,16 +131,16 @@ export const getPriceRecommendation = query({
         )
         .collect();
 
-      // Collecter les prix horaires
       for (const variant of variants) {
-        if (variant.price > 0) {
-          hourlyRates.push(variant.price);
+        const priceForUnit = getVariantPriceForUnit(variant, args.priceUnit);
+        if (priceForUnit > 0) {
+          rates.push(priceForUnit);
         }
       }
     }
 
     // 3. Si pas assez de données, utiliser le prix par défaut admin ou fallback
-    if (hourlyRates.length < 3) {
+    if (rates.length < 3) {
       return getDefaultRecommendation(
         args.category,
         args.priceUnit,
@@ -123,15 +150,15 @@ export const getPriceRecommendation = query({
     }
 
     // Calculer les statistiques
-    const minPrice = Math.min(...hourlyRates);
-    const maxPrice = Math.max(...hourlyRates);
-    const avgPrice = Math.round(hourlyRates.reduce((a, b) => a + b, 0) / hourlyRates.length);
-    const p25 = calculatePercentile(hourlyRates, 25);
-    const p75 = calculatePercentile(hourlyRates, 75);
+    const minPrice = Math.min(...rates);
+    const maxPrice = Math.max(...rates);
+    const avgPrice = Math.round(rates.reduce((a, b) => a + b, 0) / rates.length);
+    const p25 = calculatePercentile(rates, 25);
+    const p75 = calculatePercentile(rates, 75);
 
     return {
       hasData: true,
-      sampleSize: hourlyRates.length,
+      sampleSize: rates.length,
       minPrice,
       maxPrice,
       avgPrice,

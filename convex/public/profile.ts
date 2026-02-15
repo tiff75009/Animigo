@@ -109,6 +109,7 @@ export const getPublicProfileBySlug = query({
 
     // Récupérer les services/formules si c'est un annonceur
     let services: any[] = [];
+    let collectiveSlots: any[] = [];
     if (user.accountType === "annonceur_pro" || user.accountType === "annonceur_particulier") {
       const userServices = await ctx.db
         .query("services")
@@ -145,18 +146,50 @@ export const getPublicProfileBySlug = query({
             categoryName: catInfo.name,
             categoryIcon: catInfo.icon,
             animalTypes: service.animalTypes || [],
-            formules: variants.map((v) => ({
-              id: v._id,
-              name: v.name,
-              description: v.description,
-              basePrice: v.price,
-              pricePerHour: v.pricing?.hourly,
-              pricePerDay: v.pricing?.daily,
-              animalTypes: v.animalTypes || [],
+            formules: variants.map((variant) => ({
+              id: variant._id,
+              name: variant.name,
+              description: variant.description,
+              basePrice: variant.price,
+              priceUnit: variant.priceUnit,
+              pricePerHour: variant.pricing?.hourly,
+              pricePerHalfDay: variant.pricing?.halfDaily,
+              pricePerDay: variant.pricing?.daily,
+              pricePerWeek: variant.pricing?.weekly,
+              pricePerMonth: variant.pricing?.monthly,
+              animalTypes: variant.animalTypes || [],
+              sessionType: variant.sessionType,
+              numberOfSessions: variant.numberOfSessions,
+              maxAnimalsPerSession: variant.maxAnimalsPerSession,
             })),
           };
         })
       );
+
+      // Récupérer les créneaux collectifs futurs (14 prochains jours)
+      const today = new Date();
+      const todayStr = today.toISOString().split("T")[0];
+      const allSlots = await ctx.db
+        .query("collectiveSlots")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .collect();
+
+      collectiveSlots = allSlots
+        .filter((slot) =>
+          slot.isActive &&
+          !slot.isCancelled &&
+          slot.date >= todayStr
+        )
+        .slice(0, 50)
+        .map((slot) => ({
+          id: slot._id,
+          variantId: slot.variantId,
+          date: slot.date,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          maxAnimals: slot.maxAnimals,
+          bookedAnimals: slot.bookedAnimals ?? 0,
+        }));
     }
 
     // Déterminer le type de membre
@@ -176,6 +209,9 @@ export const getPublicProfileBySlug = query({
         : user.accountType === "annonceur_particulier"
           ? "particulier"
           : "utilisateur",
+      // Données pro
+      siret: user.accountType === "annonceur_pro" ? (user.siret || null) : null,
+      companyName: user.accountType === "annonceur_pro" ? (user.companyName || null) : null,
       // Profil
       profileImage: (profile?.listingDisplayImage === "logo" && profile?.companyLogoUrl)
         ? profile.companyLogoUrl
@@ -184,7 +220,9 @@ export const getPublicProfileBySlug = query({
       coverImage: profile?.coverImageUrl || null,
       bio: profile?.description || profile?.bio || null,
       location: profile?.location || profile?.city || null,
+      city: profile?.city || null,
       coordinates: profile?.coordinates || null,
+      radius: profile?.radius || null,
       // Équipement (pour annonceurs)
       equipment: {
         housingType: profile?.housingType || null,
@@ -210,6 +248,70 @@ export const getPublicProfileBySlug = query({
       reviewCount: enrichedReviews.length,
       // Services (pour annonceurs)
       services,
+      // Créneaux collectifs futurs
+      collectiveSlots,
+    };
+  },
+});
+
+/**
+ * Query publique pour les disponibilités d'un annonceur par mois.
+ * Retourne uniquement les statuts (pas les détails de missions/réservations).
+ */
+export const getPublicAvailability = query({
+  args: {
+    slug: v.string(),
+    startDate: v.string(), // "YYYY-MM-DD"
+    endDate: v.string(),   // "YYYY-MM-DD"
+  },
+  handler: async (ctx, args) => {
+    // Trouver l'utilisateur par username ou slug
+    let user = await ctx.db
+      .query("users")
+      .withIndex("by_username", (q) => q.eq("username", args.slug.toLowerCase()))
+      .first();
+    if (!user) {
+      user = await ctx.db
+        .query("users")
+        .withIndex("by_slug", (q) => q.eq("slug", args.slug))
+        .first();
+    }
+    if (!user || !user.isActive) return [];
+
+    // Récupérer les disponibilités
+    const availabilities = await ctx.db
+      .query("availability")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+
+    const filtered = availabilities.filter(
+      (a) => a.date >= args.startDate && a.date <= args.endDate
+    );
+
+    // Récupérer les créneaux collectifs actifs sur la période
+    const collectiveSlots = await ctx.db
+      .query("collectiveSlots")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+
+    const activeSlots = collectiveSlots.filter(
+      (s) => s.isActive && !s.isCancelled && s.date >= args.startDate && s.date <= args.endDate
+    );
+
+    return {
+      availability: filtered.map((a) => ({
+        date: a.date,
+        status: a.status,
+      })),
+      collectiveSlots: activeSlots.map((s) => ({
+        id: s._id,
+        variantId: s.variantId,
+        date: s.date,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        maxAnimals: s.maxAnimals,
+        bookedAnimals: s.bookedAnimals ?? 0,
+      })),
     };
   },
 });

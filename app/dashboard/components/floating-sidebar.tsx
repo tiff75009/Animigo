@@ -373,7 +373,7 @@ function FloatingSidebarContent() {
   ];
 
   const profileNavItems: NavItem[] = [
-    { href: "/dashboard/profil", icon: <User className="w-5 h-5" />, label: "Ma fiche" },
+    { href: "/dashboard/profil", icon: <User className="w-5 h-5" />, label: "Mon profil" },
     { href: "/dashboard/services", icon: <Briefcase className="w-5 h-5" />, label: "Mes services" },
     { href: "/dashboard/avis", icon: <Star className="w-5 h-5" />, label: "Mes avis" },
   ];

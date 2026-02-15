@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircle,
@@ -17,6 +18,8 @@ import {
   Shield,
   ChevronDown,
   Sparkles,
+  AlertTriangle,
+  ArrowRight,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 
@@ -45,6 +48,7 @@ interface CompletionItem {
   shortLabel: string;
   icon: React.ReactNode;
   weight: number;
+  target: string; // "#section-id" pour scroll, "/path" pour navigation
 }
 
 const completionItems: CompletionItem[] = [
@@ -54,6 +58,7 @@ const completionItems: CompletionItem[] = [
     shortLabel: "Photo",
     icon: <Camera className="w-3.5 h-3.5" />,
     weight: 10,
+    target: "#section-profile-header",
   },
   {
     key: "hasCoverPhoto",
@@ -61,6 +66,7 @@ const completionItems: CompletionItem[] = [
     shortLabel: "Couverture",
     icon: <ImageIcon className="w-3.5 h-3.5" />,
     weight: 10,
+    target: "#section-profile-header",
   },
   {
     key: "hasDescription",
@@ -68,6 +74,7 @@ const completionItems: CompletionItem[] = [
     shortLabel: "Description",
     icon: <FileText className="w-3.5 h-3.5" />,
     weight: 15,
+    target: "#section-profile-header",
   },
   {
     key: "hasLocation",
@@ -75,6 +82,7 @@ const completionItems: CompletionItem[] = [
     shortLabel: "Adresse",
     icon: <MapPin className="w-3.5 h-3.5" />,
     weight: 10,
+    target: "#section-profile-header",
   },
   {
     key: "hasRadius",
@@ -82,6 +90,7 @@ const completionItems: CompletionItem[] = [
     shortLabel: "Rayon",
     icon: <Navigation className="w-3.5 h-3.5" />,
     weight: 10,
+    target: "#section-radius",
   },
   {
     key: "hasAcceptedAnimals",
@@ -89,6 +98,7 @@ const completionItems: CompletionItem[] = [
     shortLabel: "Animaux",
     icon: <Heart className="w-3.5 h-3.5" />,
     weight: 10,
+    target: "#section-animaux",
   },
   {
     key: "hasEquipments",
@@ -96,6 +106,7 @@ const completionItems: CompletionItem[] = [
     shortLabel: "Équipements",
     icon: <Trees className="w-3.5 h-3.5" />,
     weight: 5,
+    target: "#section-conditions",
   },
   {
     key: "hasMaxAnimals",
@@ -103,6 +114,7 @@ const completionItems: CompletionItem[] = [
     shortLabel: "Capacité",
     icon: <Users className="w-3.5 h-3.5" />,
     weight: 10,
+    target: "#section-animaux",
   },
   {
     key: "hasServices",
@@ -110,6 +122,7 @@ const completionItems: CompletionItem[] = [
     shortLabel: "Services",
     icon: <Euro className="w-3.5 h-3.5" />,
     weight: 10,
+    target: "/dashboard/services",
   },
   {
     key: "hasAvailability",
@@ -117,6 +130,7 @@ const completionItems: CompletionItem[] = [
     shortLabel: "Dispo",
     icon: <Calendar className="w-3.5 h-3.5" />,
     weight: 10,
+    target: "/dashboard/planning",
   },
   {
     key: "hasIcad",
@@ -124,6 +138,7 @@ const completionItems: CompletionItem[] = [
     shortLabel: "I-CAD",
     icon: <Shield className="w-3.5 h-3.5" />,
     weight: 5,
+    target: "#section-profile-header",
   },
 ];
 
@@ -132,6 +147,7 @@ export default function ProfileCompletionBar({
   className,
 }: ProfileCompletionBarProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const router = useRouter();
 
   // Calculer le pourcentage de complétion
   const completedWeight = completionItems.reduce((sum, item) => {
@@ -143,7 +159,20 @@ export default function ProfileCompletionBar({
 
   // Éléments manquants et complétés
   const missingItems = completionItems.filter((item) => !profileData[item.key]);
-  const completedItems = completionItems.filter((item) => profileData[item.key]);
+
+  // Navigation vers la section correspondante
+  const handleItemClick = (item: CompletionItem) => {
+    if (item.target.startsWith("#")) {
+      // Scroll vers la section sur la même page
+      const element = document.getElementById(item.target.slice(1));
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    } else {
+      // Navigation vers une autre page
+      router.push(item.target);
+    }
+  };
 
   // Couleur selon le pourcentage
   const getBarColor = () => {
@@ -204,6 +233,14 @@ export default function ProfileCompletionBar({
         className
       )}
     >
+      {/* Avertissement - publication impossible */}
+      <div className="mx-4 mt-4 flex items-start gap-2.5 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+        <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+        <p className="text-xs text-amber-800 leading-relaxed">
+          <span className="font-semibold">Profil incomplet.</span> Vous devez compléter toutes les informations de votre profil pour que votre annonce soit visible en ligne.
+        </p>
+      </div>
+
       {/* Header compact - toujours visible */}
       <button
         type="button"
@@ -328,13 +365,15 @@ export default function ProfileCompletionBar({
                 {completionItems.map((item) => {
                   const isComplete = profileData[item.key];
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={item.key}
+                      onClick={() => handleItemClick(item)}
                       className={cn(
-                        "flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all",
+                        "flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all group cursor-pointer",
                         isComplete
-                          ? "bg-green-100 text-green-700"
-                          : "bg-white text-gray-500 border border-gray-200"
+                          ? "bg-green-100 text-green-700 hover:bg-green-200"
+                          : "bg-white text-gray-500 border border-gray-200 hover:border-primary/40 hover:text-primary hover:bg-primary/5"
                       )}
                     >
                       {isComplete ? (
@@ -343,7 +382,10 @@ export default function ProfileCompletionBar({
                         <span className="flex-shrink-0">{item.icon}</span>
                       )}
                       <span className="truncate">{item.shortLabel}</span>
-                    </div>
+                      {!isComplete && (
+                        <ArrowRight className="w-3 h-3 ml-auto flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      )}
+                    </button>
                   );
                 })}
               </div>
@@ -352,9 +394,13 @@ export default function ProfileCompletionBar({
               {missingItems.length > 0 && (
                 <p className="text-xs text-gray-500 pt-2 border-t border-gray-200/50">
                   <span className="font-medium">Conseil :</span> Complétez{" "}
-                  <span className={cn("font-medium", getTextColor())}>
+                  <button
+                    type="button"
+                    onClick={() => handleItemClick(missingItems[0])}
+                    className={cn("font-medium underline underline-offset-2 hover:no-underline cursor-pointer", getTextColor())}
+                  >
                     {missingItems[0].label.toLowerCase()}
-                  </span>{" "}
+                  </button>{" "}
                   pour améliorer votre visibilité.
                 </p>
               )}
