@@ -57,6 +57,7 @@ import type * as auth_session from "../auth/session.js";
 import type * as auth_username from "../auth/username.js";
 import type * as auth_utils from "../auth/utils.js";
 import type * as client_addresses from "../client/addresses.js";
+import type * as client_dashboard from "../client/dashboard.js";
 import type * as client_favorites from "../client/favorites.js";
 import type * as client_profile from "../client/profile.js";
 import type * as config from "../config.js";
@@ -181,6 +182,7 @@ declare const fullApi: ApiFromModules<{
   "auth/username": typeof auth_username;
   "auth/utils": typeof auth_utils;
   "client/addresses": typeof client_addresses;
+  "client/dashboard": typeof client_dashboard;
   "client/favorites": typeof client_favorites;
   "client/profile": typeof client_profile;
   config: typeof config;
