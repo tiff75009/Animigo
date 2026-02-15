@@ -66,6 +66,11 @@ export interface InvoiceData {
   recipientAddress?: InvoiceAddress;
   mission?: InvoiceMission;
   serviceTypeSlug?: string | null;
+  // Frais client (ajoutés uniquement côté client)
+  platformFee?: number;      // Commission Animigo en centimes
+  stripeFee?: number;        // Frais de paiement Stripe en centimes
+  commissionRate?: number;   // Taux commission (%)
+  stripeFeeRate?: number;    // Taux frais Stripe (%)
 }
 
 // ============================================
@@ -397,6 +402,7 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Blob> {
   // ── TOTAUX (alignés à droite) ──
   const totalLabelX = margin + contentWidth * 0.58;
   const totalValueX = pageWidth - margin;
+  const hasClientFees = (data.platformFee && data.platformFee > 0) || (data.stripeFee && data.stripeFee > 0);
 
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
@@ -418,19 +424,79 @@ export async function generateInvoicePdf(data: InvoiceData): Promise<Blob> {
     doc.line(totalLabelX, y, pageWidth - margin, y);
     y += 6;
 
-    // Total TTC
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.setTextColor(accent.r, accent.g, accent.b);
-    doc.text("Total TTC :", totalLabelX, y);
-    doc.text(formatPrice(data.amount), totalValueX, y, { align: "right" });
+    if (hasClientFees) {
+      // Sous-total prestation TTC
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(dark.r, dark.g, dark.b);
+      doc.text("Sous-total prestation TTC :", totalLabelX, y);
+      doc.text(formatPrice(data.amount), totalValueX, y, { align: "right" });
+      y += 8;
+    } else {
+      // Total TTC (sans frais client)
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(accent.r, accent.g, accent.b);
+      doc.text("Total TTC :", totalLabelX, y);
+      doc.text(formatPrice(data.amount), totalValueX, y, { align: "right" });
+    }
   } else {
-    // Pas de TVA (micro-entrepreneur)
+    if (hasClientFees) {
+      // Sous-total prestation (micro-entrepreneur)
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(dark.r, dark.g, dark.b);
+      doc.text("Sous-total prestation :", totalLabelX, y);
+      doc.text(formatPrice(data.amount), totalValueX, y, { align: "right" });
+      y += 8;
+    } else {
+      // Total (sans frais client)
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(accent.r, accent.g, accent.b);
+      doc.text("Total :", totalLabelX, y);
+      doc.text(formatPrice(data.amount), totalValueX, y, { align: "right" });
+    }
+  }
+
+  // ── FRAIS DE SERVICE (côté client uniquement) ──
+  if (hasClientFees) {
+    // Ligne commission Animigo
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(gray.r, gray.g, gray.b);
+
+    if (data.platformFee && data.platformFee > 0) {
+      const commLabel = data.commissionRate
+        ? `Commission Animigo (${data.commissionRate}%) :`
+        : "Commission Animigo :";
+      doc.text(commLabel, totalLabelX, y);
+      doc.text(formatPrice(data.platformFee), totalValueX, y, { align: "right" });
+      y += 6;
+    }
+
+    // Ligne frais de paiement
+    if (data.stripeFee && data.stripeFee > 0) {
+      const stripeLabel = data.stripeFeeRate
+        ? `Frais de paiement (${data.stripeFeeRate}%) :`
+        : "Frais de paiement :";
+      doc.text(stripeLabel, totalLabelX, y);
+      doc.text(formatPrice(data.stripeFee), totalValueX, y, { align: "right" });
+      y += 4;
+    }
+
+    // Séparateur avant total réglé
+    doc.setDrawColor(200, 200, 200);
+    doc.line(totalLabelX, y, pageWidth - margin, y);
+    y += 6;
+
+    // Total réglé (montant réellement payé par le client)
+    const totalRegle = data.amount + (data.platformFee || 0) + (data.stripeFee || 0);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
     doc.setTextColor(accent.r, accent.g, accent.b);
-    doc.text("Total :", totalLabelX, y);
-    doc.text(formatPrice(data.amount), totalValueX, y, { align: "right" });
+    doc.text("Total réglé :", totalLabelX, y);
+    doc.text(formatPrice(totalRegle), totalValueX, y, { align: "right" });
   }
 
   y += 15;

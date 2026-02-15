@@ -30,6 +30,7 @@ import type * as admin_reservations from "../admin/reservations.js";
 import type * as admin_seed from "../admin/seed.js";
 import type * as admin_serviceCategories from "../admin/serviceCategories.js";
 import type * as admin_stats from "../admin/stats.js";
+import type * as admin_stripeConnect from "../admin/stripeConnect.js";
 import type * as admin_support from "../admin/support.js";
 import type * as admin_transfers from "../admin/transfers.js";
 import type * as admin_users from "../admin/users.js";
@@ -153,6 +154,7 @@ declare const fullApi: ApiFromModules<{
   "admin/seed": typeof admin_seed;
   "admin/serviceCategories": typeof admin_serviceCategories;
   "admin/stats": typeof admin_stats;
+  "admin/stripeConnect": typeof admin_stripeConnect;
   "admin/support": typeof admin_support;
   "admin/transfers": typeof admin_transfers;
   "admin/users": typeof admin_users;

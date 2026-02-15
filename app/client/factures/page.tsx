@@ -135,6 +135,10 @@ function ClientInvoiceRow({
           overnightNights: invoiceDetails.mission.overnightNights,
         } : undefined,
         serviceTypeSlug: invoiceDetails.serviceTypeSlug,
+        platformFee: invoiceDetails.mission?.platformFee,
+        stripeFee: invoiceDetails.mission?.stripeFee,
+        commissionRate: invoiceDetails.mission?.commissionRate,
+        stripeFeeRate: invoiceDetails.mission?.stripeFeeRate,
       };
 
       const blob = await generateInvoicePdf(pdfData);
@@ -199,10 +203,16 @@ function ClientInvoiceRow({
 
         {/* Montant */}
         <div className="text-right flex-shrink-0 mr-2">
-          <div className="font-bold text-foreground">{formatPrice(invoice.amount)}</div>
-          {invoice.amountHT && invoice.tva && (
+          <div className="font-bold text-foreground">
+            {formatPrice(
+              invoice.amount
+              + (invoice.mission?.platformFee || 0)
+              + (invoice.mission?.stripeFee || 0)
+            )}
+          </div>
+          {((invoice.mission?.platformFee || 0) + (invoice.mission?.stripeFee || 0)) > 0 && (
             <div className="text-[10px] text-text-light">
-              dont TVA : {formatPrice(invoice.tva)}
+              dont frais : {formatPrice((invoice.mission?.platformFee || 0) + (invoice.mission?.stripeFee || 0))}
             </div>
           )}
         </div>

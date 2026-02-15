@@ -546,6 +546,10 @@ export const getInvoiceDetails = query({
             overnightNights: mission.overnightNights,
             overnightAmount: mission.overnightAmount,
             optionNames: mission.optionNames,
+            platformFee: mission.platformFee,
+            stripeFee: mission.stripeFee,
+            commissionRate: mission.commissionRate,
+            stripeFeeRate: mission.stripeFeeRate,
           }
         : null,
     };
@@ -597,6 +601,8 @@ export const getClientInvoices = query({
                 serviceName: mission.serviceName,
                 startDate: mission.startDate,
                 endDate: mission.endDate,
+                platformFee: mission.platformFee,
+                stripeFee: mission.stripeFee,
               }
             : null,
         };

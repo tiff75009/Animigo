@@ -6,6 +6,35 @@ import { internal } from "../_generated/api";
 import { ConvexError } from "convex/values";
 import { notifyMissionValidatedByClient, notifyMissionAutoValidated } from "../lib/notificationTemplates";
 
+// Helper pour récupérer la config email depuis systemConfig
+async function getEmailConfig(ctx: { db: any }) {
+  const apiKeyConfig = await ctx.db
+    .query("systemConfig")
+    .withIndex("by_key", (q: any) => q.eq("key", "resend_api_key"))
+    .first();
+  const fromEmailConfig = await ctx.db
+    .query("systemConfig")
+    .withIndex("by_key", (q: any) => q.eq("key", "resend_from_email"))
+    .first();
+  const fromNameConfig = await ctx.db
+    .query("systemConfig")
+    .withIndex("by_key", (q: any) => q.eq("key", "resend_from_name"))
+    .first();
+  const appUrlConfig = await ctx.db
+    .query("systemConfig")
+    .withIndex("by_key", (q: any) => q.eq("key", "app_url"))
+    .first();
+
+  return {
+    emailConfig: apiKeyConfig?.value ? {
+      apiKey: apiKeyConfig.value,
+      fromEmail: fromEmailConfig?.value,
+      fromName: fromNameConfig?.value,
+    } : undefined,
+    appUrl: appUrlConfig?.value || undefined,
+  };
+}
+
 /**
  * Gestion des versements aux annonceurs
  *
@@ -110,7 +139,7 @@ export const confirmMissionEnd = mutation({
       updatedAt: now,
     });
 
-    // Notification annonceur
+    // Notification annonceur (push)
     const client = await ctx.db.get(session.userId);
     const clientName = client ? `${client.firstName} ${client.lastName.charAt(0)}.` : "Un client";
     await notifyMissionValidatedByClient({
@@ -119,6 +148,26 @@ export const confirmMissionEnd = mutation({
       serviceName: mission.serviceName,
       missionId: args.missionId,
     });
+
+    // Email annonceur
+    const { emailConfig, appUrl } = await getEmailConfig(ctx);
+    if (emailConfig) {
+      const animalName = mission.animals?.length
+        ? mission.animals.map((a: any) => a.name).join(", ")
+        : mission.animal?.name || "Animal";
+
+      await ctx.scheduler.runAfter(0, internal.api.email.sendMissionValidatedByClientEmail, {
+        announcerEmail: announcer.email,
+        announcerName: announcer.firstName,
+        clientName,
+        serviceName: mission.serviceName,
+        animalName,
+        startDate: mission.startDate,
+        endDate: mission.endDate,
+        emailConfig,
+        appUrl,
+      });
+    }
 
     // Si mode instantané et pas de blocage, déclencher le versement immédiat
     if (payoutMode === "instant" && announcer.stripeAccountId && !isPaymentBlocked) {
@@ -289,6 +338,8 @@ export const autoConfirmMissions = internalMutation({
 
 /**
  * Traiter un versement instantané (action Stripe)
+ * Avec les destination charges, le transfert vers le compte Connect est automatique.
+ * Il suffit de déclencher le payout (versement vers le compte bancaire de l'annonceur).
  */
 export const processInstantPayoutAction = internalAction({
   args: {
@@ -304,20 +355,8 @@ export const processInstantPayoutAction = internalAction({
     console.log("Mission:", args.missionId, "Amount:", args.amount);
 
     try {
-      // D'abord, créer un transfert vers le compte Connect
-      const transferResult = await ctx.runAction(internal.api.stripeConnect.createTransfer, {
-        stripeAccountId: args.stripeAccountId,
-        amount: args.amount,
-        missionId: args.missionId,
-        description: `Virement instantané - Mission ${args.missionId}`,
-        stripeSecretKey: args.stripeSecretKey,
-      });
-
-      if (!transferResult.success) {
-        throw new Error("Échec du transfert");
-      }
-
-      // Ensuite, créer un payout instantané vers le compte bancaire
+      // Avec destination charges, le transfert est déjà fait par Stripe au moment du paiement.
+      // On déclenche uniquement le payout instantané vers le compte bancaire de l'annonceur.
       const payoutResult = await ctx.runAction(internal.api.stripeConnect.createInstantPayout, {
         stripeAccountId: args.stripeAccountId,
         amount: args.amount,
@@ -327,7 +366,7 @@ export const processInstantPayoutAction = internalAction({
       // Mettre à jour la mission
       await ctx.runMutation(internal.planning.payouts.markMissionPaidOut, {
         missionId: args.missionId,
-        transferId: transferResult.transferId,
+        transferId: payoutResult.success ? payoutResult.payoutId || "auto" : "auto",
         payoutId: payoutResult.success ? payoutResult.payoutId : undefined,
         amount: args.amount,
         fee: args.fee,
@@ -434,6 +473,9 @@ export const processScheduledPayouts = internalMutation({
 
 /**
  * Action pour traiter un versement programmé groupé
+ * Avec les destination charges, les transferts vers le compte Connect sont déjà faits
+ * automatiquement par Stripe au moment du paiement client.
+ * Cette action déclenche le payout (versement vers le compte bancaire de l'annonceur).
  */
 export const processScheduledPayoutAction = internalAction({
   args: {
@@ -460,27 +502,27 @@ export const processScheduledPayoutAction = internalAction({
         commissionAmount,
       });
 
-      // Créer le transfert vers le compte Connect
-      const transferResult = await ctx.runAction(internal.api.stripeConnect.createTransfer, {
+      // Avec destination charges, le transfert est déjà fait par Stripe
+      // au moment du paiement client. Les fonds sont déjà sur le compte Connect.
+      // On crée un payout standard pour virer vers le compte bancaire de l'annonceur.
+      const payoutResult = await ctx.runAction(internal.api.stripeConnect.createStandardPayout, {
         stripeAccountId: args.stripeAccountId,
         amount: args.totalAmount,
-        missionId: args.missionIds[0], // Première mission pour référence
         description: `Virement mensuel - ${args.missionIds.length} mission(s)`,
         stripeSecretKey: args.stripeSecretKey,
       });
 
-      if (!transferResult.success) {
-        throw new Error("Échec du transfert");
+      if (!payoutResult.success) {
+        throw new Error("Échec du payout");
       }
 
-      // Le payout standard (non instantané) se fait automatiquement par Stripe
-      // selon le schedule du compte connecté
+      console.log("Payout programmé créé:", payoutResult.payoutId);
 
       // Mettre à jour les missions et le payout
       await ctx.runMutation(internal.planning.payouts.markScheduledPayoutComplete, {
         payoutId,
         missionIds: args.missionIds,
-        transferId: transferResult.transferId,
+        transferId: payoutResult.payoutId,
       });
 
       return { success: true };

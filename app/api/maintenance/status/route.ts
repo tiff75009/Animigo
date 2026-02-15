@@ -62,7 +62,10 @@ function getClientIp(req: NextRequest): string {
  */
 export async function GET(req: NextRequest) {
   try {
-    const clientIp = getClientIp(req);
+    // Priorité au paramètre middlewareIp (passé par le middleware proxy.ts car
+    // les headers IP se perdent lors d'un fetch interne)
+    const middlewareIp = req.nextUrl.searchParams.get("middlewareIp");
+    const clientIp = middlewareIp ? normalizeIp(middlewareIp) : getClientIp(req);
 
     // Vérifier le cache
     const now = Date.now();

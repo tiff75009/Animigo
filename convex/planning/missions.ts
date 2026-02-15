@@ -575,6 +575,8 @@ export const acceptMission = mutation({
       amount,
       platformFee,
       announcerEarnings,
+      stripeFee: mission.stripeFee || 0,
+      stripeAccountId: announcer.stripeAccountId || undefined,
       clientEmail: client.email,
       clientName: `${client.firstName} ${client.lastName}`,
       serviceName: mission.serviceName,

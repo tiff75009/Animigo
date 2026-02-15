@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 
 // Paths exclus du mode maintenance (toujours accessibles)
 const EXCLUDED_PATHS = ["/maintenance", "/admin", "/api"];
@@ -25,7 +25,6 @@ export default function MaintenanceGuard({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [isChecking, setIsChecking] = useState(true);
   const [isAllowed, setIsAllowed] = useState(false);
 
@@ -49,33 +48,33 @@ export default function MaintenanceGuard({
       return;
     }
 
+    // Reset l'état pour la nouvelle route (évite de montrer l'ancien contenu)
+    setIsChecking(true);
+    setIsAllowed(false);
+
     const checkAccess = async () => {
       try {
-        // 1. Vérifier d'abord si la maintenance est activée (appel léger)
-        const maintenanceResponse = await fetch("/api/maintenance/status");
-        const maintenanceData = await maintenanceResponse.json();
-
-        // Si maintenance désactivée → autoriser directement
-        if (!maintenanceData.maintenanceEnabled) {
+        // 0. Vérifier si l'accès a déjà été approuvé dans cette session
+        if (typeof window !== "undefined" && sessionStorage.getItem("maintenance_approved") === "true") {
           setIsAllowed(true);
           setIsChecking(false);
           return;
         }
 
-        // 2. Maintenance activée → vérifier l'IP
-        const ipResponse = await fetch("https://api.ipify.org?format=json");
-        const ipData = await ipResponse.json();
-        const clientIp = ipData.ip;
+        // 1. Appel unique au status API — retourne maintenanceEnabled + isApproved (détection IP côté serveur)
+        const response = await fetch("/api/maintenance/status");
+        const data = await response.json();
 
-        const statusResponse = await fetch(
-          `/api/maintenance/check-ip?ip=${clientIp}`
-        );
-        const statusData = await statusResponse.json();
-
-        if (statusData.isApproved) {
+        // Si maintenance désactivée ou IP approuvée → autoriser
+        if (!data.maintenanceEnabled || data.isApproved) {
           setIsAllowed(true);
+          // Mémoriser l'approbation pour éviter les re-vérifications réseau
+          if (data.isApproved && typeof window !== "undefined") {
+            sessionStorage.setItem("maintenance_approved", "true");
+          }
         } else {
-          router.replace("/maintenance");
+          // Maintenance ON et IP non approuvée → rediriger
+          window.location.href = "/maintenance";
           return;
         }
       } catch (error) {
@@ -88,7 +87,7 @@ export default function MaintenanceGuard({
     };
 
     checkAccess();
-  }, [pathname, router]);
+  }, [pathname]);
 
   // Pendant la vérification, afficher un écran neutre (pas le contenu)
   if (isChecking) {

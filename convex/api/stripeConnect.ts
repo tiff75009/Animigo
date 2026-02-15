@@ -306,6 +306,49 @@ export const createInstantPayout = internalAction({
   },
 });
 
+/**
+ * Créer un payout standard vers le compte bancaire de l'annonceur
+ * (versement programmé, pas instantané — délai standard Stripe ~2 jours)
+ */
+export const createStandardPayout = internalAction({
+  args: {
+    stripeAccountId: v.string(),
+    amount: v.number(), // en centimes
+    description: v.optional(v.string()),
+    stripeSecretKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    console.log("=== createStandardPayout START ===");
+
+    try {
+      const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+
+      const payout = await stripe.payouts.create(
+        {
+          amount: args.amount,
+          currency: "eur",
+          description: args.description || "Virement programmé",
+        },
+        {
+          stripeAccount: args.stripeAccountId,
+        }
+      );
+
+      console.log("Payout standard créé:", payout.id);
+
+      return {
+        success: true,
+        payoutId: payout.id,
+        amount: payout.amount,
+        arrivalDate: payout.arrival_date,
+      };
+    } catch (error) {
+      console.error("Erreur payout standard:", error);
+      throw error;
+    }
+  },
+});
+
 // NOTE: Les mutations (saveAccountToUser, saveIbanToUser, updatePayoutMode, updateAccountStatus)
 // sont dans stripeConnectQueries.ts car ce fichier utilise "use node"
 

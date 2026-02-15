@@ -48,10 +48,43 @@ function isStaticFile(pathname: string): boolean {
 }
 
 /**
+ * Normaliser l'IP (enlever le préfixe IPv6-mapped)
+ */
+function normalizeIp(ip: string): string {
+  if (ip.startsWith("::ffff:")) {
+    return ip.substring(7);
+  }
+  return ip;
+}
+
+/**
+ * Récupérer l'IP du client depuis les headers de la requête originale
+ */
+function getClientIp(request: NextRequest): string {
+  const headersToCheck = [
+    "cf-connecting-ip",       // Cloudflare
+    "true-client-ip",         // Akamai/Cloudflare Enterprise
+    "x-vercel-forwarded-for", // Vercel
+    "x-vercel-ip",            // Vercel (alternative)
+    "x-real-ip",              // Nginx
+    "x-forwarded-for",        // Standard
+  ];
+
+  for (const header of headersToCheck) {
+    const value = request.headers.get(header);
+    if (value) {
+      const ip = value.split(",")[0].trim();
+      if (ip) return normalizeIp(ip);
+    }
+  }
+
+  return "unknown";
+}
+
+/**
  * Récupère l'URL de base pour les appels API
  */
 function getBaseUrl(request: NextRequest): string {
-  // En production, utiliser le host de la requête
   const host = request.headers.get("host");
   const protocol = request.headers.get("x-forwarded-proto") || "https";
 
@@ -59,7 +92,6 @@ function getBaseUrl(request: NextRequest): string {
     return `${protocol}://${host}`;
   }
 
-  // Fallback pour le développement
   return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 }
 
@@ -88,54 +120,29 @@ export async function proxy(request: NextRequest) {
   }
 
   try {
-    // 3. Appeler l'API de statut maintenance
+    // 3. Déterminer l'IP du client depuis les headers originaux du middleware
+    const clientIp = getClientIp(request);
+
+    // 4. Appeler l'API de statut en passant l'IP explicitement
+    //    (les headers IP se perdent lors d'un fetch interne)
     const baseUrl = getBaseUrl(request);
-    const statusUrl = `${baseUrl}/api/maintenance/status`;
+    const statusUrl = `${baseUrl}/api/maintenance/status?middlewareIp=${encodeURIComponent(clientIp)}`;
 
-    // Passer tous les headers IP possibles (Vercel, Cloudflare, etc.)
-    const headers: Record<string, string> = {};
-
-    // Headers IP standards et spécifiques aux providers
-    const ipHeaders = [
-      "x-forwarded-for",
-      "x-real-ip",
-      "x-vercel-forwarded-for",
-      "x-vercel-ip",
-      "cf-connecting-ip", // Cloudflare
-      "true-client-ip",   // Akamai/Cloudflare
-    ];
-
-    for (const header of ipHeaders) {
-      const value = request.headers.get(header);
-      if (value) {
-        headers[header] = value;
-      }
-    }
-
-    const response = await fetch(statusUrl, {
-      headers,
-      // Cache court pour éviter trop de requêtes
-      next: { revalidate: 5 },
-    });
+    const response = await fetch(statusUrl);
 
     if (!response.ok) {
-      // En cas d'erreur API, fail-open (laisser passer)
-      console.error(
-        "Maintenance status check failed:",
-        response.status,
-        response.statusText
-      );
+      console.error("Maintenance status check failed:", response.status);
       return NextResponse.next();
     }
 
     const data = await response.json();
 
-    // 4. Si maintenance OFF ou IP approuvée → laisser passer
+    // 5. Si maintenance OFF ou IP approuvée → laisser passer
     if (!data.maintenanceEnabled || data.isApproved) {
       return NextResponse.next();
     }
 
-    // 5. Mode maintenance ON et IP non approuvée → redirect vers /maintenance
+    // 6. Mode maintenance ON et IP non approuvée → redirect vers /maintenance
     const maintenanceUrl = new URL("/maintenance", request.url);
     return NextResponse.redirect(maintenanceUrl);
   } catch (error) {

@@ -767,6 +767,74 @@ const DEFAULT_TEMPLATES: Record<string, { subject: string; html: string }> = {
 </body>
 </html>`,
   },
+  mission_validated_by_client: {
+    subject: "{{clientName}} a validé votre service - {{siteName}}",
+    html: `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Service validé</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;-webkit-font-smoothing:antialiased;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+<tr><td align="center" style="padding:40px 20px;">
+  <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+    <!-- Header -->
+    <tr>
+      <td align="center" style="background-color:#4ECDC4;padding:40px 30px;">
+        <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:bold;">&#10004; Service validé !</h1>
+      </td>
+    </tr>
+    <!-- Body -->
+    <tr>
+      <td style="padding:40px 30px;">
+        <h2 style="margin:0 0 20px 0;color:#1e293b;font-size:24px;">Bonjour {{announcerName}},</h2>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          {{clientName}} a confirmé la fin de votre service <strong>"{{serviceName}}"</strong> pour <strong>{{animalName}}</strong>.
+        </p>
+        <!-- Détails -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#f0f9ff;border-left:4px solid #0ea5e9;border-radius:8px;">
+              <p style="margin:0 0 10px 0;font-weight:bold;color:#0369a1;">Détails de la prestation</p>
+              <p style="margin:5px 0;color:#475569;font-size:14px;"><strong>Service :</strong> {{serviceName}}</p>
+              <p style="margin:5px 0;color:#475569;font-size:14px;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
+              <p style="margin:5px 0;color:#475569;font-size:14px;"><strong>Client :</strong> {{clientName}}</p>
+            </td>
+          </tr>
+        </table>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          Le versement sera effectué selon votre mode de paiement configuré. Le client peut désormais laisser un avis sur votre prestation.
+        </p>
+        <!-- CTA Voir l'avis -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center" style="padding:30px 0;">
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{reviewUrl}}" style="height:52px;width:250px;v-text-anchor:middle;" arcsize="50%" fillcolor="#4ECDC4" stroke="false"><v:textbox><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Voir les avis</center></v:textbox></v:roundrect><![endif]-->
+              <!--[if !mso]><!--><a href="{{reviewUrl}}" style="display:inline-block;background-color:#4ECDC4;color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:bold;font-size:16px;">Voir les avis</a><!--<![endif]-->
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <!-- Footer -->
+    <tr>
+      <td align="center" style="background-color:#f8fafc;padding:30px;border-top:1px solid #e2e8f0;">
+        <p style="margin:0;color:#94a3b8;font-size:12px;">&copy; 2025 {{siteName}}. Tous droits réservés.</p>
+        <p style="margin:5px 0 0 0;color:#94a3b8;font-size:11px;">{{siteName}} — Plateforme de mise en relation pour services animaliers</p>
+      </td>
+    </tr>
+  </table>
+  <!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
+</body>
+</html>`,
+  },
   payment_receipt: {
     subject: "Votre reçu de paiement - {{serviceName}} - {{siteName}}",
     html: `<!DOCTYPE html>
@@ -2000,6 +2068,88 @@ export const sendCancellationClientEmail = internalAction({
       return { success: true, id: result.id };
     } catch (error) {
       console.error("Failed to send cancellation client email:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  },
+});
+
+// Email à l'annonceur quand le client valide la fin de mission
+export const sendMissionValidatedByClientEmail = internalAction({
+  args: {
+    announcerEmail: v.string(),
+    announcerName: v.string(),
+    clientName: v.string(),
+    serviceName: v.string(),
+    animalName: v.string(),
+    startDate: v.string(),
+    endDate: v.string(),
+    emailConfig: v.object({
+      apiKey: v.string(),
+      fromEmail: v.optional(v.string()),
+      fromName: v.optional(v.string()),
+    }),
+    appUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const fromEmail = args.emailConfig.fromEmail || "onboarding@resend.dev";
+      const fromName = args.emailConfig.fromName || "Animigo";
+      const siteName = "Animigo";
+      const appUrl = args.appUrl || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+      const template = getTemplate("mission_validated_by_client");
+      if (!template) {
+        return { success: false, error: "Template not found" };
+      }
+
+      const variables = {
+        announcerName: args.announcerName,
+        clientName: args.clientName,
+        serviceName: args.serviceName,
+        animalName: args.animalName,
+        startDate: formatDate(args.startDate),
+        endDate: formatDate(args.endDate),
+        siteName,
+        reviewUrl: `${appUrl}/dashboard/avis`,
+      };
+
+      const subject = replaceVariables(template.subject, variables);
+      const html = replaceVariables(template.htmlContent, variables);
+
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${args.emailConfig.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: `${fromName} <${fromEmail}>`,
+          to: [args.announcerEmail],
+          subject,
+          html,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Resend API error: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log("Mission validated by client email sent:", result);
+
+      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+        to: args.announcerEmail,
+        from: `${fromName} <${fromEmail}>`,
+        subject,
+        template: "mission_validated_by_client",
+        status: "sent",
+        resendId: result.id,
+      });
+
+      return { success: true, id: result.id };
+    } catch (error) {
+      console.error("Failed to send mission validated by client email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
     }
   },

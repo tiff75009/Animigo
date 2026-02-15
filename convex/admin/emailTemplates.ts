@@ -118,6 +118,7 @@ const DEFAULT_TEMPLATES = [
       { key: "startDate", description: "Date de début", example: "15/03/2025" },
       { key: "endDate", description: "Date de fin", example: "17/03/2025" },
       { key: "siteName", description: "Nom du site", example: "Animigo" },
+      { key: "reviewUrl", description: "Lien vers la page des avis", example: "https://animigo.fr/dashboard/avis" },
     ],
     isSystem: true,
   },
@@ -536,16 +537,20 @@ const getDefaultHtmlContent = (slug: string): string => {
 <div style="padding: 40px 20px; background-color: #f4f4f5;">
   <div class="container">
     <div class="header">
-      <h1>✅ Service validé !</h1>
+      <h1>&#10004; Service validé !</h1>
     </div>
     <div class="content">
       <h2>Bonjour {{announcerName}},</h2>
-      <p>{{clientName}} a validé la fin de votre service "{{serviceName}}" pour {{animalName}}.</p>
+      <p>{{clientName}} a confirmé la fin de votre service <strong>"{{serviceName}}"</strong> pour <strong>{{animalName}}</strong>.</p>
       <div class="info-box">
-        <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">Détails</p>
+        <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">Détails de la prestation</p>
         <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Client :</strong> {{clientName}}</p>
       </div>
-      <p>Le versement sera effectué selon votre mode de paiement configuré.</p>
+      <p>Le versement sera effectué selon votre mode de paiement configuré. Le client peut désormais laisser un avis sur votre prestation.</p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="{{reviewUrl}}" style="display: inline-block; background-color: #4ECDC4; color: #ffffff; text-decoration: none; padding: 14px 36px; border-radius: 50px; font-weight: bold; font-size: 16px;">Voir les avis</a>
+      </div>
     </div>
     <div class="footer">
       <p>&copy; 2025 {{siteName}}. Tous droits réservés.</p>

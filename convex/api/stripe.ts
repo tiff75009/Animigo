@@ -27,9 +27,11 @@ async function getStripeClient(ctx: any): Promise<Stripe> {
 export const createPaymentIntent = internalAction({
   args: {
     missionId: v.id("missions"),
-    amount: v.number(), // centimes
-    platformFee: v.number(), // centimes
-    announcerEarnings: v.number(), // centimes
+    amount: v.number(), // centimes — montant total payé par le client
+    platformFee: v.number(), // centimes — commission plateforme
+    announcerEarnings: v.number(), // centimes — revenus annonceur
+    stripeFee: v.optional(v.number()), // centimes — frais Stripe
+    stripeAccountId: v.optional(v.string()), // compte Connect annonceur (acct_xxx)
     clientEmail: v.string(),
     clientName: v.string(),
     serviceName: v.string(),
@@ -58,7 +60,11 @@ export const createPaymentIntent = internalAction({
       const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
       const appUrl = args.appUrl || "http://localhost:3000";
 
-      // Créer le PaymentIntent avec paiement immédiat (plus de pré-autorisation)
+      // Créer le PaymentIntent avec paiement immédiat
+      // Si l'annonceur a un compte Connect, utiliser les destination charges
+      // pour que le paiement soit associé à son compte dès l'encaissement
+      const applicationFee = args.platformFee + (args.stripeFee || 0); // Commission + frais Stripe retenus par la plateforme
+
       const piCreateParams: any = {
         amount: args.amount,
         currency: "eur",
@@ -72,14 +78,29 @@ export const createPaymentIntent = internalAction({
         description: `${args.serviceName} - ${args.animalName || "Service"} avec ${args.announcerName}`,
       };
 
+      // Destination charge : associer le paiement au compte Connect de l'annonceur
+      if (args.stripeAccountId) {
+        piCreateParams.transfer_data = {
+          destination: args.stripeAccountId,
+        };
+        // application_fee_amount = ce que la plateforme retient (commission + frais Stripe)
+        piCreateParams.application_fee_amount = applicationFee;
+      }
+
       // Si le client a un Stripe Customer, l'attacher au PI
       if (args.stripeCustomerId) {
         piCreateParams.customer = args.stripeCustomerId;
       }
 
+      // DEBUG: Log les paramètres de destination charge
+      console.log("stripeAccountId:", args.stripeAccountId || "NONE");
+      console.log("transfer_data:", piCreateParams.transfer_data ? JSON.stringify(piCreateParams.transfer_data) : "NONE");
+      console.log("application_fee_amount:", piCreateParams.application_fee_amount || "NONE");
+
       const paymentIntent = await stripe.paymentIntents.create(piCreateParams);
 
       console.log("PaymentIntent created:", paymentIntent.id);
+      console.log("PI transfer_data:", paymentIntent.transfer_data ? JSON.stringify(paymentIntent.transfer_data) : "NULL");
 
       // Mettre à jour le payment record via l'API HTTP Convex
       // (car scheduler/runMutation ne fonctionnent pas sur Convex self-hosted)

@@ -4,6 +4,400 @@ import { ConvexError } from "convex/values";
 import { requireAdmin, requireAdminAction } from "./utils";
 import { internal } from "../_generated/api";
 
+/**
+ * Dashboard financier complet — agrège toutes les données financières
+ */
+export const getFinanceDashboard = query({
+  args: {
+    token: v.string(),
+    period: v.union(v.literal("month"), v.literal("year")),
+    date: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx, args.token);
+
+    // ═══ TAUX CONFIGURÉS (admin/commissions) ═══
+    const vatRateConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "commission_vat_rate"))
+      .first();
+    const configuredVatRate = vatRateConfig ? parseFloat(vatRateConfig.value) : 20;
+
+    const stripeFeeRateConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "stripe_fee_rate"))
+      .first();
+    const configuredStripeFeeRate = stripeFeeRateConfig ? parseFloat(stripeFeeRateConfig.value) : 3;
+
+    // Taux de commission par type d'annonceur
+    const commissionTypes = ["particulier", "micro_entrepreneur", "professionnel"] as const;
+    const configuredCommissionRates: Record<string, number> = {};
+    const defaultRates: Record<string, number> = { particulier: 15, micro_entrepreneur: 12, professionnel: 10 };
+    for (const type of commissionTypes) {
+      const config = await ctx.db
+        .query("systemConfig")
+        .withIndex("by_key", (q) => q.eq("key", `commission_${type}`))
+        .first();
+      configuredCommissionRates[type] = config ? parseFloat(config.value) : defaultRates[type];
+    }
+
+    const [year, month] = args.date.split("-").map(Number);
+
+    let periodStartDate: string;
+    let periodEndDate: string;
+
+    if (args.period === "month") {
+      periodStartDate = `${year}-${String(month).padStart(2, "0")}-01`;
+      const lastDay = new Date(year, month, 0).getDate();
+      periodEndDate = `${year}-${String(month).padStart(2, "0")}-${lastDay}`;
+    } else {
+      periodStartDate = `${year}-01-01`;
+      periodEndDate = `${year}-12-31`;
+    }
+
+    // Période précédente pour comparaison
+    let prevStartDate: string;
+    let prevEndDate: string;
+    if (args.period === "month") {
+      const prevMonth = month === 1 ? 12 : month - 1;
+      const prevYear = month === 1 ? year - 1 : year;
+      prevStartDate = `${prevYear}-${String(prevMonth).padStart(2, "0")}-01`;
+      const prevLastDay = new Date(prevYear, prevMonth, 0).getDate();
+      prevEndDate = `${prevYear}-${String(prevMonth).padStart(2, "0")}-${prevLastDay}`;
+    } else {
+      prevStartDate = `${year - 1}-01-01`;
+      prevEndDate = `${year - 1}-12-31`;
+    }
+
+    // ═══ MISSIONS ═══
+    const allMissions = await ctx.db.query("missions").collect();
+
+    const periodMissions = allMissions.filter(
+      (m) => m.startDate >= periodStartDate && m.startDate <= periodEndDate
+    );
+    const prevPeriodMissions = allMissions.filter(
+      (m) => m.startDate >= prevStartDate && m.startDate <= prevEndDate
+    );
+
+    // Pipeline missions par statut
+    const missionsByStatus = {
+      pending_acceptance: periodMissions.filter((m) => m.status === "pending_acceptance"),
+      pending_confirmation: periodMissions.filter((m) => m.status === "pending_confirmation"),
+      upcoming: periodMissions.filter((m) => m.status === "upcoming"),
+      in_progress: periodMissions.filter((m) => m.status === "in_progress"),
+      completed: periodMissions.filter((m) => m.status === "completed"),
+      cancelled: periodMissions.filter((m) => m.status === "cancelled"),
+      refused: periodMissions.filter((m) => m.status === "refused"),
+    };
+
+    // Missions terminées et payées
+    const completedPaid = missionsByStatus.completed.filter((m) => m.paymentStatus === "paid");
+    const prevCompletedPaid = prevPeriodMissions.filter(
+      (m) => m.status === "completed" && m.paymentStatus === "paid"
+    );
+
+    // ═══ VOLUME FINANCIER ═══
+    const sumField = (missions: typeof allMissions, field: "amount" | "platformFee" | "announcerEarnings" | "stripeFee" | "vatOnCommission") =>
+      missions.reduce((sum, m) => sum + ((m as any)[field] || 0), 0);
+
+    // Revenus plateforme (commissions)
+    const periodRevenue = sumField(completedPaid, "platformFee");
+    const prevRevenue = sumField(prevCompletedPaid, "platformFee");
+
+    // Volume brut (montants payés par les clients)
+    const periodGross = sumField(completedPaid, "amount");
+    const prevGross = sumField(prevCompletedPaid, "amount");
+
+    // Revenus annonceurs
+    const periodAnnouncerEarnings = sumField(completedPaid, "announcerEarnings");
+
+    // Frais Stripe (frais de gestion facturés au client, TTC)
+    const periodStripeFees = sumField(completedPaid, "stripeFee");
+
+    // TVA sur commissions — recalcul correct : extraction TVA du TTC
+    // Formule : TVA = TTC × taux / (100 + taux)
+    // On recalcule plutôt que lire vatOnCommission car les anciennes missions
+    // ont un calcul erroné (platformFee * 20 / 100 au lieu de * 20 / 120)
+    // Utilise le taux TVA configuré dans admin/commissions
+    const periodVatOnCommission = completedPaid.reduce(
+      (sum, m) => sum + Math.round(((m.platformFee || 0) * configuredVatRate) / (100 + configuredVatRate)),
+      0
+    );
+
+    // TVA sur frais de gestion (stripeFee est aussi TTC)
+    const periodVatOnStripeFees = completedPaid.reduce(
+      (sum, m) => sum + Math.round(((m.stripeFee || 0) * configuredVatRate) / (100 + configuredVatRate)),
+      0
+    );
+
+    // Pipeline commissions par état
+    const commissionsUpcoming = sumField(
+      periodMissions.filter(
+        (m) =>
+          m.status === "pending_confirmation" ||
+          m.status === "upcoming" ||
+          m.status === "in_progress"
+      ),
+      "platformFee"
+    );
+    const commissionsValidated = sumField(
+      missionsByStatus.completed.filter((m) => m.paymentStatus === "pending"),
+      "platformFee"
+    );
+    const commissionsPaid = periodRevenue;
+
+    // ═══ VERSEMENTS ANNONCEURS ═══
+    const readyForPayout = periodMissions.filter(
+      (m) => m.readyForPayout === true && m.announcerPaymentStatus !== "paid"
+    );
+    const pendingPayoutAmount = sumField(readyForPayout, "announcerEarnings");
+
+    const alreadyPaid = periodMissions.filter((m) => m.announcerPaymentStatus === "paid");
+    const paidOutAmount = sumField(alreadyPaid, "announcerEarnings");
+
+    // ═══ PAYOUTS (table announcerPayouts) ═══
+    const allPayouts = await ctx.db.query("announcerPayouts").collect();
+    const periodStart = new Date(periodStartDate).getTime();
+    const periodEnd = new Date(periodEndDate + "T23:59:59.999Z").getTime();
+
+    const periodPayouts = allPayouts.filter(
+      (p) => p.createdAt >= periodStart && p.createdAt <= periodEnd
+    );
+
+    const payoutsByStatus = {
+      pending: periodPayouts.filter((p) => p.status === "pending"),
+      processing: periodPayouts.filter((p) => p.status === "processing"),
+      completed: periodPayouts.filter((p) => p.status === "completed"),
+      failed: periodPayouts.filter((p) => p.status === "failed"),
+    };
+
+    const payoutAmounts = {
+      pending: payoutsByStatus.pending.reduce((s, p) => s + p.amount, 0),
+      processing: payoutsByStatus.processing.reduce((s, p) => s + p.amount, 0),
+      completed: payoutsByStatus.completed.reduce((s, p) => s + p.amount, 0),
+      failed: payoutsByStatus.failed.reduce((s, p) => s + p.amount, 0),
+    };
+
+    // ═══ AVOIRS CLIENTS ═══
+    const allCredits = await ctx.db.query("clientCredits").collect();
+    const now = Date.now();
+    let creditsActive = 0;
+    let creditsActiveCount = 0;
+    let creditsUsed = 0;
+    let creditsUsedCount = 0;
+    let creditsExpired = 0;
+
+    for (const credit of allCredits) {
+      if (credit.status === "active") {
+        if (credit.expiresAt && credit.expiresAt < now) {
+          creditsExpired += credit.amount;
+        } else {
+          creditsActive += credit.amount;
+          creditsActiveCount++;
+        }
+      } else if (credit.status === "used") {
+        creditsUsed += credit.originalAmount;
+        creditsUsedCount++;
+      } else if (credit.status === "expired") {
+        creditsExpired += credit.originalAmount;
+      }
+    }
+
+    // ═══ BREAKDOWN MENSUEL (si year) ═══
+    let monthlyBreakdown: Array<{
+      month: string;
+      gross: number;
+      revenue: number;
+      announcerEarnings: number;
+      missionsCount: number;
+      avgBasket: number;
+    }> | undefined;
+
+    if (args.period === "year") {
+      monthlyBreakdown = [];
+      for (let m = 0; m < 12; m++) {
+        const mStart = `${year}-${String(m + 1).padStart(2, "0")}-01`;
+        const mLastDay = new Date(year, m + 1, 0).getDate();
+        const mEnd = `${year}-${String(m + 1).padStart(2, "0")}-${mLastDay}`;
+        const monthName = new Date(year, m, 1).toLocaleDateString("fr-FR", { month: "short" });
+
+        const monthMissions = completedPaid.filter(
+          (mi) => mi.startDate >= mStart && mi.startDate <= mEnd
+        );
+
+        const gross = sumField(monthMissions, "amount");
+        const revenue = sumField(monthMissions, "platformFee");
+        const earnings = sumField(monthMissions, "announcerEarnings");
+
+        monthlyBreakdown.push({
+          month: monthName,
+          gross,
+          revenue,
+          announcerEarnings: earnings,
+          missionsCount: monthMissions.length,
+          avgBasket: monthMissions.length > 0 ? Math.round(gross / monthMissions.length) : 0,
+        });
+      }
+    }
+
+    // ═══ TOP ANNONCEURS ═══
+    const announcerMap = new Map<string, { earnings: number; missions: number; fees: number }>();
+    for (const m of completedPaid) {
+      const key = m.announcerId;
+      const existing = announcerMap.get(key) || { earnings: 0, missions: 0, fees: 0 };
+      existing.earnings += m.announcerEarnings || 0;
+      existing.missions += 1;
+      existing.fees += m.platformFee || 0;
+      announcerMap.set(key, existing);
+    }
+
+    const topAnnouncerIds = [...announcerMap.entries()]
+      .sort((a, b) => b[1].earnings - a[1].earnings)
+      .slice(0, 5);
+
+    const topAnnouncers = await Promise.all(
+      topAnnouncerIds.map(async ([id, data]) => {
+        const user = await ctx.db.get(id as any);
+        return {
+          userId: id,
+          name: user ? `${user.firstName} ${user.lastName}` : "Inconnu",
+          email: user?.email || "",
+          earnings: data.earnings,
+          missions: data.missions,
+          fees: data.fees,
+        };
+      })
+    );
+
+    // ═══ TOUTES LES TRANSACTIONS (pagination côté client) ═══
+    const sortedMissions = [...completedPaid]
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+    const recentTransactions = await Promise.all(
+      sortedMissions.map(async (m) => {
+        const client = await ctx.db.get(m.clientId);
+        const announcer = await ctx.db.get(m.announcerId);
+        return {
+          _id: m._id,
+          reference: m._id.slice(-8).toUpperCase(),
+          serviceName: m.serviceName,
+          startDate: m.startDate,
+          amount: m.amount,
+          platformFee: m.platformFee || 0,
+          announcerEarnings: m.announcerEarnings || 0,
+          commissionRate: m.commissionRate || null,
+          announcerPaymentStatus: m.announcerPaymentStatus || "not_due",
+          clientName: client ? `${client.firstName} ${client.lastName}` : "Inconnu",
+          announcerName: announcer ? `${announcer.firstName} ${announcer.lastName}` : "Inconnu",
+          createdAt: m.createdAt,
+        };
+      })
+    );
+
+    // ═══ VIREMENTS EN ATTENTE ═══
+    const pendingPayouts = allPayouts
+      .filter((p) => p.status === "pending")
+      .sort((a, b) => (a.scheduledAt || a.createdAt) - (b.scheduledAt || b.createdAt))
+      .slice(0, 8);
+
+    const pendingPayoutsList = await Promise.all(
+      pendingPayouts.map(async (p) => {
+        const announcer = await ctx.db.get(p.announcerId);
+        return {
+          _id: p._id,
+          amount: p.amount,
+          missionsCount: p.missions.length,
+          scheduledAt: p.scheduledAt || null,
+          createdAt: p.createdAt,
+          announcerName: announcer ? `${announcer.firstName} ${announcer.lastName}` : "Inconnu",
+          announcerEmail: announcer?.email || "",
+        };
+      })
+    );
+
+    // ═══ COMPARAISON ═══
+    const calcVariation = (current: number, previous: number) => {
+      if (previous === 0) return current > 0 ? 100 : 0;
+      return Math.round(((current - previous) / previous) * 100);
+    };
+
+    const prevMissionsCount = prevPeriodMissions.filter(
+      (m) => m.status === "completed" && m.paymentStatus === "paid"
+    ).length;
+
+    return {
+      // KPIs principaux
+      kpis: {
+        gross: periodGross,
+        grossVariation: calcVariation(periodGross, prevGross),
+        revenue: periodRevenue,
+        revenueVariation: calcVariation(periodRevenue, prevRevenue),
+        announcerEarnings: periodAnnouncerEarnings,
+        stripeFees: periodStripeFees,
+        vatOnCommission: periodVatOnCommission,
+        vatOnStripeFees: periodVatOnStripeFees,
+        // Taux configurés depuis admin/commissions
+        vatRate: configuredVatRate,
+        stripeFeeRate: configuredStripeFeeRate,
+        commissionRates: configuredCommissionRates,
+        missionsCount: completedPaid.length,
+        missionsVariation: calcVariation(completedPaid.length, prevMissionsCount),
+        avgBasket: completedPaid.length > 0 ? Math.round(periodGross / completedPaid.length) : 0,
+        avgCommissionRate:
+          periodGross > 0 ? Math.round((periodRevenue / periodGross) * 10000) / 100 : 0,
+      },
+      // Pipeline commissions
+      commissions: {
+        upcoming: commissionsUpcoming,
+        validated: commissionsValidated,
+        paid: commissionsPaid,
+        total: commissionsUpcoming + commissionsValidated + commissionsPaid,
+      },
+      // Pipeline missions
+      missions: {
+        pending_acceptance: missionsByStatus.pending_acceptance.length,
+        pending_confirmation: missionsByStatus.pending_confirmation.length,
+        upcoming: missionsByStatus.upcoming.length,
+        in_progress: missionsByStatus.in_progress.length,
+        completed: missionsByStatus.completed.length,
+        cancelled: missionsByStatus.cancelled.length,
+        refused: missionsByStatus.refused.length,
+        total: periodMissions.length,
+      },
+      // Versements
+      payouts: {
+        pendingPayoutAmount,
+        pendingPayoutMissions: readyForPayout.length,
+        paidOutAmount,
+        paidOutMissions: alreadyPaid.length,
+        byStatus: payoutAmounts,
+        byStatusCount: {
+          pending: payoutsByStatus.pending.length,
+          processing: payoutsByStatus.processing.length,
+          completed: payoutsByStatus.completed.length,
+          failed: payoutsByStatus.failed.length,
+        },
+      },
+      // Avoirs
+      credits: {
+        active: creditsActive,
+        activeCount: creditsActiveCount,
+        used: creditsUsed,
+        usedCount: creditsUsedCount,
+        expired: creditsExpired,
+      },
+      // Graphique
+      monthlyBreakdown,
+      // Top annonceurs
+      topAnnouncers,
+      // Dernières transactions
+      recentTransactions,
+      // Virements en attente
+      pendingPayoutsList,
+    };
+  },
+});
+
 // Query: Statistiques des commissions par période
 export const getCommissionStats = query({
   args: {

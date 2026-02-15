@@ -151,6 +151,31 @@ bun run build
   - TVA sur les commissions (taux configurable)
   - Integration Stripe (frais plateforme configurable)
 
+- **Comptes Stripe Connect** (`/admin/stripe-connect`)
+  - Liste de tous les comptes Stripe Connect des annonceurs
+  - Statistiques : total, verifies, en attente, restreints, desactives
+  - Filtrage par statut et recherche par nom/email
+  - Donnees financieres : gains du mois, en attente de versement, total gagne
+  - Actions : desactiver ou supprimer un compte
+  - **Page detail** (`/admin/stripe-connect/[userId]`)
+    - Informations utilisateur et compte Stripe
+    - 4 KPIs financiers (gains mois, en attente, verse, total)
+    - Historique des 10 dernieres missions
+    - Historique des versements
+
+- **Finances** (`/admin/finances`)
+  - Dashboard financier complet avec selecteur de periode (mois/annee)
+  - 5 KPIs principaux : volume brut, commissions, revenus annonceurs, missions, panier moyen
+  - Taux configures affiches : commission par type (Part./Micro/Pro), frais de gestion, TVA
+  - Montants nets : commissions HT, frais gestion HT, revenus nets plateforme
+  - Pipeline commissions (a venir, validees, encaissees)
+  - Repartition des missions par statut avec barre empilee
+  - Graphique d'evolution mensuelle (mode annee)
+  - Versements annonceurs et avoirs clients
+  - Top 5 annonceurs de la periode
+  - Virements en attente
+  - Transactions payees avec recherche, reference, pagination (10/page)
+
 - **Paiements & Delais** (`/admin/paiements`)
   - Delais d'acceptation des reservations
   - Delais de paiement
@@ -533,6 +558,57 @@ Utilisation de Framer Motion avec des variants predefinies :
 ---
 
 ## Changelog recent
+
+### v0.27.0 - Admin Stripe Connect, Refonte Finances et Correction TVA
+
+- **Nouvelle page Comptes Stripe Connect** (`/admin/stripe-connect`)
+  - Liste de tous les comptes Connect avec statistiques (total, verifies, en attente, restreints, desactives)
+  - Filtrage par statut, recherche par nom/email/IBAN
+  - Donnees financieres par compte : gains du mois, en attente de versement, total gagne
+  - Actions admin : desactiver (stripeAccountStatus → disabled) ou supprimer un compte
+  - Modales de confirmation pour les actions destructrices
+
+- **Page detail compte Connect** (`/admin/stripe-connect/[userId]`)
+  - 4 KPIs financiers (gains mois, en attente, verse, total tous temps)
+  - Informations utilisateur et stripe (statut, charges, payouts, IBAN, mode versement)
+  - Statistiques des missions (total, terminees, en cours, annulees, litiges)
+  - Tableau des 10 dernieres missions (service, dates, montants, commission, versement)
+  - Historique des virements (montant, brut, commission, statut, ID transfert)
+
+- **Refonte complete page Finances** (`/admin/finances`)
+  - Dashboard financier avec selecteur de periode (mois/annee) et comparaison N-1
+  - 5 KPIs principaux avec variations : volume brut, commissions, revenus annonceurs, missions, panier moyen
+  - Affichage des taux configures depuis admin/commissions : commission (Part./Micro/Pro), frais gestion, TVA
+  - Stats secondaires : commissions HT, frais gestion HT, revenus nets plateforme
+  - Pipeline commissions (a venir, validees, encaissees) avec barres de progression
+  - Repartition des missions par statut avec barre empilee coloree
+  - Graphique d'evolution mensuelle avec tooltips (mode annee)
+  - Versements annonceurs (pret a verser, deja verse, par statut)
+  - Avoirs clients (actifs, utilises, expires)
+  - Top 5 annonceurs de la periode
+  - Virements en attente avec dates programmees
+  - Transactions payees : recherche (ref, client, annonceur), reference, pagination 10/page
+
+- **Correction calcul TVA sur commissions**
+  - Ancien calcul errone : `platformFee * 20 / 100` (surestimation de 20%)
+  - Nouveau calcul correct : `platformFee * taux / (100 + taux)` (extraction TVA du TTC)
+  - Taux TVA lu depuis systemConfig (`commission_vat_rate`) au lieu de hardcode
+  - Recalcul dans le dashboard pour corriger les anciennes missions
+  - TVA sur frais de gestion aussi calculee
+
+- **Taux configures dans le dashboard**
+  - Taux de commission par type (particulier, micro, pro) lus depuis systemConfig
+  - Taux de frais de gestion (Stripe) lu depuis systemConfig
+  - Taux TVA lu depuis systemConfig
+  - Tous affiches dans la section stats secondaires
+
+- **Sidebar admin**
+  - Nouveau lien "Comptes Connect" (icone Landmark) dans la section Paiements
+
+- **Backend Convex**
+  - `convex/admin/stripeConnect.ts` : listConnectAccounts, getConnectAccountDetails, adminDeleteStripeAccount, adminRejectStripeAccount
+  - `convex/admin/finances.ts` : getFinanceDashboard (nouvelle query agrégée avec taux configurés)
+  - `convex/public/booking.ts` : correction formule TVA + lecture taux depuis systemConfig
 
 ### v0.25.0 - Refactoring Panel Admin (Parametres)
 

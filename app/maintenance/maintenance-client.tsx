@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { motion } from "framer-motion";
@@ -37,7 +36,6 @@ const features = [
 ];
 
 export default function MaintenanceClient() {
-  const router = useRouter();
   const [name, setName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -68,9 +66,14 @@ export default function MaintenanceClient() {
   // Redirection automatique dès que l'IP est approuvée ou la maintenance désactivée
   useEffect(() => {
     if (isApprovedRealtime === true || isMaintenanceEnabled === false) {
-      router.replace("/");
+      // Mémoriser l'approbation pour que MaintenanceGuard ne re-bloque pas
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("maintenance_approved", "true");
+        // Rechargement complet pour réinitialiser le MaintenanceGuard proprement
+        window.location.href = "/";
+      }
     }
-  }, [isApprovedRealtime, isMaintenanceEnabled, router]);
+  }, [isApprovedRealtime, isMaintenanceEnabled]);
 
   // Récupérer l'IP publique via ipify
   useEffect(() => {
@@ -85,7 +88,7 @@ export default function MaintenanceClient() {
           hostname.startsWith("192.168.") ||
           hostname === "::1"
         ) {
-          router.replace("/");
+          window.location.href = "/";
           return;
         }
 
@@ -101,7 +104,7 @@ export default function MaintenanceClient() {
     };
 
     fetchIp();
-  }, [router]);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -269,13 +272,18 @@ export default function MaintenanceClient() {
                   IP : {clientIp}
                 </p>
               )}
-              <Link
-                href="/"
+              <button
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    sessionStorage.setItem("maintenance_approved", "true");
+                    window.location.href = "/";
+                  }
+                }}
                 className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white font-semibold rounded-full hover:shadow-lg hover:shadow-primary/30 transition-all"
               >
                 <Home className="w-5 h-5" />
                 Accéder au site
-              </Link>
+              </button>
             </div>
           </motion.div>
         ) : (

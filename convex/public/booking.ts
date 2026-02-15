@@ -964,8 +964,15 @@ export const finalizeBooking = mutation({
       ? Math.round(serviceAmount - serviceAmount / (1 + vatRate / 100))
       : 0;
 
-    // TVA sur la commission (toujours 20%)
-    const vatOnCommission = Math.round(platformFee * 20 / 100);
+    // TVA sur la commission — extraction TVA du montant TTC
+    // Formule : TVA = TTC × taux / (100 + taux)
+    // Taux TVA depuis la config admin (commission_vat_rate), 20% par défaut
+    const commissionVatConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "commission_vat_rate"))
+      .first();
+    const commissionVatRate = commissionVatConfig ? parseFloat(commissionVatConfig.value) : 20;
+    const vatOnCommission = Math.round(platformFee * commissionVatRate / (100 + commissionVatRate));
 
     // Créer la mission
     const missionId = await ctx.db.insert("missions", {
