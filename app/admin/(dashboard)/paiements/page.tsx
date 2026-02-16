@@ -853,45 +853,38 @@ export default function PaiementsPage() {
       </div>
 
       {/* Spacer pour le bouton fixe */}
-      <div className="h-24" />
+      <div className="h-20" />
 
-      {/* Barre de sauvegarde fixe en bas */}
+      {/* Bouton de sauvegarde flottant */}
       <motion.div
-        className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-sm border-t border-slate-700 px-8 py-4 z-50"
+        className="fixed bottom-6 right-6 z-50 flex items-center gap-3"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
       >
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <p className="text-slate-400 text-sm hidden sm:block">
-            N&apos;oubliez pas d&apos;enregistrer vos modifications
-          </p>
-          <div className="flex items-center gap-4">
-            {saveSuccess && (
-              <motion.div
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0 }}
-                className="flex items-center gap-2 text-green-400"
-              >
-                <Check className="w-5 h-5" />
-                <span className="hidden sm:inline">Modifications enregistrées</span>
-              </motion.div>
-            )}
-            <button
-              onClick={handleSaveAll}
-              disabled={isSaving}
-              className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 shadow-lg"
-            >
-              {isSaving ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Save className="w-5 h-5" />
-              )}
-              {isSaving ? "Sauvegarde en cours..." : "Sauvegarder tout"}
-            </button>
-          </div>
-        </div>
+        {saveSuccess && (
+          <motion.div
+            initial={{ opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0 }}
+            className="flex items-center gap-2 px-4 py-3 bg-green-500/15 text-green-400 rounded-xl backdrop-blur-sm border border-green-500/20 text-sm font-medium"
+          >
+            <Check className="w-4 h-4" />
+            Enregistré
+          </motion.div>
+        )}
+        <button
+          onClick={handleSaveAll}
+          disabled={isSaving}
+          className="flex items-center gap-2 px-5 py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl transition-all disabled:opacity-50 shadow-lg shadow-blue-600/30 hover:shadow-blue-500/40"
+        >
+          {isSaving ? (
+            <Loader2 className="w-5 h-5 animate-spin" />
+          ) : (
+            <Save className="w-5 h-5" />
+          )}
+          {isSaving ? "Sauvegarde..." : "Sauvegarder tout"}
+        </button>
       </motion.div>
     </div>
   );
