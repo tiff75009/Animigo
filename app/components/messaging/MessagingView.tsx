@@ -79,14 +79,20 @@ function ConversationItem({ conversation, isSelected, onClick }: ConversationIte
     >
       {/* Avatar */}
       <div className="relative flex-shrink-0">
-        <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-200">
-          <Image
-            src={conversation.participantImage}
-            alt={conversation.participantName}
-            width={48}
-            height={48}
-            className="object-cover w-full h-full"
-          />
+        <div className="w-12 h-12 rounded-full overflow-hidden bg-secondary/15">
+          {conversation.participantImage && !conversation.participantImage.includes("default-avatar") ? (
+            <Image
+              src={conversation.participantImage}
+              alt={conversation.participantName}
+              width={48}
+              height={48}
+              className="object-cover w-full h-full"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-secondary font-semibold text-lg">
+              {conversation.participantName?.charAt(0)?.toUpperCase() || "?"}
+            </div>
+          )}
         </div>
       </div>
 
@@ -323,14 +329,20 @@ function ChatView({ conversationId, onBack, userType }: ChatViewProps) {
           </motion.button>
 
           <Link href={missionLink} className="relative">
-            <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-full overflow-hidden bg-gray-200">
-              <Image
-                src={conversation.participantImage}
-                alt={conversation.participantName}
-                width={48}
-                height={48}
-                className="object-cover w-full h-full"
-              />
+            <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-full overflow-hidden bg-secondary/15">
+              {conversation.participantImage && !conversation.participantImage.includes("default-avatar") ? (
+                <Image
+                  src={conversation.participantImage}
+                  alt={conversation.participantName}
+                  width={48}
+                  height={48}
+                  className="object-cover w-full h-full"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-secondary font-semibold text-base lg:text-lg">
+                  {conversation.participantName?.charAt(0)?.toUpperCase() || "?"}
+                </div>
+              )}
             </div>
           </Link>
 

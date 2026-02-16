@@ -1607,7 +1607,7 @@ function DatePickerDropdown({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.15 }}
-              className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-[101] bg-white shadow-2xl border border-gray-200 rounded-2xl w-[340px]"
+              className="absolute top-full left-0 mt-2 z-[101] bg-white shadow-2xl border border-gray-200 rounded-2xl w-[340px]"
               onClick={(e) => e.stopPropagation()}
             >
               {calendarContent}

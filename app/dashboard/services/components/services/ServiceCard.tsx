@@ -707,15 +707,15 @@ export default function ServiceCard({
                               onClick={() => handleToggleVariant(variant.id, variant.isActive)}
                               disabled={isToggling}
                               className={cn(
-                                "relative w-9 h-5 rounded-full transition-colors flex-shrink-0 mt-0.5",
+                                "relative w-9 h-5 rounded-full transition-colors flex-shrink-0 mt-0.5 p-0 border-0 appearance-none",
                                 variant.isActive ? "bg-secondary" : "bg-gray-300",
                                 isToggling && "opacity-50"
                               )}
                               title={variant.isActive ? "Désactiver ce service" : "Activer ce service"}
                             >
                               <span className={cn(
-                                "absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform",
-                                variant.isActive ? "translate-x-4" : "translate-x-0.5"
+                                "absolute left-0 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform",
+                                variant.isActive ? "translate-x-[18px]" : "translate-x-0.5"
                               )} />
                             </button>
                             <div className="flex-1 min-w-0">
