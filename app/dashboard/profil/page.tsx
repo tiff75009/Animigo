@@ -184,98 +184,65 @@ function CategoryPricingRow({ token, category, variants }: {
   const statusBorder = { green: "border-green-500", amber: "border-amber-500", orange: "border-orange-500" }[statusColor];
 
   return (
-    <div className="p-4 rounded-xl bg-gray-50 space-y-3">
-      {/* En-tête : catégorie + badge statut */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">{catInfo.emoji}</span>
-          <div>
-            <span className="text-sm font-semibold text-foreground">{catInfo.name}</span>
-            <span className="text-[10px] text-text-light ml-1.5">
-              {variants.length} formule{variants.length > 1 ? "s" : ""}
-              {hasMultiSession && " · multi-séances"}
-              {hasCollective && " · collectif"}
-            </span>
-          </div>
-        </div>
-        <div className={cn("flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full", statusBgLight, statusText)}>
-          {isInRange ? (
-            <><Check className="w-3 h-3" /> Dans la fourchette</>
-          ) : isBelow ? (
-            <><TrendingDown className="w-3 h-3" /> {Math.abs(diffPercent)}% en dessous</>
-          ) : (
-            <><TrendingUp className="w-3 h-3" /> +{diffPercent}% au dessus</>
-          )}
-        </div>
-      </div>
+    <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-gray-50 hover:bg-gray-100/80 transition-colors">
+      {/* Emoji catégorie */}
+      <span className="text-lg flex-shrink-0">{catInfo.emoji}</span>
 
-      {/* Détail par formule si plusieurs */}
-      {variants.length > 1 && (
-        <div className="flex flex-wrap gap-1.5">
-          {displayPrices.map((d, i) => (
-            <span
-              key={i}
-              className="text-[10px] px-2 py-0.5 bg-white rounded-full text-text-light border border-gray-100"
-            >
-              {variants[i].name}: {formatPriceCents(d.price)}{d.unitLabel}
-              {d.sessions > 1 && ` ×${d.sessions}`}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Slider complet */}
-      <div className="relative pt-7 pb-5">
-        {/* Label prix annonceur — accroché au point */}
-        <div
-          className="absolute top-0 flex flex-col items-center z-20"
-          style={{ left: `${dotPosition}%`, transform: "translateX(-50%)" }}
-        >
-          <span className={cn("text-[11px] font-bold text-white px-2 py-0.5 rounded-md whitespace-nowrap", statusBg)}>
-            {formatPriceCents(avgDisplayPrice)}{displayUnitLabel}
+      {/* Nom + formules */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-semibold text-foreground">{catInfo.name}</span>
+          <span className="text-[10px] text-text-light">
+            {variants.length} formule{variants.length > 1 ? "s" : ""}
           </span>
-          <div
-            className="w-0 h-0 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent"
-            style={{ borderTopColor: isInRange ? "#22c55e" : isBelow ? "#f59e0b" : "#f97316" }}
-          />
         </div>
-
-        {/* Barre */}
-        <div className="relative h-2.5">
-          {/* Fond gris + zone verte clippée */}
-          <div className="absolute inset-0 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className="absolute top-0 h-full bg-green-200"
-              style={{
-                left: `${Math.max(0, zoneLeftPct)}%`,
-                width: `${Math.min(100, zoneWidthPct)}%`,
-              }}
-            />
-            {/* Trait moyenne conseillée */}
-            <div
-              className="absolute top-0 h-full w-0.5 bg-green-400/70"
-              style={{ left: `${avgMarkerPct}%` }}
-            />
-          </div>
-          {/* Point annonceur */}
-          <motion.div
-            className={cn("absolute w-4 h-4 rounded-full border-2 border-white shadow-md z-10", statusBg)}
+        {/* Mini barre de positionnement */}
+        <div className="relative h-1.5 mt-1.5 rounded-full bg-gray-200 overflow-hidden">
+          <div
+            className="absolute top-0 h-full bg-green-200 rounded-full"
             style={{
-              left: `calc(${dotPosition}% - 8px)`,
-              top: `calc(50% - 8px)`,
+              left: `${Math.max(0, zoneLeftPct)}%`,
+              width: `${Math.min(100, zoneWidthPct)}%`,
+            }}
+          />
+          <div
+            className="absolute top-0 h-full w-px bg-green-400/70"
+            style={{ left: `${avgMarkerPct}%` }}
+          />
+          <motion.div
+            className={cn("absolute w-2.5 h-2.5 rounded-full border-[1.5px] border-white shadow-sm z-10", statusBg)}
+            style={{
+              left: `calc(${dotPosition}% - 5px)`,
+              top: `calc(50% - 5px)`,
             }}
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ delay: 0.2, type: "spring" }}
           />
         </div>
-
-        {/* Labels sous la barre : fourchette conseillée */}
-        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center">
-          <span className="text-[10px] text-green-600">
-            Fourchette : {formatPriceCents(recommendedRange.low)} — <span className="font-medium text-green-700">moy. {formatPriceCents(recAvg)}</span> — {formatPriceCents(recommendedRange.high)}
-          </span>
+        <div className="flex items-center gap-1 mt-1">
+          <span className="text-[9px] text-text-light">{formatPriceCents(recommendedRange.low)}</span>
+          <span className="text-[9px] text-text-light">—</span>
+          <span className="text-[9px] text-green-600 font-medium">{formatPriceCents(recAvg)}</span>
+          <span className="text-[9px] text-text-light">—</span>
+          <span className="text-[9px] text-text-light">{formatPriceCents(recommendedRange.high)}</span>
         </div>
+      </div>
+
+      {/* Prix + badge statut */}
+      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+        <span className={cn("text-sm font-bold tabular-nums", statusText)}>
+          {formatPriceCents(avgDisplayPrice)}{displayUnitLabel}
+        </span>
+        <span className={cn("flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full", statusBgLight, statusText)}>
+          {isInRange ? (
+            <><Check className="w-2.5 h-2.5" /> OK</>
+          ) : isBelow ? (
+            <><TrendingDown className="w-2.5 h-2.5" /> -{Math.abs(diffPercent)}%</>
+          ) : (
+            <><TrendingUp className="w-2.5 h-2.5" /> +{diffPercent}%</>
+          )}
+        </span>
       </div>
     </div>
   );
@@ -337,7 +304,7 @@ function ServicePricingOverview({ token }: { token: string }) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-1.5">
       {categories.map(([category, variants]) => (
         <CategoryPricingRow
           key={category}
