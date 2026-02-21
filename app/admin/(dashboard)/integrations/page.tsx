@@ -416,15 +416,22 @@ export default function IntegrationsPage() {
     return config?.value || "";
   };
 
-  // Générer l'URL du webhook Stripe basée sur l'URL Convex
+  // Générer l'URL du webhook Stripe basée sur l'URL Convex Self-Hosted
   const getStripeWebhookUrl = () => {
-    // L'URL du site Convex est basée sur NEXT_PUBLIC_CONVEX_URL
-    // Format: https://xxx.convex.cloud -> https://xxx.convex.site/stripe-webhook
-    const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL || "";
+    // Utiliser l'URL Convex depuis la config admin (self-hosted)
+    const convexUrl = getConfigValue("convex_url");
     if (convexUrl) {
-      return convexUrl.replace(".convex.cloud", ".convex.site") + "/stripe-webhook";
+      // Convex self-hosted : les routes HTTP sont sous /http/
+      const baseUrl = convexUrl.endsWith("/") ? convexUrl.slice(0, -1) : convexUrl;
+      return `${baseUrl}/http/stripe-webhook`;
     }
-    return "[URL_CONVEX].convex.site/stripe-webhook";
+    // Fallback : essayer NEXT_PUBLIC_CONVEX_URL
+    const envUrl = process.env.NEXT_PUBLIC_CONVEX_URL || "";
+    if (envUrl) {
+      const baseUrl = envUrl.endsWith("/") ? envUrl.slice(0, -1) : envUrl;
+      return `${baseUrl}/http/stripe-webhook`;
+    }
+    return "[URL_CONVEX]/http/stripe-webhook";
   };
 
   const copyToClipboard = (text: string) => {
