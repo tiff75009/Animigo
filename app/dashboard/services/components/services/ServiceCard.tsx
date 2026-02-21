@@ -44,6 +44,7 @@ import ConfirmModal from "../shared/ConfirmModal";
 import { PriceRecommendationCompact } from "../PriceRecommendationCompact";
 import CollectiveSlotsManager from "../CollectiveSlotsManager";
 import { cn } from "@/app/lib/utils";
+import { Tooltip } from "@/app/components/ui/tooltip";
 import { useAuth } from "@/app/hooks/useAuth";
 
 interface ServiceCategory {
@@ -396,16 +397,17 @@ export default function ServiceCard({
 
           {/* Actions */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            <button
-              onClick={() => {
-                setIsAddingVariant(true);
-                setEditingSection("variants");
-              }}
-              className="p-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
-              title="Ajouter un service"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
+            <Tooltip content="Ajouter un service" position="top">
+              <button
+                onClick={() => {
+                  setIsAddingVariant(true);
+                  setEditingSection("variants");
+                }}
+                className="p-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </Tooltip>
 
             {/* Toggle catégorie — bien visible */}
             <button
@@ -445,13 +447,14 @@ export default function ServiceCard({
               )}
             </button>
 
-            <button
-              onClick={() => setShowDeleteModal(true)}
-              className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors"
-              title="Supprimer"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            <Tooltip content="Supprimer" position="top">
+              <button
+                onClick={() => setShowDeleteModal(true)}
+                className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </Tooltip>
           </div>
         </div>
       </div>
@@ -518,12 +521,20 @@ export default function ServiceCard({
             >
               {/* Services - Vue Grille ou Liste */}
               {displayVariants.length > 0 ? (
-                <div className={cn(
-                  "p-4",
-                  viewMode === "grid"
-                    ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"
-                    : "flex flex-col gap-2"
-                )}>
+                <AnimatePresence mode="wait">
+                <motion.div
+                  key={viewMode}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className={cn(
+                    "p-4",
+                    viewMode === "grid"
+                      ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"
+                      : "flex flex-col gap-2"
+                  )}
+                >
                   {displayVariants.map((variant) => {
                     const primaryPrice = getPrimaryPrice(variant, allowedPriceUnits, allowOvernightStay, displayPriceUnit);
                     const AnimalIcon = variant.animalTypes?.[0] ? (animalIcons[variant.animalTypes[0]] || Star) : null;
@@ -535,9 +546,8 @@ export default function ServiceCard({
                     // ========== VUE LISTE ==========
                     if (viewMode === "list") {
                       return (
-                        <motion.div
+                        <div
                           key={variant.id}
-                          layout
                           className={cn(
                             "group flex items-center gap-3 p-3 rounded-xl border transition-all",
                             variant.isActive
@@ -546,39 +556,41 @@ export default function ServiceCard({
                           )}
                         >
                           {/* Toggle individuel */}
-                          <button
-                            onClick={() => handleToggleVariant(variant.id, variant.isActive)}
-                            disabled={isToggling}
-                            className={cn(
-                              "relative w-10 h-5 rounded-full transition-colors flex-shrink-0",
-                              variant.isActive ? "bg-secondary" : "bg-gray-300",
-                              isToggling && "opacity-50"
-                            )}
-                            title={variant.isActive ? "Désactiver ce service" : "Activer ce service"}
-                          >
-                            <span className={cn(
-                              "absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform",
-                              variant.isActive ? "translate-x-5" : "translate-x-0.5"
-                            )} />
-                          </button>
+                          <Tooltip content={variant.isActive ? "Désactiver ce service" : "Activer ce service"} position="top">
+                            <button
+                              onClick={() => handleToggleVariant(variant.id, variant.isActive)}
+                              disabled={isToggling}
+                              className={cn(
+                                "relative w-10 h-5 rounded-full transition-colors flex-shrink-0",
+                                variant.isActive ? "bg-secondary" : "bg-gray-300",
+                                isToggling && "opacity-50"
+                              )}
+                            >
+                              <span className={cn(
+                                "absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform",
+                                variant.isActive ? "translate-x-5" : "translate-x-0"
+                              )} />
+                            </button>
+                          </Tooltip>
 
                           {/* Badge + bouton créneaux collectif */}
                           {variant.sessionType === "collective" && (
-                            <button
-                              onClick={() => setManagingSlotsVariant(variant)}
-                              className={cn(
-                                "flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full transition-colors",
-                                variant.needsSlotConfiguration || !variant.slotsCount
-                                  ? "bg-red-500 text-white animate-pulse hover:bg-red-600"
-                                  : "bg-orange-500 text-white hover:bg-orange-600"
-                              )}
-                              title="Gérer les créneaux collectifs"
-                            >
-                              <CalendarPlus className="w-3.5 h-3.5" />
-                              {variant.needsSlotConfiguration || !variant.slotsCount
-                                ? "Créer créneaux"
-                                : `${variant.slotsCount} créneaux`}
-                            </button>
+                            <Tooltip content="Gérer les créneaux collectifs" position="top">
+                              <button
+                                onClick={() => setManagingSlotsVariant(variant)}
+                                className={cn(
+                                  "flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full transition-colors",
+                                  variant.needsSlotConfiguration || !variant.slotsCount
+                                    ? "bg-red-500 text-white animate-pulse hover:bg-red-600"
+                                    : "bg-orange-500 text-white hover:bg-orange-600"
+                                )}
+                              >
+                                <CalendarPlus className="w-3.5 h-3.5" />
+                                {variant.needsSlotConfiguration || !variant.slotsCount
+                                  ? "Créer créneaux"
+                                  : `${variant.slotsCount} créneaux`}
+                              </button>
+                            </Tooltip>
                           )}
 
                           {/* Nom et description */}
@@ -667,15 +679,14 @@ export default function ServiceCard({
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
-                        </motion.div>
+                        </div>
                       );
                     }
 
                     // ========== VUE GRILLE ==========
                     return (
-                      <motion.div
+                      <div
                         key={variant.id}
-                        layout
                         className={cn(
                           "group relative p-4 rounded-xl border transition-all",
                           variant.isActive
@@ -703,21 +714,22 @@ export default function ServiceCard({
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-start gap-2 flex-1 min-w-0">
                             {/* Toggle individuel */}
-                            <button
-                              onClick={() => handleToggleVariant(variant.id, variant.isActive)}
-                              disabled={isToggling}
-                              className={cn(
-                                "relative w-9 h-5 rounded-full transition-colors flex-shrink-0 mt-0.5 p-0 border-0 appearance-none",
-                                variant.isActive ? "bg-secondary" : "bg-gray-300",
-                                isToggling && "opacity-50"
-                              )}
-                              title={variant.isActive ? "Désactiver ce service" : "Activer ce service"}
-                            >
-                              <span className={cn(
-                                "absolute left-0 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform",
-                                variant.isActive ? "translate-x-[18px]" : "translate-x-0.5"
-                              )} />
-                            </button>
+                            <Tooltip content={variant.isActive ? "Désactiver ce service" : "Activer ce service"} position="top">
+                              <button
+                                onClick={() => handleToggleVariant(variant.id, variant.isActive)}
+                                disabled={isToggling}
+                                className={cn(
+                                  "relative w-9 h-5 rounded-full transition-colors flex-shrink-0 mt-0.5 p-0 border-0 appearance-none",
+                                  variant.isActive ? "bg-secondary" : "bg-gray-300",
+                                  isToggling && "opacity-50"
+                                )}
+                              >
+                                <span className={cn(
+                                  "absolute left-0 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform",
+                                  variant.isActive ? "translate-x-[18px]" : "translate-x-0.5"
+                                )} />
+                              </button>
+                            </Tooltip>
                             <div className="flex-1 min-w-0">
                               <h4 className={cn(
                                 "font-semibold truncate",
@@ -859,22 +871,21 @@ export default function ServiceCard({
                                 </span>
                               ))}
                               {sharedOptions.map((option) => (
-                                <span
-                                  key={option.id}
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-gray-50 text-gray-600 text-xs rounded border border-gray-200"
-                                  title="Option partagée"
-                                >
-                                  {option.name}
-                                  <span className="font-medium">+{formatPrice(option.price)}</span>
-                                </span>
+                                <Tooltip key={option.id} content="Option partagée" position="top">
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-gray-50 text-gray-600 text-xs rounded border border-gray-200">
+                                    {option.name}
+                                    <span className="font-medium">+{formatPrice(option.price)}</span>
+                                  </span>
+                                </Tooltip>
                               ))}
                             </div>
                           </div>
                         )}
-                      </motion.div>
+                      </div>
                     );
                   })}
-                </div>
+                </motion.div>
+                </AnimatePresence>
               ) : (
                 <div className="p-6 text-center">
                   <p className="text-text-light mb-3">Aucun service</p>
@@ -1557,34 +1568,37 @@ function VariantPreviewCard({
         <div className="flex items-center gap-1 flex-shrink-0">
           {/* Bouton Créneaux pour les services collectives */}
           {variant.sessionType === "collective" && onManageSlots && (
-            <button
-              onClick={() => onManageSlots(variant)}
-              className={cn(
-                "p-2 rounded-lg transition-colors",
-                variant.needsSlotConfiguration
-                  ? "text-white bg-orange-500 hover:bg-orange-600 animate-pulse"
-                  : "text-orange-500 hover:bg-orange-50"
-              )}
-              title="Gérer les créneaux"
-            >
-              <Calendar className="w-4 h-4" />
-            </button>
+            <Tooltip content="Gérer les créneaux" position="top">
+              <button
+                onClick={() => onManageSlots(variant)}
+                className={cn(
+                  "p-2 rounded-lg transition-colors",
+                  variant.needsSlotConfiguration
+                    ? "text-white bg-orange-500 hover:bg-orange-600 animate-pulse"
+                    : "text-orange-500 hover:bg-orange-50"
+                )}
+              >
+                <Calendar className="w-4 h-4" />
+              </button>
+            </Tooltip>
           )}
-          <button
-            onClick={onEdit}
-            className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors"
-            title="Modifier"
-          >
-            <Edit2 className="w-4 h-4" />
-          </button>
-          {canDelete && (
+          <Tooltip content="Modifier" position="top">
             <button
-              onClick={onDelete}
-              className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-              title="Supprimer"
+              onClick={onEdit}
+              className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors"
             >
-              <Trash2 className="w-4 h-4" />
+              <Edit2 className="w-4 h-4" />
             </button>
+          </Tooltip>
+          {canDelete && (
+            <Tooltip content="Supprimer" position="top">
+              <button
+                onClick={onDelete}
+                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </Tooltip>
           )}
         </div>
       </div>

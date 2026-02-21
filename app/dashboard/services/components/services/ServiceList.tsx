@@ -7,6 +7,7 @@ import { Id } from "@/convex/_generated/dataModel";
 import ServiceCard from "./ServiceCard";
 import EmptyState from "../shared/EmptyState";
 import { cn } from "@/app/lib/utils";
+import { Tooltip } from "@/app/components/ui/tooltip";
 
 interface ServiceCategory {
   slug: string;
@@ -213,30 +214,32 @@ export default function ServiceList({
           <div className="flex items-center gap-2">
             {/* Toggle vue grille/liste */}
             <div className="flex items-center bg-foreground/5 rounded-lg p-1">
-              <button
-                onClick={() => setViewMode("grid")}
-                className={cn(
-                  "p-1.5 rounded-md transition-colors",
-                  viewMode === "grid"
-                    ? "bg-white text-primary shadow-sm"
-                    : "text-text-light hover:text-foreground"
-                )}
-                title="Vue grille"
-              >
-                <LayoutGrid className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode("list")}
-                className={cn(
-                  "p-1.5 rounded-md transition-colors",
-                  viewMode === "list"
-                    ? "bg-white text-primary shadow-sm"
-                    : "text-text-light hover:text-foreground"
-                )}
-                title="Vue liste"
-              >
-                <List className="w-4 h-4" />
-              </button>
+              <Tooltip content="Vue grille" position="top">
+                <button
+                  onClick={() => setViewMode("grid")}
+                  className={cn(
+                    "p-1.5 rounded-md transition-all duration-200",
+                    viewMode === "grid"
+                      ? "bg-white text-primary shadow-sm"
+                      : "text-text-light hover:text-foreground"
+                  )}
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </button>
+              </Tooltip>
+              <Tooltip content="Vue liste" position="top">
+                <button
+                  onClick={() => setViewMode("list")}
+                  className={cn(
+                    "p-1.5 rounded-md transition-all duration-200",
+                    viewMode === "list"
+                      ? "bg-white text-primary shadow-sm"
+                      : "text-text-light hover:text-foreground"
+                  )}
+                >
+                  <List className="w-4 h-4" />
+                </button>
+              </Tooltip>
             </div>
 
             <button
