@@ -86,6 +86,7 @@ function CheckoutForm({
   const confirmPaymentSuccess = useMutation(api.api.stripeClient.confirmPaymentSuccess);
   const preparePaymentForSave = useMutation(api.api.savedCards.preparePaymentForSave);
   const clearSetupIntent = useMutation(api.api.savedCards.clearSetupIntent);
+  const triggerSaveCard = useMutation(api.api.savedCards.triggerSaveCardAfterPayment);
 
   // Query réactive : active uniquement quand on attend le flag SAVE_CARD_READY
   const setupStatus = useQuery(
@@ -191,6 +192,13 @@ function CheckoutForm({
             });
           } catch (err) {
             console.error("Erreur confirmation Convex:", err);
+          }
+          // Sauvegarder la carte directement (sans dépendre du webhook)
+          try {
+            await triggerSaveCard({ token, missionId: missionId as Id<"missions"> });
+            console.log("Sauvegarde carte déclenchée après paiement");
+          } catch (err) {
+            console.error("Erreur déclenchement sauvegarde carte:", err);
           }
           onSuccess();
         }

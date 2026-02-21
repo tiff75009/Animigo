@@ -339,3 +339,90 @@ export const preparePaymentIntentForSave = internalAction({
     return { success: piUpdateSuccess, customerId };
   },
 });
+
+/**
+ * Sauvegarde la carte directement après un paiement réussi (sans dépendre du webhook)
+ * Récupère le PaymentIntent, vérifie le customer et le PM, puis sauvegarde en base
+ */
+export const saveCardAfterPayment = internalAction({
+  args: {
+    paymentIntentId: v.string(),
+    userId: v.string(),
+    stripeSecretKey: v.string(),
+    convexUrl: v.string(),
+    convexAdminKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    console.log("=== saveCardAfterPayment START ===");
+    console.log("PI:", args.paymentIntentId);
+
+    const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+
+    try {
+      // 1. Récupérer le PaymentIntent depuis Stripe
+      const pi = await stripe.paymentIntents.retrieve(args.paymentIntentId);
+
+      if (!pi.payment_method || !pi.customer) {
+        console.error("saveCardAfterPayment: PM ou customer manquant sur le PI", {
+          payment_method: pi.payment_method,
+          customer: pi.customer,
+        });
+        return { success: false, error: "PM ou customer manquant" };
+      }
+
+      const pmId = typeof pi.payment_method === "string" ? pi.payment_method : pi.payment_method.id;
+      const customerId = typeof pi.customer === "string" ? pi.customer : pi.customer.id;
+
+      // 2. Attacher explicitement le PM au customer (si pas déjà fait par setup_future_usage)
+      try {
+        await stripe.paymentMethods.attach(pmId, { customer: customerId });
+        console.log(`PM ${pmId} attaché au customer ${customerId}`);
+      } catch (attachError: any) {
+        if (attachError?.code !== "resource_already_exists") {
+          console.warn("Erreur attachement PM (non bloquante):", attachError?.message);
+        }
+      }
+
+      // 3. Récupérer les détails de la carte
+      const pm = await stripe.paymentMethods.retrieve(pmId);
+      if (!pm.card) {
+        console.error("saveCardAfterPayment: PM n'est pas une carte, type:", pm.type);
+        return { success: false, error: "PM n'est pas une carte" };
+      }
+
+      // 4. Sauvegarder en base via API HTTP Convex
+      const convexApiUrl = `${args.convexUrl}/api/mutation`;
+      const saveResponse = await fetch(convexApiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Convex ${args.convexAdminKey}`,
+        },
+        body: JSON.stringify({
+          path: "api/savedCardsInternal:savePaymentMethodByCustomer",
+          args: {
+            stripeCustomerId: customerId,
+            stripePaymentMethodId: pm.id,
+            brand: pm.card.brand || "unknown",
+            last4: pm.card.last4 || "????",
+            expMonth: pm.card.exp_month,
+            expYear: pm.card.exp_year,
+          },
+        }),
+      });
+
+      if (!saveResponse.ok) {
+        const errorText = await saveResponse.text();
+        console.error("Erreur sauvegarde carte en base:", errorText);
+        return { success: false, error: errorText };
+      }
+
+      console.log(`Carte sauvegardée: ${pm.card.brand} **** ${pm.card.last4} pour customer ${customerId}`);
+      console.log("=== saveCardAfterPayment END (success) ===");
+      return { success: true };
+    } catch (error) {
+      console.error("Erreur saveCardAfterPayment:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown" };
+    }
+  },
+});

@@ -417,3 +417,73 @@ export const preparePaymentForSave = mutation({
     return { status: "preparing" };
   },
 });
+
+/**
+ * Déclenche la sauvegarde de la carte après un paiement réussi (sans dépendre du webhook)
+ * Appelé par le frontend après confirmPaymentSuccess quand saveCard=true
+ */
+export const triggerSaveCardAfterPayment = mutation({
+  args: {
+    token: v.string(),
+    missionId: v.id("missions"),
+  },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+
+    if (!session || session.expiresAt < Date.now()) {
+      throw new Error("Session invalide");
+    }
+
+    const user = await ctx.db.get(session.userId);
+    if (!user) {
+      throw new Error("Utilisateur non trouvé");
+    }
+
+    const mission = await ctx.db.get(args.missionId);
+    if (!mission || mission.clientId !== session.userId) {
+      throw new Error("Mission non trouvée");
+    }
+
+    const payment = mission.stripePaymentId
+      ? await ctx.db.get(mission.stripePaymentId)
+      : null;
+
+    if (!payment || !payment.paymentIntentId) {
+      throw new Error("Paiement non trouvé");
+    }
+
+    // Récupérer les configs
+    const stripeSecretKeyConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "stripe_secret_key"))
+      .first();
+
+    const convexUrlConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "convex_url"))
+      .first();
+
+    const convexAdminKeyConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "convex_admin_key"))
+      .first();
+
+    if (!stripeSecretKeyConfig?.value || !convexUrlConfig?.value || !convexAdminKeyConfig?.value) {
+      throw new Error("Configuration Stripe manquante");
+    }
+
+    // Planifier la sauvegarde de la carte
+    await ctx.scheduler.runAfter(0, internal.api.savedCardsActions.saveCardAfterPayment, {
+      paymentIntentId: payment.paymentIntentId,
+      userId: user._id,
+      stripeSecretKey: stripeSecretKeyConfig.value,
+      convexUrl: convexUrlConfig.value,
+      convexAdminKey: convexAdminKeyConfig.value,
+    });
+
+    return { status: "saving" };
+  },
+});
