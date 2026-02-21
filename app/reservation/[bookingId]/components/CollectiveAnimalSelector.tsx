@@ -159,22 +159,18 @@ export default function CollectiveAnimalSelector({
 
   // Gérer la sélection/désélection
   const toggleAnimal = (animalId: Id<"animals">) => {
-    setSelectedIds(prev => {
-      const isSelected = prev.includes(animalId);
-      let newIds: Id<"animals">[];
+    const isSelected = selectedIds.includes(animalId);
+    let newIds: Id<"animals">[];
 
-      if (isSelected) {
-        // Désélectionner
-        newIds = prev.filter(id => id !== animalId);
-      } else {
-        // Vérifier si on peut ajouter
-        if (!canAddMore) return prev;
-        newIds = [...prev, animalId];
-      }
+    if (isSelected) {
+      newIds = selectedIds.filter(id => id !== animalId);
+    } else {
+      if (!canAddMore) return;
+      newIds = [...selectedIds, animalId];
+    }
 
-      onSelectionChange(newIds);
-      return newIds;
-    });
+    setSelectedIds(newIds);
+    onSelectionChange(newIds);
   };
 
   // Animaux sélectionnés (objets complets)

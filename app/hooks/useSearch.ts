@@ -108,6 +108,8 @@ export interface NextSlot {
   date: string;
   startTime: string;
   endTime?: string;
+  isFullDay?: boolean;
+  slotOccupancy?: "free" | "busy" | "almost_full";
 }
 
 export interface CollectiveSlotInfo {

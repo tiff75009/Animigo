@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useAction } from "convex/react";
@@ -18,6 +18,7 @@ import {
   Sparkles,
   LayoutGrid,
   List,
+  Layers,
   Home,
   Scissors,
   LocateFixed,
@@ -69,7 +70,7 @@ import {
   ANIMAL_TYPES,
   radiusOptions,
 } from "@/app/components/platform";
-import { FormuleCardGrid, FormuleCardList } from "@/app/components/platform/FormuleCard";
+import { FormuleCardGrid, FormuleCardList, AnnouncerCarouselCard, type AnnouncerGroup } from "@/app/components/platform/FormuleCard";
 
 // Nuqs parsers for URL state
 const searchParamsParsers = {
@@ -280,6 +281,37 @@ export default function RecherchePage() {
       setTogglingFavoriteId(null);
     }
   };
+
+  // Regroupement par annonceur
+  const [isGrouped, setIsGrouped] = useState(false);
+
+  const groupedResults = useMemo<AnnouncerGroup[]>(() => {
+    if (!isGrouped) return [];
+    const map = new Map<string, AnnouncerGroup>();
+    for (const f of results) {
+      let group = map.get(f.announcerId);
+      if (!group) {
+        group = {
+          announcerId: f.announcerId,
+          announcerFirstName: f.announcerFirstName,
+          announcerLastName: f.announcerLastName,
+          announcerSlug: f.announcerSlug,
+          announcerProfileImage: f.announcerProfileImage,
+          announcerIsDisplayingLogo: f.announcerIsDisplayingLogo,
+          announcerRating: f.announcerRating,
+          announcerReviewCount: f.announcerReviewCount,
+          announcerLocation: f.announcerLocation,
+          announcerDistance: f.announcerDistance,
+          announcerVerified: f.announcerVerified,
+          announcerStatusType: f.announcerStatusType,
+          formules: [],
+        };
+        map.set(f.announcerId, group);
+      }
+      group.formules.push(f);
+    }
+    return Array.from(map.values());
+  }, [results, isGrouped]);
 
   const router = useRouter();
   const [showFilters, setShowFilters] = useState(false);
@@ -823,9 +855,21 @@ export default function RecherchePage() {
                 </div>
               </div>
 
-              {/* View toggle - Hidden on mobile */}
-              <div className="hidden sm:block">
+              {/* View toggle + Group toggle - Hidden on mobile */}
+              <div className="hidden sm:flex items-center gap-2">
                 <ViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
+                <button
+                  onClick={() => setIsGrouped(!isGrouped)}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all border",
+                    isGrouped
+                      ? "bg-primary/10 text-primary border-primary/30 shadow-sm"
+                      : "bg-gray-100/80 text-gray-600 border-gray-200/50 hover:bg-gray-200/80 hover:text-gray-800"
+                  )}
+                >
+                  <Layers className="w-4 h-4" />
+                  <span>Regrouper</span>
+                </button>
               </div>
             </div>
 
@@ -909,6 +953,22 @@ export default function RecherchePage() {
             <LoadingSkeletons viewMode={viewMode} />
           ) : results.length === 0 ? (
             <EmptyState onReset={resetAllFilters} />
+          ) : isGrouped ? (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-4"
+            >
+              {groupedResults.map((group: AnnouncerGroup, index: number) => (
+                <AnnouncerCarouselCard
+                  key={group.announcerId}
+                  group={group}
+                  index={index}
+                  isAnnouncer={isAnnouncer}
+                />
+              ))}
+            </motion.div>
           ) : viewMode === "grid" ? (
             <motion.div
               initial={{ opacity: 0 }}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
@@ -17,11 +17,13 @@ import {
   Car,
   Sparkles,
   ChevronRight,
+  ChevronLeft,
   Zap,
   FileCheck,
   Building2,
   Briefcase,
   MapPin,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { formatPrice, formatDistance } from "./helpers";
@@ -122,6 +124,8 @@ interface NextSlot {
   date: string;
   startTime: string;
   endTime?: string;
+  isFullDay?: boolean;
+  slotOccupancy?: "free" | "busy" | "almost_full";
 }
 
 interface CollectiveSlotInfo {
@@ -317,11 +321,18 @@ export function FormuleCardGrid({
               initial={{ y: -10, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: index * 0.05 + 0.2 }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full shadow-lg shadow-emerald-500/30"
+              className={cn(
+                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full shadow-lg",
+                formule.nextSlot.slotOccupancy === "almost_full"
+                  ? "bg-gradient-to-r from-orange-500 to-amber-500 shadow-orange-500/30"
+                  : formule.nextSlot.slotOccupancy === "busy"
+                    ? "bg-gradient-to-r from-amber-400 to-yellow-400 shadow-amber-400/30"
+                    : "bg-gradient-to-r from-emerald-500 to-teal-500 shadow-emerald-500/30"
+              )}
             >
               <Zap className="w-3.5 h-3.5 text-white" />
               <span className="text-xs font-semibold text-white">
-                {formatNextSlotDate(formule.nextSlot.date)} · {formatTime(formule.nextSlot.startTime)}
+                {formatNextSlotDate(formule.nextSlot.date)}{!formule.nextSlot.isFullDay && ` · ${formatTime(formule.nextSlot.startTime)}`}
               </span>
               {isCollective && formule.spotsLeft && (
                 <span className="px-1.5 py-0.5 bg-white/20 rounded-full text-[10px] font-bold text-white">
@@ -677,10 +688,31 @@ export function FormuleCardList({
             {/* Footer : Créneau + Prix + CTA */}
             <div className="flex flex-wrap items-center justify-between gap-3 mt-auto">
               {formule.nextSlot && (
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border border-emerald-100">
-                  <Zap className="w-3.5 h-3.5 text-emerald-500" />
-                  <span className="text-xs font-semibold text-emerald-700">
-                    {formatNextSlotDate(formule.nextSlot.date)} · {formatTime(formule.nextSlot.startTime)}
+                <div className={cn(
+                  "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border",
+                  formule.nextSlot.slotOccupancy === "almost_full"
+                    ? "bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200"
+                    : formule.nextSlot.slotOccupancy === "busy"
+                      ? "bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-200"
+                      : "bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-100"
+                )}>
+                  <Zap className={cn(
+                    "w-3.5 h-3.5",
+                    formule.nextSlot.slotOccupancy === "almost_full"
+                      ? "text-orange-500"
+                      : formule.nextSlot.slotOccupancy === "busy"
+                        ? "text-amber-500"
+                        : "text-emerald-500"
+                  )} />
+                  <span className={cn(
+                    "text-xs font-semibold",
+                    formule.nextSlot.slotOccupancy === "almost_full"
+                      ? "text-orange-700"
+                      : formule.nextSlot.slotOccupancy === "busy"
+                        ? "text-amber-700"
+                        : "text-emerald-700"
+                  )}>
+                    {formatNextSlotDate(formule.nextSlot.date)}{!formule.nextSlot.isFullDay && ` · ${formatTime(formule.nextSlot.startTime)}`}
                   </span>
                   {isCollective && formule.spotsLeft && (
                     <span className={cn(
@@ -738,5 +770,311 @@ export function FormuleCardList({
         </div>
       </div>
     </motion.article>
+  );
+}
+
+// ========================
+// Grouped by Announcer - Carousel Card
+// ========================
+
+export interface AnnouncerGroup {
+  announcerId: string;
+  announcerFirstName: string;
+  announcerLastName: string;
+  announcerSlug?: string;
+  announcerProfileImage?: string | null;
+  announcerIsDisplayingLogo?: boolean;
+  announcerRating: number;
+  announcerReviewCount: number;
+  announcerLocation: string;
+  announcerDistance?: number;
+  announcerVerified: boolean;
+  announcerStatusType: "particulier" | "micro_entrepreneur" | "professionnel";
+  formules: FormuleResult[];
+}
+
+// Mini-card formule pour le carousel
+function FormuleChip({
+  formule,
+  isAnnouncer,
+}: {
+  formule: FormuleResult;
+  isAnnouncer: boolean;
+}) {
+  const announcerBaseUrl = `/annonceur/${formule.announcerSlug || formule.announcerId}`;
+  const announcerBookingUrl = `${announcerBaseUrl}?formule=${formule.formuleId}`;
+
+  const finalPrice = getPriceWithCommission(formule.price, formule.announcerStatusType);
+  const priceLabel = priceUnitLabels[formule.priceUnit] || formule.priceUnit;
+  const isCollective = formule.sessionType === "collective";
+
+  return (
+    <div className="flex-shrink-0 w-[180px] bg-white border border-gray-100 rounded-2xl p-3 hover:shadow-lg hover:border-primary/20 transition-all duration-300 flex flex-col">
+      {/* Catégorie */}
+      <div className="flex items-center gap-1.5 mb-2">
+        {formule.categoryIcon && <span className="text-sm">{formule.categoryIcon}</span>}
+        <span className="text-[11px] font-semibold text-primary truncate">{formule.categoryName}</span>
+      </div>
+
+      {/* Nom formule */}
+      <h4 className="text-sm font-bold text-gray-900 line-clamp-2 leading-snug mb-2 flex-1">
+        {formule.formuleName}
+      </h4>
+
+      {/* Infos compactes */}
+      <div className="flex items-center gap-2 text-[11px] text-gray-500 mb-2">
+        {formule.duration && (
+          <span className="flex items-center gap-0.5">
+            <Timer className="w-3 h-3 text-gray-400" />
+            {formatDuration(formule.duration)}
+          </span>
+        )}
+        <span className={cn(
+          "flex items-center gap-0.5",
+          isCollective ? "text-blue-600" : ""
+        )}>
+          {isCollective ? <Users className="w-3 h-3" /> : <User className="w-3 h-3 text-gray-400" />}
+          {isCollective ? "Collectif" : "Indiv."}
+        </span>
+      </div>
+
+      {/* Badge créneau */}
+      {formule.nextSlot && (
+        <div className={cn(
+          "flex items-center gap-1 px-2 py-1 rounded-lg mb-2 text-[10px] font-semibold",
+          formule.nextSlot.slotOccupancy === "almost_full"
+            ? "bg-orange-50 text-orange-700 border border-orange-200"
+            : formule.nextSlot.slotOccupancy === "busy"
+              ? "bg-amber-50 text-amber-700 border border-amber-200"
+              : "bg-emerald-50 text-emerald-700 border border-emerald-100"
+        )}>
+          <Zap className="w-3 h-3" />
+          {formatNextSlotDate(formule.nextSlot.date)}
+          {!formule.nextSlot.isFullDay && ` · ${formatTime(formule.nextSlot.startTime)}`}
+        </div>
+      )}
+
+      {/* Prix */}
+      <div className="mb-2">
+        {formule.numberOfSessions && formule.numberOfSessions > 1 ? (
+          <>
+            <span className="text-lg font-black text-gray-900">
+              {formatPrice(finalPrice * formule.numberOfSessions)}
+            </span>
+            <span className="block text-[10px] text-gray-400">
+              {formule.numberOfSessions}× {formatPrice(finalPrice)}
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="text-lg font-black text-gray-900">
+              {formatPrice(finalPrice)}
+            </span>
+            {priceLabel && (
+              <span className="text-[10px] text-gray-400 ml-0.5">/{priceLabel}</span>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Bouton Réserver */}
+      {!isAnnouncer && (
+        <Link href={announcerBookingUrl} className="mt-auto">
+          <button className="w-full px-3 py-2 bg-gradient-to-r from-primary to-primary/90 text-white font-bold text-xs rounded-xl hover:shadow-lg hover:shadow-primary/30 transition-all flex items-center justify-center gap-1">
+            Réserver
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </Link>
+      )}
+    </div>
+  );
+}
+
+// Carousel Card groupé par annonceur
+export function AnnouncerCarouselCard({
+  group,
+  index,
+  isAnnouncer = false,
+}: {
+  group: AnnouncerGroup;
+  index: number;
+  isAnnouncer: boolean;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const announcerPublicProfileUrl = `/profil/${group.announcerSlug || group.announcerId}`;
+  const sc = statusTypeConfig[group.announcerStatusType];
+  const StatusIcon = sc.icon;
+
+  const shortDistance = group.announcerDistance !== undefined
+    ? group.announcerDistance < 1
+      ? "< 1 km"
+      : `${Math.round(group.announcerDistance)} km`
+    : null;
+
+  const updateScrollButtons = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 4);
+  };
+
+  const scrollBy = (dir: "left" | "right") => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir === "left" ? -200 : 200, behavior: "smooth" });
+  };
+
+  // Check scroll on mount
+  const handleRef = (el: HTMLDivElement | null) => {
+    (scrollRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+    if (el) {
+      setCanScrollRight(el.scrollWidth > el.clientWidth + 4);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.06, duration: 0.4, ease: "easeOut" }}
+      className="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden"
+    >
+      <div className="flex flex-col md:flex-row">
+        {/* Gauche : Info annonceur */}
+        <div className="relative md:w-[210px] flex-shrink-0 p-4 md:p-5 bg-gradient-to-br from-gray-50/80 to-white flex flex-row md:flex-col items-center gap-3 md:gap-3 md:justify-center border-b md:border-b-0 md:border-r border-gray-100">
+          {/* Avatar */}
+          <Link href={announcerPublicProfileUrl} className="relative group/avatar flex-shrink-0">
+            <div className="absolute -inset-1 bg-gradient-to-tr from-primary via-secondary to-primary rounded-2xl opacity-60 blur-sm group-hover/avatar:opacity-100 transition-opacity" />
+            <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-white ring-2 ring-white shadow-md">
+              {group.announcerProfileImage ? (
+                <Image
+                  src={group.announcerProfileImage}
+                  alt={group.announcerFirstName}
+                  width={56}
+                  height={56}
+                  className={cn("w-full h-full", group.announcerIsDisplayingLogo ? "object-contain p-1" : "object-cover")}
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20">
+                  <span className="text-xl">👤</span>
+                </div>
+              )}
+            </div>
+            {group.announcerVerified && (
+              <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-gradient-to-br from-secondary to-teal-500 rounded-lg flex items-center justify-center ring-2 ring-white shadow-sm">
+                <Shield className="w-3 h-3 text-white" />
+              </div>
+            )}
+          </Link>
+
+          {/* Infos textuelles */}
+          <div className="flex flex-col items-start md:items-center gap-1.5">
+            <Link href={announcerPublicProfileUrl}>
+              <h3 className="font-bold text-gray-900 text-sm hover:text-primary transition-colors">
+                {group.announcerFirstName} {group.announcerLastName.charAt(0)}.
+              </h3>
+            </Link>
+
+            {/* Badge statut */}
+            <div className={cn("flex items-center gap-1 px-2 py-0.5 rounded-full border", sc.bg, sc.border)}>
+              <StatusIcon className={cn("w-3 h-3", sc.text)} />
+              <span className={cn("text-[11px] font-semibold", sc.text)}>{sc.label}</span>
+            </div>
+
+            {/* Note + Distance */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-0.5">
+                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                <span className="text-xs font-bold text-amber-600">{group.announcerRating.toFixed(1)}</span>
+                {group.announcerReviewCount > 0 && (
+                  <span className="text-[10px] text-gray-400">({group.announcerReviewCount})</span>
+                )}
+              </div>
+            </div>
+
+            {/* Localisation */}
+            {group.announcerLocation && (
+              <span className="text-[11px] text-gray-500 flex items-center gap-0.5 md:text-center">
+                <MapPin className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                <span className="truncate max-w-[120px]">{group.announcerLocation}</span>
+              </span>
+            )}
+            {shortDistance && (
+              <span className="text-xs text-primary font-medium flex items-center gap-0.5">
+                <Navigation className="w-3 h-3" />
+                {shortDistance}
+              </span>
+            )}
+
+            {/* Lien profil */}
+            <Link
+              href={announcerPublicProfileUrl}
+              className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 hover:text-primary transition-colors"
+            >
+              <ExternalLink className="w-3 h-3" />
+              Voir profil
+            </Link>
+          </div>
+        </div>
+
+        {/* Droite : Carousel formules */}
+        <div className="relative flex-1 min-w-0 py-4 md:py-5">
+          {/* Compteur formules */}
+          <div className="px-4 mb-3">
+            <span className="text-xs font-semibold text-gray-500">
+              {group.formules.length} formule{group.formules.length > 1 ? "s" : ""}
+            </span>
+          </div>
+
+          {/* Scroll container */}
+          <div className="relative">
+            {/* Flèche gauche */}
+            {canScrollLeft && (
+              <button
+                onClick={() => scrollBy("left")}
+                className="absolute left-1 top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white/90 border border-gray-200 rounded-full shadow-lg flex items-center justify-center hover:bg-white hover:scale-110 transition-all"
+              >
+                <ChevronLeft className="w-4 h-4 text-gray-700" />
+              </button>
+            )}
+
+            {/* Flèche droite */}
+            {canScrollRight && (
+              <button
+                onClick={() => scrollBy("right")}
+                className="absolute right-1 top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white/90 border border-gray-200 rounded-full shadow-lg flex items-center justify-center hover:bg-white hover:scale-110 transition-all"
+              >
+                <ChevronRight className="w-4 h-4 text-gray-700" />
+              </button>
+            )}
+
+            {/* Fade indicators */}
+            {canScrollLeft && (
+              <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-white to-transparent z-[5] pointer-events-none" />
+            )}
+            {canScrollRight && (
+              <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white to-transparent z-[5] pointer-events-none" />
+            )}
+
+            <div
+              ref={handleRef}
+              onScroll={updateScrollButtons}
+              className="flex gap-3 overflow-x-auto scrollbar-hide px-4"
+            >
+              {group.formules.map((formule) => (
+                <FormuleChip
+                  key={formule.formuleId}
+                  formule={formule}
+                  isAnnouncer={isAnnouncer}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </motion.div>
   );
 }

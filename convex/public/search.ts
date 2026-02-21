@@ -2,7 +2,7 @@ import { query, mutation } from "../_generated/server";
 import { v } from "convex/values";
 import { Id, Doc } from "../_generated/dataModel";
 import { ConvexError } from "convex/values";
-import { missionsOverlap, missionsOverlapWithBuffers, addMinutesToTime, subtractMinutesFromTime, applyBuffersToTimeSlot } from "../lib/timeUtils";
+import { missionsOverlap, missionsOverlapWithBuffers, timeSlotsOverlapWithBuffers, addMinutesToTime, subtractMinutesFromTime, applyBuffersToTimeSlot } from "../lib/timeUtils";
 import { checkBookingConflict, checkCapacityAvailability, isCategoryCapacityBased, getAllSubcategorySlugs } from "../lib/capacityUtils";
 import { getDefaultPricing } from "../utils/defaultPricing";
 import { isInBoundingBox } from "../lib/geoUtils";
@@ -78,8 +78,35 @@ function getDatesBetween(startDate: string, endDate: string): string[] {
 }
 
 /**
+ * Retourne l'offset UTC de Europe/Paris en heures pour une date donnée.
+ * CET = UTC+1 (hiver), CEST = UTC+2 (été).
+ * DST : dernier dimanche de mars → dernier dimanche d'octobre.
+ */
+function getParisUtcOffsetHours(year: number, month: number, day: number): number {
+  if (month >= 4 && month <= 9) return 2; // Avril-Septembre : toujours CEST
+  if (month <= 2 || month >= 11) return 1; // Jan-Fév, Nov-Déc : toujours CET
+  if (month === 3) {
+    // Mars : trouver le dernier dimanche
+    for (let d = 31; d >= 25; d--) {
+      if (new Date(Date.UTC(year, 2, d)).getUTCDay() === 0) {
+        return day >= d ? 2 : 1;
+      }
+    }
+  }
+  if (month === 10) {
+    // Octobre : trouver le dernier dimanche
+    for (let d = 31; d >= 25; d--) {
+      if (new Date(Date.UTC(year, 9, d)).getUTCDay() === 0) {
+        return day < d ? 2 : 1;
+      }
+    }
+  }
+  return 1;
+}
+
+/**
  * Vérifie si un créneau respecte le délai minimum de réservation à l'avance.
- * Retourne true si le créneau est assez loin dans le futur.
+ * Les heures de créneaux sont en Europe/Paris, minBookingTimestamp est basé sur Date.now() (UTC).
  */
 function isSlotAfterMinimumAdvance(
   date: string,
@@ -87,17 +114,100 @@ function isSlotAfterMinimumAdvance(
   minBookingTimestamp: number
 ): boolean {
   const [year, month, day] = date.split("-").map(Number);
-  const slotDate = new Date(year, month - 1, day);
+  const [hours, minutes] = (startTime || "08:00").split(":").map(Number);
 
-  if (startTime) {
-    const [hours, minutes] = startTime.split(":").map(Number);
-    slotDate.setHours(hours, minutes, 0, 0);
-  } else {
-    // Par défaut 08:00 si pas d'heure précisée
-    slotDate.setHours(8, 0, 0, 0);
+  // Créer le timestamp UTC correspondant à l'heure de Paris
+  const parisOffset = getParisUtcOffsetHours(year, month, day);
+  const slotUtcMs = Date.UTC(year, month - 1, day, hours - parisOffset, minutes, 0, 0);
+
+  return slotUtcMs >= minBookingTimestamp;
+}
+
+/**
+ * Trouve le premier créneau libre dans une journée en tenant compte des missions existantes et buffers.
+ * Les availWindows sont les plages de disponibilité (ex: [{startTime: "09:00", endTime: "18:00"}]).
+ * Les dayMissions sont les missions déjà réservées ce jour.
+ * Retourne le startTime du premier créneau libre de durée `sessionDuration`, ou null.
+ */
+function findFirstFreeSlotInDay(
+  day: string,
+  availWindows: { startTime: string; endTime: string }[],
+  dayMissions: { startTime: string; endTime: string }[],
+  sessionDuration: number,
+  bufferBefore: number,
+  bufferAfter: number,
+  minBookingTs: number,
+): { startTime: string; endTime: string } | null {
+  // Trier les fenêtres de dispo par heure de début
+  const sortedWindows = [...availWindows].sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+  // Trier les missions par heure de début et calculer les périodes bloquées (mission + buffers)
+  const blockedPeriods = dayMissions
+    .map((m) => ({
+      start: subtractMinutesFromTime(m.startTime, bufferBefore),
+      end: addMinutesToTime(m.endTime, bufferAfter),
+    }))
+    .sort((a, b) => a.start.localeCompare(b.start));
+
+  for (const window of sortedWindows) {
+    // On cherche un créneau libre dans cette fenêtre de disponibilité
+    let candidate = window.startTime;
+
+    // Tant qu'on est dans la fenêtre de disponibilité
+    while (true) {
+      const candidateEnd = addMinutesToTime(candidate, sessionDuration);
+
+      // Vérifier que le créneau tient dans la fenêtre
+      if (candidateEnd > window.endTime) break;
+
+      // Vérifier le délai minimum de réservation
+      if (!isSlotAfterMinimumAdvance(day, candidate, minBookingTs)) {
+        // Avancer de 30 min et réessayer
+        candidate = addMinutesToTime(candidate, 30);
+        continue;
+      }
+
+      // Vérifier si ce créneau chevauche une période bloquée
+      let conflict = false;
+      for (const blocked of blockedPeriods) {
+        // Le créneau candidat [candidate, candidateEnd] chevauche [blocked.start, blocked.end] ?
+        if (candidate < blocked.end && candidateEnd > blocked.start) {
+          // Conflit : sauter après la fin de la période bloquée
+          candidate = blocked.end;
+          conflict = true;
+          break;
+        }
+      }
+
+      if (!conflict) {
+        return { startTime: candidate, endTime: candidateEnd };
+      }
+    }
   }
 
-  return slotDate.getTime() >= minBookingTimestamp;
+  return null;
+}
+
+// Convertit "HH:MM" en minutes depuis minuit
+function timeToMinutes(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+// Calcule le taux d'occupation d'un jour à partir des missions existantes
+function computeSlotOccupancy(
+  dayMissions: { startTime: string; endTime: string }[],
+  totalWindowMinutes: number
+): "free" | "busy" | "almost_full" {
+  if (dayMissions.length === 0) return "free";
+  let busyMinutes = 0;
+  for (const m of dayMissions) {
+    busyMinutes += timeToMinutes(m.endTime) - timeToMinutes(m.startTime);
+  }
+  const ratio = busyMinutes / totalWindowMinutes;
+  if (ratio >= 0.75) return "almost_full";
+  if (ratio >= 0.25) return "busy";
+  return "free";
 }
 
 // Types pour les résultats
@@ -105,6 +215,8 @@ interface NextSlot {
   date: string;
   startTime: string;
   endTime?: string;
+  isFullDay?: boolean;
+  slotOccupancy?: "free" | "busy" | "almost_full";
 }
 
 interface CollectiveSlotInfo {
@@ -572,33 +684,60 @@ export const searchAnnouncers = query({
         };
       }
 
-      // Sinon, chercher le prochain créneau de disponibilité partielle depuis le cache (Phase 2)
-      if (!nextSlot && availability.nextAvailable) {
-        const nextAvailDate = availability.nextAvailable;
+      // Sinon, chercher le prochain créneau individuel avec findFirstFreeSlotInDay
+      if (!nextSlot) {
         const userAvailability = availabilityMap.get(announcer._id) ?? [];
-        const partialAvail = userAvailability.find(
-          (a) => a.date === nextAvailDate && a.status === "partial"
-        );
+        const announcerMissions = missionsMap.get(announcer._id) ?? [];
+        const bufferBefore = profile?.bufferBefore ?? 0;
+        const bufferAfter = profile?.bufferAfter ?? 0;
+        const defaultSessionDuration = 60; // durée typique pour searchAnnouncers (pas de formule spécifique)
 
-        if (partialAvail?.status === "partial" && partialAvail.timeSlots && partialAvail.timeSlots.length > 0) {
-          // Prendre le premier créneau du jour qui respecte le délai minimum
-          const sortedSlots = [...partialAvail.timeSlots].sort((a, b) => a.startTime.localeCompare(b.startTime));
-          const validSlot = sortedSlots.find((s) =>
-            isSlotAfterMinimumAdvance(nextAvailDate, s.startTime, minBookingTimestamp)
-          );
-          if (validSlot) {
-            nextSlot = {
-              date: nextAvailDate,
-              startTime: validSlot.startTime,
-              endTime: validSlot.endTime,
-            };
+        // Construire la map des jours disponibles dans les 30 prochains jours
+        const in30Days = new Date(today);
+        in30Days.setDate(in30Days.getDate() + 30);
+        const in30DaysStr = `${in30Days.getFullYear()}-${String(in30Days.getMonth() + 1).padStart(2, "0")}-${String(in30Days.getDate()).padStart(2, "0")}`;
+
+        const availDays = new Map<string, { status: "available" | "partial"; timeSlots?: { startTime: string; endTime: string }[] }>();
+        for (const a of userAvailability) {
+          if (a.date < todayStr || a.date > in30DaysStr) continue;
+          if (a.status === "unavailable") continue;
+          if (!availDays.has(a.date)) {
+            availDays.set(a.date, {
+              status: a.status as "available" | "partial",
+              timeSlots: (a.status === "partial" && a.timeSlots) ? a.timeSlots : undefined,
+            });
           }
-        } else if (isSlotAfterMinimumAdvance(nextAvailDate, "09:00", minBookingTimestamp)) {
-          // Jour complet disponible, mettre 09:00 par défaut
-          nextSlot = {
-            date: nextAvailDate,
-            startTime: "09:00",
-          };
+        }
+
+        const sortedAvailDays = Array.from(availDays.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+
+        for (const [day, dayInfo] of sortedAvailDays) {
+          const dayMissions = announcerMissions.filter(
+            (m) => m.startDate <= day && m.endDate >= day && m.startTime && m.endTime
+          ).map((m) => ({ startTime: m.startTime!, endTime: m.endTime! }));
+
+          if (dayInfo.status === "partial" && dayInfo.timeSlots && dayInfo.timeSlots.length > 0) {
+            const freeSlot = findFirstFreeSlotInDay(
+              day, dayInfo.timeSlots, dayMissions, defaultSessionDuration,
+              bufferBefore, bufferAfter, minBookingTimestamp
+            );
+            if (freeSlot) {
+              const windowMinutes = dayInfo.timeSlots.reduce((sum, s) => sum + timeToMinutes(s.endTime) - timeToMinutes(s.startTime), 0);
+              const occupancy = computeSlotOccupancy(dayMissions, windowMinutes || 720);
+              nextSlot = { date: day, startTime: freeSlot.startTime, endTime: freeSlot.endTime, slotOccupancy: occupancy };
+              break;
+            }
+          } else if (dayInfo.status === "available") {
+            const freeSlot = findFirstFreeSlotInDay(
+              day, [{ startTime: "08:00", endTime: "20:00" }], dayMissions, defaultSessionDuration,
+              bufferBefore, bufferAfter, minBookingTimestamp
+            );
+            if (freeSlot) {
+              const occupancy = computeSlotOccupancy(dayMissions, 720);
+              nextSlot = { date: day, startTime: freeSlot.startTime, endTime: freeSlot.endTime, slotOccupancy: occupancy };
+              break;
+            }
+          }
         }
       }
 
@@ -1170,9 +1309,10 @@ export const searchFormules = query({
     }
 
     // Charger les créneaux collectifs et disponibilités
-    const [collectiveSlotsByVariantMap, availabilityMap] = await Promise.all([
+    const [collectiveSlotsByVariantMap, availabilityMap, missionsMap] = await Promise.all([
       batchLoadCollectiveSlotsByVariant(ctx, allVariantIds, todayStr, in7DaysStr),
       batchLoadAvailability(ctx, userIds),
+      batchLoadMissions(ctx, userIds),
     ]);
 
     for (const service of services) {
@@ -1210,6 +1350,22 @@ export const searchFormules = query({
 
       // Récupérer la catégorie depuis le cache (Phase 2 batch loading)
       const categoryDoc = service.category ? categoriesMap.get(service.category) ?? null : null;
+
+      // Résoudre le categoryTypeId pour filtrer les disponibilités correctement
+      let serviceCategoryTypeId: string | null = null;
+      if (categoryDoc) {
+        if (categoryDoc.typeId) {
+          serviceCategoryTypeId = String(categoryDoc.typeId);
+        } else if (categoryDoc.parentCategoryId) {
+          // Sous-catégorie : chercher le typeId du parent dans categoriesMap
+          for (const cat of Array.from(categoriesMap.values())) {
+            if (String(cat._id) === String(categoryDoc.parentCategoryId) && cat.typeId) {
+              serviceCategoryTypeId = String(cat.typeId);
+              break;
+            }
+          }
+        }
+      }
 
       // Récupérer les variantes depuis le cache (Phase 2 batch loading)
       const variants = variantsByServiceMap.get(service._id) ?? [];
@@ -1335,46 +1491,85 @@ export const searchFormules = query({
           if (collectiveSlots.length === 0) continue;
         } else {
           // Formule individuelle: chercher le prochain créneau disponible
-          // Vérifier la disponibilité des 7 prochains jours (élargi pour tenir compte du délai 24h)
           const nextDays: string[] = [];
-          for (let i = 0; i <= 7; i++) {
-            const d = new Date(today);
-            d.setDate(d.getDate() + i);
-            nextDays.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+          // Chercher dans les entrées de disponibilité directement (plus efficace)
+          // Filtrer les entrées futures pour ce user, triées par date
+          const allUserAvail = availabilityMap.get(announcer._id) ?? [];
+
+          const priceUnit = variant.priceUnit || "hour";
+          const isLongDuration = priceUnit === "day" || priceUnit === "week" || priceUnit === "month";
+          const hasNightly = variant.pricing?.nightly !== undefined && variant.pricing.nightly > 0;
+          const needsFullDayOnly = isLongDuration || hasNightly;
+
+          const announcerMissions = missionsMap.get(announcer._id) ?? [];
+          const bufferBefore = profile?.bufferBefore ?? 0;
+          const bufferAfter = profile?.bufferAfter ?? 0;
+          const sessionDuration = variant.duration ?? 60;
+
+          // Extraire les jours disponibles depuis les entrées d'availability (pas d'entrée = indisponible)
+          const availableDays = new Map<string, { status: "available" | "partial"; timeSlots?: { startTime: string; endTime: string }[] }>();
+          const in30Days = new Date(today);
+          in30Days.setDate(in30Days.getDate() + 30);
+          const in30DaysStr = `${in30Days.getFullYear()}-${String(in30Days.getMonth() + 1).padStart(2, "0")}-${String(in30Days.getDate()).padStart(2, "0")}`;
+
+          for (const a of allUserAvail) {
+            if (a.date < todayStr || a.date > in30DaysStr) continue;
+            if (a.status === "unavailable") continue;
+
+            // Matching par categoryTypeId
+            if (serviceCategoryTypeId && a.categoryTypeId) {
+              if (String(a.categoryTypeId) !== serviceCategoryTypeId) continue;
+            }
+
+            // Ne garder que la première entrée par jour (priorité aux entrées typées)
+            if (!availableDays.has(a.date)) {
+              availableDays.set(a.date, {
+                status: a.status,
+                timeSlots: (a.status === "partial" && a.timeSlots) ? a.timeSlots : undefined,
+              });
+            }
           }
 
-          // Récupérer les indisponibilités depuis le cache (Phase 2 batch loading)
-          const userAvailability = availabilityMap.get(announcer._id) ?? [];
-          const unavailableDates = userAvailability.filter((a) => a.status === "unavailable");
-          const unavailableSet = new Set(unavailableDates.map((a) => a.date));
+          // Trier les jours disponibles par date
+          const sortedDays = Array.from(availableDays.entries()).sort((a, b) => a[0].localeCompare(b[0]));
 
-          for (const day of nextDays) {
-            if (!unavailableSet.has(day)) {
-              // Vérifier la dispo partielle depuis le cache (Phase 2)
-              const partial = userAvailability.find(
-                (a) => a.date === day && a.status === "partial"
-              );
+          for (const [day, dayInfo] of sortedDays) {
+            if (needsFullDayOnly) {
+              if (isSlotAfterMinimumAdvance(day, "08:00", minBookingTs)) {
+                const fullDayMissions = announcerMissions.filter(
+                  (m) => m.startDate <= day && m.endDate >= day && m.startTime && m.endTime
+                ).map((m) => ({ startTime: m.startTime!, endTime: m.endTime! }));
+                const occupancy = computeSlotOccupancy(fullDayMissions, 720);
+                nextSlot = { date: day, startTime: "08:00", isFullDay: true, slotOccupancy: occupancy };
+                break;
+              }
+            } else {
+              const dayMissions = announcerMissions.filter(
+                (m) => m.startDate <= day && m.endDate >= day && m.startTime && m.endTime
+              ).map((m) => ({ startTime: m.startTime!, endTime: m.endTime! }));
 
-              if (partial?.status === "partial" && partial.timeSlots && partial.timeSlots.length > 0) {
-                const sortedSlots = [...partial.timeSlots].sort((a, b) => a.startTime.localeCompare(b.startTime));
-                // Trouver le premier créneau qui respecte le délai minimum de réservation
-                const validSlot = sortedSlots.find((s) =>
-                  isSlotAfterMinimumAdvance(day, s.startTime, minBookingTs)
+              if (dayInfo.status === "partial" && dayInfo.timeSlots && dayInfo.timeSlots.length > 0) {
+                const freeSlot = findFirstFreeSlotInDay(
+                  day, dayInfo.timeSlots, dayMissions, sessionDuration,
+                  bufferBefore, bufferAfter, minBookingTs
                 );
-                if (validSlot) {
-                  nextSlot = {
-                    date: day,
-                    startTime: validSlot.startTime,
-                    endTime: validSlot.endTime,
-                  };
+                if (freeSlot) {
+                  const windowMinutes = dayInfo.timeSlots.reduce((sum, s) => sum + timeToMinutes(s.endTime) - timeToMinutes(s.startTime), 0);
+                  const occupancy = computeSlotOccupancy(dayMissions, windowMinutes || 720);
+                  nextSlot = { date: day, startTime: freeSlot.startTime, endTime: freeSlot.endTime, slotOccupancy: occupancy };
                   break;
                 }
-              } else if (isSlotAfterMinimumAdvance(day, "09:00", minBookingTs)) {
-                nextSlot = {
-                  date: day,
-                  startTime: "09:00",
-                };
-                break;
+              } else if (dayInfo.status === "available") {
+                // Journée complète dispo : trouver le premier créneau libre dans la plage 08:00-20:00
+                const freeSlot = findFirstFreeSlotInDay(
+                  day, [{ startTime: "08:00", endTime: "20:00" }], dayMissions, sessionDuration,
+                  bufferBefore, bufferAfter, minBookingTs
+                );
+                if (freeSlot) {
+                  const occupancy = computeSlotOccupancy(dayMissions, 720);
+                  nextSlot = { date: day, startTime: freeSlot.startTime, endTime: freeSlot.endTime, slotOccupancy: occupancy };
+                  break;
+                }
               }
             }
           }
@@ -1559,9 +1754,10 @@ export const searchFormulesInternal = query({
       }
     }
 
-    const [collectiveSlotsByVariantMap, availabilityMap] = await Promise.all([
+    const [collectiveSlotsByVariantMap, availabilityMap, missionsMap] = await Promise.all([
       batchLoadCollectiveSlotsByVariant(ctx, allVariantIds, todayStr, in7DaysStr),
       batchLoadAvailability(ctx, userIds),
+      batchLoadMissions(ctx, userIds),
     ]);
 
     for (const service of services) {
@@ -1597,6 +1793,21 @@ export const searchFormulesInternal = query({
 
       const categoryDoc = service.category ? categoriesMap.get(service.category) ?? null : null;
       const variants = variantsByServiceMap.get(service._id) ?? [];
+
+      // Résoudre le categoryTypeId pour filtrer les disponibilités correctement
+      let serviceCategoryTypeId: string | null = null;
+      if (categoryDoc) {
+        if (categoryDoc.typeId) {
+          serviceCategoryTypeId = String(categoryDoc.typeId);
+        } else if (categoryDoc.parentCategoryId) {
+          for (const cat of Array.from(categoriesMap.values())) {
+            if (String(cat._id) === String(categoryDoc.parentCategoryId) && cat.typeId) {
+              serviceCategoryTypeId = String(cat.typeId);
+              break;
+            }
+          }
+        }
+      }
 
       let statusType: "particulier" | "micro_entrepreneur" | "professionnel" = "particulier";
       if (announcer.accountType === "annonceur_pro") {
@@ -1694,29 +1905,96 @@ export const searchFormulesInternal = query({
           collectiveSlots = collectiveSlots.slice(0, 5);
           if (collectiveSlots.length === 0) continue;
         } else {
-          const nextDays: string[] = [];
-          for (let i = 0; i <= 7; i++) {
-            const d = new Date(today);
-            d.setDate(d.getDate() + i);
-            nextDays.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+          // Chercher dans les entrées de disponibilité directement (pas d'entrée = indisponible)
+          const allUserAvail = availabilityMap.get(announcer._id) ?? [];
+
+          const priceUnit = variant.priceUnit || "hour";
+          const isLongDuration = priceUnit === "day" || priceUnit === "week" || priceUnit === "month";
+          const hasNightly = variant.pricing?.nightly !== undefined && variant.pricing.nightly > 0;
+          const needsFullDayOnly = isLongDuration || hasNightly;
+
+          const announcerMissions = missionsMap.get(announcer._id) ?? [];
+          const bufferBefore = profile?.bufferBefore ?? 0;
+          const bufferAfter = profile?.bufferAfter ?? 0;
+          const sessionDuration = variant.duration ?? 60;
+
+          // Extraire les jours disponibles depuis les entrées d'availability
+          // Pour chaque date, on garde la meilleure entrée (typed match > any, partial > available)
+          const availableDays = new Map<string, { status: "available" | "partial"; timeSlots?: { startTime: string; endTime: string }[]; isTypedMatch: boolean }>();
+          const in30Days = new Date(today);
+          in30Days.setDate(in30Days.getDate() + 30);
+          const in30DaysStr = `${in30Days.getFullYear()}-${String(in30Days.getMonth() + 1).padStart(2, "0")}-${String(in30Days.getDate()).padStart(2, "0")}`;
+
+          for (const a of allUserAvail) {
+            if (a.date < todayStr || a.date > in30DaysStr) continue;
+            if (a.status === "unavailable") continue;
+
+            // Vérifier si c'est un match typé
+            const isTypedMatch = !!(serviceCategoryTypeId && a.categoryTypeId && String(a.categoryTypeId) === serviceCategoryTypeId);
+            const isDifferentType = !!(serviceCategoryTypeId && a.categoryTypeId && String(a.categoryTypeId) !== serviceCategoryTypeId);
+
+            // Ignorer les entrées d'un type différent (si on connaît notre type)
+            if (isDifferentType) continue;
+
+            const existing = availableDays.get(a.date);
+            const entryInfo = {
+              status: a.status as "available" | "partial",
+              timeSlots: (a.status === "partial" && a.timeSlots) ? a.timeSlots : undefined,
+              isTypedMatch,
+            };
+
+            if (!existing) {
+              availableDays.set(a.date, entryInfo);
+            } else {
+              // Remplacer si meilleure entrée : typed > non-typed, partial > available
+              const betterType = entryInfo.isTypedMatch && !existing.isTypedMatch;
+              const betterStatus = entryInfo.status === "partial" && entryInfo.timeSlots && entryInfo.timeSlots.length > 0 && existing.status !== "partial";
+              if (betterType || betterStatus) {
+                availableDays.set(a.date, entryInfo);
+              }
+            }
           }
-          const userAvailability = availabilityMap.get(announcer._id) ?? [];
-          const unavailableSet = new Set(userAvailability.filter((a) => a.status === "unavailable").map((a) => a.date));
-          for (const day of nextDays) {
-            if (!unavailableSet.has(day)) {
-              const partial = userAvailability.find((a) => a.date === day && a.status === "partial");
-              if (partial?.status === "partial" && partial.timeSlots && partial.timeSlots.length > 0) {
-                const sortedSlots = [...partial.timeSlots].sort((a, b) => a.startTime.localeCompare(b.startTime));
-                const validSlot = sortedSlots.find((s) =>
-                  isSlotAfterMinimumAdvance(day, s.startTime, minBookingTsInternal)
+
+          // Trier les jours disponibles par date
+          const sortedDays = Array.from(availableDays.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+
+          for (const [day, dayInfo] of sortedDays) {
+            if (needsFullDayOnly) {
+              if (isSlotAfterMinimumAdvance(day, "08:00", minBookingTsInternal)) {
+                const fullDayMissions = announcerMissions.filter(
+                  (m) => m.startDate <= day && m.endDate >= day && m.startTime && m.endTime
+                ).map((m) => ({ startTime: m.startTime!, endTime: m.endTime! }));
+                const occupancy = computeSlotOccupancy(fullDayMissions, 720);
+                nextSlot = { date: day, startTime: "08:00", isFullDay: true, slotOccupancy: occupancy };
+                break;
+              }
+            } else {
+              const dayMissions = announcerMissions.filter(
+                (m) => m.startDate <= day && m.endDate >= day && m.startTime && m.endTime
+              ).map((m) => ({ startTime: m.startTime!, endTime: m.endTime! }));
+
+              if (dayInfo.status === "partial" && dayInfo.timeSlots && dayInfo.timeSlots.length > 0) {
+                const freeSlot = findFirstFreeSlotInDay(
+                  day, dayInfo.timeSlots, dayMissions, sessionDuration,
+                  bufferBefore, bufferAfter, minBookingTsInternal
                 );
-                if (validSlot) {
-                  nextSlot = { date: day, startTime: validSlot.startTime, endTime: validSlot.endTime };
+                if (freeSlot) {
+                  const windowMinutes = dayInfo.timeSlots.reduce((sum, s) => sum + timeToMinutes(s.endTime) - timeToMinutes(s.startTime), 0);
+                  const occupancy = computeSlotOccupancy(dayMissions, windowMinutes || 720);
+                  nextSlot = { date: day, startTime: freeSlot.startTime, endTime: freeSlot.endTime, slotOccupancy: occupancy };
                   break;
                 }
-              } else if (isSlotAfterMinimumAdvance(day, "09:00", minBookingTsInternal)) {
-                nextSlot = { date: day, startTime: "09:00" };
-                break;
+              } else if (dayInfo.status === "available") {
+                // Journée complète dispo : trouver le premier créneau libre dans la plage 08:00-20:00
+                const freeSlot = findFirstFreeSlotInDay(
+                  day, [{ startTime: "08:00", endTime: "20:00" }], dayMissions, sessionDuration,
+                  bufferBefore, bufferAfter, minBookingTsInternal
+                );
+                if (freeSlot) {
+                  const occupancy = computeSlotOccupancy(dayMissions, 720);
+                  nextSlot = { date: day, startTime: freeSlot.startTime, endTime: freeSlot.endTime, slotOccupancy: occupancy };
+                  break;
+                }
               }
             }
           }
@@ -3500,3 +3778,4 @@ export const createBookingRequest = mutation({
     };
   },
 });
+
