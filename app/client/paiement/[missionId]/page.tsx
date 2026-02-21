@@ -14,10 +14,9 @@ import {
   useStripe,
   useElements,
 } from "@stripe/react-stripe-js";
-import { useQuery, useMutation, useAction } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
-import type { Stripe } from "@stripe/stripe-js";
 import {
   CreditCard,
   Shield,
@@ -30,7 +29,6 @@ import {
   ArrowLeft,
   Lock,
   Star,
-  Check,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -433,6 +431,193 @@ function SavedCardSelector({
   );
 }
 
+// Composant paiement par carte sauvegardée (wrappé dans Elements pour accès à useStripe)
+function SavedCardPayment({
+  cards,
+  selectedCardId,
+  onSelect,
+  onUseNew,
+  missionId,
+  token,
+  amount,
+  clientSecret,
+  paymentIntentId,
+  onSuccess,
+  onFallbackToNew,
+}: {
+  cards: { id: string; brand: string; last4: string; expMonth: number; expYear: number; isDefault: boolean }[];
+  selectedCardId: string | null;
+  onSelect: (cardId: string) => void;
+  onUseNew: () => void;
+  missionId: string;
+  token: string;
+  amount: number;
+  clientSecret: string;
+  paymentIntentId: string;
+  onSuccess: () => void;
+  onFallbackToNew: (errorMsg: string) => void;
+}) {
+  const stripe = useStripe();
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const payWithSavedCard = useMutation(api.api.savedCards.payWithSavedCard);
+  const confirmPaymentSuccess = useMutation(api.api.stripeClient.confirmPaymentSuccess);
+
+  const handlePay = async () => {
+    if (!token || !selectedCardId || !stripe) return;
+    setIsProcessing(true);
+    setError(null);
+
+    try {
+      const result = await payWithSavedCard({
+        token,
+        missionId: missionId as Id<"missions">,
+        savedCardId: selectedCardId as Id<"savedPaymentMethods">,
+      });
+
+      if (result.status === "processing" && result.clientSecret) {
+        // Polling du PaymentIntent via Stripe.js
+        const maxAttempts = 10;
+        for (let i = 0; i < maxAttempts; i++) {
+          await new Promise((r) => setTimeout(r, 2000));
+
+          const { paymentIntent } = await stripe.retrievePaymentIntent(result.clientSecret);
+          if (!paymentIntent) continue;
+
+          if (paymentIntent.status === "succeeded" || paymentIntent.status === "requires_capture") {
+            // Confirmer côté Convex
+            try {
+              await confirmPaymentSuccess({
+                token,
+                missionId: missionId as Id<"missions">,
+                paymentIntentId: paymentIntent.id,
+                paymentStatus: paymentIntent.status,
+              });
+            } catch (err) {
+              console.error("Erreur confirmation Convex:", err);
+            }
+            onSuccess();
+            return;
+          }
+
+          if (paymentIntent.status === "requires_action") {
+            // Gérer 3D Secure
+            const { error: actionError } = await stripe.handleNextAction({
+              clientSecret: result.clientSecret,
+            });
+
+            if (actionError) {
+              // 3DS échoué → fallback vers nouvelle carte
+              const selectedCard = cards.find((c) => c.id === selectedCardId);
+              const last4 = selectedCard?.last4 || "****";
+              onFallbackToNew(
+                `L'authentification 3D Secure a échoué pour votre carte •••• ${last4}. Veuillez utiliser une autre carte.`
+              );
+              return;
+            }
+
+            // 3DS réussi → re-vérifier le statut
+            const { paymentIntent: piAfter3ds } = await stripe.retrievePaymentIntent(result.clientSecret);
+            if (piAfter3ds && (piAfter3ds.status === "succeeded" || piAfter3ds.status === "requires_capture")) {
+              try {
+                await confirmPaymentSuccess({
+                  token,
+                  missionId: missionId as Id<"missions">,
+                  paymentIntentId: piAfter3ds.id,
+                  paymentStatus: piAfter3ds.status,
+                });
+              } catch (err) {
+                console.error("Erreur confirmation Convex après 3DS:", err);
+              }
+              onSuccess();
+              return;
+            }
+
+            if (piAfter3ds && ["requires_payment_method", "canceled"].includes(piAfter3ds.status)) {
+              const selectedCard = cards.find((c) => c.id === selectedCardId);
+              const last4 = selectedCard?.last4 || "****";
+              onFallbackToNew(
+                `Le paiement avec votre carte •••• ${last4} a été refusé. Veuillez utiliser une autre carte.`
+              );
+              return;
+            }
+            // Sinon continuer le polling
+            continue;
+          }
+
+          if (["requires_payment_method", "canceled"].includes(paymentIntent.status)) {
+            // Paiement refusé → fallback
+            const selectedCard = cards.find((c) => c.id === selectedCardId);
+            const last4 = selectedCard?.last4 || "****";
+            onFallbackToNew(
+              `Le paiement avec votre carte •••• ${last4} a été refusé. Veuillez utiliser une autre carte.`
+            );
+            return;
+          }
+        }
+
+        // Timeout polling → fallback
+        onFallbackToNew(
+          "Le paiement n'a pas pu être confirmé dans le temps imparti. Veuillez réessayer avec une autre carte."
+        );
+      }
+    } catch (err) {
+      console.error("Erreur paiement carte sauvegardée:", err);
+      const errorMsg = err instanceof Error ? err.message : "Erreur lors du paiement";
+      setError(errorMsg);
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <>
+      <SavedCardSelector
+        cards={cards}
+        selectedCardId={selectedCardId}
+        onSelect={onSelect}
+        onUseNew={onUseNew}
+      />
+
+      {error && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-xl text-red-700"
+        >
+          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+          <p className="text-sm">{error}</p>
+        </motion.div>
+      )}
+
+      <motion.button
+        onClick={handlePay}
+        disabled={!selectedCardId || isProcessing || !stripe}
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        className="w-full py-4 bg-gradient-to-r from-primary to-primary/90 text-white rounded-xl font-semibold text-lg shadow-lg shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+      >
+        {isProcessing ? (
+          <>
+            <Loader2 className="w-5 h-5 animate-spin" />
+            Traitement en cours...
+          </>
+        ) : (
+          <>
+            <Lock className="w-5 h-5" />
+            Payer {(amount / 100).toFixed(2)} €
+          </>
+        )}
+      </motion.button>
+
+      <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+        <Shield className="w-4 h-4" />
+        <span>Paiement sécurisé par Stripe</span>
+      </div>
+    </>
+  );
+}
+
 // Success view
 function SuccessView() {
   return (
@@ -475,7 +660,6 @@ export default function PaymentPage() {
   const [paymentMode, setPaymentMode] = useState<"saved" | "new">("saved");
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [saveCard, setSaveCard] = useState(false);
-  const [isPayingSaved, setIsPayingSaved] = useState(false);
   const [savedCardError, setSavedCardError] = useState<string | null>(null);
 
   const token =
@@ -498,10 +682,6 @@ export default function PaymentPage() {
     token ? { token } : "skip"
   );
 
-  // Mutations
-  const payWithSavedCard = useMutation(api.api.savedCards.payWithSavedCard);
-  const confirmPaymentSuccess = useMutation(api.api.stripeClient.confirmPaymentSuccess);
-
   // Auto-select default card
   useEffect(() => {
     if (savedCards && savedCards.length > 0 && !selectedCardId) {
@@ -512,39 +692,6 @@ export default function PaymentPage() {
       setPaymentMode("new");
     }
   }, [savedCards, selectedCardId]);
-
-  // Payer avec carte sauvegardée
-  const handlePayWithSaved = async () => {
-    if (!token || !selectedCardId) return;
-    setIsPayingSaved(true);
-    setSavedCardError(null);
-
-    try {
-      const result = await payWithSavedCard({
-        token,
-        missionId: missionId as Id<"missions">,
-        savedCardId: selectedCardId as Id<"savedPaymentMethods">,
-      });
-
-      // Le paiement est lancé en async via scheduler
-      // On attend un peu puis on confirme côté Convex
-      // Le webhook gérera le reste, mais on peut aussi poll le statut
-      if (result.status === "processing") {
-        // Attendre que le paiement soit traité
-        // Le webhook mettra à jour le statut
-        // On redirige vers succès après un délai
-        setTimeout(() => {
-          setPaymentSuccess(true);
-        }, 3000);
-      }
-    } catch (err) {
-      console.error("Erreur paiement carte sauvegardée:", err);
-      setSavedCardError(
-        err instanceof Error ? err.message : "Erreur lors du paiement"
-      );
-      setIsPayingSaved(false);
-    }
-  };
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -769,8 +916,8 @@ export default function PaymentPage() {
         >
           {/* Sélecteur de cartes sauvegardées */}
           {savedCards && savedCards.length > 0 && paymentMode === "saved" && (
-            <>
-              <SavedCardSelector
+            <Elements stripe={getStripePromise(stripePublicKey)} options={options}>
+              <SavedCardPayment
                 cards={savedCards}
                 selectedCardId={selectedCardId}
                 onSelect={(id) => {
@@ -778,52 +925,45 @@ export default function PaymentPage() {
                   setPaymentMode("saved");
                 }}
                 onUseNew={() => setPaymentMode("new")}
+                missionId={missionId}
+                token={token || ""}
+                amount={paymentInfo.payment.amount}
+                clientSecret={paymentInfo.payment.clientSecret}
+                paymentIntentId={paymentInfo.payment.paymentIntentId || ""}
+                onSuccess={() => setPaymentSuccess(true)}
+                onFallbackToNew={(errorMsg) => {
+                  setSavedCardError(errorMsg);
+                  setPaymentMode("new");
+                  setSaveCard(true);
+                }}
               />
-
-              {savedCardError && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-xl text-red-700"
-                >
-                  <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                  <p className="text-sm">{savedCardError}</p>
-                </motion.div>
-              )}
-
-              <motion.button
-                onClick={handlePayWithSaved}
-                disabled={!selectedCardId || isPayingSaved}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className="w-full py-4 bg-gradient-to-r from-primary to-primary/90 text-white rounded-xl font-semibold text-lg shadow-lg shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
-              >
-                {isPayingSaved ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Traitement en cours...
-                  </>
-                ) : (
-                  <>
-                    <Lock className="w-5 h-5" />
-                    Payer {(paymentInfo.payment.amount / 100).toFixed(2)} €
-                  </>
-                )}
-              </motion.button>
-
-              <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
-                <Shield className="w-4 h-4" />
-                <span>Paiement sécurisé par Stripe</span>
-              </div>
-            </>
+            </Elements>
           )}
 
           {/* Formulaire nouvelle carte */}
           {(paymentMode === "new" || !savedCards || savedCards.length === 0) && (
             <>
+              {savedCardError && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800"
+                >
+                  <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">{savedCardError}</p>
+                    <p className="text-xs text-amber-600 mt-1">
+                      Veuillez utiliser une autre carte ci-dessous.
+                    </p>
+                  </div>
+                </motion.div>
+              )}
               {savedCards && savedCards.length > 0 && (
                 <button
-                  onClick={() => setPaymentMode("saved")}
+                  onClick={() => {
+                    setPaymentMode("saved");
+                    setSavedCardError(null);
+                  }}
                   className="flex items-center gap-2 text-sm text-primary font-medium hover:underline"
                 >
                   <ArrowLeft className="w-4 h-4" />
