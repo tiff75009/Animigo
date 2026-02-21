@@ -93,10 +93,77 @@ function CheckoutForm({
     awaitingSaveReady && token ? { token } : "skip"
   );
 
-  // Quand le PI est prêt (flag SAVE_CARD_READY), lancer le paiement Stripe
+  // Timeout : si le flag n'arrive pas en 15s, procéder sans sauvegarde
+  useEffect(() => {
+    if (!awaitingSaveReady) return;
+    const timeout = setTimeout(() => {
+      console.warn("Timeout atteint pour SAVE_CARD_READY, paiement sans sauvegarde carte");
+      setAwaitingSaveReady(false);
+      setSaveCardFailed(true);
+    }, 15000);
+    return () => clearTimeout(timeout);
+  }, [awaitingSaveReady]);
+
+  // State pour indiquer si la sauvegarde carte a échoué (on procède quand même au paiement)
+  const [saveCardFailed, setSaveCardFailed] = useState(false);
+
+  // Quand le timeout déclenche saveCardFailed, faire le paiement sans sauvegarde
+  useEffect(() => {
+    if (!saveCardFailed || !stripe || !elements) return;
+
+    const proceedWithoutSave = async () => {
+      try {
+        const { error: confirmError, paymentIntent } = await stripe.confirmPayment({
+          elements,
+          confirmParams: {
+            return_url: `${window.location.origin}/client/paiement/${missionId}/succes`,
+          },
+          redirect: "if_required",
+        });
+
+        if (confirmError) {
+          setError(confirmError.message || "Le paiement a échoué");
+          setIsProcessing(false);
+        } else if (paymentIntent && (paymentIntent.status === "requires_capture" || paymentIntent.status === "succeeded")) {
+          try {
+            await confirmPaymentSuccess({
+              token,
+              missionId: missionId as Id<"missions">,
+              paymentIntentId: paymentIntent.id,
+              paymentStatus: paymentIntent.status,
+            });
+          } catch (err) {
+            console.error("Erreur confirmation Convex:", err);
+          }
+          onSuccess();
+        }
+      } catch (err) {
+        console.error("Erreur paiement (sans sauvegarde):", err);
+        setError("Une erreur est survenue lors du paiement");
+        setIsProcessing(false);
+      } finally {
+        setSaveCardFailed(false);
+      }
+    };
+
+    proceedWithoutSave();
+  }, [saveCardFailed, stripe, elements]);
+
+  // Quand le PI est prêt (flag SAVE_CARD_READY ou SAVE_CARD_ERROR), lancer le paiement Stripe
   useEffect(() => {
     if (!awaitingSaveReady || !stripe || !elements) return;
-    if (setupStatus?.clientSecret !== "SAVE_CARD_READY") return;
+    if (!setupStatus?.clientSecret) return;
+
+    // SAVE_CARD_ERROR → procéder sans sauvegarde
+    if (setupStatus.clientSecret === "SAVE_CARD_ERROR") {
+      console.warn("Erreur préparation sauvegarde carte, paiement sans sauvegarde");
+      clearSetupIntent({ token }).catch(() => {});
+      setAwaitingSaveReady(false);
+      setSaveCardFailed(true);
+      return;
+    }
+
+    if (setupStatus.clientSecret !== "SAVE_CARD_READY") return;
 
     const proceedWithPayment = async () => {
       try {

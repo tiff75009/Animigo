@@ -293,15 +293,32 @@ export const preparePaymentIntentForSave = internalAction({
     }
 
     // 2. Mettre à jour le PaymentIntent avec customer + setup_future_usage
-    await stripe.paymentIntents.update(args.paymentIntentId, {
-      customer: customerId,
-      setup_future_usage: "off_session",
-      metadata: { saveCard: "true" },
-    });
+    let piUpdateSuccess = false;
+    try {
+      await stripe.paymentIntents.update(args.paymentIntentId, {
+        customer: customerId,
+        setup_future_usage: "off_session",
+        metadata: { saveCard: "true" },
+      });
+      piUpdateSuccess = true;
+      console.log("PI mis à jour avec setup_future_usage et customer:", args.paymentIntentId);
+    } catch (stripeError) {
+      console.error("Erreur mise à jour PI avec setup_future_usage:", stripeError);
+      // Fallback : mettre à jour seulement customer + metadata (sans setup_future_usage)
+      try {
+        await stripe.paymentIntents.update(args.paymentIntentId, {
+          customer: customerId,
+          metadata: { saveCard: "true" },
+        });
+        piUpdateSuccess = true;
+        console.log("PI mis à jour sans setup_future_usage (fallback):", args.paymentIntentId);
+      } catch (fallbackError) {
+        console.error("Erreur fallback mise à jour PI:", fallbackError);
+      }
+    }
 
-    console.log("PI mis à jour avec setup_future_usage et customer:", args.paymentIntentId);
-
-    // 3. Signaler la complétion via un flag sur le user
+    // 3. Signaler la complétion (ou l'erreur) via un flag sur le user
+    const flagValue = piUpdateSuccess ? "SAVE_CARD_READY" : "SAVE_CARD_ERROR";
     const flagResponse = await fetch(convexApiUrl, {
       method: "POST",
       headers: {
@@ -310,7 +327,7 @@ export const preparePaymentIntentForSave = internalAction({
       },
       body: JSON.stringify({
         path: "api/savedCardsInternal:setSetupIntentSecret",
-        args: { userId: args.userId, setupIntentSecret: "SAVE_CARD_READY" },
+        args: { userId: args.userId, setupIntentSecret: flagValue },
       }),
     });
 
@@ -318,7 +335,7 @@ export const preparePaymentIntentForSave = internalAction({
       console.error("Erreur signalement complétion:", await flagResponse.text());
     }
 
-    console.log("=== preparePaymentIntentForSave END (ready) ===");
-    return { success: true, customerId };
+    console.log(`=== preparePaymentIntentForSave END (${flagValue}) ===`);
+    return { success: piUpdateSuccess, customerId };
   },
 });

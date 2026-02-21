@@ -162,10 +162,25 @@ export const handleStripeWebhook = internalAction({
           paymentIntent.payment_method &&
           typeof paymentIntent.customer === "string"
         ) {
+          console.log(`Sauvegarde carte demandée - customer: ${paymentIntent.customer}, pm: ${paymentIntent.payment_method}`);
           try {
             const pmId = typeof paymentIntent.payment_method === "string"
               ? paymentIntent.payment_method
               : paymentIntent.payment_method.id;
+
+            // Attacher explicitement le PM au customer (no-op si déjà attaché via setup_future_usage)
+            try {
+              await stripe.paymentMethods.attach(pmId, {
+                customer: paymentIntent.customer as string,
+              });
+              console.log(`PM ${pmId} attaché au customer ${paymentIntent.customer}`);
+            } catch (attachError: any) {
+              // Ignorer si déjà attaché
+              if (attachError?.code !== "resource_already_exists") {
+                console.warn("Erreur attachement PM (non bloquante):", attachError?.message || attachError);
+              }
+            }
+
             const pm = await stripe.paymentMethods.retrieve(pmId);
             if (pm.card) {
               await ctx.runMutation(
@@ -179,11 +194,15 @@ export const handleStripeWebhook = internalAction({
                   expYear: pm.card.exp_year,
                 }
               );
-              console.log(`Carte sauvegardée via payment_intent.succeeded: ${pm.id}`);
+              console.log(`Carte sauvegardée via payment_intent.succeeded: ${pm.id} (${pm.card.brand} **** ${pm.card.last4})`);
+            } else {
+              console.warn(`PM ${pmId} n'est pas une carte, type: ${pm.type}`);
             }
           } catch (e) {
             console.error("Erreur sauvegarde carte via PI:", e);
           }
+        } else if (paymentIntent.metadata?.saveCard === "true") {
+          console.warn(`Sauvegarde carte demandée mais conditions non remplies - pm: ${paymentIntent.payment_method}, customer: ${paymentIntent.customer} (type: ${typeof paymentIntent.customer})`);
         }
         break;
       }
