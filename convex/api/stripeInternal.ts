@@ -785,6 +785,10 @@ export const updateConnectAccountStatus = internalMutation({
  * Déclencher l'auto-capture des paiements (appelé par cron)
  * Cette mutation récupère les configs et planifie les captures
  * (contourne le bug ctx.runQuery dans les actions sur Convex self-hosted)
+ *
+ * Gère 2 cas :
+ * 1. Legacy pré-autorisation (payment.status === "authorized") → capture manuelle
+ * 2. Paiement immédiat déjà capturé mais DB pas à jour → sync le statut
  */
 export const triggerAutoCapture = internalMutation({
   args: {},
@@ -800,45 +804,75 @@ export const triggerAutoCapture = internalMutation({
 
     if (!stripeSecretKeyConfig?.value) {
       console.log("Stripe non configuré - clé secrète manquante");
-      return { processed: 0, errors: 0, total: 0, error: "Stripe non configuré" };
+      return { scheduled: 0, synced: 0 };
     }
 
-    // Récupérer les missions éligibles à l'auto-capture
-    const allMissions = await ctx.db.query("missions").collect();
+    // Utiliser l'index by_auto_capture au lieu de charger toutes les missions
+    const missionsWithAutoCapture = await ctx.db
+      .query("missions")
+      .withIndex("by_auto_capture")
+      .collect();
 
-    const eligibleMissions = allMissions.filter(
+    // Filtrer les missions éligibles (autoCaptureScheduledAt dépassé + status/paymentStatus cohérents)
+    const eligibleMissions = missionsWithAutoCapture.filter(
       (m) =>
-        m.status === "completed" &&
-        m.paymentStatus === "pending" &&
         m.autoCaptureScheduledAt &&
         m.autoCaptureScheduledAt <= now &&
-        m.stripePaymentId
+        m.stripePaymentId &&
+        (
+          // Cas 1 : paiement en attente (legacy pré-autorisation OU DB pas sync)
+          (m.status === "completed" && m.paymentStatus === "pending") ||
+          // Cas 2 : mission upcoming avec paymentStatus pending (désynchronisation)
+          (m.status === "upcoming" && m.paymentStatus === "pending")
+        )
     );
+
+    if (eligibleMissions.length === 0) {
+      console.log("Auto-capture: aucune mission éligible");
+      return { scheduled: 0, synced: 0 };
+    }
 
     console.log(`Auto-capture: ${eligibleMissions.length} missions éligibles`);
 
-    // Récupérer les infos de paiement et planifier les captures
     let scheduled = 0;
+    let synced = 0;
+
     for (const mission of eligibleMissions) {
-      if (mission.stripePaymentId) {
-        const payment = await ctx.db.get(mission.stripePaymentId);
-        if (
-          payment &&
-          payment.status === "authorized" &&
-          payment.paymentIntentId
-        ) {
-          // Planifier la capture avec la clé Stripe
-          await ctx.scheduler.runAfter(0, internal.api.stripe.capturePayment, {
-            paymentIntentId: payment.paymentIntentId,
-            missionId: mission._id,
-            stripeSecretKey: stripeSecretKeyConfig.value,
-          });
-          scheduled++;
-          console.log(`Auto-capture planifiée pour mission ${mission._id}`);
-        }
+      if (!mission.stripePaymentId) continue;
+
+      const payment = await ctx.db.get(mission.stripePaymentId);
+      if (!payment || !payment.paymentIntentId) continue;
+
+      if (payment.status === "authorized") {
+        // Pré-autorisation legacy → planifier la capture (vérifiera le statut Stripe avant)
+        await ctx.scheduler.runAfter(0, internal.api.stripe.capturePayment, {
+          paymentIntentId: payment.paymentIntentId,
+          missionId: mission._id,
+          stripeSecretKey: stripeSecretKeyConfig.value,
+        });
+        scheduled++;
+        console.log(`Auto-capture planifiée pour mission ${mission._id}`);
+      } else if (payment.status === "captured" && mission.paymentStatus === "pending") {
+        // DB désynchronisée : le paiement est capturé mais la mission dit "pending"
+        await ctx.db.patch(mission._id, {
+          paymentStatus: "paid",
+          updatedAt: now,
+        });
+        synced++;
+        console.log(`Sync paymentStatus → paid pour mission ${mission._id}`);
+      } else if (payment.status === "pending") {
+        // Paiement jamais confirmé mais autoCaptureScheduledAt dépassé → vérifier côté Stripe
+        await ctx.scheduler.runAfter(0, internal.api.stripe.capturePayment, {
+          paymentIntentId: payment.paymentIntentId,
+          missionId: mission._id,
+          stripeSecretKey: stripeSecretKeyConfig.value,
+        });
+        scheduled++;
+        console.log(`Vérification/capture planifiée pour mission ${mission._id} (payment pending)`);
       }
     }
 
-    return { processed: 0, errors: 0, total: eligibleMissions.length, scheduled };
+    console.log(`=== triggerAutoCapture END: ${scheduled} planifiées, ${synced} synchronisées ===`);
+    return { scheduled, synced };
   },
 });

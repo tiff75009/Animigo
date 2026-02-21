@@ -257,14 +257,17 @@ export const confirmPaymentSuccess = mutation({
         missionId: args.missionId,
       });
 
-      // Envoyer le reçu de paiement par email au client
+      // Envoyer le reçu de paiement par email au client (si pas déjà envoyé par le webhook)
+      const freshPayment = await ctx.db.get(payment._id);
+      const receiptAlreadySent = freshPayment?.receiptEmailSent === true;
+
       const announcer = await ctx.db.get(mission.announcerId);
       const apiKeyConfig = await ctx.db
         .query("systemConfig")
         .withIndex("by_key", (q) => q.eq("key", "resend_api_key"))
         .first();
 
-      if (apiKeyConfig?.value && client?.email) {
+      if (apiKeyConfig?.value && client?.email && !receiptAlreadySent) {
         const fromEmailConfig = await ctx.db
           .query("systemConfig")
           .withIndex("by_key", (q) => q.eq("key", "resend_from_email"))

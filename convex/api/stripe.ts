@@ -748,6 +748,39 @@ export const capturePayment = internalAction({
     const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
 
     try {
+      // Vérifier le statut du PI avant de tenter la capture
+      const piCheck = await stripe.paymentIntents.retrieve(args.paymentIntentId);
+
+      if (piCheck.status === "succeeded") {
+        // Déjà capturé (paiement immédiat ou capture automatique)
+        console.log("PaymentIntent déjà capturé (succeeded), mise à jour base uniquement:", piCheck.id);
+
+        let receiptUrl: string | undefined;
+        if (piCheck.latest_charge) {
+          const chargeId = typeof piCheck.latest_charge === "string" ? piCheck.latest_charge : piCheck.latest_charge.id;
+          const charge = await stripe.charges.retrieve(chargeId);
+          receiptUrl = charge.receipt_url || undefined;
+        }
+
+        await ctx.runMutation(internal.api.stripeInternal.markPaymentCaptured, {
+          missionId: args.missionId,
+          paymentIntentId: args.paymentIntentId,
+          receiptUrl,
+        });
+
+        return { success: true, alreadyCaptured: true };
+      }
+
+      if (piCheck.status === "canceled") {
+        console.log("PaymentIntent annulé, skip capture:", piCheck.id);
+        return { success: false, reason: "canceled" };
+      }
+
+      if (piCheck.status !== "requires_capture") {
+        console.log(`PaymentIntent status inattendu: ${piCheck.status}, skip capture:`, piCheck.id);
+        return { success: false, reason: `unexpected_status_${piCheck.status}` };
+      }
+
       const paymentIntent = await stripe.paymentIntents.capture(
         args.paymentIntentId
       );
@@ -775,7 +808,16 @@ export const capturePayment = internalAction({
       });
 
       return { success: true, paymentIntent };
-    } catch (error) {
+    } catch (error: any) {
+      // Gérer l'erreur "already captured" comme un succès
+      if (error?.code === "payment_intent_unexpected_state") {
+        console.log("PaymentIntent déjà dans un état final, mise à jour base:", args.paymentIntentId);
+        await ctx.runMutation(internal.api.stripeInternal.markPaymentCaptured, {
+          missionId: args.missionId,
+          paymentIntentId: args.paymentIntentId,
+        });
+        return { success: true, alreadyCaptured: true };
+      }
       console.error("Erreur capture PaymentIntent:", error);
       throw error;
     }
