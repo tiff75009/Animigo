@@ -195,27 +195,30 @@ export default function PaiementsPage() {
       </div>
 
       <div className="space-y-8">
-        {/* Délais d'acceptation */}
+        {/* Délai de réponse annonceur */}
         <motion.div
           className="bg-slate-900 rounded-xl p-6 border border-slate-800"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <div className="flex items-center gap-3 mb-6">
+          <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-cyan-500/20 rounded-lg">
               <Timer className="w-5 h-5 text-cyan-400" />
             </div>
-            <h2 className="text-lg font-semibold text-white">Délais d&apos;acceptation</h2>
+            <h2 className="text-lg font-semibold text-white">Délai de réponse annonceur</h2>
           </div>
+          <p className="text-sm text-slate-400 mb-6">
+            Quand un client réserve un service, l&apos;annonceur reçoit une notification (email + push).
+            Il dispose d&apos;un délai limité pour accepter ou refuser. Passé ce délai, la réservation est <span className="text-red-400 font-medium">automatiquement refusée</span> et le client est prévenu.
+          </p>
 
           <div className="space-y-6">
             {/* Toggle principal */}
             <div className="flex items-center justify-between p-4 bg-slate-800 rounded-lg">
               <div className="flex-1">
-                <p className="text-slate-200 font-medium">Activer le système de délais</p>
+                <p className="text-slate-200 font-medium">Activer l&apos;auto-refus</p>
                 <p className="text-sm text-slate-400 mt-1">
-                  Les annonceurs auront un temps limité pour accepter les demandes.
-                  Passé ce délai, la mission sera automatiquement refusée.
+                  Si désactivé, les annonceurs ont un temps illimité pour répondre.
                 </p>
               </div>
               <button
@@ -236,11 +239,14 @@ export default function PaiementsPage() {
 
             {deadlineEnabled && (
               <>
-                {/* Minimum réservation */}
+                {/* Minimum réservation à l'avance (côté client) */}
                 <div className="p-4 bg-slate-800/50 rounded-lg">
-                  <label className="block text-sm font-medium text-slate-300 mb-3">
+                  <label className="block text-sm font-medium text-slate-300 mb-1">
                     Réservation minimum à l&apos;avance
                   </label>
+                  <p className="text-xs text-slate-500 mb-3">
+                    Le client ne peut pas réserver si la mission commence dans moins de ce délai.
+                  </p>
                   <div className="flex items-center gap-4">
                     <input
                       type="range"
@@ -255,158 +261,169 @@ export default function PaiementsPage() {
                       {formatHoursDisplay(minimumBookingAdvanceHours)}
                     </div>
                   </div>
-                  <p className="text-xs text-slate-500 mt-2">
-                    Le client doit réserver au minimum ce délai avant le début de la prestation.
-                  </p>
                 </div>
 
-                {/* Seuils d'intervalle */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 bg-slate-800/50 rounded-lg">
-                    <label className="block text-sm font-medium text-slate-300 mb-3">
-                      Seuil &quot;mission proche&quot;
-                    </label>
-                    <div className="flex items-center gap-4">
-                      <input
-                        type="range"
-                        min={1}
-                        max={14}
-                        value={intervalShortDays}
-                        onChange={(e) => setIntervalShortDays(Number(e.target.value))}
-                        className="flex-1 accent-cyan-500"
-                      />
-                      <div className="w-16 px-3 py-2 bg-slate-700 rounded-lg text-center font-semibold text-cyan-400">
-                        {intervalShortDays}j
+                {/* 3 niveaux unifiés : chaque bloc = plage de dates + délai + slider seuil */}
+                <div className="space-y-4">
+                  {/* Niveau 1 : Mission urgente */}
+                  <div className="p-5 bg-green-500/10 border border-green-500/30 rounded-lg">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
+                      <h3 className="text-sm font-semibold text-green-300">Mission urgente</h3>
+                    </div>
+                    <p className="text-xs text-green-400/60 mb-4">
+                      La mission commence bientôt, l&apos;annonceur doit répondre rapidement.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-2">
+                          S&apos;applique si la mission commence dans moins de...
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="range"
+                            min={1}
+                            max={14}
+                            value={intervalShortDays}
+                            onChange={(e) => setIntervalShortDays(Number(e.target.value))}
+                            className="flex-1 accent-green-500"
+                          />
+                          <div className="w-16 px-3 py-2 bg-green-500/20 rounded-lg text-center font-semibold text-green-400">
+                            {intervalShortDays}j
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-2">
+                          L&apos;annonceur a ce délai pour accepter ou refuser
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="range"
+                            min={1}
+                            max={48}
+                            value={deadlineShortHours}
+                            onChange={(e) => setDeadlineShortHours(Number(e.target.value))}
+                            className="flex-1 accent-green-500"
+                          />
+                          <div className="w-16 px-3 py-2 bg-green-500/20 rounded-lg text-center font-semibold text-green-400">
+                            {formatHoursDisplay(deadlineShortHours)}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <p className="text-xs text-slate-500 mt-2">
-                      Missions commençant dans moins de {intervalShortDays} jours
-                    </p>
                   </div>
 
-                  <div className="p-4 bg-slate-800/50 rounded-lg">
-                    <label className="block text-sm font-medium text-slate-300 mb-3">
-                      Seuil &quot;mission lointaine&quot;
-                    </label>
-                    <div className="flex items-center gap-4">
-                      <input
-                        type="range"
-                        min={14}
-                        max={90}
-                        value={intervalLongDays}
-                        onChange={(e) => setIntervalLongDays(Number(e.target.value))}
-                        className="flex-1 accent-cyan-500"
-                      />
-                      <div className="w-16 px-3 py-2 bg-slate-700 rounded-lg text-center font-semibold text-cyan-400">
-                        {intervalLongDays}j
+                  {/* Niveau 2 : Mission normale */}
+                  <div className="p-5 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-2.5 h-2.5 rounded-full bg-orange-400" />
+                      <h3 className="text-sm font-semibold text-orange-300">Mission normale</h3>
+                    </div>
+                    <p className="text-xs text-orange-400/60 mb-4">
+                      La mission est dans {intervalShortDays} à {intervalLongDays} jours, délai de réponse standard.
+                    </p>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-2">
+                        L&apos;annonceur a ce délai pour accepter ou refuser
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="range"
+                          min={12}
+                          max={96}
+                          value={deadlineMediumHours}
+                          onChange={(e) => setDeadlineMediumHours(Number(e.target.value))}
+                          className="flex-1 accent-orange-500"
+                        />
+                        <div className="w-16 px-3 py-2 bg-orange-500/20 rounded-lg text-center font-semibold text-orange-400">
+                          {formatHoursDisplay(deadlineMediumHours)}
+                        </div>
                       </div>
                     </div>
-                    <p className="text-xs text-slate-500 mt-2">
-                      Missions commençant dans plus de {intervalLongDays} jours
+                  </div>
+
+                  {/* Niveau 3 : Mission lointaine */}
+                  <div className="p-5 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-2.5 h-2.5 rounded-full bg-blue-400" />
+                      <h3 className="text-sm font-semibold text-blue-300">Mission lointaine</h3>
+                    </div>
+                    <p className="text-xs text-blue-400/60 mb-4">
+                      La mission est loin, l&apos;annonceur a plus de temps pour répondre.
                     </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-2">
+                          S&apos;applique si la mission commence dans plus de...
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="range"
+                            min={14}
+                            max={90}
+                            value={intervalLongDays}
+                            onChange={(e) => setIntervalLongDays(Number(e.target.value))}
+                            className="flex-1 accent-blue-500"
+                          />
+                          <div className="w-16 px-3 py-2 bg-blue-500/20 rounded-lg text-center font-semibold text-blue-400">
+                            {intervalLongDays}j
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-2">
+                          L&apos;annonceur a ce délai pour accepter ou refuser
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="range"
+                            min={24}
+                            max={336}
+                            step={12}
+                            value={deadlineLongHours}
+                            onChange={(e) => setDeadlineLongHours(Number(e.target.value))}
+                            className="flex-1 accent-blue-500"
+                          />
+                          <div className="w-16 px-3 py-2 bg-blue-500/20 rounded-lg text-center font-semibold text-blue-400">
+                            {formatHoursDisplay(deadlineLongHours)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Délais d'acceptation */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
-                    <label className="block text-sm font-medium text-green-300 mb-3">
-                      Délai mission proche
-                    </label>
-                    <div className="flex items-center gap-4">
-                      <input
-                        type="range"
-                        min={1}
-                        max={48}
-                        value={deadlineShortHours}
-                        onChange={(e) => setDeadlineShortHours(Number(e.target.value))}
-                        className="flex-1 accent-green-500"
-                      />
-                      <div className="w-16 px-3 py-2 bg-green-500/20 rounded-lg text-center font-semibold text-green-400">
-                        {formatHoursDisplay(deadlineShortHours)}
-                      </div>
-                    </div>
-                    <p className="text-xs text-green-400/70 mt-2">
-                      &lt; {intervalShortDays} jours
-                    </p>
-                  </div>
-
-                  <div className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-lg">
-                    <label className="block text-sm font-medium text-orange-300 mb-3">
-                      Délai mission moyenne
-                    </label>
-                    <div className="flex items-center gap-4">
-                      <input
-                        type="range"
-                        min={12}
-                        max={96}
-                        value={deadlineMediumHours}
-                        onChange={(e) => setDeadlineMediumHours(Number(e.target.value))}
-                        className="flex-1 accent-orange-500"
-                      />
-                      <div className="w-16 px-3 py-2 bg-orange-500/20 rounded-lg text-center font-semibold text-orange-400">
-                        {formatHoursDisplay(deadlineMediumHours)}
-                      </div>
-                    </div>
-                    <p className="text-xs text-orange-400/70 mt-2">
-                      {intervalShortDays} - {intervalLongDays} jours
-                    </p>
-                  </div>
-
-                  <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                    <label className="block text-sm font-medium text-blue-300 mb-3">
-                      Délai mission lointaine
-                    </label>
-                    <div className="flex items-center gap-4">
-                      <input
-                        type="range"
-                        min={24}
-                        max={336}
-                        step={12}
-                        value={deadlineLongHours}
-                        onChange={(e) => setDeadlineLongHours(Number(e.target.value))}
-                        className="flex-1 accent-blue-500"
-                      />
-                      <div className="w-16 px-3 py-2 bg-blue-500/20 rounded-lg text-center font-semibold text-blue-400">
-                        {formatHoursDisplay(deadlineLongHours)}
-                      </div>
-                    </div>
-                    <p className="text-xs text-blue-400/70 mt-2">
-                      &gt; {intervalLongDays} jours
-                    </p>
-                  </div>
-                </div>
-
-                {/* Tableau récapitulatif */}
+                {/* Exemple concret */}
                 <div className="p-4 bg-slate-800/50 rounded-lg">
                   <div className="flex items-center gap-2 mb-3">
                     <Info className="w-4 h-4 text-cyan-400" />
-                    <span className="font-medium text-slate-200">Règles actives</span>
+                    <span className="font-medium text-slate-200">Exemple concret</span>
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-slate-400 border-b border-slate-700">
-                          <th className="text-left py-2 px-3">Intervalle mission</th>
-                          <th className="text-left py-2 px-3">Délai acceptation</th>
-                        </tr>
-                      </thead>
-                      <tbody className="text-slate-300">
-                        <tr className="border-b border-slate-700/50">
-                          <td className="py-2 px-3">&lt; {intervalShortDays} jours</td>
-                          <td className="py-2 px-3 text-green-400 font-medium">{formatHoursDisplay(deadlineShortHours)}</td>
-                        </tr>
-                        <tr className="border-b border-slate-700/50">
-                          <td className="py-2 px-3">{intervalShortDays} - {intervalLongDays} jours</td>
-                          <td className="py-2 px-3 text-orange-400 font-medium">{formatHoursDisplay(deadlineMediumHours)}</td>
-                        </tr>
-                        <tr>
-                          <td className="py-2 px-3">&gt; {intervalLongDays} jours</td>
-                          <td className="py-2 px-3 text-blue-400 font-medium">{formatHoursDisplay(deadlineLongHours)}</td>
-                        </tr>
-                      </tbody>
-                    </table>
+                  <div className="text-sm text-slate-300 space-y-2">
+                    <p>
+                      Un client réserve une garde de chien qui commence <span className="text-green-400 font-medium">dans 3 jours</span> (mission urgente) →
+                      l&apos;annonceur a <span className="text-green-400 font-medium">{formatHoursDisplay(deadlineShortHours)}</span> pour accepter.
+                    </p>
+                    <p>
+                      Un client réserve un service qui commence <span className="text-orange-400 font-medium">dans 2 semaines</span> (mission normale) →
+                      l&apos;annonceur a <span className="text-orange-400 font-medium">{formatHoursDisplay(deadlineMediumHours)}</span> pour accepter.
+                    </p>
+                    <p>
+                      Un client réserve un service qui commence <span className="text-blue-400 font-medium">dans 2 mois</span> (mission lointaine) →
+                      l&apos;annonceur a <span className="text-blue-400 font-medium">{formatHoursDisplay(deadlineLongHours)}</span> pour accepter.
+                    </p>
+                    <p className="text-red-400 text-xs mt-2">
+                      Si l&apos;annonceur ne répond pas dans le délai, la réservation est automatiquement refusée.
+                    </p>
                   </div>
+                </div>
+
+                <div className="flex items-start gap-2 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
+                  <Timer className="w-5 h-5 text-cyan-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-cyan-300">
+                    L&apos;annonceur et le client voient un compteur à rebours dans leur dashboard. Le système vérifie automatiquement toutes les 15 minutes si le délai est dépassé.
+                  </p>
                 </div>
               </>
             )}
@@ -678,175 +695,238 @@ export default function PaiementsPage() {
 
         {/* Politique d'annulation client */}
         <motion.div
-          className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl overflow-hidden"
+          className="bg-slate-900 rounded-xl p-6 border border-slate-800"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
         >
-          <div className="px-6 py-4 border-b border-slate-700 flex items-center gap-3">
-            <Ban className="w-5 h-5 text-red-400" />
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-red-500/20 rounded-lg">
+              <Ban className="w-5 h-5 text-red-400" />
+            </div>
             <h2 className="text-lg font-semibold text-white">Politique d&apos;annulation client</h2>
           </div>
-          <div className="p-6 space-y-6">
-            {/* Délai de grâce post-paiement */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-slate-300">
+
+          <div className="space-y-6">
+            {/* Grâce et seuil */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                <label className="block text-sm font-medium text-blue-300 mb-3">
                   Délai de grâce post-paiement
                 </label>
-                <span className="text-sm font-mono text-blue-400">{cancellationGracePeriodHours}h</span>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="range"
+                    min={1}
+                    max={72}
+                    value={cancellationGracePeriodHours}
+                    onChange={(e) => setCancellationGracePeriodHours(Number(e.target.value))}
+                    className="flex-1 accent-blue-500"
+                  />
+                  <div className="w-16 px-3 py-2 bg-blue-500/20 rounded-lg text-center font-semibold text-blue-400">
+                    {cancellationGracePeriodHours}h
+                  </div>
+                </div>
+                <p className="text-xs text-blue-400/70 mt-2">
+                  Remboursement 100% dans ce délai après paiement
+                </p>
               </div>
-              <input
-                type="range"
-                min={1}
-                max={72}
-                value={cancellationGracePeriodHours}
-                onChange={(e) => setCancellationGracePeriodHours(Number(e.target.value))}
-                className="w-full accent-blue-500"
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                Remboursement 100% si annulation dans les {cancellationGracePeriodHours}h suivant le paiement
-              </p>
-            </div>
 
-            {/* Seuil avant début mission */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-slate-300">
+              <div className="p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
+                <label className="block text-sm font-medium text-cyan-300 mb-3">
                   Seuil avant début de mission
                 </label>
-                <span className="text-sm font-mono text-blue-400">{cancellationThresholdHours}h</span>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="range"
+                    min={1}
+                    max={168}
+                    value={cancellationThresholdHours}
+                    onChange={(e) => setCancellationThresholdHours(Number(e.target.value))}
+                    className="flex-1 accent-cyan-500"
+                  />
+                  <div className="w-16 px-3 py-2 bg-cyan-500/20 rounded-lg text-center font-semibold text-cyan-400">
+                    {formatHoursDisplay(cancellationThresholdHours)}
+                  </div>
+                </div>
+                <p className="text-xs text-cyan-400/70 mt-2">
+                  Au-delà : remboursement total moins commission
+                </p>
               </div>
-              <input
-                type="range"
-                min={1}
-                max={168}
-                value={cancellationThresholdHours}
-                onChange={(e) => setCancellationThresholdHours(Number(e.target.value))}
-                className="w-full accent-blue-500"
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                Au-delà de {cancellationThresholdHours}h avant le début : remboursement total moins commission
-              </p>
             </div>
 
-            {/* % annonceur 2ème annulation */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-slate-300">
+            {/* Pénalités progressives */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+                <label className="block text-sm font-medium text-orange-300 mb-3">
                   Part annonceur - 2ème annulation
                 </label>
-                <span className="text-sm font-mono text-orange-400">{cancellation2ndAnnouncerPercent}%</span>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={cancellation2ndAnnouncerPercent}
+                    onChange={(e) => setCancellation2ndAnnouncerPercent(Number(e.target.value))}
+                    className="flex-1 accent-orange-500"
+                  />
+                  <div className="w-16 px-3 py-2 bg-orange-500/20 rounded-lg text-center font-semibold text-orange-400">
+                    {cancellation2ndAnnouncerPercent}%
+                  </div>
+                </div>
+                <p className="text-xs text-orange-400/70 mt-2">
+                  L&apos;annonceur conserve cette part (&lt;{formatHoursDisplay(cancellationThresholdHours)} avant début)
+                </p>
               </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={cancellation2ndAnnouncerPercent}
-                onChange={(e) => setCancellation2ndAnnouncerPercent(Number(e.target.value))}
-                className="w-full accent-orange-500"
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                L&apos;annonceur conserve {cancellation2ndAnnouncerPercent}% de ses gains lors de la 2ème annulation (&lt;{cancellationThresholdHours}h)
-              </p>
-            </div>
 
-            {/* % annonceur 3ème+ annulation */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-slate-300">
+              <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                <label className="block text-sm font-medium text-red-300 mb-3">
                   Part annonceur - 3ème+ annulation
                 </label>
-                <span className="text-sm font-mono text-red-400">{cancellation3rdAnnouncerPercent}%</span>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={cancellation3rdAnnouncerPercent}
+                    onChange={(e) => setCancellation3rdAnnouncerPercent(Number(e.target.value))}
+                    className="flex-1 accent-red-500"
+                  />
+                  <div className="w-16 px-3 py-2 bg-red-500/20 rounded-lg text-center font-semibold text-red-400">
+                    {cancellation3rdAnnouncerPercent}%
+                  </div>
+                </div>
+                <p className="text-xs text-red-400/70 mt-2">
+                  L&apos;annonceur conserve cette part à partir de la 3ème annulation
+                </p>
               </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={cancellation3rdAnnouncerPercent}
-                onChange={(e) => setCancellation3rdAnnouncerPercent(Number(e.target.value))}
-                className="w-full accent-red-500"
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                L&apos;annonceur conserve {cancellation3rdAnnouncerPercent}% de ses gains à partir de la 3ème annulation
-              </p>
             </div>
 
-            {/* Période compteur */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-slate-300">
-                  Période du compteur d&apos;annulations
-                </label>
-                <span className="text-sm font-mono text-purple-400">{cancellationCounterPeriodMonths} mois</span>
+            {/* Compteur et last-minute */}
+            <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+              <label className="block text-sm font-medium text-purple-300 mb-3">
+                Période du compteur d&apos;annulations
+              </label>
+              <div className="flex items-center gap-4">
+                <input
+                  type="range"
+                  min={1}
+                  max={24}
+                  value={cancellationCounterPeriodMonths}
+                  onChange={(e) => setCancellationCounterPeriodMonths(Number(e.target.value))}
+                  className="flex-1 accent-purple-500"
+                />
+                <div className="w-20 px-3 py-2 bg-purple-500/20 rounded-lg text-center font-semibold text-purple-400">
+                  {cancellationCounterPeriodMonths} mois
+                </div>
               </div>
-              <input
-                type="range"
-                min={1}
-                max={24}
-                value={cancellationCounterPeriodMonths}
-                onChange={(e) => setCancellationCounterPeriodMonths(Number(e.target.value))}
-                className="w-full accent-purple-500"
-              />
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-purple-400/70 mt-2">
                 Le compteur d&apos;annulations est calculé sur {cancellationCounterPeriodMonths} mois glissants
               </p>
             </div>
 
-            {/* Seuil réservation last-minute */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-slate-300">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                <label className="block text-sm font-medium text-amber-300 mb-3">
                   Seuil réservation last-minute
                 </label>
-                <span className="text-sm font-mono text-amber-400">{lastMinuteThresholdHours}h</span>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="range"
+                    min={6}
+                    max={72}
+                    value={lastMinuteThresholdHours}
+                    onChange={(e) => setLastMinuteThresholdHours(Number(e.target.value))}
+                    className="flex-1 accent-amber-500"
+                  />
+                  <div className="w-16 px-3 py-2 bg-amber-500/20 rounded-lg text-center font-semibold text-amber-400">
+                    {lastMinuteThresholdHours}h
+                  </div>
+                </div>
+                <p className="text-xs text-amber-400/70 mt-2">
+                  Réservation &lt;{lastMinuteThresholdHours}h avant le début = last-minute
+                </p>
               </div>
-              <input
-                type="range"
-                min={6}
-                max={72}
-                value={lastMinuteThresholdHours}
-                onChange={(e) => setLastMinuteThresholdHours(Number(e.target.value))}
-                className="w-full accent-amber-500"
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                Si le client réserve moins de {lastMinuteThresholdHours}h avant le début, la grâce est réduite
-              </p>
-            </div>
 
-            {/* Grâce réduite last-minute */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-slate-300">
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                <label className="block text-sm font-medium text-amber-300 mb-3">
                   Grâce réduite last-minute
                 </label>
-                <span className="text-sm font-mono text-amber-400">{lastMinuteGraceHours}h</span>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="range"
+                    min={1}
+                    max={24}
+                    value={lastMinuteGraceHours}
+                    onChange={(e) => setLastMinuteGraceHours(Number(e.target.value))}
+                    className="flex-1 accent-amber-500"
+                  />
+                  <div className="w-16 px-3 py-2 bg-amber-500/20 rounded-lg text-center font-semibold text-amber-400">
+                    {lastMinuteGraceHours}h
+                  </div>
+                </div>
+                <p className="text-xs text-amber-400/70 mt-2">
+                  Au lieu de {cancellationGracePeriodHours}h pour les réservations last-minute
+                </p>
               </div>
-              <input
-                type="range"
-                min={1}
-                max={24}
-                value={lastMinuteGraceHours}
-                onChange={(e) => setLastMinuteGraceHours(Number(e.target.value))}
-                className="w-full accent-amber-500"
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                Délai de grâce réduit à {lastMinuteGraceHours}h au lieu de {cancellationGracePeriodHours}h pour les réservations last-minute
-              </p>
             </div>
 
-            {/* Info box exemple */}
-            <div className="bg-slate-700/50 rounded-xl p-4 border border-slate-600">
-              <div className="flex items-start gap-3">
-                <Info className="w-5 h-5 text-blue-400 mt-0.5 shrink-0" />
-                <div className="text-sm text-slate-300 space-y-1">
-                  <p className="font-medium text-white">Exemple de calcul :</p>
-                  <p>1ère annulation &lt;{cancellationThresholdHours}h : remboursement total moins commission plateforme</p>
-                  <p>2ème annulation &lt;{cancellationThresholdHours}h : l&apos;annonceur conserve {cancellation2ndAnnouncerPercent}% de ses gains</p>
-                  <p>3ème+ annulation &lt;{cancellationThresholdHours}h : l&apos;annonceur conserve {cancellation3rdAnnouncerPercent}% de ses gains</p>
-                  <p className="text-amber-400">Réservation last-minute (&lt;{lastMinuteThresholdHours}h avant début) : grâce de {lastMinuteGraceHours}h seulement</p>
-                </div>
+            {/* Tableau récapitulatif */}
+            <div className="p-4 bg-slate-800/50 rounded-lg">
+              <div className="flex items-center gap-2 mb-3">
+                <Info className="w-4 h-4 text-red-400" />
+                <span className="font-medium text-slate-200">Règles d&apos;annulation actives</span>
               </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-slate-400 border-b border-slate-700">
+                      <th className="text-left py-2 px-3">Situation</th>
+                      <th className="text-left py-2 px-3">Remboursement client</th>
+                      <th className="text-left py-2 px-3">Part annonceur</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-slate-300">
+                    <tr className="border-b border-slate-700/50">
+                      <td className="py-2 px-3">Grâce post-paiement (&lt;{cancellationGracePeriodHours}h)</td>
+                      <td className="py-2 px-3 text-blue-400 font-medium">100%</td>
+                      <td className="py-2 px-3 text-slate-500">0%</td>
+                    </tr>
+                    <tr className="border-b border-slate-700/50">
+                      <td className="py-2 px-3">&gt;{formatHoursDisplay(cancellationThresholdHours)} avant début</td>
+                      <td className="py-2 px-3 text-cyan-400 font-medium">Total - commission</td>
+                      <td className="py-2 px-3 text-slate-500">0%</td>
+                    </tr>
+                    <tr className="border-b border-slate-700/50">
+                      <td className="py-2 px-3">1ère annulation &lt;{formatHoursDisplay(cancellationThresholdHours)}</td>
+                      <td className="py-2 px-3 text-green-400 font-medium">Total - commission</td>
+                      <td className="py-2 px-3 text-slate-500">0%</td>
+                    </tr>
+                    <tr className="border-b border-slate-700/50">
+                      <td className="py-2 px-3">2ème annulation &lt;{formatHoursDisplay(cancellationThresholdHours)}</td>
+                      <td className="py-2 px-3 text-orange-400 font-medium">Partiel</td>
+                      <td className="py-2 px-3 text-orange-400 font-medium">{cancellation2ndAnnouncerPercent}%</td>
+                    </tr>
+                    <tr className="border-b border-slate-700/50">
+                      <td className="py-2 px-3">3ème+ annulation &lt;{formatHoursDisplay(cancellationThresholdHours)}</td>
+                      <td className="py-2 px-3 text-red-400 font-medium">{cancellation3rdAnnouncerPercent < 100 ? "Partiel" : "Aucun"}</td>
+                      <td className="py-2 px-3 text-red-400 font-medium">{cancellation3rdAnnouncerPercent}%</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 px-3 text-amber-400">Last-minute (&lt;{lastMinuteThresholdHours}h)</td>
+                      <td className="py-2 px-3 text-amber-400 font-medium" colSpan={2}>Grâce réduite à {lastMinuteGraceHours}h</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <Ban className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-300">
+                Le compteur d&apos;annulations se calcule sur {cancellationCounterPeriodMonths} mois glissants.
+                Les pénalités progressives s&apos;appliquent uniquement pour les annulations à moins de {formatHoursDisplay(cancellationThresholdHours)} du début de la mission.
+              </p>
             </div>
           </div>
         </motion.div>

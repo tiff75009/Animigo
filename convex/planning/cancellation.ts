@@ -326,13 +326,15 @@ async function calculateRefund(
     };
   }
 
-  // 3ème+ annulation → aucun remboursement
+  // 3ème+ annulation → annonceur conserve thirdPercent% de ses gains
+  const announcerRetained3rd = Math.round(announcerEarnings * (thirdPercent / 100));
+  const refund3rd = Math.max(0, totalAmount - platformFee - announcerRetained3rd);
   return {
     canCancel: true,
-    refundAmount: 0,
+    refundAmount: refund3rd,
     platformFeeRetained: platformFee,
-    announcerRetained: announcerEarnings,
-    reason: `${cancellationCount + 1}ème annulation : aucun remboursement`,
+    announcerRetained: announcerRetained3rd,
+    reason: `${cancellationCount + 1}ème annulation : l'annonceur conserve ${thirdPercent}% de ses gains`,
     cancellationCount,
   };
 }

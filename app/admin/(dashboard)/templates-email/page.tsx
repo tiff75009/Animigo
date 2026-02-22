@@ -252,7 +252,7 @@ export default function EmailTemplatesPage() {
         slug: selectedTemplate,
         subject: editedSubject,
         htmlContent: editedHtml,
-        brevoTemplateId: brevoTemplateId ? parseInt(brevoTemplateId, 10) : undefined,
+        brevoTemplateId: brevoTemplateId ? parseInt(brevoTemplateId, 10) : 0,
         useBrevoTemplate,
       });
       setSaved(true);
