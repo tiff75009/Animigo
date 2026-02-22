@@ -14,11 +14,17 @@ import {
   Wrench,
   Users,
   RefreshCw,
+  Clock,
 } from "lucide-react";
 import { Id, Doc } from "@/convex/_generated/dataModel";
 
 export default function MaintenancePage() {
   const { token } = useAdminAuth();
+
+  // États pour le fuseau horaire
+  const [selectedTimezone, setSelectedTimezone] = useState<string | null>(null);
+  const [isSavingTimezone, setIsSavingTimezone] = useState(false);
+  const [timezoneSaved, setTimezoneSaved] = useState(false);
 
   // États pour le mode maintenance
   const [isTogglingMaintenance, setIsTogglingMaintenance] = useState(false);
@@ -37,6 +43,10 @@ export default function MaintenancePage() {
   } | null>(null);
 
   // Queries
+  const timezoneSettings = useQuery(
+    api.admin.config.getTimezoneSettings,
+    token ? { token } : "skip"
+  );
   const isMaintenanceEnabled = useQuery(api.admin.config.isMaintenanceModeEnabled);
   const pendingVisitRequests = useQuery(
     api.maintenance.visitRequests.listPendingRequests,
@@ -48,12 +58,32 @@ export default function MaintenancePage() {
   );
 
   // Mutations
+  const updateTimezone = useMutation(api.admin.config.updateTimezone);
   const toggleMaintenanceMode = useMutation(api.admin.config.toggleMaintenanceMode);
   const approveRequest = useMutation(api.maintenance.visitRequests.approveRequest);
   const rejectRequest = useMutation(api.maintenance.visitRequests.rejectRequest);
   const revokeAccess = useMutation(api.maintenance.visitRequests.revokeAccess);
   const addManualIp = useMutation(api.maintenance.visitRequests.addManualIp);
   const regenerateAllSlugs = useMutation(api.admin.maintenance.regenerateAllSlugs);
+
+  // Initialiser le timezone sélectionné quand les données arrivent
+  const currentTimezone = selectedTimezone ?? timezoneSettings?.timezone ?? "Europe/Paris";
+
+  const handleSaveTimezone = async () => {
+    if (!token) return;
+    setIsSavingTimezone(true);
+    setTimezoneSaved(false);
+    try {
+      await updateTimezone({ token, timezone: currentTimezone });
+      setSelectedTimezone(null);
+      setTimezoneSaved(true);
+      setTimeout(() => setTimezoneSaved(false), 3000);
+    } catch (error) {
+      console.error("Erreur lors de la sauvegarde du fuseau horaire:", error);
+    } finally {
+      setIsSavingTimezone(false);
+    }
+  };
 
   const handleToggleMaintenance = async () => {
     if (!token) return;
@@ -158,6 +188,90 @@ export default function MaintenancePage() {
       </div>
 
       <div className="space-y-8">
+        {/* Fuseau horaire */}
+        <motion.div
+          className="bg-slate-900 rounded-xl p-6 border border-slate-800"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-blue-500/20 rounded-lg">
+              <Clock className="w-5 h-5 text-blue-400" />
+            </div>
+            <h2 className="text-lg font-semibold text-white">Fuseau horaire</h2>
+          </div>
+
+          <div className="space-y-4">
+            <div className="p-4 bg-slate-800 rounded-lg">
+              <p className="text-sm text-slate-400 mb-3">
+                Le fuseau horaire détermine quand les missions passent automatiquement
+                de &quot;à venir&quot; à &quot;en cours&quot; puis &quot;terminée&quot;.
+                Choisissez le fuseau correspondant à votre zone d&apos;activité.
+              </p>
+              <label htmlFor="timezone-select" className="text-sm text-slate-300 font-medium mb-2 block">
+                Fuseau horaire de la plateforme
+              </label>
+              <select
+                id="timezone-select"
+                value={currentTimezone}
+                onChange={(e) => setSelectedTimezone(e.target.value)}
+                className="w-full px-3 py-2.5 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500 appearance-none cursor-pointer"
+              >
+                <optgroup label="Europe">
+                  <option value="Europe/Paris">Europe/Paris (France, Belgique, Luxembourg)</option>
+                  <option value="Europe/Brussels">Europe/Brussels (Belgique)</option>
+                  <option value="Europe/Zurich">Europe/Zurich (Suisse)</option>
+                  <option value="Europe/London">Europe/London (Royaume-Uni)</option>
+                  <option value="Europe/Berlin">Europe/Berlin (Allemagne)</option>
+                  <option value="Europe/Madrid">Europe/Madrid (Espagne)</option>
+                  <option value="Europe/Rome">Europe/Rome (Italie)</option>
+                  <option value="Europe/Amsterdam">Europe/Amsterdam (Pays-Bas)</option>
+                  <option value="Europe/Lisbon">Europe/Lisbon (Portugal)</option>
+                </optgroup>
+                <optgroup label="Outre-mer">
+                  <option value="America/Guadeloupe">Guadeloupe (UTC-4)</option>
+                  <option value="America/Martinique">Martinique (UTC-4)</option>
+                  <option value="America/Cayenne">Guyane (UTC-3)</option>
+                  <option value="Indian/Reunion">La Réunion (UTC+4)</option>
+                  <option value="Indian/Mayotte">Mayotte (UTC+3)</option>
+                  <option value="Pacific/Noumea">Nouvelle-Calédonie (UTC+11)</option>
+                  <option value="Pacific/Tahiti">Polynésie française (UTC-10)</option>
+                </optgroup>
+                <optgroup label="Autres">
+                  <option value="America/New_York">New York (UTC-5)</option>
+                  <option value="America/Montreal">Montréal (UTC-5)</option>
+                  <option value="Africa/Casablanca">Casablanca (UTC+1)</option>
+                  <option value="Africa/Tunis">Tunis (UTC+1)</option>
+                  <option value="Africa/Dakar">Dakar (UTC+0)</option>
+                </optgroup>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleSaveTimezone}
+                disabled={isSavingTimezone || timezoneSaved}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg text-sm transition-colors disabled:opacity-50"
+              >
+                {isSavingTimezone ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : timezoneSaved ? (
+                  <Check className="w-4 h-4" />
+                ) : null}
+                {isSavingTimezone ? "Sauvegarde..." : timezoneSaved ? "Enregistré !" : "Enregistrer"}
+              </button>
+              {selectedTimezone && selectedTimezone !== timezoneSettings?.timezone && (
+                <button
+                  onClick={() => setSelectedTimezone(null)}
+                  className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors"
+                >
+                  Annuler
+                </button>
+              )}
+            </div>
+          </div>
+        </motion.div>
+
         {/* Mode Maintenance */}
         <motion.div
           className="bg-slate-900 rounded-xl p-6 border border-slate-800"

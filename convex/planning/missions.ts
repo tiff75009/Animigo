@@ -1876,6 +1876,37 @@ export const getAnnouncerMissionsWithStats = query({
 });
 
 /**
+ * Convertit une date locale "YYYY-MM-DD" + "HH:MM" en timestamp UTC,
+ * en tenant compte du fuseau horaire configuré (ex: Europe/Paris).
+ * Utilise Intl.DateTimeFormat pour résoudre l'offset UTC du timezone IANA.
+ */
+function localDateToTimestamp(date: string, time: string, timezone: string): number {
+  // Construire la date en UTC d'abord
+  const utcDate = new Date(`${date}T${time}:00Z`);
+  // Calculer l'offset du timezone cible à cette date
+  // En formatant la date UTC dans le timezone cible, on obtient l'heure locale
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(utcDate);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value || "0";
+  const localAtUtc = new Date(
+    `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}:${get("second")}Z`
+  );
+  // L'offset = heure locale affichée quand il est X en UTC - X en UTC
+  const offsetMs = localAtUtc.getTime() - utcDate.getTime();
+  // La date locale voulue = UTC - offset (si Paris est UTC+1, 14:00 local = 13:00 UTC)
+  return utcDate.getTime() - offsetMs;
+}
+
+/**
  * Auto-démarrage des missions à venir
  * Cron toutes les 15 min : passe les missions "upcoming" en "in_progress"
  * quand leur date/heure de début est atteinte
@@ -1884,6 +1915,13 @@ export const autoStartMissions = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
+
+    // Récupérer le fuseau horaire configuré
+    const timezoneConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "platform_timezone"))
+      .first();
+    const timezone = timezoneConfig?.value || "Europe/Paris";
 
     const missions = await ctx.db
       .query("missions")
@@ -1898,14 +1936,20 @@ export const autoStartMissions = internalMutation({
         // Multi-sessions : démarrer à la 1ère session
         if (mission.sessions && mission.sessions.length > 0) {
           const firstSession = mission.sessions[0];
-          const sessionStartStr = `${firstSession.date}T${firstSession.startTime || "00:00"}`;
-          shouldStart = now >= new Date(sessionStartStr).getTime();
+          const startTs = localDateToTimestamp(
+            firstSession.date,
+            firstSession.startTime || "00:00",
+            timezone
+          );
+          shouldStart = now >= startTs;
         } else {
           // Garde ou session unique : utiliser startDate + startTime
-          const startStr = mission.startTime
-            ? `${mission.startDate}T${mission.startTime}`
-            : `${mission.startDate}T00:00`;
-          shouldStart = now >= new Date(startStr).getTime();
+          const startTs = localDateToTimestamp(
+            mission.startDate,
+            mission.startTime || "00:00",
+            timezone
+          );
+          shouldStart = now >= startTs;
         }
 
         if (shouldStart) {
@@ -1934,6 +1978,13 @@ export const autoCompleteMissions = internalMutation({
   handler: async (ctx) => {
     const now = Date.now();
 
+    // Récupérer le fuseau horaire configuré
+    const timezoneConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "platform_timezone"))
+      .first();
+    const timezone = timezoneConfig?.value || "Europe/Paris";
+
     const missions = await ctx.db
       .query("missions")
       .filter((q) => q.eq(q.field("status"), "in_progress"))
@@ -1947,14 +1998,20 @@ export const autoCompleteMissions = internalMutation({
         // Multi-sessions : terminer après la dernière session
         if (mission.sessions && mission.sessions.length > 0) {
           const lastSession = mission.sessions[mission.sessions.length - 1];
-          const sessionEndStr = `${lastSession.date}T${lastSession.endTime || "23:59"}`;
-          shouldComplete = now >= new Date(sessionEndStr).getTime();
+          const endTs = localDateToTimestamp(
+            lastSession.date,
+            lastSession.endTime || "23:59",
+            timezone
+          );
+          shouldComplete = now >= endTs;
         } else {
           // Garde ou session unique : utiliser endDate + endTime
-          const endStr = mission.endTime
-            ? `${mission.endDate}T${mission.endTime}`
-            : `${mission.endDate}T23:59`;
-          shouldComplete = now >= new Date(endStr).getTime();
+          const endTs = localDateToTimestamp(
+            mission.endDate,
+            mission.endTime || "23:59",
+            timezone
+          );
+          shouldComplete = now >= endTs;
         }
 
         if (shouldComplete) {

@@ -889,6 +889,75 @@ export const updateCompanyEditableFields = mutation({
 });
 
 // ==========================================
+// FUSEAU HORAIRE PLATEFORME
+// ==========================================
+
+// Query admin: Récupérer le fuseau horaire configuré
+export const getTimezoneSettings = query({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx, args.token);
+
+    const config = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "platform_timezone"))
+      .first();
+
+    return {
+      timezone: config?.value || "Europe/Paris",
+    };
+  },
+});
+
+// Query publique: Récupérer le fuseau horaire (pour les crons et logique interne)
+export const getTimezone = query({
+  args: {},
+  handler: async (ctx) => {
+    const config = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "platform_timezone"))
+      .first();
+
+    return config?.value || "Europe/Paris";
+  },
+});
+
+// Mutation admin: Mettre à jour le fuseau horaire
+export const updateTimezone = mutation({
+  args: {
+    token: v.string(),
+    timezone: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireAdmin(ctx, args.token);
+
+    const existing = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "platform_timezone"))
+      .first();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        value: args.timezone,
+        updatedAt: Date.now(),
+        updatedBy: user._id,
+      });
+    } else {
+      await ctx.db.insert("systemConfig", {
+        key: "platform_timezone",
+        value: args.timezone,
+        isSecret: false,
+        environment: "production",
+        updatedAt: Date.now(),
+        updatedBy: user._id,
+      });
+    }
+
+    return { success: true, timezone: args.timezone };
+  },
+});
+
+// ==========================================
 // POLITIQUE D'ANNULATION CLIENT
 // ==========================================
 

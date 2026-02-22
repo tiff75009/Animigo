@@ -38,6 +38,7 @@ import { Id } from "@/convex/_generated/dataModel";
 import {
   formatCents,
   formatDate,
+  formatTimestamp,
   statusConfig,
   payoutStatusConfig,
   missionPaymentConfig,
@@ -52,6 +53,7 @@ export default function ConnectAccountDetailPage() {
   const [disableModal, setDisableModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDisabling, setIsDisabling] = useState(false);
+  const [activeTab, setActiveTab] = useState<"completed" | "upcoming" | "cancelled" | "payouts">("completed");
 
   const data = useQuery(
     api.admin.stripeConnect.getConnectAccountDetails,
@@ -115,9 +117,32 @@ export default function ConnectAccountDetailPage() {
           <MissionStatsCard data={data} />
         </div>
 
-        <div className="lg:col-span-2 space-y-6">
-          <MissionsTable missions={data.recentMissions} />
-          <PayoutsTable payouts={data.payouts} />
+        <div className="lg:col-span-2 space-y-0">
+          <MissionsTabs
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            counts={{
+              completed: data.recentMissions.length,
+              upcoming: data.upcomingMissions.length,
+              cancelled: data.cancelledMissions.length,
+              payouts: data.payouts.length,
+            }}
+          />
+          {activeTab === "completed" && (
+            <MissionsTable missions={data.recentMissions} />
+          )}
+          {activeTab === "upcoming" && (
+            <UpcomingMissionsTable missions={data.upcomingMissions} />
+          )}
+          {activeTab === "cancelled" && (
+            <CancelledMissionsTable
+              missions={data.cancelledMissions}
+              cancellationPolicy={data.cancellationPolicy}
+            />
+          )}
+          {activeTab === "payouts" && (
+            <PayoutsTable payouts={data.payouts} />
+          )}
         </div>
       </div>
 
@@ -433,15 +458,62 @@ function MissionStatsCard({ data }: { data: any }) {
   );
 }
 
+type TabKey = "completed" | "upcoming" | "cancelled" | "payouts";
+
+const tabsConfig: { key: TabKey; label: string; icon: React.ElementType; color: string }[] = [
+  { key: "completed", label: "Terminées", icon: FileText, color: "text-emerald-400 border-emerald-400" },
+  { key: "upcoming", label: "À venir", icon: Calendar, color: "text-cyan-400 border-cyan-400" },
+  { key: "cancelled", label: "Annulées", icon: XCircle, color: "text-red-400 border-red-400" },
+  { key: "payouts", label: "Virements", icon: Banknote, color: "text-blue-400 border-blue-400" },
+];
+
+function MissionsTabs({
+  activeTab,
+  onTabChange,
+  counts,
+}: {
+  activeTab: TabKey;
+  onTabChange: (tab: TabKey) => void;
+  counts: Record<TabKey, number>;
+}) {
+  return (
+    <div className="flex border-b border-slate-700 bg-slate-800/30 rounded-t-xl overflow-x-auto">
+      {tabsConfig.map((tab) => {
+        const isActive = activeTab === tab.key;
+        const TabIcon = tab.icon;
+        return (
+          <button
+            key={tab.key}
+            onClick={() => onTabChange(tab.key)}
+            className={`flex items-center gap-2 px-5 py-3.5 text-sm font-medium transition-colors whitespace-nowrap border-b-2 ${
+              isActive
+                ? `${tab.color} bg-slate-800/50`
+                : "text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-800/30"
+            }`}
+          >
+            <TabIcon className="w-4 h-4" />
+            {tab.label}
+            {counts[tab.key] > 0 && (
+              <span
+                className={`text-xs px-1.5 py-0.5 rounded-full ${
+                  isActive
+                    ? "bg-white/10"
+                    : "bg-slate-700 text-slate-400"
+                }`}
+              >
+                {counts[tab.key]}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function MissionsTable({ missions }: { missions: any[] }) {
   return (
-    <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-700">
-        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-          <FileText className="w-4 h-4 text-blue-400" />
-          Dernières missions terminées
-        </h2>
-      </div>
+    <div className="bg-slate-800/50 border border-slate-700 border-t-0 rounded-b-xl overflow-hidden">
       {missions.length === 0 ? (
         <div className="p-8 text-center text-slate-500">
           <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
@@ -514,15 +586,200 @@ function MissionRow({ mission }: { mission: any }) {
   );
 }
 
+function UpcomingMissionsTable({ missions }: { missions: any[] }) {
+  return (
+    <div className="bg-slate-800/50 border border-slate-700 border-t-0 rounded-b-xl overflow-hidden">
+      {missions.length === 0 ? (
+        <div className="p-8 text-center text-slate-500">
+          <Calendar className="w-8 h-8 mx-auto mb-2 opacity-50" />
+          <p className="text-sm">Aucune mission à venir</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-slate-700/50">
+                {["Service", "Client", "Date", "Montant client", "Gains annonceur", "Séances"].map(
+                  (h, i) => (
+                    <th
+                      key={h}
+                      className={`${i >= 3 ? "text-right" : "text-left"} px-6 py-3 text-xs font-semibold text-slate-400 uppercase`}
+                    >
+                      {h}
+                    </th>
+                  )
+                )}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-700/30">
+              {missions.map((mission) => (
+                <UpcomingMissionRow key={mission._id} mission={mission} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UpcomingMissionRow({ mission }: { mission: any }) {
+  return (
+    <tr className="hover:bg-slate-800/30 transition-colors">
+      <td className="px-6 py-3">
+        <span className="text-sm text-white">{mission.serviceName || "—"}</span>
+      </td>
+      <td className="px-6 py-3">
+        <span className="text-sm text-slate-300">{mission.clientName || "—"}</span>
+      </td>
+      <td className="px-6 py-3">
+        <span className="text-sm text-slate-400">{formatDate(mission.startDate)}</span>
+        {mission.startTime && (
+          <span className="text-xs text-slate-500 ml-1">{mission.startTime}</span>
+        )}
+      </td>
+      <td className="px-6 py-3 text-right">
+        <span className="text-sm text-white font-medium">{formatCents(mission.amount)}</span>
+      </td>
+      <td className="px-6 py-3 text-right">
+        <span className="text-sm text-cyan-400 font-medium">
+          {formatCents(mission.announcerEarnings)}
+        </span>
+      </td>
+      <td className="px-6 py-3 text-right">
+        {mission.numberOfSessions > 1 ? (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-500/10 border border-purple-500/20 text-purple-400">
+            {mission.numberOfSessions} séances
+          </span>
+        ) : (
+          <span className="text-sm text-slate-400">1</span>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function CancelledMissionsTable({
+  missions,
+  cancellationPolicy,
+}: {
+  missions: any[];
+  cancellationPolicy: { refundMode: string; defaultCommissionPercent: number; isActive: boolean } | null;
+}) {
+  return (
+    <div className="bg-slate-800/50 border border-slate-700 border-t-0 rounded-b-xl overflow-hidden">
+      {cancellationPolicy?.isActive && (
+        <div className="px-6 py-3 border-b border-slate-700/50">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-700/50 border border-slate-600 text-slate-300">
+            Politique annonceur :{" "}
+            {cancellationPolicy.refundMode === "per_session"
+              ? "Par séance"
+              : `${cancellationPolicy.defaultCommissionPercent}% retenu`}
+          </span>
+        </div>
+      )}
+      {missions.length === 0 ? (
+        <div className="p-8 text-center text-slate-500">
+          <XCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
+          <p className="text-sm">Aucune mission annulée</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-slate-700/50">
+                {[
+                  "Service",
+                  "Client",
+                  "Annulée par",
+                  "Date annulation",
+                  "Montant initial",
+                  "Remboursé",
+                  "Retenu annonceur",
+                ].map((h, i) => (
+                  <th
+                    key={h}
+                    className={`${i >= 4 ? "text-right" : "text-left"} px-6 py-3 text-xs font-semibold text-slate-400 uppercase`}
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-700/30">
+              {missions.map((mission) => (
+                <CancelledMissionRow key={mission._id} mission={mission} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CancelledMissionRow({ mission }: { mission: any }) {
+  const cancelledByConfig: Record<string, { label: string; color: string; bgColor: string }> = {
+    client: { label: "Client", color: "text-amber-400", bgColor: "bg-amber-500/10 border-amber-500/20" },
+    announcer: { label: "Annonceur", color: "text-orange-400", bgColor: "bg-orange-500/10 border-orange-500/20" },
+    system: { label: "Système", color: "text-slate-400", bgColor: "bg-slate-500/10 border-slate-500/20" },
+  };
+  const cancelledBy = cancelledByConfig[mission.cancelledBy] || cancelledByConfig.system;
+
+  return (
+    <tr className="hover:bg-slate-800/30 transition-colors">
+      <td className="px-6 py-3">
+        <span className="text-sm text-white">{mission.serviceName || "—"}</span>
+        {mission.cancellationReason && (
+          <p className="text-xs text-slate-500 mt-0.5 truncate max-w-[180px]" title={mission.cancellationReason}>
+            {mission.cancellationReason}
+          </p>
+        )}
+      </td>
+      <td className="px-6 py-3">
+        <span className="text-sm text-slate-300">{mission.clientName || "—"}</span>
+      </td>
+      <td className="px-6 py-3">
+        <span
+          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${cancelledBy.bgColor} ${cancelledBy.color}`}
+        >
+          {cancelledBy.label}
+        </span>
+      </td>
+      <td className="px-6 py-3">
+        <span className="text-sm text-slate-400">{formatTimestamp(mission.cancelledAt)}</span>
+      </td>
+      <td className="px-6 py-3 text-right">
+        <span className="text-sm text-white font-medium">{formatCents(mission.amount)}</span>
+        {mission.numberOfSessions > 1 && (
+          <span className="text-xs text-purple-400 ml-1">({mission.numberOfSessions}s)</span>
+        )}
+      </td>
+      <td className="px-6 py-3 text-right">
+        {mission.refundAmount > 0 ? (
+          <span className="text-sm text-amber-400 font-medium">
+            -{formatCents(mission.refundAmount)}
+          </span>
+        ) : (
+          <span className="text-sm text-slate-500">—</span>
+        )}
+      </td>
+      <td className="px-6 py-3 text-right">
+        {mission.announcerRetainedAmount > 0 ? (
+          <span className="text-sm text-emerald-400 font-medium">
+            +{formatCents(mission.announcerRetainedAmount)}
+          </span>
+        ) : (
+          <span className="text-sm text-slate-500">—</span>
+        )}
+      </td>
+    </tr>
+  );
+}
+
 function PayoutsTable({ payouts }: { payouts: any[] }) {
   return (
-    <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-700">
-        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-          <Banknote className="w-4 h-4 text-blue-400" />
-          Historique des virements
-        </h2>
-      </div>
+    <div className="bg-slate-800/50 border border-slate-700 border-t-0 rounded-b-xl overflow-hidden">
       {payouts.length === 0 ? (
         <div className="p-8 text-center text-slate-500">
           <Banknote className="w-8 h-8 mx-auto mb-2 opacity-50" />

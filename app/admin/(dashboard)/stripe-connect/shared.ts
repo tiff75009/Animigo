@@ -24,6 +24,19 @@ export function formatDate(timestamp: number | string | null | undefined): strin
   });
 }
 
+export function formatTimestamp(timestamp: number | null | undefined): string {
+  if (!timestamp) return "—";
+  const date = new Date(timestamp);
+  return date.toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }) + " " + date.toLocaleTimeString("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 /* ═══ Configs statut ═══ */
 
 export const statusConfig: Record<

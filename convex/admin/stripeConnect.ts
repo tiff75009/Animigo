@@ -163,7 +163,13 @@ export const getConnectAccountDetails = query({
       .order("desc")
       .collect();
 
-    // 5 dernières missions terminées
+    // Politique d'annulation annonceur
+    const cancellationPolicy = await ctx.db
+      .query("cancellationPolicies")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .first();
+
+    // 10 dernières missions terminées
     const recentMissions = [...completedMissions]
       .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
       .slice(0, 10)
@@ -180,6 +186,46 @@ export const getConnectAccountDetails = query({
         announcerPaymentStatus: m.announcerPaymentStatus || "not_due",
         readyForPayout: m.readyForPayout || false,
         payoutScheduledFor: m.payoutScheduledFor || null,
+      }));
+
+    // Missions à venir (confirmées + payées)
+    const upcomingMissions = missions
+      .filter((m) => m.status === "upcoming" && m.paymentStatus === "paid")
+      .sort((a, b) => (a.startDate || "").localeCompare(b.startDate || ""))
+      .slice(0, 10)
+      .map((m) => ({
+        _id: m._id,
+        serviceName: m.serviceName,
+        clientName: m.clientName,
+        startDate: m.startDate,
+        endDate: m.endDate,
+        startTime: m.startTime || null,
+        amount: m.amount || 0,
+        announcerEarnings: m.announcerEarnings || 0,
+        platformFee: m.platformFee || 0,
+        commissionRate: m.commissionRate,
+        numberOfSessions: m.numberOfSessions || 1,
+      }));
+
+    // Missions annulées
+    const cancelledMissions = missions
+      .filter((m) => m.status === "cancelled")
+      .sort((a, b) => (b.cancelledAt || 0) - (a.cancelledAt || 0))
+      .slice(0, 15)
+      .map((m) => ({
+        _id: m._id,
+        serviceName: m.serviceName,
+        clientName: m.clientName,
+        startDate: m.startDate,
+        cancelledBy: m.cancelledBy || null,
+        cancelledAt: m.cancelledAt || null,
+        cancellationReason: m.cancellationReason || null,
+        amount: m.amount || 0,
+        refundAmount: m.refundAmount || 0,
+        announcerRetainedAmount: m.announcerRetainedAmount || 0,
+        platformFee: m.platformFee || 0,
+        paymentStatus: m.paymentStatus,
+        numberOfSessions: m.numberOfSessions || 1,
       }));
 
     // Réclamations
@@ -252,6 +298,15 @@ export const getConnectAccountDetails = query({
         ).length,
       },
       recentMissions,
+      upcomingMissions,
+      cancelledMissions,
+      cancellationPolicy: cancellationPolicy
+        ? {
+            refundMode: cancellationPolicy.refundMode || "per_session",
+            defaultCommissionPercent: cancellationPolicy.defaultCommissionPercent,
+            isActive: cancellationPolicy.isActive,
+          }
+        : null,
       payouts: payouts.slice(0, 10).map((p) => ({
         _id: p._id,
         amount: p.amount,
