@@ -34,7 +34,9 @@ export const listReservations = query({
     }
 
     // Filtrer par statut
-    if (args.status && args.status !== "all") {
+    if (args.status === "disputed") {
+      missions = missions.filter((m) => m.hasDispute === true);
+    } else if (args.status && args.status !== "all") {
       missions = missions.filter((m) => m.status === args.status);
     }
 
@@ -117,6 +119,7 @@ export const getReservationStats = query({
         inProgress: 0,
         completed: 0,
         cancelled: 0,
+        disputed: 0,
       };
     }
 
@@ -134,6 +137,7 @@ export const getReservationStats = query({
       cancelled: missions.filter(
         (m) => m.status === "cancelled" || m.status === "refused"
       ).length,
+      disputed: missions.filter((m) => m.hasDispute === true).length,
     };
   },
 });
@@ -300,53 +304,78 @@ export const adminRefundMission = action({
     reason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAdminAction(ctx, args.token);
+    try {
+      await requireAdminAction(ctx, args.token);
 
-    // 1. Récupérer mission + paiement via query interne
-    const data = await ctx.runQuery(internal.admin.financesInternal.getMissionForRefund, {
-      missionId: args.missionId,
-    });
-    if (!data) throw new ConvexError("Mission non trouvée");
-    if (!data.paymentIntentId) throw new ConvexError("Pas de paiement Stripe associé");
-    if (data.paymentStatus === "refunded") throw new ConvexError("Déjà remboursé");
+      // 1. Récupérer mission + paiement via query interne
+      const data = await ctx.runQuery(internal.admin.financesInternal.getMissionForRefund, {
+        missionId: args.missionId,
+      });
+      if (!data) throw new ConvexError("Mission non trouvée");
+      if (!data.paymentIntentId) throw new ConvexError("Pas de paiement Stripe associé");
+      if (data.paymentStatus === "refunded") throw new ConvexError("Déjà remboursé");
 
-    // 2. Calculer montant à rembourser
-    let refundAmount: number;
-    if (args.refundType === "total") {
-      refundAmount = data.totalAmount;
-    } else {
-      if (args.partialPercent) {
-        refundAmount = Math.round(data.totalAmount * args.partialPercent / 100);
-      } else if (args.partialAmount) {
-        refundAmount = args.partialAmount;
+      // 2. Calculer montant à rembourser
+      let refundAmount: number;
+      if (args.refundType === "total") {
+        refundAmount = data.totalAmount;
       } else {
-        throw new ConvexError("Montant partiel requis");
+        if (args.partialPercent) {
+          refundAmount = Math.round(data.totalAmount * args.partialPercent / 100);
+        } else if (args.partialAmount) {
+          refundAmount = args.partialAmount;
+        } else {
+          throw new ConvexError("Montant partiel requis");
+        }
       }
+
+      // 3. Récupérer la clé Stripe
+      const stripeSecretKey = await ctx.runQuery(internal.admin.financesInternal.getStripeSecretKey, {});
+      if (!stripeSecretKey) throw new ConvexError("Clé Stripe non configurée");
+
+      // 4. Émettre le remboursement via Stripe
+      const result = await ctx.runAction(internal.planning.cancellationActions.processStripeRefund, {
+        missionId: args.missionId,
+        paymentIntentId: data.paymentIntentId,
+        refundAmount,
+        stripeSecretKey,
+      });
+
+      if (!result.success) throw new ConvexError("Échec du remboursement Stripe: " + result.error);
+
+      // 5. Récupérer la config email pour envoyer le mail au client
+      const emailConfigs = await ctx.runQuery(internal.api.emailInternal.getEmailConfigs);
+      const appUrlConfig = await ctx.runQuery(internal.admin.financesInternal.getAppUrl);
+
+      // 6. Mettre à jour mission + envoyer email
+      await ctx.runMutation(internal.admin.reservations.markAdminRefund, {
+        missionId: args.missionId,
+        refundAmount,
+        isTotal: args.refundType === "total",
+        reason: args.reason,
+        refundStripeId: result.refundId || undefined,
+        clientEmail: data.clientEmail || undefined,
+        clientName: data.clientName || undefined,
+        announcerName: data.announcerName || undefined,
+        serviceName: data.serviceName || undefined,
+        startDate: data.startDate || undefined,
+        endDate: data.endDate || undefined,
+        emailConfig: emailConfigs?.apiKey ? {
+          apiKey: emailConfigs.apiKey,
+          fromEmail: emailConfigs.fromEmail || undefined,
+          fromName: emailConfigs.fromName || undefined,
+        } : undefined,
+        brevoApiKey: emailConfigs?.brevoApiKey || undefined,
+        emailProvider: emailConfigs?.emailProvider || undefined,
+        appUrl: appUrlConfig || undefined,
+      });
+
+      return { success: true, refundAmount, refundId: result.refundId };
+    } catch (error) {
+      if (error instanceof ConvexError) throw error;
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new ConvexError("Erreur remboursement: " + msg);
     }
-
-    // 3. Récupérer la clé Stripe
-    const stripeSecretKey = await ctx.runQuery(internal.admin.financesInternal.getStripeSecretKey, {});
-    if (!stripeSecretKey) throw new ConvexError("Clé Stripe non configurée");
-
-    // 4. Émettre le remboursement via Stripe
-    const result = await ctx.runAction(internal.planning.cancellationActions.processStripeRefund, {
-      missionId: args.missionId,
-      paymentIntentId: data.paymentIntentId,
-      refundAmount,
-      stripeSecretKey,
-    });
-
-    if (!result.success) throw new ConvexError("Échec du remboursement Stripe: " + result.error);
-
-    // 5. Mettre à jour mission
-    await ctx.runMutation(internal.admin.reservations.markAdminRefund, {
-      missionId: args.missionId,
-      refundAmount,
-      isTotal: args.refundType === "total",
-      reason: args.reason,
-    });
-
-    return { success: true, refundAmount, refundId: result.refundId };
   },
 });
 
@@ -359,6 +388,21 @@ export const markAdminRefund = internalMutation({
     refundAmount: v.number(),
     isTotal: v.boolean(),
     reason: v.optional(v.string()),
+    refundStripeId: v.optional(v.string()),
+    clientEmail: v.optional(v.string()),
+    clientName: v.optional(v.string()),
+    announcerName: v.optional(v.string()),
+    serviceName: v.optional(v.string()),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+    emailConfig: v.optional(v.object({
+      apiKey: v.string(),
+      fromEmail: v.optional(v.string()),
+      fromName: v.optional(v.string()),
+    })),
+    brevoApiKey: v.optional(v.string()),
+    emailProvider: v.optional(v.string()),
+    appUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const mission = await ctx.db.get(args.missionId);
@@ -366,45 +410,79 @@ export const markAdminRefund = internalMutation({
 
     const updates: Record<string, unknown> = {
       refundAmount: args.refundAmount,
-      paymentStatus: args.isTotal ? "refunded" : mission.paymentStatus,
+      paymentStatus: "refunded",
       updatedAt: Date.now(),
+      // Bloquer le versement annonceur (le paiement est sur le compte plateforme,
+      // pas encore transféré → on empêche le virement mensuel pour cette mission)
+      readyForPayout: false,
+      announcerPaymentStatus: "not_due",
     };
 
     if (args.isTotal) {
-      updates.readyForPayout = false;
       updates.announcerRetainedAmount = 0;
+      updates.announcerEarnings = 0;
+    } else {
+      // Remboursement partiel : recalculer les gains annonceur proportionnellement
+      const totalAmount = mission.amount || 0;
+      if (totalAmount > 0) {
+        const refundRatio = args.refundAmount / totalAmount;
+        const reducedEarnings = Math.round((mission.announcerEarnings || 0) * (1 - refundRatio));
+        updates.announcerEarnings = reducedEarnings;
+        updates.announcerRetainedAmount = reducedEarnings;
+      }
     }
 
     if (args.reason) {
       updates.cancellationReason = args.reason;
     }
 
+    if (args.refundStripeId) {
+      updates.refundStripeId = args.refundStripeId;
+    }
+
     await ctx.db.patch(args.missionId, updates);
 
     // Mettre à jour stripePayments
     if (mission.stripePaymentId) {
-      const paymentUpdates: Record<string, unknown> = {
+      await ctx.db.patch(mission.stripePaymentId, {
         refundedAmount: args.refundAmount,
         refundedAt: Date.now(),
+        status: "refunded",
         updatedAt: Date.now(),
-      };
-      if (args.isTotal) {
-        paymentUpdates.status = "refunded";
-      }
-      await ctx.db.patch(mission.stripePaymentId, paymentUpdates);
+      });
     }
 
     // Notification au client
+    const now2 = Date.now();
     await ctx.db.insert("notifications", {
       userId: mission.clientId,
       type: "payment_refunded",
       title: "Remboursement effectué",
       message: `Un remboursement de ${(args.refundAmount / 100).toFixed(2).replace(".", ",")}€ a été effectué pour "${mission.serviceName}".`,
-      read: false,
-      linkType: "reservation",
+      isRead: false,
+      linkType: "mission",
       linkUrl: `/client/reservations/${args.missionId}`,
-      createdAt: Date.now(),
+      createdAt: now2,
+      expiresAt: now2 + 30 * 24 * 60 * 60 * 1000,
     });
+
+    // Envoyer l'email de remboursement au client
+    if (args.clientEmail && args.emailConfig) {
+      await ctx.scheduler.runAfter(0, internal.api.email.sendAdminRefundClientEmail, {
+        clientEmail: args.clientEmail,
+        clientName: args.clientName || "Client",
+        serviceName: args.serviceName || mission.serviceName || "Service",
+        announcerName: args.announcerName || "Prestataire",
+        startDate: args.startDate || mission.startDate || "",
+        endDate: args.endDate || mission.endDate || "",
+        refundAmount: args.refundAmount,
+        reason: args.reason || "Remboursement administratif",
+        emailConfig: args.emailConfig,
+        brevoApiKey: args.brevoApiKey,
+        emailProvider: args.emailProvider,
+        appUrl: args.appUrl,
+      });
+    }
   },
 });
 

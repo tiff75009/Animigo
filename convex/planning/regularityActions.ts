@@ -21,6 +21,8 @@ export const sendRegularityAlertEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     }),
+    brevoApiKey: v.optional(v.string()),
+    emailProvider: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     try {
@@ -153,6 +155,37 @@ export const sendRegularityAlertEmail = internalAction({
 </body>
 </html>`;
 
+      const fromStr = `${fromName} <${fromEmail}>`;
+      const provider = (args.emailProvider as "brevo" | "resend") || "resend";
+
+      // Tentative Brevo si configuré
+      if (provider === "brevo" && args.brevoApiKey) {
+        try {
+          const brevoResp = await fetch("https://api.brevo.com/v3/smtp/email", {
+            method: "POST",
+            headers: {
+              "api-key": args.brevoApiKey,
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            body: JSON.stringify({
+              sender: { name: fromName, email: fromEmail },
+              to: [{ email: args.recipientEmail }],
+              subject,
+              htmlContent: html,
+            }),
+          });
+          if (brevoResp.ok) {
+            const brevoResult = await brevoResp.json();
+            return { success: true, id: brevoResult.messageId, provider: "brevo" };
+          }
+          console.warn(`[Brevo] Failed (${brevoResp.status}) — falling back to Resend`);
+        } catch (e) {
+          console.warn(`[Brevo] Exception — falling back to Resend`);
+        }
+      }
+
+      // Resend (provider par défaut ou fallback)
       const response = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
@@ -160,7 +193,7 @@ export const sendRegularityAlertEmail = internalAction({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: `${fromName} <${fromEmail}>`,
+          from: fromStr,
           to: [args.recipientEmail],
           subject,
           html,
@@ -173,7 +206,7 @@ export const sendRegularityAlertEmail = internalAction({
       }
 
       const result = await response.json();
-      return { success: true, id: result.id };
+      return { success: true, id: result.id, provider: "resend" };
     } catch (error) {
       console.error("Failed to send regularity alert email:", error);
       return {

@@ -5,6 +5,7 @@ import { internal } from "../_generated/api";
 import { Doc, Id } from "../_generated/dataModel";
 import { validateSiret } from "../auth/utils";
 import { notifyRegularityAlert } from "../lib/notificationTemplates";
+import { getEmailConfigFromDb } from "../api/emailInternal";
 
 // ============================================
 // CONSTANTES - Seuils URSSAF
@@ -267,20 +268,9 @@ export const computeAllScores = internalMutation({
           existingScore?.lastEmailSentLevel !== result.alertLevel
         ) {
           // Récupérer les configs email
-          const emailApiKeyConfig = await ctx.db
-            .query("systemConfig")
-            .withIndex("by_key", (q) => q.eq("key", "resend_api_key"))
-            .first();
-          const emailFromConfig = await ctx.db
-            .query("systemConfig")
-            .withIndex("by_key", (q) => q.eq("key", "resend_from_email"))
-            .first();
-          const emailFromNameConfig = await ctx.db
-            .query("systemConfig")
-            .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
-            .first();
+          const { emailConfig: regEmailConfig, brevoApiKey: regBrevoKey, emailProvider: regProvider } = await getEmailConfigFromDb(ctx.db);
 
-          if (emailApiKeyConfig?.value) {
+          if (regEmailConfig || regBrevoKey) {
             await ctx.scheduler.runAfter(
               0,
               internal.planning.regularityActions.sendRegularityAlertEmail,
@@ -295,11 +285,9 @@ export const computeAllScores = internalMutation({
                 score: result.score,
                 isBlocked,
                 graceDeadline: graceDeadline || null,
-                emailConfig: {
-                  apiKey: emailApiKeyConfig.value,
-                  fromEmail: emailFromConfig?.value,
-                  fromName: emailFromNameConfig?.value,
-                },
+                emailConfig: regEmailConfig || { apiKey: "" },
+                brevoApiKey: regBrevoKey,
+                emailProvider: regProvider,
               }
             );
 

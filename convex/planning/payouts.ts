@@ -5,35 +5,8 @@ import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { ConvexError } from "convex/values";
 import { notifyMissionValidatedByClient, notifyMissionAutoValidated } from "../lib/notificationTemplates";
+import { getEmailConfigFromDb } from "../api/emailInternal";
 
-// Helper pour récupérer la config email depuis systemConfig
-async function getEmailConfig(ctx: { db: any }) {
-  const apiKeyConfig = await ctx.db
-    .query("systemConfig")
-    .withIndex("by_key", (q: any) => q.eq("key", "resend_api_key"))
-    .first();
-  const fromEmailConfig = await ctx.db
-    .query("systemConfig")
-    .withIndex("by_key", (q: any) => q.eq("key", "resend_from_email"))
-    .first();
-  const fromNameConfig = await ctx.db
-    .query("systemConfig")
-    .withIndex("by_key", (q: any) => q.eq("key", "resend_from_name"))
-    .first();
-  const appUrlConfig = await ctx.db
-    .query("systemConfig")
-    .withIndex("by_key", (q: any) => q.eq("key", "app_url"))
-    .first();
-
-  return {
-    emailConfig: apiKeyConfig?.value ? {
-      apiKey: apiKeyConfig.value,
-      fromEmail: fromEmailConfig?.value,
-      fromName: fromNameConfig?.value,
-    } : undefined,
-    appUrl: appUrlConfig?.value || undefined,
-  };
-}
 
 /**
  * Gestion des versements aux annonceurs
@@ -92,6 +65,14 @@ export const confirmMissionEnd = mutation({
       throw new ConvexError("La mission est déjà confirmée");
     }
 
+    // Vérifier qu'il n'y a pas de réclamation ouverte
+    if (mission.hasDispute && mission.disputeId) {
+      const existingDispute = await ctx.db.get(mission.disputeId);
+      if (existingDispute && (existingDispute.status === "open" || existingDispute.status === "investigating")) {
+        throw new ConvexError("Impossible de confirmer : une réclamation est en cours de traitement");
+      }
+    }
+
     const now = Date.now();
 
     // Récupérer l'annonceur pour connaître son mode de versement
@@ -125,17 +106,11 @@ export const confirmMissionEnd = mutation({
       payoutScheduledFor = payoutDate.toISOString().split("T")[0];
     }
 
-    // Vérifier s'il y a une dispute ouverte avec blocage paiement
-    const dispute = mission.hasDispute && mission.disputeId
-      ? await ctx.db.get(mission.disputeId)
-      : null;
-    const isPaymentBlocked = dispute?.paymentBlocked && (dispute.status === "open" || dispute.status === "investigating");
-
-    // Marquer la mission comme confirmée et prête pour versement (sauf si bloqué)
+    // Marquer la mission comme confirmée et prête pour versement
     await ctx.db.patch(args.missionId, {
       clientConfirmedAt: now,
-      readyForPayout: !isPaymentBlocked,
-      payoutScheduledFor: isPaymentBlocked ? undefined : payoutScheduledFor,
+      readyForPayout: true,
+      payoutScheduledFor,
       updatedAt: now,
     });
 
@@ -150,8 +125,8 @@ export const confirmMissionEnd = mutation({
     });
 
     // Email annonceur
-    const { emailConfig, appUrl } = await getEmailConfig(ctx);
-    if (emailConfig) {
+    const { emailConfig, brevoApiKey, emailProvider, appUrl } = await getEmailConfigFromDb(ctx.db);
+    if (emailConfig || brevoApiKey) {
       const animalName = mission.animals?.length
         ? mission.animals.map((a: any) => a.name).join(", ")
         : mission.animal?.name || "Animal";
@@ -165,6 +140,8 @@ export const confirmMissionEnd = mutation({
         startDate: mission.startDate,
         endDate: mission.endDate,
         emailConfig,
+        brevoApiKey,
+        emailProvider,
         appUrl,
       });
     }

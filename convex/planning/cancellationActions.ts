@@ -19,23 +19,29 @@ export const processStripeRefund = internalAction({
         apiVersion: "2024-12-18.acacia",
       });
 
+      // Tenter le remboursement avec reverse_transfer pour inverser
+      // le transfert Connect automatique (transfer_data.destination)
       const refund = await stripe.refunds.create({
         payment_intent: args.paymentIntentId,
         amount: args.refundAmount,
+        reverse_transfer: true,
       });
 
-      await ctx.runMutation(
-        internal.planning.cancellation.markRefundProcessed,
-        {
-          missionId: args.missionId,
-          refundStripeId: refund.id,
-        }
-      );
+      // NE PAS appeler ctx.runMutation ici — le runtime Node.js de Convex
+      // self-hosted a un bug qui retourne le HTML du dashboard au lieu de la réponse.
+      // L'appelant (adminRefundMission) gère les mises à jour via markAdminRefund.
 
       return { success: true, refundId: refund.id };
-    } catch (error) {
+    } catch (error: any) {
       console.error("Stripe refund failed:", error);
-      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+      // Si la charge est déjà remboursée (tentatives précédentes),
+      // considérer comme succès pour permettre la mise à jour Convex
+      const errMsg = error?.raw?.message || error?.message || "Unknown error";
+      if (typeof errMsg === "string" && errMsg.includes("greater than unrefunded amount")) {
+        console.log("Charge déjà remboursée côté Stripe, on continue");
+        return { success: true, refundId: "already_refunded" };
+      }
+      return { success: false, error: typeof errMsg === "string" ? errMsg : "Erreur Stripe inconnue" };
     }
   },
 });
@@ -93,19 +99,14 @@ export const cancelStripePaymentIntent = internalAction({
       } else if (pi.status === "succeeded") {
         // PI déjà capturé (paiement immédiat) → créer un remboursement
         const refundAmount = args.refundAmount || pi.amount;
+        // reverse_transfer: true car transfer_data.destination crée un transfert auto
         const refund = await stripe.refunds.create({
           payment_intent: args.paymentIntentId,
           amount: refundAmount,
+          reverse_transfer: true,
         });
         console.log("Refund créé (PI succeeded):", refund.id, "montant:", refundAmount);
-
-        // Mettre à jour la mission avec l'ID du refund
-        if (args.missionId) {
-          await ctx.runMutation(
-            internal.planning.cancellation.markRefundProcessed,
-            { missionId: args.missionId, refundStripeId: refund.id }
-          );
-        }
+        // L'appelant gère les mises à jour Convex (pas de ctx.runMutation ici)
         return { success: true, refundId: refund.id };
       } else if (pi.status === "canceled") {
         console.log("PaymentIntent déjà annulé:", args.paymentIntentId);

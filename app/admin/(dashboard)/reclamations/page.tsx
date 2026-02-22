@@ -28,6 +28,8 @@ import {
   ArrowLeft,
   FileText,
   Settings,
+  UserX,
+  Ban,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import Link from "next/link";
@@ -114,6 +116,9 @@ export default function AdminReclamationsPage() {
   const [adminNote, setAdminNote] = useState("");
   const [resolution, setResolution] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [suspendAnnouncer, setSuspendAnnouncer] = useState(false);
+  const [suspendReason, setSuspendReason] = useState("");
+  const [closeMission, setCloseMission] = useState(false);
 
   // Queries
   const disputes = useQuery(
@@ -128,6 +133,7 @@ export default function AdminReclamationsPage() {
 
   // Mutations
   const updateStatus = useMutation(api.admin.disputes.updateDisputeStatus);
+  const resolveWithActions = useMutation(api.admin.disputes.resolveDisputeWithActions);
   const addNote = useMutation(api.admin.disputes.addAdminNote);
 
   const formatDate = (timestamp: number) => {
@@ -156,15 +162,31 @@ export default function AdminReclamationsPage() {
     if (!token) return;
     setIsProcessing(true);
     try {
-      await updateStatus({
-        token,
-        disputeId,
-        status: newStatus,
-        resolution: resolution || undefined,
-        adminNotes: adminNote || undefined,
-      });
+      if (suspendAnnouncer || closeMission) {
+        await resolveWithActions({
+          token,
+          disputeId,
+          status: newStatus,
+          resolution: resolution || undefined,
+          adminNotes: adminNote || undefined,
+          suspendAnnouncer: suspendAnnouncer || undefined,
+          suspendReason: suspendReason || undefined,
+          closeMission: closeMission || undefined,
+        });
+      } else {
+        await updateStatus({
+          token,
+          disputeId,
+          status: newStatus,
+          resolution: resolution || undefined,
+          adminNotes: adminNote || undefined,
+        });
+      }
       setResolution("");
       setAdminNote("");
+      setSuspendAnnouncer(false);
+      setSuspendReason("");
+      setCloseMission(false);
     } catch (error) {
       console.error("Erreur:", error);
     } finally {
@@ -484,6 +506,65 @@ export default function AdminReclamationsPage() {
                     rows={3}
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none placeholder-slate-500"
                   />
+                </div>
+
+                {/* Options de clôture */}
+                <div className="mb-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700 space-y-3">
+                  <p className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                    <Settings className="w-4 h-4 text-slate-400" />
+                    Options de clôture
+                  </p>
+
+                  {/* Suspendre l'annonceur */}
+                  <label className="flex items-start gap-3 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={suspendAnnouncer}
+                      onChange={(e) => setSuspendAnnouncer(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-700 text-red-500 focus:ring-red-500 focus:ring-offset-0"
+                    />
+                    <div>
+                      <span className="text-sm text-white flex items-center gap-1.5 group-hover:text-red-400 transition-colors">
+                        <UserX className="w-3.5 h-3.5" />
+                        Suspendre le compte annonceur
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        Le prestataire sera déconnecté et ne pourra plus accéder à son espace
+                      </span>
+                    </div>
+                  </label>
+
+                  {/* Raison de suspension (conditionnelle) */}
+                  {suspendAnnouncer && (
+                    <div className="ml-7">
+                      <input
+                        type="text"
+                        value={suspendReason}
+                        onChange={(e) => setSuspendReason(e.target.value)}
+                        placeholder="Raison de la suspension..."
+                        className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-red-500"
+                      />
+                    </div>
+                  )}
+
+                  {/* Clôturer la réservation */}
+                  <label className="flex items-start gap-3 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={closeMission}
+                      onChange={(e) => setCloseMission(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-700 text-amber-500 focus:ring-amber-500 focus:ring-offset-0"
+                    />
+                    <div>
+                      <span className="text-sm text-white flex items-center gap-1.5 group-hover:text-amber-400 transition-colors">
+                        <Ban className="w-3.5 h-3.5" />
+                        Clôturer la réservation
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        La mission sera marquée comme annulée par le système
+                      </span>
+                    </div>
+                  </label>
                 </div>
 
                 <div className="space-y-2">

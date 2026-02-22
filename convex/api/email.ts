@@ -3,7 +3,6 @@
 
 import { action, internalAction } from "../_generated/server";
 import { v } from "convex/values";
-import { Resend } from "resend";
 import { internal } from "../_generated/api";
 
 // Helper pour remplacer les variables dans un template
@@ -28,6 +27,123 @@ function formatPrice(cents: number): string {
 function formatDate(dateStr: string): string {
   const [year, month, day] = dateStr.split("-");
   return `${day}/${month}/${year}`;
+}
+
+// Helper pour extraire les args template Brevo depuis un template DB
+function getBrevoTemplateArgs(template: any, variables: Record<string, any>) {
+  if (template?.useBrevoTemplate && template?.brevoTemplateId) {
+    return {
+      brevoTemplateId: template.brevoTemplateId as number,
+      templateParams: variables,
+    };
+  }
+  return {};
+}
+
+// ─── Email Provider Helper ───────────────────────────────────────────────
+// Envoie un email via Brevo (prioritaire) ou Resend (fallback).
+// La config emailConfig contient toujours la clé Resend (apiKey).
+// Si brevoApiKey est fourni et que le provider est "brevo", on tente Brevo d'abord.
+
+interface EmailSendParams {
+  to: string;
+  from: string;
+  subject: string;
+  html: string;
+  // Provider config
+  provider?: "brevo" | "resend";
+  resendApiKey?: string;
+  brevoApiKey?: string;
+  // Brevo template (optionnel)
+  brevoTemplateId?: number;
+  templateParams?: Record<string, string | number>;
+}
+
+interface EmailSendResult {
+  success: boolean;
+  id?: string;
+  provider?: "brevo" | "resend";
+  error?: string;
+}
+
+async function sendEmailViaProvider(params: EmailSendParams): Promise<EmailSendResult> {
+  const { to, from, subject, html, provider = "resend", resendApiKey, brevoApiKey, brevoTemplateId, templateParams } = params;
+
+  // Tentative Brevo si configuré et provider = brevo
+  if (provider === "brevo" && brevoApiKey) {
+    try {
+      // Si un templateId Brevo est fourni, utiliser l'API template
+      const bodyPayload: Record<string, unknown> = brevoTemplateId
+        ? {
+            templateId: brevoTemplateId,
+            to: [{ email: to }],
+            params: templateParams || {},
+          }
+        : {
+            sender: { name: from.split("<")[0].trim(), email: from.match(/<(.+)>/)?.[1] || from },
+            to: [{ email: to }],
+            subject,
+            htmlContent: html,
+          };
+
+      const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+        method: "POST",
+        headers: {
+          "api-key": brevoApiKey,
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: JSON.stringify(bodyPayload),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`[Brevo] Email sent to ${to}: messageId=${result.messageId}`);
+        return { success: true, id: result.messageId, provider: "brevo" };
+      }
+
+      // Brevo a échoué → log et fallback Resend
+      const errorText = await response.text();
+      console.warn(`[Brevo] Failed (${response.status}): ${errorText} — falling back to Resend`);
+    } catch (error) {
+      console.warn(`[Brevo] Exception: ${error instanceof Error ? error.message : error} — falling back to Resend`);
+    }
+  }
+
+  // Resend (provider par défaut ou fallback)
+  if (resendApiKey) {
+    try {
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from,
+          to: [to],
+          subject,
+          html,
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`[Resend] Email sent to ${to}: id=${result.id}`);
+        return { success: true, id: result.id, provider: "resend" };
+      }
+
+      const errorText = await response.text();
+      console.error(`[Resend] Failed (${response.status}): ${errorText}`);
+      return { success: false, error: `Resend error: ${response.status} - ${errorText}` };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error(`[Resend] Exception: ${msg}`);
+      return { success: false, error: msg };
+    }
+  }
+
+  return { success: false, error: "No email provider configured" };
 }
 
 // Templates HTML par défaut (fallback si pas en base)
@@ -940,6 +1056,156 @@ const DEFAULT_TEMPLATES: Record<string, { subject: string; html: string }> = {
 </body>
 </html>`,
   },
+  admin_refund_client: {
+    subject: "Votre remboursement a ete effectue - {{siteName}}",
+    html: `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Remboursement effectue</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+<tr><td align="center" style="padding:40px 20px;">
+  <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+    <!-- Header -->
+    <tr>
+      <td align="center" style="background-color:#10B981;padding:40px 30px;">
+        <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:bold;">Remboursement effectue</h1>
+      </td>
+    </tr>
+    <!-- Body -->
+    <tr>
+      <td style="padding:40px 30px;">
+        <h2 style="margin:0 0 20px 0;color:#1e293b;font-size:24px;">Bonjour {{clientName}},</h2>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          Un remboursement a ete effectue sur votre reservation. Voici le detail :
+        </p>
+        <!-- Service info -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#f0f9ff;border-left:4px solid #0ea5e9;border-radius:8px;">
+              <p style="margin:0 0 10px 0;font-weight:bold;color:#0369a1;">Details du service</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Service :</strong> {{serviceName}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Prestataire :</strong> {{announcerName}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
+            </td>
+          </tr>
+        </table>
+        <!-- Refund amount -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#ecfdf5;border-left:4px solid #10b981;border-radius:8px;">
+              <p style="margin:0 0 5px 0;font-weight:bold;color:#065f46;font-size:18px;">Montant rembourse : {{refundAmount}}</p>
+              <p style="margin:0;color:#047857;font-size:14px;">Le remboursement sera visible sur votre compte sous 5 a 10 jours ouvres.</p>
+            </td>
+          </tr>
+        </table>
+        <!-- Reason -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#fef3c7;border-left:4px solid #f59e0b;border-radius:8px;">
+              <p style="margin:0 0 5px 0;font-weight:bold;color:#92400e;">Raison :</p>
+              <p style="margin:0;color:#78350f;">{{reason}}</p>
+            </td>
+          </tr>
+        </table>
+        <!-- Button -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center" style="padding:30px 0;">
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{reservationsUrl}}" style="height:52px;v-text-anchor:middle;width:280px;" arcsize="50%" fillcolor="#10B981" stroke="f"><v:textbox inset="0,0,0,0"><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Voir mes reservations</center></v:textbox></v:roundrect><![endif]-->
+              <!--[if !mso]><!--><a href="{{reservationsUrl}}" style="display:inline-block;background-color:#10B981;color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:bold;font-size:16px;">Voir mes reservations</a><!--<![endif]-->
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <!-- Footer -->
+    <tr>
+      <td align="center" style="background-color:#f8fafc;padding:30px;border-top:1px solid #e2e8f0;">
+        <p style="margin:0;color:#94a3b8;font-size:12px;">&copy; 2025 {{siteName}}. Tous droits reserves.</p>
+      </td>
+    </tr>
+  </table>
+  <!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
+</body>
+</html>`,
+  },
+  account_deactivated: {
+    subject: "Votre compte a ete desactive - {{siteName}}",
+    html: `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Compte desactive</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+<tr><td align="center" style="padding:40px 20px;">
+  <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+    <!-- Header -->
+    <tr>
+      <td align="center" style="background-color:#DC2626;padding:40px 30px;">
+        <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:bold;">Compte desactive</h1>
+      </td>
+    </tr>
+    <!-- Body -->
+    <tr>
+      <td style="padding:40px 30px;">
+        <h2 style="margin:0 0 20px 0;color:#1e293b;font-size:24px;">Bonjour {{announcerName}},</h2>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          Nous vous informons que votre compte sur {{siteName}} a ete desactive par notre equipe d'administration.
+        </p>
+        <!-- Reason -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#fef2f2;border-left:4px solid #DC2626;border-radius:8px;">
+              <p style="margin:0 0 5px 0;font-weight:bold;color:#991b1b;">Raison :</p>
+              <p style="margin:0;color:#7f1d1d;">{{reason}}</p>
+            </td>
+          </tr>
+        </table>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          Tant que votre compte est desactive, vous ne pourrez plus recevoir de reservations ni acceder a votre espace prestataire.
+        </p>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          Si vous pensez qu'il s'agit d'une erreur ou si vous souhaitez contester cette decision, veuillez contacter notre support :
+        </p>
+        <!-- Button -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center" style="padding:30px 0;">
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="mailto:{{supportEmail}}" style="height:52px;v-text-anchor:middle;width:280px;" arcsize="50%" fillcolor="#6366F1" stroke="f"><v:textbox inset="0,0,0,0"><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Contacter le support</center></v:textbox></v:roundrect><![endif]-->
+              <!--[if !mso]><!--><a href="mailto:{{supportEmail}}" style="display:inline-block;background-color:#6366F1;color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:bold;font-size:16px;">Contacter le support</a><!--<![endif]-->
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <!-- Footer -->
+    <tr>
+      <td align="center" style="background-color:#f8fafc;padding:30px;border-top:1px solid #e2e8f0;">
+        <p style="margin:0;color:#94a3b8;font-size:12px;">&copy; 2025 {{siteName}}. Tous droits reserves.</p>
+      </td>
+    </tr>
+  </table>
+  <!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
+</body>
+</html>`,
+  },
 };
 
 // Helper pour récupérer un template (utilise les templates par défaut - bypass database pour éviter le bug des appels internes)
@@ -979,284 +1245,88 @@ export const sendVerificationEmail = internalAction({
       location: v.optional(v.string()),
       totalAmount: v.number(),
     })),
-    // Config email passée depuis la mutation (contourne le bug ctx.runQuery sur self-hosted)
     emailConfig: v.optional(v.object({
       apiKey: v.string(),
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     })),
-    // URL de l'application passée depuis la mutation
+    brevoApiKey: v.optional(v.string()),
+    emailProvider: v.optional(v.string()),
     appUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    console.log("=== sendVerificationEmail START ===");
-    console.log("Args received:", { userId: args.userId, email: args.email, context: args.context });
-
     try {
-      // Utiliser la config passée en argument, sinon fallback sur env vars
       const apiKey = args.emailConfig?.apiKey || process.env.RESEND_API_KEY;
       const fromEmail = args.emailConfig?.fromEmail || process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
       const fromName = args.emailConfig?.fromName || process.env.RESEND_FROM_NAME || "Animigo";
 
-      console.log("Email config:", {
-        hasApiKey: !!apiKey,
-        apiKeyPrefix: apiKey ? apiKey.substring(0, 10) + "..." : "none",
-        fromEmail,
-        fromName,
-        source: args.emailConfig ? "from mutation args" : "from env vars",
-      });
-
-      if (!apiKey) {
-        console.error("No API key configured (neither in args nor env vars)");
+      if (!apiKey && !args.brevoApiKey) {
+        console.error("No email API key configured");
         return { success: false, error: "Email service not configured" };
       }
 
-      // Valider le format de la clé API Resend (doit commencer par "re_")
-      if (!apiKey.startsWith("re_")) {
-        console.error("Invalid Resend API key format. Must start with 're_'");
-        return { success: false, error: "Invalid API key format" };
+      const siteName = "Animigo";
+      const appUrl = args.appUrl || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+      const verificationUrl = `${appUrl}/verify-email?token=${args.token}`;
+
+      const templateSlug = args.context === "reservation" ? "verification_reservation" : "verification";
+      const template = getTemplate(templateSlug);
+
+      if (!template) {
+        return { success: false, error: "Template not found" };
       }
-    const siteName = "Animigo";
-    // Utiliser l'URL passée en argument (depuis la DB), sinon fallback sur env var, sinon localhost
-    const appUrl = args.appUrl || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const verificationUrl = `${appUrl}/verify-email?token=${args.token}`;
-    console.log("App URL source:", args.appUrl ? "from DB config" : (process.env.NEXT_PUBLIC_APP_URL ? "from env var" : "default localhost"));
-    console.log("Verification URL:", verificationUrl);
 
-    // Choisir le bon template selon le contexte
-    const templateSlug = args.context === "reservation" ? "verification_reservation" : "verification";
-    const template = getTemplate(templateSlug);
+      const variables: Record<string, string | number> = {
+        firstName: args.firstName,
+        verificationUrl,
+        siteName,
+        expirationHours: 24,
+      };
 
-    if (!template) {
-      console.error(`Template ${templateSlug} not found`);
-      return { success: false, error: "Template not found" };
-    }
-
-    // Préparer les variables
-    const variables: Record<string, string | number> = {
-      firstName: args.firstName,
-      verificationUrl,
-      siteName,
-      expirationHours: 24,
-    };
-
-    // Ajouter les variables de réservation si présentes
-    if (args.reservationData) {
-      variables.serviceName = args.reservationData.serviceName;
-      variables.announcerName = args.reservationData.announcerName;
-      variables.startDate = formatDate(args.reservationData.startDate);
-      variables.endDate = formatDate(args.reservationData.endDate);
-      variables.totalAmount = formatPrice(args.reservationData.totalAmount);
-      if (args.reservationData.startTime) {
-        variables.startTime = args.reservationData.startTime;
+      if (args.reservationData) {
+        variables.serviceName = args.reservationData.serviceName;
+        variables.announcerName = args.reservationData.announcerName;
+        variables.startDate = formatDate(args.reservationData.startDate);
+        variables.endDate = formatDate(args.reservationData.endDate);
+        variables.totalAmount = formatPrice(args.reservationData.totalAmount);
+        if (args.reservationData.startTime) variables.startTime = args.reservationData.startTime;
+        if (args.reservationData.animalName) variables.animalName = args.reservationData.animalName;
+        if (args.reservationData.location) variables.location = args.reservationData.location;
       }
-      if (args.reservationData.animalName) {
-        variables.animalName = args.reservationData.animalName;
-      }
-      if (args.reservationData.location) {
-        variables.location = args.reservationData.location;
-      }
-    }
 
-    const subject = replaceVariables(template.subject, variables);
-    const html = replaceVariables(template.htmlContent, variables);
+      const subject = replaceVariables(template.subject, variables);
+      const html = replaceVariables(template.htmlContent, variables);
+      const fromStr = `${fromName} <${fromEmail}>`;
 
-    console.log("Attempting to send email:", {
-      to: args.email,
-      from: `${fromName} <${fromEmail}>`,
-      subject,
-    });
-
-    // Utiliser fetch directement au lieu du SDK Resend pour debug
-    try {
-      console.log("Making direct fetch to Resend API...");
-
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: `${fromName} <${fromEmail}>`,
-          to: [args.email],
-          subject,
-          html,
-        }),
+      const result = await sendEmailViaProvider({
+        to: args.email,
+        from: fromStr,
+        subject,
+        html,
+        provider: (args.emailProvider as "brevo" | "resend") || "resend",
+        resendApiKey: apiKey,
+        brevoApiKey: args.brevoApiKey,
+        ...getBrevoTemplateArgs(template, variables),
       });
 
-      console.log("Resend API response status:", response.status);
-
-      const responseText = await response.text();
-      console.log("Resend API response body:", responseText.substring(0, 500));
-
-      if (!response.ok) {
-        throw new Error(`Resend API error: ${response.status} - ${responseText}`);
+      if (!result.success) {
+        throw new Error(result.error || "Email send failed");
       }
 
-      const result = JSON.parse(responseText);
-      console.log("Email sent successfully:", result);
+      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+        to: args.email,
+        from: fromStr,
+        subject,
+        template: templateSlug,
+        status: "sent",
+        resendId: result.id,
+        provider: result.provider as "brevo" | "resend" | undefined,
+        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
+      });
 
-      // Note: Email logging désactivé temporairement car ctx.runMutation échoue sur self-hosted
-      // await ctx.runMutation(internal.api.emailInternal.logEmail, {...});
-
-      return { success: true, id: result.id };
+      return { success: true, id: result.id, provider: result.provider };
     } catch (error) {
-      console.error("Failed to send email:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-
-      // Note: Email logging désactivé temporairement car ctx.runMutation échoue sur self-hosted
-      // await ctx.runMutation(internal.api.emailInternal.logEmail, {...});
-
       console.error("Failed to send verification email:", error);
-      return { success: false, error: errorMessage };
-    }
-    // Fin du try intérieur (fetch)
-    } catch (outerError: unknown) {
-      // Catch pour le try extérieur (configs, template, etc.)
-      console.error("=== OUTER ERROR in sendVerificationEmail ===");
-      console.error("Error type:", typeof outerError);
-      console.error("Error:", String(outerError));
-      throw outerError;
-    }
-  },
-});
-
-// Action pour envoyer un email de bienvenue (après vérification simple)
-export const sendWelcomeEmail = internalAction({
-  args: {
-    email: v.string(),
-    firstName: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const configs = await ctx.runQuery(internal.api.emailInternal.getEmailConfigs);
-
-    if (!configs.apiKey) {
-      return { success: false, error: "Email service not configured" };
-    }
-
-    // Note: Pour les tests, utilisez onboarding@resend.dev ou un domaine vérifié
-    const fromEmail = configs.fromEmail || "onboarding@resend.dev";
-    const fromName = configs.fromName || "Animigo";
-    const siteName = "Animigo";
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
-    const template = getTemplate("welcome");
-    if (!template) {
-      return { success: false, error: "Template not found" };
-    }
-
-    const variables = {
-      firstName: args.firstName,
-      siteName,
-      dashboardUrl: `${appUrl}/dashboard`,
-    };
-
-    const subject = replaceVariables(template.subject, variables);
-    const html = replaceVariables(template.htmlContent, variables);
-
-    const resend = new Resend(configs.apiKey);
-
-    try {
-      const result = await resend.emails.send({
-        from: `${fromName} <${fromEmail}>`,
-        to: args.email,
-        subject,
-        html,
-      });
-
-      await ctx.runMutation(internal.api.emailInternal.logEmail, {
-        to: args.email,
-        from: `${fromName} <${fromEmail}>`,
-        subject,
-        template: "welcome",
-        status: "sent",
-        resendId: result.data?.id,
-      });
-
-      return { success: true, id: result.data?.id };
-    } catch (error) {
-      console.error("Failed to send welcome email:", error);
-      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
-    }
-  },
-});
-
-// Action pour envoyer l'email de confirmation de réservation (au client)
-export const sendReservationConfirmedEmail = internalAction({
-  args: {
-    email: v.string(),
-    firstName: v.string(),
-    reservation: v.object({
-      serviceName: v.string(),
-      announcerName: v.string(),
-      startDate: v.string(),
-      endDate: v.string(),
-      startTime: v.optional(v.string()),
-      animalName: v.optional(v.string()),
-      animalType: v.optional(v.string()),
-      location: v.optional(v.string()),
-      totalAmount: v.number(),
-    }),
-  },
-  handler: async (ctx, args) => {
-    const configs = await ctx.runQuery(internal.api.emailInternal.getEmailConfigs);
-
-    if (!configs.apiKey) {
-      return { success: false, error: "Email service not configured" };
-    }
-
-    // Note: Pour les tests, utilisez onboarding@resend.dev ou un domaine vérifié
-    const fromEmail = configs.fromEmail || "onboarding@resend.dev";
-    const fromName = configs.fromName || "Animigo";
-    const siteName = "Animigo";
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
-    const template = getTemplate("reservation_confirmed");
-    if (!template) {
-      return { success: false, error: "Template not found" };
-    }
-
-    const variables = {
-      firstName: args.firstName,
-      siteName,
-      dashboardUrl: `${appUrl}/dashboard`,
-      serviceName: args.reservation.serviceName,
-      announcerName: args.reservation.announcerName,
-      startDate: formatDate(args.reservation.startDate),
-      endDate: formatDate(args.reservation.endDate),
-      startTime: args.reservation.startTime || "",
-      animalName: args.reservation.animalName || "Animal",
-      animalType: args.reservation.animalType || "",
-      location: args.reservation.location || "",
-      totalAmount: formatPrice(args.reservation.totalAmount),
-    };
-
-    const subject = replaceVariables(template.subject, variables);
-    const html = replaceVariables(template.htmlContent, variables);
-
-    const resend = new Resend(configs.apiKey);
-
-    try {
-      const result = await resend.emails.send({
-        from: `${fromName} <${fromEmail}>`,
-        to: args.email,
-        subject,
-        html,
-      });
-
-      await ctx.runMutation(internal.api.emailInternal.logEmail, {
-        to: args.email,
-        from: `${fromName} <${fromEmail}>`,
-        subject,
-        template: "reservation_confirmed",
-        status: "sent",
-        resendId: result.data?.id,
-      });
-
-      return { success: true, id: result.data?.id };
-    } catch (error) {
-      console.error("Failed to send reservation confirmed email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
     }
   },
@@ -1287,6 +1357,8 @@ export const sendNewReservationRequestEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     })),
+    brevoApiKey: v.optional(v.string()),
+    emailProvider: v.optional(v.string()),
     appUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -1301,11 +1373,6 @@ export const sendNewReservationRequestEmail = internalAction({
       if (!apiKey) {
         console.error("No API key configured");
         return { success: false, error: "Email service not configured" };
-      }
-
-      if (!apiKey.startsWith("re_")) {
-        console.error("Invalid Resend API key format");
-        return { success: false, error: "Invalid API key format" };
       }
 
       const siteName = "Animigo";
@@ -1361,30 +1428,26 @@ export const sendNewReservationRequestEmail = internalAction({
 
       console.log("Sending new reservation email to:", args.announcerEmail);
 
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: `${fromName} <${fromEmail}>`,
-          to: [args.announcerEmail],
-          subject,
-          html,
-        }),
+      const fromStr = `${fromName} <${fromEmail}>`;
+
+      const result = await sendEmailViaProvider({
+        to: args.announcerEmail,
+        from: fromStr,
+        subject,
+        html,
+        provider: (args.emailProvider as "brevo" | "resend") || "resend",
+        resendApiKey: apiKey,
+        brevoApiKey: args.brevoApiKey,
+        ...getBrevoTemplateArgs(template, variables),
       });
 
-      const responseText = await response.text();
-
-      if (!response.ok) {
-        throw new Error(`Resend API error: ${response.status} - ${responseText}`);
+      if (!result.success) {
+        throw new Error(result.error || "Email send failed");
       }
 
-      const result = JSON.parse(responseText);
       console.log("New reservation email sent successfully:", result);
 
-      return { success: true, id: result.id };
+      return { success: true, id: result.id, provider: result.provider };
     } catch (error) {
       console.error("Failed to send new reservation request email:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -1417,12 +1480,22 @@ export const resendVerificationEmail = action({
       context: "registration",
     });
 
+    // Récupérer la config email (y compris Brevo)
+    const configs = await ctx.runQuery(internal.api.emailInternal.getEmailConfigs);
+
     const result = await ctx.runAction(internal.api.email.sendVerificationEmail, {
       userId: user._id,
       email: user.email,
       firstName: user.firstName,
       token,
       context: "registration",
+      emailConfig: configs.apiKey ? {
+        apiKey: configs.apiKey,
+        fromEmail: configs.fromEmail || undefined,
+        fromName: configs.fromName || undefined,
+      } : undefined,
+      brevoApiKey: configs.brevoApiKey || undefined,
+      emailProvider: configs.emailProvider || undefined,
     });
 
     return result;
@@ -1439,32 +1512,23 @@ export const sendPasswordResetEmail = internalAction({
     email: v.string(),
     firstName: v.string(),
     token: v.string(),
-    // Config email passée depuis la mutation (contourne le bug ctx.runQuery sur self-hosted)
     emailConfig: v.optional(v.object({
       apiKey: v.string(),
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     })),
-    // URL de l'application passée depuis la mutation
+    brevoApiKey: v.optional(v.string()),
+    emailProvider: v.optional(v.string()),
     appUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    console.log("=== sendPasswordResetEmail START ===");
-
     try {
-      // Utiliser la config passée en argument, sinon fallback sur env vars
       const apiKey = args.emailConfig?.apiKey || process.env.RESEND_API_KEY;
       const fromEmail = args.emailConfig?.fromEmail || process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
       const fromName = args.emailConfig?.fromName || process.env.RESEND_FROM_NAME || "Animigo";
 
-      if (!apiKey) {
-        console.error("No API key configured");
+      if (!apiKey && !args.brevoApiKey) {
         return { success: false, error: "Email service not configured" };
-      }
-
-      if (!apiKey.startsWith("re_")) {
-        console.error("Invalid Resend API key format");
-        return { success: false, error: "Invalid API key format" };
       }
 
       const siteName = "Animigo";
@@ -1473,7 +1537,6 @@ export const sendPasswordResetEmail = internalAction({
 
       const template = getTemplate("password_reset");
       if (!template) {
-        console.error("Template password_reset not found");
         return { success: false, error: "Template not found" };
       }
 
@@ -1486,37 +1549,38 @@ export const sendPasswordResetEmail = internalAction({
 
       const subject = replaceVariables(template.subject, variables);
       const html = replaceVariables(template.htmlContent, variables);
+      const fromStr = `${fromName} <${fromEmail}>`;
 
-      console.log("Sending password reset email to:", args.email);
-
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: `${fromName} <${fromEmail}>`,
-          to: [args.email],
-          subject,
-          html,
-        }),
+      const result = await sendEmailViaProvider({
+        to: args.email,
+        from: fromStr,
+        subject,
+        html,
+        provider: (args.emailProvider as "brevo" | "resend") || "resend",
+        resendApiKey: apiKey,
+        brevoApiKey: args.brevoApiKey,
+        ...getBrevoTemplateArgs(template, variables),
       });
 
-      const responseText = await response.text();
-
-      if (!response.ok) {
-        throw new Error(`Resend API error: ${response.status} - ${responseText}`);
+      if (!result.success) {
+        throw new Error(result.error || "Email send failed");
       }
 
-      const result = JSON.parse(responseText);
-      console.log("Password reset email sent successfully:", result);
+      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+        to: args.email,
+        from: fromStr,
+        subject,
+        template: "password_reset",
+        status: "sent",
+        resendId: result.id,
+        provider: result.provider as "brevo" | "resend" | undefined,
+        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
+      });
 
-      return { success: true, id: result.id };
+      return { success: true, id: result.id, provider: result.provider };
     } catch (error) {
       console.error("Failed to send password reset email:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      return { success: false, error: errorMessage };
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
     }
   },
 });
@@ -1539,6 +1603,8 @@ export const sendMissionAutoRefusedEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     }),
+    brevoApiKey: v.optional(v.string()),
+    emailProvider: v.optional(v.string()),
     appUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -1565,39 +1631,35 @@ export const sendMissionAutoRefusedEmail = internalAction({
 
       const subject = replaceVariables(template.subject, variables);
       const html = replaceVariables(template.htmlContent, variables);
+      const fromStr = `${fromName} <${fromEmail}>`;
 
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${args.emailConfig.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: `${fromName} <${fromEmail}>`,
-          to: [args.clientEmail],
-          subject,
-          html,
-        }),
+      const result = await sendEmailViaProvider({
+        to: args.clientEmail,
+        from: fromStr,
+        subject,
+        html,
+        provider: (args.emailProvider as "brevo" | "resend") || "resend",
+        resendApiKey: args.emailConfig.apiKey,
+        brevoApiKey: args.brevoApiKey,
+        ...getBrevoTemplateArgs(template, variables),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Resend API error: ${response.status} - ${errorText}`);
+      if (!result.success) {
+        throw new Error(result.error || "Email send failed");
       }
-
-      const result = await response.json();
-      console.log("Mission auto-refused email sent:", result);
 
       await ctx.runMutation(internal.api.emailInternal.logEmail, {
         to: args.clientEmail,
-        from: `${fromName} <${fromEmail}>`,
+        from: fromStr,
         subject,
         template: "mission_auto_refused",
         status: "sent",
         resendId: result.id,
+        provider: result.provider as "brevo" | "resend" | undefined,
+        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
       });
 
-      return { success: true, id: result.id };
+      return { success: true, id: result.id, provider: result.provider };
     } catch (error) {
       console.error("Failed to send mission auto-refused email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
@@ -1619,6 +1681,8 @@ export const sendMissionAutoExpiredClientEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     }),
+    brevoApiKey: v.optional(v.string()),
+    emailProvider: v.optional(v.string()),
     appUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -1645,39 +1709,35 @@ export const sendMissionAutoExpiredClientEmail = internalAction({
 
       const subject = replaceVariables(template.subject, variables);
       const html = replaceVariables(template.htmlContent, variables);
+      const fromStr = `${fromName} <${fromEmail}>`;
 
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${args.emailConfig.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: `${fromName} <${fromEmail}>`,
-          to: [args.clientEmail],
-          subject,
-          html,
-        }),
+      const result = await sendEmailViaProvider({
+        to: args.clientEmail,
+        from: fromStr,
+        subject,
+        html,
+        provider: (args.emailProvider as "brevo" | "resend") || "resend",
+        resendApiKey: args.emailConfig.apiKey,
+        brevoApiKey: args.brevoApiKey,
+        ...getBrevoTemplateArgs(template, variables),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Resend API error: ${response.status} - ${errorText}`);
+      if (!result.success) {
+        throw new Error(result.error || "Email send failed");
       }
-
-      const result = await response.json();
-      console.log("Mission auto-expired client email sent:", result);
 
       await ctx.runMutation(internal.api.emailInternal.logEmail, {
         to: args.clientEmail,
-        from: `${fromName} <${fromEmail}>`,
+        from: fromStr,
         subject,
         template: "mission_auto_expired_client",
         status: "sent",
         resendId: result.id,
+        provider: result.provider as "brevo" | "resend" | undefined,
+        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
       });
 
-      return { success: true, id: result.id };
+      return { success: true, id: result.id, provider: result.provider };
     } catch (error) {
       console.error("Failed to send mission auto-expired client email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
@@ -1699,6 +1759,8 @@ export const sendMissionAutoExpiredAnnouncerEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     }),
+    brevoApiKey: v.optional(v.string()),
+    emailProvider: v.optional(v.string()),
     appUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -1725,39 +1787,35 @@ export const sendMissionAutoExpiredAnnouncerEmail = internalAction({
 
       const subject = replaceVariables(template.subject, variables);
       const html = replaceVariables(template.htmlContent, variables);
+      const fromStr = `${fromName} <${fromEmail}>`;
 
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${args.emailConfig.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: `${fromName} <${fromEmail}>`,
-          to: [args.announcerEmail],
-          subject,
-          html,
-        }),
+      const result = await sendEmailViaProvider({
+        to: args.announcerEmail,
+        from: fromStr,
+        subject,
+        html,
+        provider: (args.emailProvider as "brevo" | "resend") || "resend",
+        resendApiKey: args.emailConfig.apiKey,
+        brevoApiKey: args.brevoApiKey,
+        ...getBrevoTemplateArgs(template, variables),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Resend API error: ${response.status} - ${errorText}`);
+      if (!result.success) {
+        throw new Error(result.error || "Email send failed");
       }
-
-      const result = await response.json();
-      console.log("Mission auto-expired announcer email sent:", result);
 
       await ctx.runMutation(internal.api.emailInternal.logEmail, {
         to: args.announcerEmail,
-        from: `${fromName} <${fromEmail}>`,
+        from: fromStr,
         subject,
         template: "mission_auto_expired_announcer",
         status: "sent",
         resendId: result.id,
+        provider: result.provider as "brevo" | "resend" | undefined,
+        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
       });
 
-      return { success: true, id: result.id };
+      return { success: true, id: result.id, provider: result.provider };
     } catch (error) {
       console.error("Failed to send mission auto-expired announcer email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
@@ -1795,6 +1853,8 @@ export const sendPaymentReceiptEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     }),
+    brevoApiKey: v.optional(v.string()),
+    emailProvider: v.optional(v.string()),
     appUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -1859,38 +1919,35 @@ export const sendPaymentReceiptEmail = internalAction({
       const subject = replaceVariables(template.subject, variables);
       const html = replaceVariables(template.htmlContent, variables);
 
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${args.emailConfig.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: `${fromName} <${fromEmail}>`,
-          to: [args.clientEmail],
-          subject,
-          html,
-        }),
+      const fromStr = `${fromName} <${fromEmail}>`;
+
+      const result = await sendEmailViaProvider({
+        to: args.clientEmail,
+        from: fromStr,
+        subject,
+        html,
+        provider: (args.emailProvider as "brevo" | "resend") || "resend",
+        resendApiKey: args.emailConfig.apiKey,
+        brevoApiKey: args.brevoApiKey,
+        ...getBrevoTemplateArgs(template, variables),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Resend API error: ${response.status} - ${errorText}`);
+      if (!result.success) {
+        throw new Error(result.error || "Email send failed");
       }
-
-      const result = await response.json();
-      console.log("Payment receipt email sent:", result);
 
       await ctx.runMutation(internal.api.emailInternal.logEmail, {
         to: args.clientEmail,
-        from: `${fromName} <${fromEmail}>`,
+        from: fromStr,
         subject,
         template: "payment_receipt",
         status: "sent",
         resendId: result.id,
+        provider: result.provider as "brevo" | "resend" | undefined,
+        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
       });
 
-      return { success: true, id: result.id };
+      return { success: true, id: result.id, provider: result.provider };
     } catch (error) {
       console.error("Failed to send payment receipt email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
@@ -1918,6 +1975,8 @@ export const sendCancellationAnnouncerEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     }),
+    brevoApiKey: v.optional(v.string()),
+    emailProvider: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     try {
@@ -1948,38 +2007,35 @@ export const sendCancellationAnnouncerEmail = internalAction({
       const subject = replaceVariables(template.subject, variables);
       const html = replaceVariables(template.htmlContent, variables);
 
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${args.emailConfig.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: `${fromName} <${fromEmail}>`,
-          to: [args.announcerEmail],
-          subject,
-          html,
-        }),
+      const fromStr = `${fromName} <${fromEmail}>`;
+
+      const result = await sendEmailViaProvider({
+        to: args.announcerEmail,
+        from: fromStr,
+        subject,
+        html,
+        provider: (args.emailProvider as "brevo" | "resend") || "resend",
+        resendApiKey: args.emailConfig.apiKey,
+        brevoApiKey: args.brevoApiKey,
+        ...getBrevoTemplateArgs(template, variables),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Resend API error: ${response.status} - ${errorText}`);
+      if (!result.success) {
+        throw new Error(result.error || "Email send failed");
       }
-
-      const result = await response.json();
-      console.log("Cancellation announcer email sent:", result);
 
       await ctx.runMutation(internal.api.emailInternal.logEmail, {
         to: args.announcerEmail,
-        from: `${fromName} <${fromEmail}>`,
+        from: fromStr,
         subject,
         template: "mission_cancelled_by_client",
         status: "sent",
         resendId: result.id,
+        provider: result.provider as "brevo" | "resend" | undefined,
+        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
       });
 
-      return { success: true, id: result.id };
+      return { success: true, id: result.id, provider: result.provider };
     } catch (error) {
       console.error("Failed to send cancellation announcer email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
@@ -2005,6 +2061,8 @@ export const sendCancellationClientEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     }),
+    brevoApiKey: v.optional(v.string()),
+    emailProvider: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     try {
@@ -2034,38 +2092,35 @@ export const sendCancellationClientEmail = internalAction({
       const subject = replaceVariables(template.subject, variables);
       const html = replaceVariables(template.htmlContent, variables);
 
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${args.emailConfig.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: `${fromName} <${fromEmail}>`,
-          to: [args.clientEmail],
-          subject,
-          html,
-        }),
+      const fromStr = `${fromName} <${fromEmail}>`;
+
+      const result = await sendEmailViaProvider({
+        to: args.clientEmail,
+        from: fromStr,
+        subject,
+        html,
+        provider: (args.emailProvider as "brevo" | "resend") || "resend",
+        resendApiKey: args.emailConfig.apiKey,
+        brevoApiKey: args.brevoApiKey,
+        ...getBrevoTemplateArgs(template, variables),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Resend API error: ${response.status} - ${errorText}`);
+      if (!result.success) {
+        throw new Error(result.error || "Email send failed");
       }
-
-      const result = await response.json();
-      console.log("Cancellation client email sent:", result);
 
       await ctx.runMutation(internal.api.emailInternal.logEmail, {
         to: args.clientEmail,
-        from: `${fromName} <${fromEmail}>`,
+        from: fromStr,
         subject,
         template: "mission_cancelled_by_client_confirmation",
         status: "sent",
         resendId: result.id,
+        provider: result.provider as "brevo" | "resend" | undefined,
+        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
       });
 
-      return { success: true, id: result.id };
+      return { success: true, id: result.id, provider: result.provider };
     } catch (error) {
       console.error("Failed to send cancellation client email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
@@ -2088,6 +2143,8 @@ export const sendMissionValidatedByClientEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     }),
+    brevoApiKey: v.optional(v.string()),
+    emailProvider: v.optional(v.string()),
     appUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -2115,41 +2172,189 @@ export const sendMissionValidatedByClientEmail = internalAction({
 
       const subject = replaceVariables(template.subject, variables);
       const html = replaceVariables(template.htmlContent, variables);
+      const fromStr = `${fromName} <${fromEmail}>`;
 
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${args.emailConfig.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: `${fromName} <${fromEmail}>`,
-          to: [args.announcerEmail],
-          subject,
-          html,
-        }),
+      const result = await sendEmailViaProvider({
+        to: args.announcerEmail,
+        from: fromStr,
+        subject,
+        html,
+        provider: (args.emailProvider as "brevo" | "resend") || "resend",
+        resendApiKey: args.emailConfig.apiKey,
+        brevoApiKey: args.brevoApiKey,
+        ...getBrevoTemplateArgs(template, variables),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Resend API error: ${response.status} - ${errorText}`);
+      if (!result.success) {
+        throw new Error(result.error || "Email send failed");
       }
-
-      const result = await response.json();
-      console.log("Mission validated by client email sent:", result);
 
       await ctx.runMutation(internal.api.emailInternal.logEmail, {
         to: args.announcerEmail,
-        from: `${fromName} <${fromEmail}>`,
+        from: fromStr,
         subject,
         template: "mission_validated_by_client",
         status: "sent",
         resendId: result.id,
+        provider: result.provider as "brevo" | "resend" | undefined,
+        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
       });
 
-      return { success: true, id: result.id };
+      return { success: true, id: result.id, provider: result.provider };
     } catch (error) {
       console.error("Failed to send mission validated by client email:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  },
+});
+
+// Email au client quand l'admin effectue un remboursement
+export const sendAdminRefundClientEmail = internalAction({
+  args: {
+    clientEmail: v.string(),
+    clientName: v.string(),
+    serviceName: v.string(),
+    announcerName: v.string(),
+    startDate: v.string(),
+    endDate: v.string(),
+    refundAmount: v.number(),
+    reason: v.string(),
+    emailConfig: v.object({
+      apiKey: v.string(),
+      fromEmail: v.optional(v.string()),
+      fromName: v.optional(v.string()),
+    }),
+    appUrl: v.optional(v.string()),
+    brevoApiKey: v.optional(v.string()),
+    emailProvider: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const fromEmail = args.emailConfig.fromEmail || "onboarding@resend.dev";
+      const fromName = args.emailConfig.fromName || "Animigo";
+      const siteName = "Animigo";
+      const appUrl = args.appUrl || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+      const template = getTemplate("admin_refund_client");
+      if (!template) {
+        return { success: false, error: "Template not found" };
+      }
+
+      const variables = {
+        clientName: args.clientName,
+        serviceName: args.serviceName,
+        announcerName: args.announcerName,
+        startDate: formatDate(args.startDate),
+        endDate: formatDate(args.endDate),
+        refundAmount: formatPrice(args.refundAmount),
+        reason: args.reason,
+        siteName,
+        reservationsUrl: `${appUrl}/client/reservations`,
+      };
+
+      const subject = replaceVariables(template.subject, variables);
+      const html = replaceVariables(template.htmlContent, variables);
+      const fromStr = `${fromName} <${fromEmail}>`;
+
+      const result = await sendEmailViaProvider({
+        to: args.clientEmail,
+        from: fromStr,
+        subject,
+        html,
+        provider: (args.emailProvider as "brevo" | "resend") || "resend",
+        resendApiKey: args.emailConfig.apiKey,
+        brevoApiKey: args.brevoApiKey,
+        ...getBrevoTemplateArgs(template, variables),
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || "Email send failed");
+      }
+
+      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+        to: args.clientEmail,
+        from: fromStr,
+        subject,
+        template: "admin_refund_client",
+        status: "sent",
+        resendId: result.id,
+        provider: result.provider as "brevo" | "resend" | undefined,
+        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
+      });
+
+      return { success: true, id: result.id, provider: result.provider };
+    } catch (error) {
+      console.error("Failed to send admin refund client email:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  },
+});
+
+// Email à l'annonceur quand son compte est désactivé
+export const sendAccountDeactivatedEmail = internalAction({
+  args: {
+    announcerEmail: v.string(),
+    announcerName: v.string(),
+    reason: v.string(),
+    emailConfig: v.object({
+      apiKey: v.string(),
+      fromEmail: v.optional(v.string()),
+      fromName: v.optional(v.string()),
+    }),
+    brevoApiKey: v.optional(v.string()),
+    emailProvider: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const fromEmail = args.emailConfig.fromEmail || "onboarding@resend.dev";
+      const fromName = args.emailConfig.fromName || "Animigo";
+      const siteName = "Animigo";
+
+      const template = getTemplate("account_deactivated");
+      if (!template) {
+        return { success: false, error: "Template not found" };
+      }
+
+      const variables = {
+        announcerName: args.announcerName,
+        reason: args.reason,
+        siteName,
+        supportEmail: fromEmail,
+      };
+
+      const subject = replaceVariables(template.subject, variables);
+      const html = replaceVariables(template.htmlContent, variables);
+      const fromStr = `${fromName} <${fromEmail}>`;
+
+      const result = await sendEmailViaProvider({
+        to: args.announcerEmail,
+        from: fromStr,
+        subject,
+        html,
+        provider: (args.emailProvider as "brevo" | "resend") || "resend",
+        resendApiKey: args.emailConfig.apiKey,
+        brevoApiKey: args.brevoApiKey,
+        ...getBrevoTemplateArgs(template, variables),
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || "Email send failed");
+      }
+
+      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+        to: args.announcerEmail,
+        from: fromStr,
+        subject,
+        template: "account_deactivated",
+        status: "sent",
+        resendId: result.id,
+        provider: result.provider as "brevo" | "resend" | undefined,
+        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
+      });
+
+      return { success: true, id: result.id, provider: result.provider };
+    } catch (error) {
+      console.error("Failed to send account deactivated email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
     }
   },

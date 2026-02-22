@@ -2,6 +2,7 @@
 import { internalMutation, internalQuery, mutation } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
+import { getEmailConfigFromDb } from "./emailInternal";
 
 /**
  * Récupérer la clé secrète Stripe
@@ -337,25 +338,9 @@ export const markPaymentPaid = internalMutation({
       const receiptAlreadySent = freshPayment?.receiptEmailSent === true;
 
       const announcer = await ctx.db.get(mission.announcerId);
-      const apiKeyConfig = await ctx.db
-        .query("systemConfig")
-        .withIndex("by_key", (q) => q.eq("key", "resend_api_key"))
-        .first();
+      const { emailConfig: receiptEmailConfig, brevoApiKey: receiptBrevoKey, emailProvider: receiptProvider, appUrl: receiptAppUrl } = await getEmailConfigFromDb(ctx.db);
 
-      if (apiKeyConfig?.value && client?.email && !receiptAlreadySent) {
-        const fromEmailConfig = await ctx.db
-          .query("systemConfig")
-          .withIndex("by_key", (q) => q.eq("key", "resend_from_email"))
-          .first();
-        const fromNameConfig = await ctx.db
-          .query("systemConfig")
-          .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
-          .first();
-        const appUrlConfig = await ctx.db
-          .query("systemConfig")
-          .withIndex("by_key", (q) => q.eq("key", "app_url"))
-          .first();
-
+      if ((receiptEmailConfig || receiptBrevoKey) && client?.email && !receiptAlreadySent) {
         const isPro = announcer?.accountType === "annonceur_pro" && !!announcer?.siret;
         const announcerDisplayName = announcer
           ? `${announcer.firstName} ${announcer.lastName.charAt(0)}.`
@@ -385,12 +370,10 @@ export const markPaymentPaid = internalMutation({
             paymentRef: args.paymentIntentId,
             cardBrand: args.cardBrand || "",
             cardLast4: args.cardLast4 || "",
-            emailConfig: {
-              apiKey: apiKeyConfig.value,
-              fromEmail: fromEmailConfig?.value,
-              fromName: fromNameConfig?.value,
-            },
-            appUrl: appUrlConfig?.value || undefined,
+            emailConfig: receiptEmailConfig || { apiKey: "" },
+            brevoApiKey: receiptBrevoKey,
+            emailProvider: receiptProvider,
+            appUrl: receiptAppUrl,
           }
         );
 

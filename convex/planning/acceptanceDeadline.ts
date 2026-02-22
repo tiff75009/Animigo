@@ -3,6 +3,7 @@ import { query, internalQuery, internalMutation } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { Id } from "../_generated/dataModel";
+import { getEmailConfigFromDb } from "../api/emailInternal";
 
 // ============================================
 // TYPES
@@ -242,25 +243,9 @@ export const autoRefuseExpiredMissions = internalMutation({
 
     // Envoyer les emails d'auto-refus aux clients
     // Récupérer la config email depuis la DB
-    const apiKeyConfig = await ctx.db
-      .query("systemConfig")
-      .withIndex("by_key", (q) => q.eq("key", "resend_api_key"))
-      .first();
+    const { emailConfig: deadlineEmailConfig, brevoApiKey: deadlineBrevoKey, emailProvider: deadlineProvider, appUrl: deadlineAppUrl } = await getEmailConfigFromDb(ctx.db);
 
-    if (apiKeyConfig?.value) {
-      const fromEmailConfig = await ctx.db
-        .query("systemConfig")
-        .withIndex("by_key", (q) => q.eq("key", "resend_from_email"))
-        .first();
-      const fromNameConfig = await ctx.db
-        .query("systemConfig")
-        .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
-        .first();
-      const appUrlConfig = await ctx.db
-        .query("systemConfig")
-        .withIndex("by_key", (q) => q.eq("key", "app_url"))
-        .first();
-
+    if (deadlineEmailConfig || deadlineBrevoKey) {
       for (const mission of expiredMissions) {
         const client = await ctx.db.get(mission.clientId);
         const announcer = await ctx.db.get(mission.announcerId);
@@ -279,12 +264,10 @@ export const autoRefuseExpiredMissions = internalMutation({
               serviceName: mission.serviceName,
               startDate: mission.startDate,
               endDate: mission.endDate,
-              emailConfig: {
-                apiKey: apiKeyConfig.value,
-                fromEmail: fromEmailConfig?.value,
-                fromName: fromNameConfig?.value,
-              },
-              appUrl: appUrlConfig?.value || undefined,
+              emailConfig: deadlineEmailConfig || { apiKey: "" },
+              brevoApiKey: deadlineBrevoKey,
+              emailProvider: deadlineProvider,
+              appUrl: deadlineAppUrl,
             }
           );
         }

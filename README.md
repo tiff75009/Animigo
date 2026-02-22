@@ -183,10 +183,11 @@ bun run build
   - Politique d'annulation (periode de comptage, paliers, templates email)
 
 - **Integrations API** (`/admin/integrations`)
-  - Configuration API INSEE (SIRENE)
-  - Configuration API Adresse (gouvernement)
+  - Configuration Brevo (provider email principal) avec test de connexion
+  - Configuration Resend (fallback email) avec selecteur de provider actif
+  - Configuration Stripe, Google Maps, Cloudinary, Octopush, QStash, Redis
   - Stockage securise des cles API
-  - Test de connexion en temps reel
+  - Test de connexion en temps reel pour chaque service
 
 - **Parametres** (`/admin/parametres`)
   - General : nom du site, email de contact, logo
@@ -347,6 +348,25 @@ Politique d'annulation progressive avec 3 paliers :
 - Checkbox d'acceptation obligatoire avant confirmation de reservation
 
 ### Integrations API
+
+#### Emails transactionnels (Brevo + Resend)
+
+Systeme d'envoi d'emails avec double provider et fallback automatique :
+
+- **Brevo** (provider principal recommande) : API v3 pour l'envoi d'emails transactionnels
+- **Resend** (fallback) : Si Brevo echoue, les emails sont automatiquement envoyes via Resend
+- **Configuration** : via le panel admin (`/admin/integrations`)
+  - `brevo_api_key` : Cle API Brevo v3
+  - `email_provider` : `brevo` (recommande) ou `resend`
+  - `resend_api_key` : Cle API Resend (fallback)
+  - `resend_from_email` : Adresse email d'envoi
+  - `resend_from_name` : Nom d'affichage de l'expediteur
+
+**Architecture** :
+- Helper `sendEmailViaProvider` dans `convex/api/email.ts` gere le routage et le fallback
+- Si le provider actif echoue, bascule automatiquement sur l'autre
+- Les configs email sont stockees dans `systemConfig` et lues via `getEmailConfigs`
+- Test de connexion Brevo disponible dans le panel admin (verifie le compte et les credits)
 
 #### API INSEE (SIRENE)
 

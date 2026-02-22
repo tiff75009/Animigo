@@ -186,6 +186,7 @@ export const getConnectAccountDetails = query({
         announcerPaymentStatus: m.announcerPaymentStatus || "not_due",
         readyForPayout: m.readyForPayout || false,
         payoutScheduledFor: m.payoutScheduledFor || null,
+        hasDispute: m.hasDispute || false,
       }));
 
     // Missions à venir (confirmées + payées)
@@ -236,6 +237,29 @@ export const getConnectAccountDetails = query({
       (d) => missions.some((m) => m._id === d.missionId)
     );
 
+    // Missions contestées (réclamation)
+    const disputedMissions = missions
+      .filter((m) => m.hasDispute === true && m.status === "completed")
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+      .slice(0, 15)
+      .map((m) => {
+        const dispute = userDisputes.find((d) => d.missionId === m._id);
+        return {
+          _id: m._id,
+          serviceName: m.serviceName,
+          clientName: m.clientName,
+          startDate: m.startDate,
+          amount: m.amount || 0,
+          announcerEarnings: m.announcerEarnings || 0,
+          paymentStatus: m.paymentStatus,
+          readyForPayout: m.readyForPayout || false,
+          disputeStatus: dispute?.status || "open",
+          disputeReason: dispute?.reasonLabel || null,
+          disputePaymentBlocked: dispute?.paymentBlocked || false,
+          disputeCreatedAt: dispute?.createdAt || null,
+        };
+      });
+
     return {
       user: {
         _id: user._id,
@@ -277,6 +301,12 @@ export const getConnectAccountDetails = query({
         pendingPayoutCount: pendingPayoutMissions.length,
         paidAmount,
         paidCount: paidMissions.length,
+        disputedAmount: missions
+          .filter((m) => m.hasDispute && m.status === "completed" && !m.readyForPayout)
+          .reduce((sum, m) => sum + (m.announcerEarnings || 0), 0),
+        disputedCount: missions
+          .filter((m) => m.hasDispute && m.status === "completed" && !m.readyForPayout)
+          .length,
       },
       stats: {
         totalMissions: missions.length,
@@ -300,6 +330,7 @@ export const getConnectAccountDetails = query({
       recentMissions,
       upcomingMissions,
       cancelledMissions,
+      disputedMissions,
       cancellationPolicy: cancellationPolicy
         ? {
             refundMode: cancellationPolicy.refundMode || "per_session",

@@ -6,6 +6,7 @@ import { ANIMAL_TYPES } from "../animals";
 import { internal } from "../_generated/api";
 import { missionsOverlap, missionsOverlapWithBuffers, addMinutesToTime } from "../lib/timeUtils";
 import { checkBookingConflict, checkAnimalBookingConflict } from "../lib/capacityUtils";
+import { getEmailConfigFromDb } from "../api/emailInternal";
 import { hashPassword, generateUniqueSlug } from "../auth/utils";
 import {
   calculateAcceptanceDeadline,
@@ -1115,23 +1116,7 @@ export const finalizeBooking = mutation({
     // Envoyer l'email de notification à l'annonceur
     const announcer = await ctx.db.get(pendingBooking.announcerId);
     if (announcer) {
-      // Récupérer la config email depuis la DB
-      const apiKeyConfig = await ctx.db
-        .query("systemConfig")
-        .withIndex("by_key", (q) => q.eq("key", "resend_api_key"))
-        .first();
-      const fromEmailConfig = await ctx.db
-        .query("systemConfig")
-        .withIndex("by_key", (q) => q.eq("key", "resend_from_email"))
-        .first();
-      const fromNameConfig = await ctx.db
-        .query("systemConfig")
-        .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
-        .first();
-      const appUrlConfig = await ctx.db
-        .query("systemConfig")
-        .withIndex("by_key", (q) => q.eq("key", "app_url"))
-        .first();
+      const { emailConfig: bookingEmailConfig, brevoApiKey: bookingBrevoKey, emailProvider: bookingProvider, appUrl: bookingAppUrl } = await getEmailConfigFromDb(ctx.db);
 
       // Trouver le type d'animal pour le nom
       const animalTypeName = ANIMAL_TYPES.find((t) => t.id === animal.type);
@@ -1153,12 +1138,10 @@ export const finalizeBooking = mutation({
           overnightNights: pendingBooking.overnightNights,
           totalAmount: totalAmount,
         },
-        emailConfig: apiKeyConfig?.value ? {
-          apiKey: apiKeyConfig.value,
-          fromEmail: fromEmailConfig?.value,
-          fromName: fromNameConfig?.value,
-        } : undefined,
-        appUrl: appUrlConfig?.value || undefined,
+        emailConfig: bookingEmailConfig,
+        brevoApiKey: bookingBrevoKey,
+        emailProvider: bookingProvider,
+        appUrl: bookingAppUrl,
       });
     }
 
@@ -1452,24 +1435,7 @@ export const finalizeBookingAsGuest = mutation({
       .first();
 
     // 7bis. Récupérer la config email depuis la DB (pour passer à l'action)
-    const apiKeyConfig = await ctx.db
-      .query("systemConfig")
-      .withIndex("by_key", (q) => q.eq("key", "resend_api_key"))
-      .first();
-    const fromEmailConfig = await ctx.db
-      .query("systemConfig")
-      .withIndex("by_key", (q) => q.eq("key", "resend_from_email"))
-      .first();
-    const fromNameConfig = await ctx.db
-      .query("systemConfig")
-      .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
-      .first();
-
-    // 7ter. Récupérer l'URL de l'application depuis la DB
-    const appUrlConfig = await ctx.db
-      .query("systemConfig")
-      .withIndex("by_key", (q) => q.eq("key", "app_url"))
-      .first();
+    const { emailConfig: guestEmailConfig, brevoApiKey: guestBrevoKey, emailProvider: guestProvider, appUrl: guestAppUrl } = await getEmailConfigFromDb(ctx.db);
 
     // 8. Envoyer l'email de vérification avec contexte réservation
     await ctx.scheduler.runAfter(0, internal.api.email.sendVerificationEmail, {
@@ -1489,14 +1455,10 @@ export const finalizeBookingAsGuest = mutation({
         location: args.location,
         totalAmount: finalAmount,
       },
-      // Passer la config email depuis la mutation (car ctx.runQuery échoue dans les actions sur self-hosted)
-      emailConfig: apiKeyConfig?.value ? {
-        apiKey: apiKeyConfig.value,
-        fromEmail: fromEmailConfig?.value,
-        fromName: fromNameConfig?.value,
-      } : undefined,
-      // Passer l'URL de l'application depuis la DB
-      appUrl: appUrlConfig?.value || undefined,
+      emailConfig: guestEmailConfig,
+      brevoApiKey: guestBrevoKey,
+      emailProvider: guestProvider,
+      appUrl: guestAppUrl,
     });
 
     // Retourner le succès - la mission sera créée après vérification de l'email

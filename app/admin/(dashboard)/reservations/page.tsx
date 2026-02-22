@@ -41,7 +41,7 @@ import { Id } from "@/convex/_generated/dataModel";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-type StatusFilter = "all" | "pending_acceptance" | "pending_confirmation" | "upcoming" | "in_progress" | "completed" | "cancelled" | "refused";
+type StatusFilter = "all" | "pending_acceptance" | "pending_confirmation" | "upcoming" | "in_progress" | "completed" | "cancelled" | "refused" | "disputed";
 
 interface Reservation {
   _id: Id<"missions">;
@@ -504,10 +504,11 @@ function ReservationDetailView({
       setPartialAmountInput("");
       setPartialPercentInput("");
       alert("Remboursement effectué avec succès !");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erreur remboursement:", error);
-      const msg = error instanceof Error ? error.message : "Erreur lors du remboursement";
-      alert(msg);
+      // ConvexError stocke le message dans error.data, pas error.message
+      const msg = error?.data || error?.message || "Erreur lors du remboursement";
+      alert(typeof msg === "string" ? msg : JSON.stringify(msg));
     } finally {
       setIsRefunding(false);
     }
@@ -1631,7 +1632,7 @@ export default function ReservationsPage() {
 
       {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
             <p className="text-slate-400 text-sm">Total</p>
             <p className="text-2xl font-bold text-white">{stats.total}</p>
@@ -1655,6 +1656,10 @@ export default function ReservationsPage() {
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
             <p className="text-red-400 text-sm">Annulées</p>
             <p className="text-2xl font-bold text-red-400">{stats.cancelled}</p>
+          </div>
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+            <p className="text-amber-400 text-sm">Contestées</p>
+            <p className="text-2xl font-bold text-amber-400">{stats.disputed}</p>
           </div>
         </div>
       )}
@@ -1698,6 +1703,7 @@ export default function ReservationsPage() {
               <option value="completed">Terminées</option>
               <option value="cancelled">Annulées</option>
               <option value="refused">Refusées</option>
+              <option value="disputed">Contestées (réclamation)</option>
             </select>
           </div>
 

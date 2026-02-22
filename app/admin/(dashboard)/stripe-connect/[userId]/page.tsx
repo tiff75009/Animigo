@@ -33,6 +33,7 @@ import {
   Trash2,
   Ban,
   Clock,
+  AlertTriangle,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import {
@@ -53,7 +54,7 @@ export default function ConnectAccountDetailPage() {
   const [disableModal, setDisableModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDisabling, setIsDisabling] = useState(false);
-  const [activeTab, setActiveTab] = useState<"completed" | "upcoming" | "cancelled" | "payouts">("completed");
+  const [activeTab, setActiveTab] = useState<"completed" | "upcoming" | "cancelled" | "payouts" | "disputed">("completed");
 
   const data = useQuery(
     api.admin.stripeConnect.getConnectAccountDetails,
@@ -126,6 +127,7 @@ export default function ConnectAccountDetailPage() {
               upcoming: data.upcomingMissions.length,
               cancelled: data.cancelledMissions.length,
               payouts: data.payouts.length,
+              disputed: data.disputedMissions.length,
             }}
           />
           {activeTab === "completed" && (
@@ -142,6 +144,9 @@ export default function ConnectAccountDetailPage() {
           )}
           {activeTab === "payouts" && (
             <PayoutsTable payouts={data.payouts} />
+          )}
+          {activeTab === "disputed" && (
+            <DisputedMissionsTable missions={data.disputedMissions} />
           )}
         </div>
       </div>
@@ -291,8 +296,18 @@ function FinanceCards({ data }: { data: any }) {
     },
   ];
 
+  if (data.finances.disputedCount > 0) {
+    cards.push({
+      label: "Paiement bloqué",
+      value: formatCents(data.finances.disputedAmount),
+      sub: `${data.finances.disputedCount} réclamation${data.finances.disputedCount > 1 ? "s" : ""}`,
+      icon: AlertTriangle,
+      color: "text-amber-400",
+    });
+  }
+
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div className={`grid grid-cols-2 ${cards.length > 4 ? "md:grid-cols-5" : "md:grid-cols-4"} gap-4`}>
       {cards.map((card) => (
         <motion.div
           key={card.label}
@@ -458,12 +473,13 @@ function MissionStatsCard({ data }: { data: any }) {
   );
 }
 
-type TabKey = "completed" | "upcoming" | "cancelled" | "payouts";
+type TabKey = "completed" | "upcoming" | "cancelled" | "payouts" | "disputed";
 
 const tabsConfig: { key: TabKey; label: string; icon: React.ElementType; color: string }[] = [
   { key: "completed", label: "Terminées", icon: FileText, color: "text-emerald-400 border-emerald-400" },
   { key: "upcoming", label: "À venir", icon: Calendar, color: "text-cyan-400 border-cyan-400" },
   { key: "cancelled", label: "Annulées", icon: XCircle, color: "text-red-400 border-red-400" },
+  { key: "disputed", label: "Contestées", icon: AlertTriangle, color: "text-amber-400 border-amber-400" },
   { key: "payouts", label: "Virements", icon: Banknote, color: "text-blue-400 border-blue-400" },
 ];
 
@@ -575,7 +591,14 @@ function MissionRow({ mission }: { mission: any }) {
         )}
       </td>
       <td className="px-6 py-3">
-        <span className={`text-xs font-medium ${payStatus.color}`}>{payStatus.label}</span>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className={`text-xs font-medium ${payStatus.color}`}>{payStatus.label}</span>
+          {mission.hasDispute && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs rounded-full">
+              <AlertTriangle className="w-3 h-3" /> Contestée
+            </span>
+          )}
+        </div>
         {mission.payoutScheduledFor && mission.announcerPaymentStatus !== "paid" && (
           <p className="text-xs text-slate-500 mt-0.5">
             Prévu le {formatDate(mission.payoutScheduledFor)}
@@ -774,6 +797,94 @@ function CancelledMissionRow({ mission }: { mission: any }) {
         )}
       </td>
     </tr>
+  );
+}
+
+function DisputedMissionsTable({ missions }: { missions: any[] }) {
+  const disputeStatusConfig: Record<string, { label: string; color: string; bgColor: string }> = {
+    open: { label: "Ouverte", color: "text-orange-400", bgColor: "bg-orange-500/10 border-orange-500/20" },
+    investigating: { label: "Investigation", color: "text-blue-400", bgColor: "bg-blue-500/10 border-blue-500/20" },
+    resolved_client: { label: "Résolu (client)", color: "text-green-400", bgColor: "bg-green-500/10 border-green-500/20" },
+    resolved_announcer: { label: "Résolu (annonceur)", color: "text-emerald-400", bgColor: "bg-emerald-500/10 border-emerald-500/20" },
+    closed: { label: "Fermée", color: "text-slate-400", bgColor: "bg-slate-500/10 border-slate-500/20" },
+  };
+
+  return (
+    <div className="bg-slate-800/50 border border-slate-700 border-t-0 rounded-b-xl overflow-hidden">
+      {missions.length === 0 ? (
+        <div className="p-8 text-center text-slate-500">
+          <AlertTriangle className="w-8 h-8 mx-auto mb-2 opacity-50" />
+          <p className="text-sm">Aucune mission contestée</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-slate-700/50">
+                {["Service", "Client", "Date", "Montant", "Motif", "Paiement", "Statut réclamation"].map(
+                  (h, i) => (
+                    <th
+                      key={h}
+                      className={`${i === 3 ? "text-right" : "text-left"} px-6 py-3 text-xs font-semibold text-slate-400 uppercase`}
+                    >
+                      {h}
+                    </th>
+                  )
+                )}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-700/30">
+              {missions.map((mission) => {
+                const disputeStatus = disputeStatusConfig[mission.disputeStatus] || disputeStatusConfig.open;
+                return (
+                  <tr key={mission._id} className="hover:bg-slate-800/30 transition-colors">
+                    <td className="px-6 py-3">
+                      <span className="text-sm text-white">{mission.serviceName || "—"}</span>
+                    </td>
+                    <td className="px-6 py-3">
+                      <span className="text-sm text-slate-300">{mission.clientName || "—"}</span>
+                    </td>
+                    <td className="px-6 py-3">
+                      <span className="text-sm text-slate-400">{formatDate(mission.startDate)}</span>
+                      {mission.disputeCreatedAt && (
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Réclamation le {formatTimestamp(mission.disputeCreatedAt)}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-6 py-3 text-right">
+                      <span className="text-sm text-white font-medium">{formatCents(mission.amount)}</span>
+                      <p className="text-xs text-emerald-400">{formatCents(mission.announcerEarnings)}</p>
+                    </td>
+                    <td className="px-6 py-3">
+                      <span className="text-sm text-slate-300">{mission.disputeReason || "—"}</span>
+                    </td>
+                    <td className="px-6 py-3">
+                      {mission.disputePaymentBlocked ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-full font-medium">
+                          Bloqué
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/10 border border-green-500/20 text-green-400 text-xs rounded-full font-medium">
+                          Non bloqué
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-3">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${disputeStatus.bgColor} ${disputeStatus.color}`}
+                      >
+                        {disputeStatus.label}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 

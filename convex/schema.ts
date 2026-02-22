@@ -1094,6 +1094,10 @@ export default defineSchema({
       example: v.optional(v.string()), // ex: "Jean"
     })),
 
+    // Brevo template (optionnel)
+    brevoTemplateId: v.optional(v.number()), // ID du template dans Brevo
+    useBrevoTemplate: v.optional(v.boolean()), // true = utiliser le template Brevo au lieu du HTML local
+
     // Métadonnées
     isActive: v.boolean(),
     isSystem: v.boolean(), // true = template système non supprimable
@@ -1109,20 +1113,40 @@ export default defineSchema({
     to: v.string(),
     from: v.string(),
     subject: v.string(),
-    template: v.string(), // "verification", "reservation_confirmation", etc.
+    template: v.string(),
     status: v.union(
       v.literal("sent"),
       v.literal("failed"),
-      v.literal("pending")
+      v.literal("pending"),
+      v.literal("delivered"),
+      v.literal("opened"),
+      v.literal("clicked"),
+      v.literal("bounced"),
+      v.literal("complained"),
+      v.literal("blocked")
     ),
-    resendId: v.optional(v.string()), // ID Resend pour tracking
+    resendId: v.optional(v.string()),
     errorMessage: v.optional(v.string()),
-    metadata: v.optional(v.any()), // Données additionnelles (userId, bookingId, etc.)
+    metadata: v.optional(v.any()),
+    // Provider tracking
+    provider: v.optional(v.union(v.literal("brevo"), v.literal("resend"))),
+    brevoMessageId: v.optional(v.string()),
+    // Tracking timestamps
+    deliveredAt: v.optional(v.number()),
+    openedAt: v.optional(v.number()),
+    firstOpenedAt: v.optional(v.number()),
+    clickedAt: v.optional(v.number()),
+    bouncedAt: v.optional(v.number()),
+    bouncedReason: v.optional(v.string()),
+    complainedAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_to", ["to"])
     .index("by_template", ["template"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    .index("by_brevo_message_id", ["brevoMessageId"])
+    .index("by_created", ["createdAt"])
+    .index("by_provider", ["provider"]),
 
   // Invitations administrateur (tokens à usage unique)
   adminInvitations: defineTable({
@@ -2020,4 +2044,29 @@ export default defineSchema({
   })
     .index("by_phone", ["phone"])
     .index("by_pinId", ["pinId"]),
+
+  // Logs SMS envoyés
+  smsLogs: defineTable({
+    to: v.string(), // Numéro de téléphone (format international sans +)
+    content: v.string(), // Contenu du SMS
+    type: v.string(), // Type de SMS (reminder_j1, etc.)
+    status: v.union(
+      v.literal("sent"),
+      v.literal("failed"),
+      v.literal("pending"),
+      v.literal("delivered")
+    ),
+    provider: v.union(v.literal("brevo"), v.literal("octopush")),
+    messageId: v.optional(v.string()), // ID du message chez le provider
+    errorMessage: v.optional(v.string()),
+    missionId: v.optional(v.id("missions")),
+    userId: v.optional(v.id("users")),
+    creditsUsed: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_to", ["to"])
+    .index("by_type", ["type"])
+    .index("by_status", ["status"])
+    .index("by_mission", ["missionId"])
+    .index("by_created", ["createdAt"]),
 });

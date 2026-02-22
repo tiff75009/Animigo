@@ -13,7 +13,7 @@ import {
   Tag, ShieldAlert, FileCheck, Code, Circle, UserPlus, Percent, Mail,
   CalendarCheck, Sparkles, FlaskConical, ShieldCheck, Wallet, Landmark,
   FileText, MapPin, Globe, Layers, ListChecks, Ticket, HelpCircle,
-  AlertTriangle, CreditCard, Wrench, Menu, X, ChevronDown, ExternalLink,
+  AlertTriangle, CreditCard, Wrench, Menu, X, ChevronDown, ExternalLink, MailCheck,
 } from "lucide-react";
 
 interface NavItem {
@@ -105,6 +105,7 @@ export function AdminSidebar() {
       items: [
         { label: "Paramètres", href: "/admin/parametres", icon: Settings },
         { label: "Templates Email", href: "/admin/templates-email", icon: Mail },
+        { label: "Logs Email", href: "/admin/email-logs", icon: MailCheck },
         { label: "Pages légales", href: "/admin/legal", icon: FileText },
       ],
     },

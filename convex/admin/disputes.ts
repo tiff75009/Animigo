@@ -1,8 +1,10 @@
 // @ts-nocheck
 import { mutation, query } from "../_generated/server";
 import { v } from "convex/values";
+import { internal } from "../_generated/api";
 import { requireAdmin } from "./utils";
 import { notifySystem } from "../lib/notificationTemplates";
+import { getEmailConfigFromDb } from "../api/emailInternal";
 
 /**
  * Liste paginée des réclamations pour admin
@@ -189,6 +191,139 @@ export const updateDisputeStatus = mutation({
     });
 
     // Notifier l'annonceur
+    await notifySystem({
+      userId: dispute.announcerId,
+      title: "Mise à jour de la réclamation",
+      message: `La réclamation "${dispute.reasonLabel}" est maintenant : ${statusLabels[args.status]}`,
+      linkUrl: `/dashboard/missions`,
+    });
+
+    return { success: true };
+  },
+});
+
+/**
+ * Résolution enrichie d'une réclamation avec actions optionnelles :
+ * - Suspendre le compte annonceur + email de notification
+ * - Clôturer la réservation (statut cancelled)
+ * - Débloquer le paiement si résolu en faveur de l'annonceur
+ */
+export const resolveDisputeWithActions = mutation({
+  args: {
+    token: v.string(),
+    disputeId: v.id("disputes"),
+    status: v.union(
+      v.literal("investigating"),
+      v.literal("resolved_client"),
+      v.literal("resolved_announcer"),
+      v.literal("closed")
+    ),
+    resolution: v.optional(v.string()),
+    adminNotes: v.optional(v.string()),
+    suspendAnnouncer: v.optional(v.boolean()),
+    suspendReason: v.optional(v.string()),
+    closeMission: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireAdmin(ctx, args.token);
+
+    const dispute = await ctx.db.get(args.disputeId);
+    if (!dispute) throw new Error("Réclamation non trouvée");
+
+    const now = Date.now();
+
+    // 1. Mettre à jour la réclamation (même logique que updateDisputeStatus)
+    const updates: Record<string, unknown> = {
+      status: args.status,
+      assignedAdminId: user._id,
+      updatedAt: now,
+    };
+
+    if (args.resolution) updates.resolution = args.resolution;
+    if (args.adminNotes) updates.adminNotes = args.adminNotes;
+
+    if (args.status === "resolved_client" || args.status === "resolved_announcer" || args.status === "closed") {
+      updates.resolvedAt = now;
+    }
+
+    await ctx.db.patch(args.disputeId, updates);
+
+    // 2. Débloquer le paiement si résolu en faveur de l'annonceur
+    if (args.status === "resolved_announcer" && dispute.paymentBlocked) {
+      const mission = await ctx.db.get(dispute.missionId);
+      if (mission) {
+        await ctx.db.patch(dispute.missionId, {
+          readyForPayout: true,
+          updatedAt: now,
+        });
+      }
+    }
+
+    // 3. Suspendre l'annonceur si demandé
+    if (args.suspendAnnouncer) {
+      const announcer = await ctx.db.get(dispute.announcerId);
+      if (announcer && announcer.role !== "admin") {
+        await ctx.db.patch(dispute.announcerId, {
+          isActive: false,
+          updatedAt: now,
+        });
+
+        // Supprimer toutes les sessions de l'annonceur
+        const sessions = await ctx.db
+          .query("sessions")
+          .withIndex("by_user", (q) => q.eq("userId", dispute.announcerId))
+          .collect();
+        for (const session of sessions) {
+          await ctx.db.delete(session._id);
+        }
+
+        // Envoyer l'email de désactivation
+        if (announcer.email) {
+          const { emailConfig: deactivateEmailConfig, brevoApiKey: deactivateBrevoKey, emailProvider: deactivateProvider } = await getEmailConfigFromDb(ctx.db);
+
+          if (deactivateEmailConfig || deactivateBrevoKey) {
+            await ctx.scheduler.runAfter(0, internal.api.email.sendAccountDeactivatedEmail, {
+              announcerEmail: announcer.email,
+              announcerName: announcer.firstName || "Prestataire",
+              reason: args.suspendReason || "Décision administrative suite à une réclamation",
+              emailConfig: deactivateEmailConfig || { apiKey: "" },
+              brevoApiKey: deactivateBrevoKey,
+              emailProvider: deactivateProvider,
+            });
+          }
+        }
+      }
+    }
+
+    // 4. Clôturer la réservation si demandé
+    if (args.closeMission) {
+      const mission = await ctx.db.get(dispute.missionId);
+      if (mission && mission.status !== "cancelled") {
+        await ctx.db.patch(dispute.missionId, {
+          status: "cancelled",
+          cancelledBy: "system",
+          cancellationReason: args.resolution || "Clôturée suite à une réclamation",
+          cancelledAt: now,
+          updatedAt: now,
+        });
+      }
+    }
+
+    // 5. Notifications
+    const statusLabels: Record<string, string> = {
+      investigating: "En cours d'investigation",
+      resolved_client: "Résolu en votre faveur",
+      resolved_announcer: "Résolu en faveur du prestataire",
+      closed: "Fermée",
+    };
+
+    await notifySystem({
+      userId: dispute.clientId,
+      title: "Mise à jour de votre réclamation",
+      message: `Votre réclamation "${dispute.reasonLabel}" est maintenant : ${statusLabels[args.status]}`,
+      linkUrl: `/client/reservations/${dispute.missionId}`,
+    });
+
     await notifySystem({
       userId: dispute.announcerId,
       title: "Mise à jour de la réclamation",

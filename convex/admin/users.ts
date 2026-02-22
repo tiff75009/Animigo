@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { requireAdmin } from "./utils";
 import { internal } from "../_generated/api";
+import { getEmailConfigFromDb } from "../api/emailInternal";
 
 // Query: Liste des utilisateurs avec pagination et filtres
 export const listUsers = query({
@@ -335,26 +336,8 @@ export const adminResendVerificationEmail = mutation({
       context: "registration",
     });
 
-    // Récupérer les configs email pour les passer à l'action
-    const apiKeyConfig = await ctx.db
-      .query("systemConfig")
-      .withIndex("by_key", (q) => q.eq("key", "resend_api_key"))
-      .first();
-
-    const fromEmailConfig = await ctx.db
-      .query("systemConfig")
-      .withIndex("by_key", (q) => q.eq("key", "resend_from_email"))
-      .first();
-
-    const fromNameConfig = await ctx.db
-      .query("systemConfig")
-      .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
-      .first();
-
-    const appUrlConfig = await ctx.db
-      .query("systemConfig")
-      .withIndex("by_key", (q) => q.eq("key", "app_url"))
-      .first();
+    // Récupérer les configs email
+    const { emailConfig, brevoApiKey, emailProvider, appUrl } = await getEmailConfigFromDb(ctx.db);
 
     // Programmer l'envoi d'email
     await ctx.scheduler.runAfter(0, internal.api.email.sendVerificationEmail, {
@@ -363,14 +346,10 @@ export const adminResendVerificationEmail = mutation({
       firstName: user.firstName,
       token: verificationToken,
       context: "registration",
-      emailConfig: apiKeyConfig?.value
-        ? {
-            apiKey: apiKeyConfig.value,
-            fromEmail: fromEmailConfig?.value,
-            fromName: fromNameConfig?.value,
-          }
-        : undefined,
-      appUrl: appUrlConfig?.value,
+      emailConfig,
+      brevoApiKey,
+      emailProvider,
+      appUrl,
     });
 
     return { success: true };
@@ -421,26 +400,8 @@ export const adminSendPasswordResetEmail = mutation({
       createdByAdmin: true,
     });
 
-    // Récupérer les configs email pour les passer à l'action
-    const apiKeyConfig = await ctx.db
-      .query("systemConfig")
-      .withIndex("by_key", (q) => q.eq("key", "resend_api_key"))
-      .first();
-
-    const fromEmailConfig = await ctx.db
-      .query("systemConfig")
-      .withIndex("by_key", (q) => q.eq("key", "resend_from_email"))
-      .first();
-
-    const fromNameConfig = await ctx.db
-      .query("systemConfig")
-      .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
-      .first();
-
-    const appUrlConfig = await ctx.db
-      .query("systemConfig")
-      .withIndex("by_key", (q) => q.eq("key", "app_url"))
-      .first();
+    // Récupérer les configs email
+    const { emailConfig: resetEmailConfig, brevoApiKey: resetBrevoKey, emailProvider: resetProvider, appUrl: resetAppUrl } = await getEmailConfigFromDb(ctx.db);
 
     // Programmer l'envoi d'email
     await ctx.scheduler.runAfter(0, internal.api.email.sendPasswordResetEmail, {
@@ -448,14 +409,10 @@ export const adminSendPasswordResetEmail = mutation({
       email: user.email,
       firstName: user.firstName,
       token: resetToken,
-      emailConfig: apiKeyConfig?.value
-        ? {
-            apiKey: apiKeyConfig.value,
-            fromEmail: fromEmailConfig?.value,
-            fromName: fromNameConfig?.value,
-          }
-        : undefined,
-      appUrl: appUrlConfig?.value,
+      emailConfig: resetEmailConfig,
+      brevoApiKey: resetBrevoKey,
+      emailProvider: resetProvider,
+      appUrl: resetAppUrl,
     });
 
     return { success: true };

@@ -115,4 +115,15 @@ crons.weekly(
   internal.planning.regularity.computeAllScores
 );
 
+/**
+ * Rappels SMS J-1
+ * Exécuté chaque jour à 9h UTC (~10h Paris) pour envoyer
+ * un SMS de rappel aux clients et annonceurs des missions du lendemain
+ */
+crons.daily(
+  "sms-reminder-j1",
+  { hourUTC: 9, minuteUTC: 0 },
+  internal.planning.smsReminders.sendDayBeforeReminders
+);
+
 export default crons;

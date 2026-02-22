@@ -50,6 +50,8 @@ interface EmailTemplate {
   availableVariables: TemplateVariable[];
   isActive: boolean;
   isSystem: boolean;
+  brevoTemplateId?: number;
+  useBrevoTemplate?: boolean;
 }
 
 type Snippet = {
@@ -144,6 +146,8 @@ export default function EmailTemplatesPage() {
   const [seeding, setSeeding] = useState(false);
   const [editorTab, setEditorTab] = useState<"rich" | "html">("rich");
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const [brevoTemplateId, setBrevoTemplateId] = useState<string>("");
+  const [useBrevoTemplate, setUseBrevoTemplate] = useState(false);
   const richEditorRef = useRef<HTMLIFrameElement>(null);
   const editedHtmlRef = useRef(editedHtml);
   editedHtmlRef.current = editedHtml;
@@ -212,6 +216,8 @@ export default function EmailTemplatesPage() {
     if (currentTemplate) {
       setEditedSubject(currentTemplate.subject);
       setEditedHtml(currentTemplate.htmlContent);
+      setBrevoTemplateId(currentTemplate.brevoTemplateId?.toString() || "");
+      setUseBrevoTemplate(currentTemplate.useBrevoTemplate || false);
     }
   }, [currentTemplate]);
 
@@ -246,6 +252,8 @@ export default function EmailTemplatesPage() {
         slug: selectedTemplate,
         subject: editedSubject,
         htmlContent: editedHtml,
+        brevoTemplateId: brevoTemplateId ? parseInt(brevoTemplateId, 10) : undefined,
+        useBrevoTemplate,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -731,6 +739,57 @@ export default function EmailTemplatesPage() {
                     className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-primary font-mono text-sm"
                     placeholder="Sujet de l'email..."
                   />
+                </div>
+
+                {/* Brevo Template */}
+                <div className="mb-4 p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-blue-400" />
+                      <span className="text-sm font-medium text-blue-300">Template Brevo</span>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <span className="text-xs text-slate-400">
+                        {useBrevoTemplate ? "Brevo actif" : "HTML local"}
+                      </span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={useBrevoTemplate}
+                        onClick={() => setUseBrevoTemplate(!useBrevoTemplate)}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                          useBrevoTemplate ? "bg-blue-500" : "bg-slate-700"
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                            useBrevoTemplate ? "translate-x-4" : "translate-x-0.5"
+                          }`}
+                        />
+                      </button>
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      value={brevoTemplateId}
+                      onChange={(e) => setBrevoTemplateId(e.target.value)}
+                      placeholder="ID du template Brevo (ex: 1, 2, 3...)"
+                      className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 text-sm"
+                    />
+                  </div>
+                  {useBrevoTemplate && !brevoTemplateId && (
+                    <p className="mt-2 text-xs text-yellow-400 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" />
+                      ID template requis pour utiliser le mode Brevo
+                    </p>
+                  )}
+                  {useBrevoTemplate && brevoTemplateId && (
+                    <p className="mt-2 text-xs text-green-400 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      Les variables seront envoyées comme params au template Brevo #{brevoTemplateId}
+                    </p>
+                  )}
                 </div>
 
                 {/* Onglets Édition enrichie / HTML brut */}

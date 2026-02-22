@@ -256,6 +256,37 @@ const DEFAULT_TEMPLATES = [
     isSystem: true,
   },
   {
+    slug: "admin_refund_client",
+    name: "Remboursement admin (client)",
+    description: "Email envoyé au client lorsqu'un remboursement est effectué par l'admin",
+    subject: "Votre remboursement a été effectué - {{siteName}}",
+    availableVariables: [
+      { key: "clientName", description: "Prénom du client", example: "Jean" },
+      { key: "serviceName", description: "Nom du service", example: "Garde de chien" },
+      { key: "announcerName", description: "Nom du prestataire", example: "Marie D." },
+      { key: "startDate", description: "Date de début", example: "15/03/2025" },
+      { key: "endDate", description: "Date de fin", example: "17/03/2025" },
+      { key: "refundAmount", description: "Montant remboursé", example: "150,00 €" },
+      { key: "reason", description: "Raison du remboursement", example: "Service non conforme" },
+      { key: "siteName", description: "Nom du site", example: "Animigo" },
+      { key: "reservationsUrl", description: "Lien vers les réservations", example: "https://..." },
+    ],
+    isSystem: true,
+  },
+  {
+    slug: "account_deactivated",
+    name: "Compte désactivé",
+    description: "Email envoyé à l'annonceur lorsque son compte est désactivé par l'admin",
+    subject: "Votre compte a été désactivé - {{siteName}}",
+    availableVariables: [
+      { key: "announcerName", description: "Prénom de l'annonceur", example: "Marie" },
+      { key: "reason", description: "Raison de la désactivation", example: "Non-respect des conditions" },
+      { key: "siteName", description: "Nom du site", example: "Animigo" },
+      { key: "supportEmail", description: "Email du support", example: "support@animigo.fr" },
+    ],
+    isSystem: true,
+  },
+  {
     slug: "payment_receipt",
     name: "Reçu de paiement",
     description: "Reçu envoyé au client après un paiement réussi. Contient le détail des prix, infos du prestataire et mentions légales.",
@@ -812,6 +843,74 @@ const getDefaultHtmlContent = (slug: string): string => {
 </body>
 </html>`;
 
+    case "admin_refund_client":
+      return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>${baseStyle} .header { background: linear-gradient(135deg, #10B981 0%, #059669 100%); }</style></head>
+<body>
+<div style="padding: 40px 20px; background-color: #f4f4f5;">
+  <div class="container">
+    <div class="header">
+      <h1>Remboursement effectué</h1>
+    </div>
+    <div class="content">
+      <h2>Bonjour {{clientName}},</h2>
+      <p>Un remboursement a été effectué sur votre réservation. Voici le détail :</p>
+      <div class="info-box">
+        <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">Détails du service</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Service :</strong> {{serviceName}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Prestataire :</strong> {{announcerName}}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
+      </div>
+      <div style="margin: 20px 0; padding: 20px; background-color: #ecfdf5; border-radius: 12px; border-left: 4px solid #10b981;">
+        <p style="margin: 0 0 5px 0; font-weight: bold; color: #065f46; font-size: 18px;">Montant remboursé : {{refundAmount}}</p>
+        <p style="margin: 0; color: #047857; font-size: 14px;">Le remboursement sera visible sur votre compte sous 5 à 10 jours ouvrés.</p>
+      </div>
+      <div style="margin: 20px 0; padding: 20px; background-color: #fef3c7; border-radius: 12px; border-left: 4px solid #f59e0b;">
+        <p style="margin: 0 0 5px 0; font-weight: bold; color: #92400e;">Raison :</p>
+        <p style="margin: 0; color: #78350f;">{{reason}}</p>
+      </div>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="{{reservationsUrl}}" class="btn" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%);">Voir mes réservations</a>
+      </div>
+    </div>
+    <div class="footer">
+      <p>&copy; 2025 {{siteName}}. Tous droits réservés.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+
+    case "account_deactivated":
+      return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>${baseStyle}</style></head>
+<body>
+<div style="padding: 40px 20px; background-color: #f4f4f5;">
+  <div class="container">
+    <div style="background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%); padding: 40px 30px; text-align: center;">
+      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">Compte désactivé</h1>
+    </div>
+    <div class="content">
+      <h2>Bonjour {{announcerName}},</h2>
+      <p>Nous vous informons que votre compte sur {{siteName}} a été désactivé par notre équipe d'administration.</p>
+      <div style="margin: 20px 0; padding: 20px; background-color: #fef2f2; border-radius: 12px; border-left: 4px solid #DC2626;">
+        <p style="margin: 0 0 5px 0; font-weight: bold; color: #991b1b;">Raison :</p>
+        <p style="margin: 0; color: #7f1d1d;">{{reason}}</p>
+      </div>
+      <p>Tant que votre compte est désactivé, vous ne pourrez plus recevoir de réservations ni accéder à votre espace prestataire.</p>
+      <p>Si vous pensez qu'il s'agit d'une erreur ou si vous souhaitez contester cette décision, veuillez contacter notre support :</p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="mailto:{{supportEmail}}" style="display: inline-block; background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 50px; font-weight: bold; font-size: 16px;">Contacter le support</a>
+      </div>
+    </div>
+    <div class="footer">
+      <p>&copy; 2025 {{siteName}}. Tous droits réservés.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+
     case "payment_receipt":
       return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><style>${baseStyle}</style></head>
@@ -918,6 +1017,8 @@ export const update = mutation({
     name: v.optional(v.string()),
     description: v.optional(v.string()),
     isActive: v.optional(v.boolean()),
+    brevoTemplateId: v.optional(v.number()),
+    useBrevoTemplate: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const { user } = await requireAdmin(ctx, args.token);
@@ -931,7 +1032,7 @@ export const update = mutation({
       throw new Error("Template non trouvé");
     }
 
-    await ctx.db.patch(template._id, {
+    const patch: Record<string, unknown> = {
       subject: args.subject,
       htmlContent: args.htmlContent,
       name: args.name ?? template.name,
@@ -939,7 +1040,16 @@ export const update = mutation({
       isActive: args.isActive ?? template.isActive,
       updatedAt: Date.now(),
       updatedBy: user._id,
-    });
+    };
+
+    if (args.brevoTemplateId !== undefined) {
+      patch.brevoTemplateId = args.brevoTemplateId || undefined;
+    }
+    if (args.useBrevoTemplate !== undefined) {
+      patch.useBrevoTemplate = args.useBrevoTemplate;
+    }
+
+    await ctx.db.patch(template._id, patch);
 
     return { success: true };
   },

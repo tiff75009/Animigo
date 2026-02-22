@@ -1049,3 +1049,54 @@ export const updateCancellationSettings = mutation({
     };
   },
 });
+
+// Action: Tester la connexion Brevo
+export const testBrevoConnection = action({
+  args: {
+    token: v.string(),
+    brevoApiKey: v.string(),
+  },
+  handler: async (ctx, args): Promise<{
+    success: boolean;
+    message?: string;
+    email?: { credits: number; type: string };
+    error?: string;
+  }> => {
+    await requireAdminAction(ctx, args.token);
+
+    try {
+      // Vérifier la clé API en récupérant les infos du compte
+      const response = await fetch("https://api.brevo.com/v3/account", {
+        method: "GET",
+        headers: {
+          "api-key": args.brevoApiKey,
+          "Accept": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          success: false,
+          error: `Erreur Brevo (${response.status}): ${errorText}`,
+        };
+      }
+
+      const account = await response.json();
+
+      // Trouver les crédits email
+      const emailPlan = account.plan?.find((p: any) => p.type === "payAsYouGo" || p.type === "free" || p.type === "subscription");
+
+      return {
+        success: true,
+        message: `Compte Brevo : ${account.companyName || account.email || "OK"}`,
+        email: emailPlan ? { credits: emailPlan.credits, type: emailPlan.type } : undefined,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Erreur inconnue",
+      };
+    }
+  },
+});

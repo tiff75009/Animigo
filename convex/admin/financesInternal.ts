@@ -51,6 +51,8 @@ export const getMissionForRefund = internalQuery({
     if (!mission) return null;
 
     let payment = mission.stripePaymentId ? await ctx.db.get(mission.stripePaymentId) : null;
+    const client = await ctx.db.get(mission.clientId);
+    const announcer = await ctx.db.get(mission.announcerId);
 
     return {
       _id: mission._id,
@@ -61,7 +63,25 @@ export const getMissionForRefund = internalQuery({
       paymentStatus: mission.paymentStatus,
       paymentIntentId: payment?.paymentIntentId || null,
       stripePaymentStatus: payment?.status || null,
+      serviceName: mission.serviceName || "",
+      startDate: mission.startDate || "",
+      endDate: mission.endDate || "",
+      clientEmail: client?.email || null,
+      clientName: client ? `${client.firstName} ${client.lastName}` : null,
+      announcerName: announcer ? `${announcer.firstName} ${announcer.lastName}` : null,
     };
+  },
+});
+
+// Query interne pour récupérer l'URL de l'application
+export const getAppUrl = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const config = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "app_url"))
+      .first();
+    return config?.value || null;
   },
 });
 

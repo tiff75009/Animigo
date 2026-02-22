@@ -59,6 +59,11 @@ export const submitDispute = mutation({
       throw new ConvexError("La mission n'est pas terminée");
     }
 
+    // Vérifier que la mission n'est pas déjà confirmée
+    if (mission.clientConfirmedAt || mission.autoConfirmedAt) {
+      throw new ConvexError("Impossible de signaler : la mission a déjà été confirmée");
+    }
+
     // Vérifier pas de dispute existante
     const existingDispute = await ctx.db
       .query("disputes")

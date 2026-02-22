@@ -110,7 +110,8 @@ export default function ReservationDetailPage() {
     mission.status === "completed" &&
     (mission.paymentStatus === "paid" || mission.paymentStatus === "pending") &&
     !mission.clientConfirmedAt &&
-    !mission.autoConfirmedAt;
+    !mission.autoConfirmedAt &&
+    !mission.hasDispute;
 
   const canReview =
     mission &&
