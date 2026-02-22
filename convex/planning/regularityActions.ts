@@ -2,6 +2,7 @@
 "use node";
 
 import { internalAction } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { v } from "convex/values";
 
 export const sendRegularityAlertEmail = internalAction({
@@ -159,6 +160,9 @@ export const sendRegularityAlertEmail = internalAction({
       const provider = (args.emailProvider as "brevo" | "resend") || "resend";
 
       // Tentative Brevo si configuré
+      let emailId: string | undefined;
+      let usedProvider: "brevo" | "resend" = "resend";
+
       if (provider === "brevo" && args.brevoApiKey) {
         try {
           const brevoResp = await fetch("https://api.brevo.com/v3/smtp/email", {
@@ -177,36 +181,63 @@ export const sendRegularityAlertEmail = internalAction({
           });
           if (brevoResp.ok) {
             const brevoResult = await brevoResp.json();
-            return { success: true, id: brevoResult.messageId, provider: "brevo" };
+            emailId = brevoResult.messageId;
+            usedProvider = "brevo";
+          } else {
+            console.warn(`[Brevo] Failed (${brevoResp.status}) — falling back to Resend`);
           }
-          console.warn(`[Brevo] Failed (${brevoResp.status}) — falling back to Resend`);
         } catch (e) {
           console.warn(`[Brevo] Exception — falling back to Resend`);
         }
       }
 
       // Resend (provider par défaut ou fallback)
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${args.emailConfig.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: fromStr,
-          to: [args.recipientEmail],
-          subject,
-          html,
-        }),
-      });
+      if (!emailId && args.emailConfig.apiKey) {
+        const response = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${args.emailConfig.apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            from: fromStr,
+            to: [args.recipientEmail],
+            subject,
+            html,
+          }),
+        });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Resend API error: ${response.status} - ${errorText}`);
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Resend API error: ${response.status} - ${errorText}`);
+        }
+
+        const result = await response.json();
+        emailId = result.id;
+        usedProvider = "resend";
       }
 
-      const result = await response.json();
-      return { success: true, id: result.id, provider: "resend" };
+      if (!emailId) {
+        throw new Error("No email provider available");
+      }
+
+      // Logger l'email (non-bloquant car ctx.runMutation peut échouer sur Convex self-hosted)
+      try {
+        await ctx.runMutation(internal.api.emailInternal.logEmail, {
+          to: args.recipientEmail,
+          from: fromStr,
+          subject,
+          template: "regularity_alert",
+          status: "sent",
+          resendId: emailId,
+          provider: usedProvider,
+          brevoMessageId: usedProvider === "brevo" ? emailId : undefined,
+        });
+      } catch (e) {
+        console.warn("[logEmail] Failed to log email:", e instanceof Error ? e.message.substring(0, 100) : e);
+      }
+
+      return { success: true, id: emailId, provider: usedProvider };
     } catch (error) {
       console.error("Failed to send regularity alert email:", error);
       return {

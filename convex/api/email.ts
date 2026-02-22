@@ -66,6 +66,24 @@ interface EmailSendResult {
   error?: string;
 }
 
+// Helper pour logger un email de manière non-bloquante (Convex self-hosted: ctx.runMutation peut échouer)
+async function safeLogEmail(ctx: any, logData: {
+  to: string;
+  from: string;
+  subject: string;
+  template: string;
+  status: string;
+  resendId?: string;
+  provider?: "brevo" | "resend";
+  brevoMessageId?: string;
+}) {
+  try {
+    await ctx.runMutation(internal.api.emailInternal.logEmail, logData);
+  } catch (e) {
+    console.warn("[logEmail] Failed to log email (Convex self-hosted limitation):", e instanceof Error ? e.message.substring(0, 100) : e);
+  }
+}
+
 async function sendEmailViaProvider(params: EmailSendParams): Promise<EmailSendResult> {
   const { to, from, subject, html, provider = "resend", resendApiKey, brevoApiKey, brevoTemplateId, templateParams } = params;
 
@@ -454,6 +472,88 @@ const DEFAULT_TEMPLATES: Record<string, { subject: string; html: string }> = {
             <td align="center" style="padding:30px 0;">
               <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{dashboardUrl}}" style="height:52px;v-text-anchor:middle;width:280px;" arcsize="50%" fillcolor="#8B5CF6" stroke="f"><v:textbox inset="0,0,0,0"><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Voir et repondre</center></v:textbox></v:roundrect><![endif]-->
               <!--[if !mso]><!--><a href="{{dashboardUrl}}" style="display:inline-block;background-color:#8B5CF6;color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:bold;font-size:16px;">Voir et repondre</a><!--<![endif]-->
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <!-- Footer -->
+    <tr>
+      <td align="center" style="background-color:#f8fafc;padding:30px;border-top:1px solid #e2e8f0;">
+        <p style="margin:0;color:#94a3b8;font-size:12px;">&copy; 2025 {{siteName}}. Tous droits reserves.</p>
+      </td>
+    </tr>
+  </table>
+  <!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
+</body>
+</html>`,
+  },
+  reservation_accepted: {
+    subject: "Votre reservation a ete acceptee - Finalisez le paiement ! - {{siteName}}",
+    html: `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Reservation acceptee</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+<tr><td align="center" style="padding:40px 20px;">
+  <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+    <!-- Header -->
+    <tr>
+      <td align="center" style="background:linear-gradient(135deg,#4ECDC4 0%,#44A08D 100%);padding:40px 30px;">
+        <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:bold;">Bonne nouvelle !</h1>
+        <p style="margin:10px 0 0 0;color:rgba(255,255,255,0.9);font-size:16px;">Votre reservation a ete acceptee</p>
+      </td>
+    </tr>
+    <!-- Body -->
+    <tr>
+      <td style="padding:40px 30px;">
+        <h2 style="margin:0 0 20px 0;color:#1e293b;font-size:24px;">Bonjour {{firstName}} !</h2>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          {{announcerName}} a accepte votre demande de reservation. Pour confirmer definitivement votre prestation, veuillez proceder au paiement securise.
+        </p>
+        <!-- Details -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#f0f9ff;border-left:4px solid #0ea5e9;border-radius:8px;">
+              <p style="margin:0 0 10px 0;font-weight:bold;color:#0369a1;">Recapitulatif</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Service :</strong> {{serviceName}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Prestataire :</strong> {{announcerName}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
+              <p style="margin:5px 0;color:#475569;"><strong>Animal :</strong> {{animalName}}</p>
+              <p style="margin:10px 0 0 0;font-size:20px;font-weight:bold;color:#0369a1;">Montant : {{totalAmount}}</p>
+            </td>
+          </tr>
+        </table>
+        <!-- Button -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center" style="padding:30px 0;">
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{paymentUrl}}" style="height:52px;v-text-anchor:middle;width:280px;" arcsize="50%" fillcolor="#4ECDC4" stroke="f"><v:textbox inset="0,0,0,0"><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Proceder au paiement</center></v:textbox></v:roundrect><![endif]-->
+              <!--[if !mso]><!--><a href="{{paymentUrl}}" style="display:inline-block;background:linear-gradient(135deg,#4ECDC4 0%,#44A08D 100%);color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:bold;font-size:16px;">Proceder au paiement</a><!--<![endif]-->
+            </td>
+          </tr>
+        </table>
+        <!-- Warning -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:15px;background-color:#fef3c7;border-radius:12px;">
+              <p style="margin:0;color:#92400e;font-size:14px;">&#9200; <strong>Important :</strong> Ce lien expire dans {{expirationTime}}. Passe ce delai, la reservation sera automatiquement annulee.</p>
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td style="padding:15px;background-color:#ecfdf5;border-radius:12px;">
+              <p style="margin:0;color:#065f46;font-size:14px;">&#128274; <strong>Paiement securise :</strong> Votre paiement sera encaisse immediatement pour confirmer la reservation.</p>
             </td>
           </tr>
         </table>
@@ -1313,7 +1413,7 @@ export const sendVerificationEmail = internalAction({
         throw new Error(result.error || "Email send failed");
       }
 
-      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+      await safeLogEmail(ctx, {
         to: args.email,
         from: fromStr,
         subject,
@@ -1370,8 +1470,8 @@ export const sendNewReservationRequestEmail = internalAction({
       const fromEmail = args.emailConfig?.fromEmail || process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
       const fromName = args.emailConfig?.fromName || process.env.RESEND_FROM_NAME || "Animigo";
 
-      if (!apiKey) {
-        console.error("No API key configured");
+      if (!apiKey && !args.brevoApiKey) {
+        console.error("No API key configured (neither Resend nor Brevo)");
         return { success: false, error: "Email service not configured" };
       }
 
@@ -1452,6 +1552,99 @@ export const sendNewReservationRequestEmail = internalAction({
       console.error("Failed to send new reservation request email:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       return { success: false, error: errorMessage };
+    }
+  },
+});
+
+// Email au client quand l'annonceur accepte la réservation (avec lien de paiement)
+export const sendReservationAcceptedEmail = internalAction({
+  args: {
+    clientEmail: v.string(),
+    clientName: v.string(),
+    announcerName: v.string(),
+    serviceName: v.string(),
+    startDate: v.string(),
+    endDate: v.string(),
+    animalName: v.optional(v.string()),
+    amount: v.number(),
+    missionId: v.id("missions"),
+    emailConfig: v.object({
+      apiKey: v.string(),
+      fromEmail: v.optional(v.string()),
+      fromName: v.optional(v.string()),
+    }),
+    brevoApiKey: v.optional(v.string()),
+    emailProvider: v.optional(v.string()),
+    appUrl: v.optional(v.string()),
+    paymentDeadlineHours: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const fromEmail = args.emailConfig.fromEmail || "onboarding@resend.dev";
+      const fromName = args.emailConfig.fromName || "Animigo";
+      const siteName = "Animigo";
+      const appUrl = args.appUrl || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+      const template = getTemplate("reservation_accepted");
+      if (!template) {
+        return { success: false, error: "Template not found" };
+      }
+
+      const deadlineHours = args.paymentDeadlineHours || 48;
+      const expirationTime = deadlineHours >= 24
+        ? `${Math.floor(deadlineHours / 24)} jour${Math.floor(deadlineHours / 24) > 1 ? "s" : ""}`
+        : `${deadlineHours} heure${deadlineHours > 1 ? "s" : ""}`;
+
+      const variables = {
+        firstName: args.clientName.split(" ")[0],
+        announcerName: args.announcerName,
+        serviceName: args.serviceName,
+        startDate: formatDate(args.startDate),
+        endDate: formatDate(args.endDate),
+        animalName: args.animalName || "",
+        totalAmount: formatPrice(args.amount),
+        paymentUrl: `${appUrl}/client/paiement/${args.missionId}`,
+        expirationTime,
+        siteName,
+      };
+
+      const subject = replaceVariables(template.subject, variables);
+      const html = replaceVariables(template.htmlContent, variables);
+      const fromStr = `${fromName} <${fromEmail}>`;
+
+      console.log("Sending reservation accepted email to:", args.clientEmail);
+
+      const result = await sendEmailViaProvider({
+        to: args.clientEmail,
+        from: fromStr,
+        subject,
+        html,
+        provider: (args.emailProvider as "brevo" | "resend") || "resend",
+        resendApiKey: args.emailConfig.apiKey,
+        brevoApiKey: args.brevoApiKey,
+        ...getBrevoTemplateArgs(template, variables),
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || "Email send failed");
+      }
+
+      await safeLogEmail(ctx, {
+        to: args.clientEmail,
+        from: fromStr,
+        subject,
+        template: "reservation_accepted",
+        status: "sent",
+        resendId: result.id,
+        provider: result.provider as "brevo" | "resend" | undefined,
+        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
+      });
+
+      console.log("Reservation accepted email sent successfully:", result);
+      return { success: true, id: result.id, provider: result.provider };
+    } catch (error) {
+      console.error("Failed to send reservation accepted email:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
     }
   },
 });
@@ -1566,7 +1759,7 @@ export const sendPasswordResetEmail = internalAction({
         throw new Error(result.error || "Email send failed");
       }
 
-      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+      await safeLogEmail(ctx, {
         to: args.email,
         from: fromStr,
         subject,
@@ -1648,7 +1841,7 @@ export const sendMissionAutoRefusedEmail = internalAction({
         throw new Error(result.error || "Email send failed");
       }
 
-      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+      await safeLogEmail(ctx, {
         to: args.clientEmail,
         from: fromStr,
         subject,
@@ -1726,7 +1919,7 @@ export const sendMissionAutoExpiredClientEmail = internalAction({
         throw new Error(result.error || "Email send failed");
       }
 
-      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+      await safeLogEmail(ctx, {
         to: args.clientEmail,
         from: fromStr,
         subject,
@@ -1804,7 +1997,7 @@ export const sendMissionAutoExpiredAnnouncerEmail = internalAction({
         throw new Error(result.error || "Email send failed");
       }
 
-      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+      await safeLogEmail(ctx, {
         to: args.announcerEmail,
         from: fromStr,
         subject,
@@ -1936,7 +2129,7 @@ export const sendPaymentReceiptEmail = internalAction({
         throw new Error(result.error || "Email send failed");
       }
 
-      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+      await safeLogEmail(ctx, {
         to: args.clientEmail,
         from: fromStr,
         subject,
@@ -2024,7 +2217,7 @@ export const sendCancellationAnnouncerEmail = internalAction({
         throw new Error(result.error || "Email send failed");
       }
 
-      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+      await safeLogEmail(ctx, {
         to: args.announcerEmail,
         from: fromStr,
         subject,
@@ -2109,7 +2302,7 @@ export const sendCancellationClientEmail = internalAction({
         throw new Error(result.error || "Email send failed");
       }
 
-      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+      await safeLogEmail(ctx, {
         to: args.clientEmail,
         from: fromStr,
         subject,
@@ -2189,7 +2382,7 @@ export const sendMissionValidatedByClientEmail = internalAction({
         throw new Error(result.error || "Email send failed");
       }
 
-      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+      await safeLogEmail(ctx, {
         to: args.announcerEmail,
         from: fromStr,
         subject,
@@ -2271,7 +2464,7 @@ export const sendAdminRefundClientEmail = internalAction({
         throw new Error(result.error || "Email send failed");
       }
 
-      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+      await safeLogEmail(ctx, {
         to: args.clientEmail,
         from: fromStr,
         subject,
@@ -2341,7 +2534,7 @@ export const sendAccountDeactivatedEmail = internalAction({
         throw new Error(result.error || "Email send failed");
       }
 
-      await ctx.runMutation(internal.api.emailInternal.logEmail, {
+      await safeLogEmail(ctx, {
         to: args.announcerEmail,
         from: fromStr,
         subject,

@@ -506,6 +506,16 @@ export const acceptMission = mutation({
       .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
       .first();
 
+    const brevoApiKeyConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "brevo_api_key"))
+      .first();
+
+    const emailProviderConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "email_provider"))
+      .first();
+
     // Récupérer les configs Convex pour l'API HTTP (workaround self-hosted)
     const convexUrlConfig = await ctx.db
       .query("systemConfig")
@@ -589,17 +599,35 @@ export const acceptMission = mutation({
       appUrl: appUrlConfig?.value || "http://localhost:3000",
       convexUrl: convexUrlConfig.value, // URL Convex pour l'API HTTP
       convexAdminKey: convexAdminKeyConfig.value, // Admin key pour l'authentification
-      // Config email pour l'envoi du lien de paiement
-      emailConfig: emailApiKeyConfig?.value
-        ? {
-            apiKey: emailApiKeyConfig.value,
-            fromEmail: emailFromConfig?.value,
-            fromName: emailFromNameConfig?.value,
-          }
-        : undefined,
       // Stripe Customer (pour cartes sauvegardées)
       stripeCustomerId: client.stripeCustomerId || undefined,
     });
+
+    // Envoyer l'email au client (réservation acceptée + lien paiement)
+    const emailApiKey = emailApiKeyConfig?.value || brevoApiKeyConfig?.value;
+    if (emailApiKey) {
+      const deadlineHours = parseInt(paymentDeadlineHours?.value || "") || 48;
+      await ctx.scheduler.runAfter(0, internal.api.email.sendReservationAcceptedEmail, {
+        clientEmail: client.email,
+        clientName: `${client.firstName} ${client.lastName}`,
+        announcerName: `${announcer.firstName} ${announcer.lastName}`,
+        serviceName: mission.serviceName,
+        startDate: mission.startDate,
+        endDate: mission.endDate,
+        animalName: mission.animal?.name,
+        amount,
+        missionId: args.missionId,
+        emailConfig: {
+          apiKey: emailApiKeyConfig?.value || "",
+          fromEmail: emailFromConfig?.value,
+          fromName: emailFromNameConfig?.value,
+        },
+        brevoApiKey: brevoApiKeyConfig?.value,
+        emailProvider: emailProviderConfig?.value,
+        appUrl: appUrlConfig?.value,
+        paymentDeadlineHours: deadlineHours,
+      });
+    }
 
     // Envoyer la notification push au client (mission acceptée)
     await ctx.scheduler.runAfter(0, internal.notifications.actions.sendMissionAcceptedNotification, {

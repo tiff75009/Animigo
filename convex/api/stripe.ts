@@ -44,12 +44,6 @@ export const createPaymentIntent = internalAction({
     appUrl: v.string(),
     convexUrl: v.string(), // URL Convex self-hosted
     convexAdminKey: v.string(), // Admin key pour l'API HTTP Convex
-    // Config email
-    emailConfig: v.optional(v.object({
-      apiKey: v.string(),
-      fromEmail: v.optional(v.string()),
-      fromName: v.optional(v.string()),
-    })),
     // Cartes sauvegardées
     stripeCustomerId: v.optional(v.string()),
   },
@@ -133,89 +127,8 @@ export const createPaymentIntent = internalAction({
       // URL de paiement interne
       const paymentUrl = `${appUrl}/client/paiement/${args.missionId}`;
 
-      // Envoyer l'email au client
-      if (args.emailConfig?.apiKey) {
-        const fromEmail = args.emailConfig?.fromEmail || "onboarding@resend.dev";
-        const fromName = args.emailConfig?.fromName || "Animigo";
-
-        const formatDate = (dateStr: string) => {
-          const [year, month, day] = dateStr.split("-");
-          return `${day}/${month}/${year}`;
-        };
-
-        const formatPrice = (cents: number) => {
-          return (cents / 100).toFixed(2).replace(".", ",") + " €";
-        };
-
-        const clientFirstName = args.clientName.split(" ")[0];
-
-        const subject = `Votre réservation a été acceptée - Finalisez le paiement`;
-        const html = `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
-<div style="padding: 40px 20px; background-color: #f4f4f5;">
-  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-    <div style="background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%); padding: 40px 30px; text-align: center;">
-      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">🎉 Bonne nouvelle !</h1>
-      <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.9); font-size: 16px;">Votre réservation a été acceptée</p>
-    </div>
-    <div style="padding: 40px 30px;">
-      <h2 style="margin: 0 0 20px 0; color: #1e293b; font-size: 24px;">Bonjour ${clientFirstName} !</h2>
-      <p style="margin: 0 0 20px 0; color: #475569; font-size: 16px; line-height: 1.6;">
-        ${args.announcerName} a accepté votre demande de réservation. Pour confirmer définitivement votre prestation, veuillez procéder au paiement sécurisé.
-      </p>
-      <div style="margin: 20px 0; padding: 20px; background-color: #f0f9ff; border-radius: 12px; border-left: 4px solid #0ea5e9;">
-        <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">📋 Récapitulatif</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Service :</strong> ${args.serviceName}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Prestataire :</strong> ${args.announcerName}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> Du ${formatDate(args.startDate)} au ${formatDate(args.endDate)}</p>
-        ${args.animalName ? `<p style="margin: 5px 0; color: #475569;"><strong>Animal :</strong> ${args.animalName}</p>` : ""}
-        <p style="margin: 10px 0 0 0; font-size: 20px; font-weight: bold; color: #0369a1;">Montant : ${formatPrice(args.amount)}</p>
-      </div>
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="${paymentUrl}" style="display: inline-block; background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 50px; font-weight: bold; font-size: 16px;">💳 Procéder au paiement</a>
-      </div>
-      <div style="margin-top: 20px; padding: 15px; background-color: #fef3c7; border-radius: 12px;">
-        <p style="margin: 0; color: #92400e; font-size: 14px;">⏰ <strong>Important :</strong> Ce lien expire dans 24 heures.</p>
-      </div>
-      <div style="margin-top: 20px; padding: 15px; background-color: #ecfdf5; border-radius: 12px;">
-        <p style="margin: 0; color: #065f46; font-size: 14px;">🔒 <strong>Paiement sécurisé :</strong> Votre paiement sera encaissé immédiatement pour confirmer la réservation.</p>
-      </div>
-    </div>
-    <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
-      <p style="margin: 0; color: #94a3b8; font-size: 12px;">© 2025 Animigo. Tous droits réservés.</p>
-    </div>
-  </div>
-</div>
-</body>
-</html>`;
-
-        try {
-          const emailResponse = await fetch("https://api.resend.com/emails", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${args.emailConfig.apiKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              from: `${fromName} <${fromEmail}>`,
-              to: [args.clientEmail],
-              subject,
-              html,
-            }),
-          });
-
-          if (emailResponse.ok) {
-            console.log("Payment email sent successfully");
-          } else {
-            console.error("Failed to send payment email");
-          }
-        } catch (emailError) {
-          console.error("Error sending payment email:", emailError);
-        }
-      }
+      // Note: l'email "reservation_accepted" est maintenant envoyé depuis acceptMission
+      // via internal.api.email.sendReservationAcceptedEmail (supporte Brevo + Resend)
 
       return {
         success: true,
@@ -249,12 +162,6 @@ export const createCheckoutSession = internalAction({
     // Config passée depuis la mutation (contourne le bug ctx.runQuery sur self-hosted)
     stripeSecretKey: v.string(),
     appUrl: v.string(),
-    // Config email pour l'envoi du lien de paiement
-    emailConfig: v.optional(v.object({
-      apiKey: v.string(),
-      fromEmail: v.optional(v.string()),
-      fromName: v.optional(v.string()),
-    })),
   },
   handler: async (ctx, args) => {
     console.log("=== createCheckoutSession START ===");
@@ -317,105 +224,8 @@ export const createCheckoutSession = internalAction({
 
       console.log("Checkout Session created:", session.id);
 
-      // NOTE: Sur Convex self-hosted, les actions ne peuvent PAS appeler:
-      // - ctx.runMutation (échoue avec HTML 404)
-      // - ctx.runQuery (échoue avec HTML 404)
-      // - ctx.scheduler.runAfter (échoue avec "Transient error")
-      //
-      // Solution: Faire tout directement dans l'action (appels HTTP seulement)
-      // La sauvegarde en base se fera via le webhook Stripe checkout.session.completed
-
-      // Envoyer l'email au client avec le lien de paiement DIRECTEMENT
-      const apiKey = args.emailConfig?.apiKey;
-      if (apiKey) {
-        const fromEmail = args.emailConfig?.fromEmail || "onboarding@resend.dev";
-        const fromName = args.emailConfig?.fromName || "Animigo";
-        const siteName = "Animigo";
-
-        // Formater les dates et le prix
-        const formatDateEmail = (dateStr: string) => {
-          const [year, month, day] = dateStr.split("-");
-          return `${day}/${month}/${year}`;
-        };
-
-        const formatPriceEmail = (cents: number) => {
-          return (cents / 100).toFixed(2).replace(".", ",") + " €";
-        };
-
-        const clientFirstName = args.clientName.split(" ")[0];
-
-        const subject = `Votre réservation a été acceptée - Finalisez le paiement - ${siteName}`;
-        const html = `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
-<div style="padding: 40px 20px; background-color: #f4f4f5;">
-  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-    <div style="background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%); padding: 40px 30px; text-align: center;">
-      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">🎉 Bonne nouvelle !</h1>
-      <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.9); font-size: 16px;">Votre réservation a été acceptée</p>
-    </div>
-    <div style="padding: 40px 30px;">
-      <h2 style="margin: 0 0 20px 0; color: #1e293b; font-size: 24px;">Bonjour ${clientFirstName} !</h2>
-      <p style="margin: 0 0 20px 0; color: #475569; font-size: 16px; line-height: 1.6;">
-        ${args.announcerName} a accepté votre demande de réservation. Pour confirmer définitivement votre prestation, veuillez procéder au paiement sécurisé.
-      </p>
-      <div style="margin: 20px 0; padding: 20px; background-color: #f0f9ff; border-radius: 12px; border-left: 4px solid #0ea5e9;">
-        <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">📋 Récapitulatif</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Service :</strong> ${args.serviceName}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Prestataire :</strong> ${args.announcerName}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> Du ${formatDateEmail(args.startDate)} au ${formatDateEmail(args.endDate)}</p>
-        ${args.animalName ? `<p style="margin: 5px 0; color: #475569;"><strong>Animal :</strong> ${args.animalName}</p>` : ""}
-        <p style="margin: 10px 0 0 0; font-size: 20px; font-weight: bold; color: #0369a1;">Montant : ${formatPriceEmail(args.amount)}</p>
-      </div>
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="${session.url}" style="display: inline-block; background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 50px; font-weight: bold; font-size: 16px;">💳 Procéder au paiement</a>
-      </div>
-      <div style="margin-top: 20px; padding: 15px; background-color: #fef3c7; border-radius: 12px;">
-        <p style="margin: 0; color: #92400e; font-size: 14px;">⏰ <strong>Important :</strong> Ce lien expire dans 1 heure.</p>
-      </div>
-      <div style="margin-top: 20px; padding: 15px; background-color: #ecfdf5; border-radius: 12px;">
-        <p style="margin: 0; color: #065f46; font-size: 14px;">🔒 <strong>Paiement sécurisé :</strong> Votre paiement sera encaissé immédiatement pour confirmer la réservation.</p>
-      </div>
-    </div>
-    <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
-      <p style="margin: 0; color: #94a3b8; font-size: 12px;">© 2025 ${siteName}. Tous droits réservés.</p>
-    </div>
-  </div>
-</div>
-</body>
-</html>`;
-
-        try {
-          console.log("Sending payment email directly to:", args.clientEmail);
-
-          const emailResponse = await fetch("https://api.resend.com/emails", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              from: `${fromName} <${fromEmail}>`,
-              to: [args.clientEmail],
-              subject,
-              html,
-            }),
-          });
-
-          const emailResult = await emailResponse.text();
-          if (emailResponse.ok) {
-            console.log("Payment email sent successfully:", emailResult);
-          } else {
-            console.error("Failed to send payment email:", emailResult);
-          }
-        } catch (emailError) {
-          console.error("Error sending payment email:", emailError);
-        }
-      } else {
-        console.warn("No email config provided, skipping payment email");
-      }
+      // Note: l'email "reservation_accepted" est maintenant envoyé depuis acceptMission
+      // via internal.api.email.sendReservationAcceptedEmail (supporte Brevo + Resend)
 
       return {
         success: true,
