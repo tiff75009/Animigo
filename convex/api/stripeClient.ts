@@ -263,9 +263,9 @@ export const confirmPaymentSuccess = mutation({
       const receiptAlreadySent = freshPayment?.receiptEmailSent === true;
 
       const announcer = await ctx.db.get(mission.announcerId);
-      const { emailConfig: scEmailConfig, brevoApiKey: scBrevoKey, emailProvider: scProvider, appUrl: scAppUrl } = await getEmailConfigFromDb(ctx.db);
+      const { emailConfig: scEmailConfig, appUrl: scAppUrl } = await getEmailConfigFromDb(ctx.db);
 
-      if ((scEmailConfig || scBrevoKey) && client?.email && !receiptAlreadySent) {
+      if (scEmailConfig && client?.email && !receiptAlreadySent) {
         const isPro = announcer?.accountType === "annonceur_pro" && !!announcer?.siret;
         const announcerDisplayName = announcer
           ? `${announcer.firstName} ${announcer.lastName.charAt(0)}.`
@@ -296,8 +296,6 @@ export const confirmPaymentSuccess = mutation({
             cardBrand: "",
             cardLast4: "",
             emailConfig: scEmailConfig || { apiKey: "" },
-            brevoApiKey: scBrevoKey,
-            emailProvider: scProvider,
             appUrl: scAppUrl,
           }
         );

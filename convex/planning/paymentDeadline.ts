@@ -173,9 +173,9 @@ export const autoExpirePendingPayments = internalMutation({
     }
 
     // Envoyer les emails d'expiration paiement (client + annonceur)
-    const { emailConfig: payDeadlineEmailConfig, brevoApiKey: payDeadlineBrevoKey, emailProvider: payDeadlineProvider, appUrl: payDeadlineAppUrl } = await getEmailConfigFromDb(ctx.db);
+    const { emailConfig: payDeadlineEmailConfig, appUrl: payDeadlineAppUrl } = await getEmailConfigFromDb(ctx.db);
 
-    if (payDeadlineEmailConfig || payDeadlineBrevoKey) {
+    if (payDeadlineEmailConfig) {
       for (const mission of expiredMissions) {
         const client = await ctx.db.get(mission.clientId);
         const announcer = await ctx.db.get(mission.announcerId);
@@ -200,8 +200,6 @@ export const autoExpirePendingPayments = internalMutation({
               startDate: mission.startDate,
               endDate: mission.endDate,
               emailConfig: payDeadlineEmailConfig || { apiKey: "" },
-              brevoApiKey: payDeadlineBrevoKey,
-              emailProvider: payDeadlineProvider,
               appUrl: payDeadlineAppUrl,
             }
           );
@@ -220,8 +218,6 @@ export const autoExpirePendingPayments = internalMutation({
               startDate: mission.startDate,
               endDate: mission.endDate,
               emailConfig: payDeadlineEmailConfig || { apiKey: "" },
-              brevoApiKey: payDeadlineBrevoKey,
-              emailProvider: payDeadlineProvider,
               appUrl: payDeadlineAppUrl,
             }
           );

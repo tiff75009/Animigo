@@ -1017,8 +1017,6 @@ export const update = mutation({
     name: v.optional(v.string()),
     description: v.optional(v.string()),
     isActive: v.optional(v.boolean()),
-    brevoTemplateId: v.optional(v.number()),
-    useBrevoTemplate: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const { user } = await requireAdmin(ctx, args.token);
@@ -1041,13 +1039,6 @@ export const update = mutation({
       updatedAt: Date.now(),
       updatedBy: user._id,
     };
-
-    if (args.brevoTemplateId !== undefined) {
-      patch.brevoTemplateId = args.brevoTemplateId || undefined;
-    }
-    if (args.useBrevoTemplate !== undefined) {
-      patch.useBrevoTemplate = args.useBrevoTemplate;
-    }
 
     await ctx.db.patch(template._id, patch);
 

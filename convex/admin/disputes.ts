@@ -279,16 +279,14 @@ export const resolveDisputeWithActions = mutation({
 
         // Envoyer l'email de désactivation
         if (announcer.email) {
-          const { emailConfig: deactivateEmailConfig, brevoApiKey: deactivateBrevoKey, emailProvider: deactivateProvider } = await getEmailConfigFromDb(ctx.db);
+          const { emailConfig: deactivateEmailConfig } = await getEmailConfigFromDb(ctx.db);
 
-          if (deactivateEmailConfig || deactivateBrevoKey) {
+          if (deactivateEmailConfig) {
             await ctx.scheduler.runAfter(0, internal.api.email.sendAccountDeactivatedEmail, {
               announcerEmail: announcer.email,
               announcerName: announcer.firstName || "Prestataire",
               reason: args.suspendReason || "Décision administrative suite à une réclamation",
               emailConfig: deactivateEmailConfig || { apiKey: "" },
-              brevoApiKey: deactivateBrevoKey,
-              emailProvider: deactivateProvider,
             });
           }
         }

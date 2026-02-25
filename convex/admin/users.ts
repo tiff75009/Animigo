@@ -337,7 +337,7 @@ export const adminResendVerificationEmail = mutation({
     });
 
     // Récupérer les configs email
-    const { emailConfig, brevoApiKey, emailProvider, appUrl } = await getEmailConfigFromDb(ctx.db);
+    const { emailConfig, appUrl } = await getEmailConfigFromDb(ctx.db);
 
     // Programmer l'envoi d'email
     await ctx.scheduler.runAfter(0, internal.api.email.sendVerificationEmail, {
@@ -347,8 +347,6 @@ export const adminResendVerificationEmail = mutation({
       token: verificationToken,
       context: "registration",
       emailConfig,
-      brevoApiKey,
-      emailProvider,
       appUrl,
     });
 
@@ -401,7 +399,7 @@ export const adminSendPasswordResetEmail = mutation({
     });
 
     // Récupérer les configs email
-    const { emailConfig: resetEmailConfig, brevoApiKey: resetBrevoKey, emailProvider: resetProvider, appUrl: resetAppUrl } = await getEmailConfigFromDb(ctx.db);
+    const { emailConfig: resetEmailConfig, appUrl: resetAppUrl } = await getEmailConfigFromDb(ctx.db);
 
     // Programmer l'envoi d'email
     await ctx.scheduler.runAfter(0, internal.api.email.sendPasswordResetEmail, {
@@ -410,8 +408,6 @@ export const adminSendPasswordResetEmail = mutation({
       firstName: user.firstName,
       token: resetToken,
       emailConfig: resetEmailConfig,
-      brevoApiKey: resetBrevoKey,
-      emailProvider: resetProvider,
       appUrl: resetAppUrl,
     });
 

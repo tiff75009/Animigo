@@ -211,69 +211,9 @@ const integrations: IntegrationSection[] = [
     ],
   },
   {
-    id: "brevo",
-    name: "Brevo (SendinBlue)",
-    description: "Service d'envoi d'emails transactionnels — provider principal (Resend en fallback)",
-    icon: Mail,
-    color: "bg-blue-600",
-    docsUrl: "https://developers.brevo.com/docs/getting-started",
-    fields: [
-      {
-        key: "brevo_api_key",
-        label: "Clé API Brevo",
-        description: "Clé API v3 depuis votre compte Brevo (SMTP & API)",
-        isSecret: true,
-        placeholder: "xkeysib-...",
-      },
-      {
-        key: "email_provider",
-        label: "Provider email actif",
-        description: "Choisir 'brevo' (recommandé) ou 'resend' (fallback). Si Brevo échoue, Resend prend le relais automatiquement.",
-        isSecret: false,
-        placeholder: "brevo",
-      },
-      {
-        key: "brevo_webhook_secret",
-        label: "Secret Webhook Brevo",
-        description: "Token secret pour sécuriser le webhook de tracking email. Générez un UUID aléatoire.",
-        isSecret: true,
-        placeholder: "un-secret-aleatoire-uuid",
-      },
-      {
-        key: "brevo_sms_enabled",
-        label: "SMS Brevo activé",
-        description: "Mettre 'true' pour activer les SMS via Brevo (rappels J-1, notifications). La même clé API est utilisée.",
-        isSecret: false,
-        placeholder: "false",
-      },
-      {
-        key: "brevo_sms_sender",
-        label: "Expéditeur SMS",
-        description: "Nom affiché comme expéditeur des SMS (max 11 caractères, sans espaces ni caractères spéciaux)",
-        isSecret: false,
-        placeholder: "Animigo",
-      },
-    ],
-    webhookInfo: {
-      urlKey: "convex_site_url",
-      description: "Configurez ce webhook dans Brevo (Settings → Webhooks) pour recevoir les notifications de tracking email (délivré, ouvert, cliqué, rebond, etc.).",
-      events: [
-        { event: "delivered", description: "Email délivré au serveur destinataire" },
-        { event: "request", description: "Email envoyé (requête acceptée)" },
-        { event: "open / unique_opened", description: "Email ouvert par le destinataire" },
-        { event: "click", description: "Lien cliqué dans l'email" },
-        { event: "hard_bounce", description: "Adresse invalide (bounce permanent)" },
-        { event: "soft_bounce", description: "Boîte pleine ou serveur temporairement indisponible" },
-        { event: "complaint", description: "Marqué comme spam par le destinataire" },
-        { event: "blocked", description: "Email bloqué par Brevo" },
-        { event: "unsubscribed", description: "Destinataire désabonné" },
-      ],
-    },
-  },
-  {
     id: "resend",
-    name: "Resend (Fallback)",
-    description: "Service d'envoi d'emails transactionnels — fallback si Brevo échoue",
+    name: "Resend",
+    description: "Service d'envoi d'emails transactionnels",
     icon: Mail,
     color: "bg-rose-500",
     docsUrl: "https://resend.com/api-keys",
@@ -458,13 +398,6 @@ export default function IntegrationsPage() {
     balance?: string;
     error?: string;
   } | null>(null);
-  const [testingBrevo, setTestingBrevo] = useState(false);
-  const [brevoTestResult, setBrevoTestResult] = useState<{
-    success: boolean;
-    message?: string;
-    email?: { credits: number; type: string };
-    error?: string;
-  } | null>(null);
 
   const configs = useQuery(
     api.admin.config.getAllConfigs,
@@ -476,8 +409,6 @@ export default function IntegrationsPage() {
   const testQStashConnection = useAction(api.admin.config.testQStashConnection);
   const testRedisConnection = useAction(api.admin.config.testRedisConnection);
   const testOctopushConnection = useAction(api.admin.config.testOctopushConnection);
-  const testBrevoConnection = useAction(api.admin.config.testBrevoConnection);
-
   const getConfigValue = (key: string) => {
     if (values[key] !== undefined) return values[key];
     const config = configs?.find((c: ConfigItem) => c.key === key);
@@ -500,22 +431,6 @@ export default function IntegrationsPage() {
       return `${baseUrl}/http/stripe-webhook`;
     }
     return "[URL_CONVEX]/http/stripe-webhook";
-  };
-
-  const getBrevoWebhookUrl = () => {
-    const convexUrl = getConfigValue("convex_url");
-    const secret = getConfigValue("brevo_webhook_secret");
-    const tokenParam = secret ? `?token=${secret}` : "?token=VOTRE_SECRET";
-    if (convexUrl) {
-      const baseUrl = convexUrl.endsWith("/") ? convexUrl.slice(0, -1) : convexUrl;
-      return `${baseUrl}/http/brevo-webhook${tokenParam}`;
-    }
-    const envUrl = process.env.NEXT_PUBLIC_CONVEX_URL || "";
-    if (envUrl) {
-      const baseUrl = envUrl.endsWith("/") ? envUrl.slice(0, -1) : envUrl;
-      return `${baseUrl}/http/brevo-webhook${tokenParam}`;
-    }
-    return `[URL_CONVEX]/http/brevo-webhook${tokenParam}`;
   };
 
   const copyToClipboard = (text: string) => {
@@ -640,35 +555,6 @@ export default function IntegrationsPage() {
       });
     } finally {
       setTestingOctopush(false);
-    }
-  };
-
-  const handleTestBrevo = async () => {
-    if (!token) return;
-
-    const brevoApiKey = getConfigValue("brevo_api_key");
-
-    if (!brevoApiKey) {
-      setBrevoTestResult({
-        success: false,
-        error: "Veuillez d'abord entrer et sauvegarder votre clé API Brevo.",
-      });
-      return;
-    }
-
-    setTestingBrevo(true);
-    setBrevoTestResult(null);
-
-    try {
-      const result = await testBrevoConnection({ token, brevoApiKey });
-      setBrevoTestResult(result);
-    } catch (error) {
-      setBrevoTestResult({
-        success: false,
-        error: error instanceof Error ? error.message : "Erreur inconnue",
-      });
-    } finally {
-      setTestingBrevo(false);
     }
   };
 
@@ -1139,107 +1025,11 @@ export default function IntegrationsPage() {
               </div>
             )}
 
-            {/* Test Connection Section - Brevo */}
-            {integration.id === "brevo" && (
-              <div className="p-6 border-t border-slate-800">
-                {/* Provider actif indicator */}
-                <div className="mb-4 p-3 bg-slate-800/50 border border-slate-700 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <Info className="w-4 h-4 text-blue-400" />
-                    <span className="text-sm text-slate-300">
-                      Provider actif : <strong className="text-white">{getConfigValue("email_provider") || "resend"}</strong>
-                      {getConfigValue("email_provider") === "brevo" ? (
-                        <span className="ml-2 text-xs text-green-400">(Brevo principal, Resend fallback)</span>
-                      ) : (
-                        <span className="ml-2 text-xs text-yellow-400">(Resend principal — passez à &quot;brevo&quot; pour utiliser Brevo)</span>
-                      )}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Zap className="w-5 h-5 text-blue-400" />
-                    <h3 className="text-lg font-semibold text-white">Tester la connexion</h3>
-                  </div>
-                  <button
-                    onClick={handleTestBrevo}
-                    disabled={testingBrevo}
-                    className="px-4 py-2 rounded-lg font-medium flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50"
-                  >
-                    {testingBrevo ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Test en cours...
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="w-4 h-4" />
-                        Tester l&apos;API
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {brevoTestResult && (
-                  <div className={`mt-4 p-4 rounded-lg border ${
-                    brevoTestResult.success
-                      ? "bg-green-500/10 border-green-500/30"
-                      : "bg-red-500/10 border-red-500/30"
-                  }`}>
-                    <div className="flex items-center gap-2 mb-2">
-                      {brevoTestResult.success ? (
-                        <>
-                          <CheckCircle className="w-5 h-5 text-green-400" />
-                          <span className="text-green-400 font-medium">Connexion réussie</span>
-                        </>
-                      ) : (
-                        <>
-                          <XCircle className="w-5 h-5 text-red-400" />
-                          <span className="text-red-400 font-medium">Erreur de connexion</span>
-                        </>
-                      )}
-                    </div>
-                    {brevoTestResult.success ? (
-                      <div className="text-sm text-slate-300 space-y-1">
-                        <p><strong>Statut :</strong> {brevoTestResult.message}</p>
-                        {brevoTestResult.email && (
-                          <>
-                            <p><strong>Plan :</strong> {brevoTestResult.email.type}</p>
-                            <p><strong>Crédits email :</strong> {brevoTestResult.email.credits}</p>
-                          </>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-red-300">{brevoTestResult.error}</p>
-                    )}
-                  </div>
-                )}
-
-                {/* Info box */}
-                <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <Info className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-                    <div className="text-sm">
-                      <p className="text-blue-300 font-medium mb-2">Configuration Brevo :</p>
-                      <ol className="text-blue-300/80 space-y-1 list-decimal list-inside">
-                        <li>Créez un compte sur <a href="https://app.brevo.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-200">app.brevo.com</a></li>
-                        <li>Allez dans SMTP & API → Clés API → Générer une clé v3</li>
-                        <li>Collez la clé ci-dessus et sauvegardez</li>
-                        <li>Passez le &quot;Provider email actif&quot; à &quot;brevo&quot; pour activer</li>
-                        <li>Si Brevo échoue, les emails sont automatiquement envoyés via Resend</li>
-                      </ol>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Webhook Info Section */}
             {integration.webhookInfo && (() => {
-              const webhookUrl = integration.id === "brevo" ? getBrevoWebhookUrl() : getStripeWebhookUrl();
-              const serviceName = integration.id === "brevo" ? "Brevo" : "Stripe";
-              const accentColor = integration.id === "brevo" ? "blue" : "purple";
+              const webhookUrl = getStripeWebhookUrl();
+              const serviceName = "Stripe";
+              const accentColor = "purple";
               return (
               <div className="p-6 border-t border-slate-800 bg-slate-800/30">
                 <div className="flex items-center gap-2 mb-4">
@@ -1330,22 +1120,6 @@ export default function IntegrationsPage() {
                           {integration.webhookInfo!.testCommand} {webhookUrl}
                         </div>
                       )}
-                    </div>
-                  </div>
-                </div>
-                ) : integration.id === "brevo" ? (
-                <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <Info className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-                    <div className="text-sm">
-                      <p className="text-blue-300 font-medium mb-2">Instructions de configuration :</p>
-                      <ol className="text-blue-300/80 space-y-1 list-decimal list-inside">
-                        <li>Allez dans <a href="https://app.brevo.com/settings/keys/webhook" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-200">Brevo → Settings → Webhooks</a></li>
-                        <li>Cliquez sur &quot;Add a new webhook&quot;</li>
-                        <li>Collez l&apos;URL ci-dessus (avec le token secret)</li>
-                        <li>Sélectionnez tous les événements transactionnels</li>
-                        <li>Le suivi apparaîtra dans <a href="/admin/email-logs" className="underline hover:text-blue-200">Logs Email</a></li>
-                      </ol>
                     </div>
                   </div>
                 </div>

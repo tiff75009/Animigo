@@ -1094,9 +1094,9 @@ export default defineSchema({
       example: v.optional(v.string()), // ex: "Jean"
     })),
 
-    // Brevo template (optionnel)
-    brevoTemplateId: v.optional(v.number()), // ID du template dans Brevo
-    useBrevoTemplate: v.optional(v.boolean()), // true = utiliser le template Brevo au lieu du HTML local
+    // Champs legacy Brevo (gardés pour compatibilité avec données existantes)
+    brevoTemplateId: v.optional(v.number()),
+    useBrevoTemplate: v.optional(v.boolean()),
 
     // Métadonnées
     isActive: v.boolean(),
@@ -1128,7 +1128,7 @@ export default defineSchema({
     resendId: v.optional(v.string()),
     errorMessage: v.optional(v.string()),
     metadata: v.optional(v.any()),
-    // Provider tracking
+    // Champs legacy Brevo (gardés pour compatibilité avec données existantes)
     provider: v.optional(v.union(v.literal("brevo"), v.literal("resend"))),
     brevoMessageId: v.optional(v.string()),
     // Tracking timestamps
@@ -1144,9 +1144,7 @@ export default defineSchema({
     .index("by_to", ["to"])
     .index("by_template", ["template"])
     .index("by_status", ["status"])
-    .index("by_brevo_message_id", ["brevoMessageId"])
-    .index("by_created", ["createdAt"])
-    .index("by_provider", ["provider"]),
+    .index("by_created", ["createdAt"]),
 
   // Invitations administrateur (tokens à usage unique)
   adminInvitations: defineTable({

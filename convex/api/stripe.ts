@@ -128,7 +128,7 @@ export const createPaymentIntent = internalAction({
       const paymentUrl = `${appUrl}/client/paiement/${args.missionId}`;
 
       // Note: l'email "reservation_accepted" est maintenant envoyé depuis acceptMission
-      // via internal.api.email.sendReservationAcceptedEmail (supporte Brevo + Resend)
+      // via internal.api.email.sendReservationAcceptedEmail
 
       return {
         success: true,
@@ -225,7 +225,7 @@ export const createCheckoutSession = internalAction({
       console.log("Checkout Session created:", session.id);
 
       // Note: l'email "reservation_accepted" est maintenant envoyé depuis acceptMission
-      // via internal.api.email.sendReservationAcceptedEmail (supporte Brevo + Resend)
+      // via internal.api.email.sendReservationAcceptedEmail
 
       return {
         success: true,

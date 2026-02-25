@@ -78,9 +78,6 @@ export const getEmailLogStats = query({
     const failed = recentLogs.filter((l) => l.status === "failed").length;
     const blocked = recentLogs.filter((l) => l.status === "blocked").length;
 
-    const brevoCount = recentLogs.filter((l) => l.provider === "brevo").length;
-    const resendCount = recentLogs.filter((l) => l.provider === "resend").length;
-
     return {
       total,
       sent,
@@ -90,7 +87,6 @@ export const getEmailLogStats = query({
       complained,
       failed,
       blocked,
-      byProvider: { brevo: brevoCount, resend: resendCount },
       deliveryRate: total > 0 ? Math.round(((delivered + opened) / total) * 100) : 0,
       openRate: delivered + sent > 0 ? Math.round((opened / (delivered + sent)) * 100) : 0,
       bounceRate: total > 0 ? Math.round((bounced / total) * 100) : 0,

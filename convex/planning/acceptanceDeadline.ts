@@ -243,9 +243,9 @@ export const autoRefuseExpiredMissions = internalMutation({
 
     // Envoyer les emails d'auto-refus aux clients
     // Récupérer la config email depuis la DB
-    const { emailConfig: deadlineEmailConfig, brevoApiKey: deadlineBrevoKey, emailProvider: deadlineProvider, appUrl: deadlineAppUrl } = await getEmailConfigFromDb(ctx.db);
+    const { emailConfig: deadlineEmailConfig, appUrl: deadlineAppUrl } = await getEmailConfigFromDb(ctx.db);
 
-    if (deadlineEmailConfig || deadlineBrevoKey) {
+    if (deadlineEmailConfig) {
       for (const mission of expiredMissions) {
         const client = await ctx.db.get(mission.clientId);
         const announcer = await ctx.db.get(mission.announcerId);
@@ -265,8 +265,6 @@ export const autoRefuseExpiredMissions = internalMutation({
               startDate: mission.startDate,
               endDate: mission.endDate,
               emailConfig: deadlineEmailConfig || { apiKey: "" },
-              brevoApiKey: deadlineBrevoKey,
-              emailProvider: deadlineProvider,
               appUrl: deadlineAppUrl,
             }
           );

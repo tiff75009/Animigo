@@ -8,32 +8,16 @@ import { calculateAcceptanceDeadline } from "../planning/acceptanceDeadline";
 // Fonction pure pour récupérer la config email depuis la DB
 // Importable par toutes les mutations (pas besoin de ctx.runQuery)
 export async function getEmailConfigFromDb(db: any) {
-  const [apiKey, fromEmail, fromName, brevoApiKey, emailProvider, appUrl] = await Promise.all([
+  const [apiKey, fromEmail, fromName, appUrl] = await Promise.all([
     db.query("systemConfig").withIndex("by_key", (q: any) => q.eq("key", "resend_api_key")).first(),
     db.query("systemConfig").withIndex("by_key", (q: any) => q.eq("key", "resend_from_email")).first(),
     db.query("systemConfig").withIndex("by_key", (q: any) => q.eq("key", "resend_from_name")).first(),
-    db.query("systemConfig").withIndex("by_key", (q: any) => q.eq("key", "brevo_api_key")).first(),
-    db.query("systemConfig").withIndex("by_key", (q: any) => q.eq("key", "email_provider")).first(),
     db.query("systemConfig").withIndex("by_key", (q: any) => q.eq("key", "app_url")).first(),
   ]);
   return {
     emailConfig: apiKey?.value ? { apiKey: apiKey.value, fromEmail: fromEmail?.value, fromName: fromName?.value } : undefined,
-    brevoApiKey: brevoApiKey?.value || undefined,
-    emailProvider: (emailProvider?.value as "brevo" | "resend") || "resend",
     appUrl: appUrl?.value || undefined,
   };
-}
-
-// Récupère le brevoTemplateId pour un slug donné (si useBrevoTemplate est activé)
-export async function getBrevoTemplateIdForSlug(db: any, slug: string): Promise<number | undefined> {
-  const template = await db
-    .query("emailTemplates")
-    .withIndex("by_slug", (q: any) => q.eq("slug", slug))
-    .first();
-  if (template?.useBrevoTemplate && template?.brevoTemplateId) {
-    return template.brevoTemplateId;
-  }
-  return undefined;
 }
 
 // Query interne pour récupérer les configs email
@@ -55,24 +39,10 @@ export const getEmailConfigs = internalQuery({
       .withIndex("by_key", (q) => q.eq("key", "resend_from_name"))
       .first();
 
-    // Brevo config
-    const brevoApiKeyConfig = await ctx.db
-      .query("systemConfig")
-      .withIndex("by_key", (q) => q.eq("key", "brevo_api_key"))
-      .first();
-
-    // Provider email actif (brevo | resend, défaut: resend)
-    const emailProviderConfig = await ctx.db
-      .query("systemConfig")
-      .withIndex("by_key", (q) => q.eq("key", "email_provider"))
-      .first();
-
     return {
       apiKey: apiKeyConfig?.value || null,
       fromEmail: fromEmailConfig?.value || null,
       fromName: fromNameConfig?.value || null,
-      brevoApiKey: brevoApiKeyConfig?.value || null,
-      emailProvider: (emailProviderConfig?.value as "brevo" | "resend") || "resend",
     };
   },
 });
@@ -101,8 +71,6 @@ export const logEmail = internalMutation({
     resendId: v.optional(v.string()),
     errorMessage: v.optional(v.string()),
     metadata: v.optional(v.any()),
-    provider: v.optional(v.union(v.literal("brevo"), v.literal("resend"))),
-    brevoMessageId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await ctx.db.insert("emailLogs", {
@@ -398,7 +366,7 @@ export const verifyEmailToken = internalMutation({
 
         // Envoyer l'email de notification à l'annonceur
         if (announcer) {
-          const { emailConfig, brevoApiKey, emailProvider, appUrl: cfgAppUrl } = await getEmailConfigFromDb(ctx.db);
+          const { emailConfig, appUrl: cfgAppUrl } = await getEmailConfigFromDb(ctx.db);
 
           await ctx.scheduler.runAfter(0, internal.api.email.sendNewReservationRequestEmail, {
             announcerEmail: announcer.email,
@@ -418,8 +386,6 @@ export const verifyEmailToken = internalMutation({
               totalAmount: totalAmount,
             },
             emailConfig,
-            brevoApiKey,
-            emailProvider,
             appUrl: cfgAppUrl,
           });
         }

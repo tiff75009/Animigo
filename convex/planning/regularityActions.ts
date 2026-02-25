@@ -22,8 +22,6 @@ export const sendRegularityAlertEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     }),
-    brevoApiKey: v.optional(v.string()),
-    emailProvider: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     try {
@@ -157,42 +155,11 @@ export const sendRegularityAlertEmail = internalAction({
 </html>`;
 
       const fromStr = `${fromName} <${fromEmail}>`;
-      const provider = (args.emailProvider as "brevo" | "resend") || "resend";
 
-      // Tentative Brevo si configuré
       let emailId: string | undefined;
-      let usedProvider: "brevo" | "resend" = "resend";
 
-      if (provider === "brevo" && args.brevoApiKey) {
-        try {
-          const brevoResp = await fetch("https://api.brevo.com/v3/smtp/email", {
-            method: "POST",
-            headers: {
-              "api-key": args.brevoApiKey,
-              "Content-Type": "application/json",
-              "Accept": "application/json",
-            },
-            body: JSON.stringify({
-              sender: { name: fromName, email: fromEmail },
-              to: [{ email: args.recipientEmail }],
-              subject,
-              htmlContent: html,
-            }),
-          });
-          if (brevoResp.ok) {
-            const brevoResult = await brevoResp.json();
-            emailId = brevoResult.messageId;
-            usedProvider = "brevo";
-          } else {
-            console.warn(`[Brevo] Failed (${brevoResp.status}) — falling back to Resend`);
-          }
-        } catch (e) {
-          console.warn(`[Brevo] Exception — falling back to Resend`);
-        }
-      }
-
-      // Resend (provider par défaut ou fallback)
-      if (!emailId && args.emailConfig.apiKey) {
+      // Envoi via Resend
+      if (args.emailConfig.apiKey) {
         const response = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: {
@@ -214,7 +181,6 @@ export const sendRegularityAlertEmail = internalAction({
 
         const result = await response.json();
         emailId = result.id;
-        usedProvider = "resend";
       }
 
       if (!emailId) {
@@ -230,14 +196,13 @@ export const sendRegularityAlertEmail = internalAction({
           template: "regularity_alert",
           status: "sent",
           resendId: emailId,
-          provider: usedProvider,
-          brevoMessageId: usedProvider === "brevo" ? emailId : undefined,
+          provider: "resend",
         });
       } catch (e) {
         console.warn("[logEmail] Failed to log email:", e instanceof Error ? e.message.substring(0, 100) : e);
       }
 
-      return { success: true, id: emailId, provider: usedProvider };
+      return { success: true, id: emailId, provider: "resend" };
     } catch (error) {
       console.error("Failed to send regularity alert email:", error);
       return {

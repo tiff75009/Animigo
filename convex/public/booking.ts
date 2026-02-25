@@ -1116,7 +1116,7 @@ export const finalizeBooking = mutation({
     // Envoyer l'email de notification à l'annonceur
     const announcer = await ctx.db.get(pendingBooking.announcerId);
     if (announcer) {
-      const { emailConfig: bookingEmailConfig, brevoApiKey: bookingBrevoKey, emailProvider: bookingProvider, appUrl: bookingAppUrl } = await getEmailConfigFromDb(ctx.db);
+      const { emailConfig: bookingEmailConfig, appUrl: bookingAppUrl } = await getEmailConfigFromDb(ctx.db);
 
       // Trouver le type d'animal pour le nom
       const animalTypeName = ANIMAL_TYPES.find((t) => t.id === animal.type);
@@ -1139,8 +1139,6 @@ export const finalizeBooking = mutation({
           totalAmount: totalAmount,
         },
         emailConfig: bookingEmailConfig,
-        brevoApiKey: bookingBrevoKey,
-        emailProvider: bookingProvider,
         appUrl: bookingAppUrl,
       });
     }
@@ -1435,7 +1433,7 @@ export const finalizeBookingAsGuest = mutation({
       .first();
 
     // 7bis. Récupérer la config email depuis la DB (pour passer à l'action)
-    const { emailConfig: guestEmailConfig, brevoApiKey: guestBrevoKey, emailProvider: guestProvider, appUrl: guestAppUrl } = await getEmailConfigFromDb(ctx.db);
+    const { emailConfig: guestEmailConfig, appUrl: guestAppUrl } = await getEmailConfigFromDb(ctx.db);
 
     // 8. Envoyer l'email de vérification avec contexte réservation
     await ctx.scheduler.runAfter(0, internal.api.email.sendVerificationEmail, {
@@ -1456,8 +1454,6 @@ export const finalizeBookingAsGuest = mutation({
         totalAmount: finalAmount,
       },
       emailConfig: guestEmailConfig,
-      brevoApiKey: guestBrevoKey,
-      emailProvider: guestProvider,
       appUrl: guestAppUrl,
     });
 

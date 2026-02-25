@@ -692,10 +692,10 @@ export const cancelMissionByClient = mutation({
     }
 
     // Emails d'annulation (via templates)
-    const { emailConfig: cancelEmailConfig, brevoApiKey: cancelBrevoKey, emailProvider: cancelProvider } = await getEmailConfigFromDb(ctx.db);
+    const { emailConfig: cancelEmailConfig } = await getEmailConfigFromDb(ctx.db);
 
     // Email à l'annonceur
-    if (announcer && (cancelEmailConfig || cancelBrevoKey)) {
+    if (announcer && cancelEmailConfig) {
       await ctx.scheduler.runAfter(
         0,
         internal.api.email.sendCancellationAnnouncerEmail,
@@ -713,14 +713,12 @@ export const cancelMissionByClient = mutation({
           cancellationReason: args.reason,
           cancellationRule: refundResult.reason,
           emailConfig: cancelEmailConfig || { apiKey: "" },
-          brevoApiKey: cancelBrevoKey,
-          emailProvider: cancelProvider,
         }
       );
     }
 
     // Email au client
-    if (client && (cancelEmailConfig || cancelBrevoKey)) {
+    if (client && cancelEmailConfig) {
       await ctx.scheduler.runAfter(
         0,
         internal.api.email.sendCancellationClientEmail,
@@ -736,8 +734,6 @@ export const cancelMissionByClient = mutation({
           platformFeeRetained: refundResult.platformFeeRetained,
           cancellationRule: refundResult.reason,
           emailConfig: cancelEmailConfig || { apiKey: "" },
-          brevoApiKey: cancelBrevoKey,
-          emailProvider: cancelProvider,
         }
       );
     }

@@ -268,9 +268,9 @@ export const computeAllScores = internalMutation({
           existingScore?.lastEmailSentLevel !== result.alertLevel
         ) {
           // Récupérer les configs email
-          const { emailConfig: regEmailConfig, brevoApiKey: regBrevoKey, emailProvider: regProvider } = await getEmailConfigFromDb(ctx.db);
+          const { emailConfig: regEmailConfig } = await getEmailConfigFromDb(ctx.db);
 
-          if (regEmailConfig || regBrevoKey) {
+          if (regEmailConfig) {
             await ctx.scheduler.runAfter(
               0,
               internal.planning.regularityActions.sendRegularityAlertEmail,
@@ -286,8 +286,6 @@ export const computeAllScores = internalMutation({
                 isBlocked,
                 graceDeadline: graceDeadline || null,
                 emailConfig: regEmailConfig || { apiKey: "" },
-                brevoApiKey: regBrevoKey,
-                emailProvider: regProvider,
               }
             );
 

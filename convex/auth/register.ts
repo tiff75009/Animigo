@@ -186,7 +186,7 @@ export const registerPro = mutation({
     });
 
     // Récupérer la config email depuis la DB
-    const { emailConfig, brevoApiKey, emailProvider, appUrl } = await getEmailConfigFromDb(ctx.db);
+    const { emailConfig, appUrl } = await getEmailConfigFromDb(ctx.db);
 
     // Scheduler l'envoi d'email de vérification
     await ctx.scheduler.runAfter(0, internal.api.email.sendVerificationEmail, {
@@ -195,8 +195,6 @@ export const registerPro = mutation({
       firstName: args.firstName.trim(),
       token: verificationToken,
       emailConfig,
-      brevoApiKey,
-      emailProvider,
       appUrl,
     });
 
@@ -305,7 +303,7 @@ export const registerParticulier = mutation({
     });
 
     // Récupérer la config email depuis la DB
-    const { emailConfig, brevoApiKey, emailProvider, appUrl } = await getEmailConfigFromDb(ctx.db);
+    const { emailConfig, appUrl } = await getEmailConfigFromDb(ctx.db);
 
     // Scheduler l'envoi d'email de vérification
     await ctx.scheduler.runAfter(0, internal.api.email.sendVerificationEmail, {
@@ -314,8 +312,6 @@ export const registerParticulier = mutation({
       firstName: args.firstName.trim(),
       token: verificationToken,
       emailConfig,
-      brevoApiKey,
-      emailProvider,
       appUrl,
     });
 
@@ -423,7 +419,7 @@ export const registerUtilisateur = mutation({
     });
 
     // Récupérer la config email depuis la DB
-    const { emailConfig, brevoApiKey, emailProvider, appUrl } = await getEmailConfigFromDb(ctx.db);
+    const { emailConfig, appUrl } = await getEmailConfigFromDb(ctx.db);
 
     // Scheduler l'envoi d'email de vérification
     await ctx.scheduler.runAfter(0, internal.api.email.sendVerificationEmail, {
@@ -432,8 +428,6 @@ export const registerUtilisateur = mutation({
       firstName: args.firstName.trim(),
       token: verificationToken,
       emailConfig,
-      brevoApiKey,
-      emailProvider,
       appUrl,
     });
 

@@ -29,40 +29,20 @@ function formatDate(dateStr: string): string {
   return `${day}/${month}/${year}`;
 }
 
-// Helper pour extraire les args template Brevo depuis un template DB
-function getBrevoTemplateArgs(template: any, variables: Record<string, any>) {
-  if (template?.useBrevoTemplate && template?.brevoTemplateId) {
-    return {
-      brevoTemplateId: template.brevoTemplateId as number,
-      templateParams: variables,
-    };
-  }
-  return {};
-}
-
 // ─── Email Provider Helper ───────────────────────────────────────────────
-// Envoie un email via Brevo (prioritaire) ou Resend (fallback).
-// La config emailConfig contient toujours la clé Resend (apiKey).
-// Si brevoApiKey est fourni et que le provider est "brevo", on tente Brevo d'abord.
+// Envoie un email via Resend.
 
 interface EmailSendParams {
   to: string;
   from: string;
   subject: string;
   html: string;
-  // Provider config
-  provider?: "brevo" | "resend";
   resendApiKey?: string;
-  brevoApiKey?: string;
-  // Brevo template (optionnel)
-  brevoTemplateId?: number;
-  templateParams?: Record<string, string | number>;
 }
 
 interface EmailSendResult {
   success: boolean;
   id?: string;
-  provider?: "brevo" | "resend";
   error?: string;
 }
 
@@ -74,8 +54,6 @@ async function safeLogEmail(ctx: any, logData: {
   template: string;
   status: string;
   resendId?: string;
-  provider?: "brevo" | "resend";
-  brevoMessageId?: string;
 }) {
   try {
     await ctx.runMutation(internal.api.emailInternal.logEmail, logData);
@@ -85,83 +63,41 @@ async function safeLogEmail(ctx: any, logData: {
 }
 
 async function sendEmailViaProvider(params: EmailSendParams): Promise<EmailSendResult> {
-  const { to, from, subject, html, provider = "resend", resendApiKey, brevoApiKey, brevoTemplateId, templateParams } = params;
+  const { to, from, subject, html, resendApiKey } = params;
 
-  // Tentative Brevo si configuré et provider = brevo
-  if (provider === "brevo" && brevoApiKey) {
-    try {
-      // Si un templateId Brevo est fourni, utiliser l'API template
-      const bodyPayload: Record<string, unknown> = brevoTemplateId
-        ? {
-            templateId: brevoTemplateId,
-            to: [{ email: to }],
-            params: templateParams || {},
-          }
-        : {
-            sender: { name: from.split("<")[0].trim(), email: from.match(/<(.+)>/)?.[1] || from },
-            to: [{ email: to }],
-            subject,
-            htmlContent: html,
-          };
-
-      const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-        method: "POST",
-        headers: {
-          "api-key": brevoApiKey,
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-        },
-        body: JSON.stringify(bodyPayload),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log(`[Brevo] Email sent to ${to}: messageId=${result.messageId}`);
-        return { success: true, id: result.messageId, provider: "brevo" };
-      }
-
-      // Brevo a échoué → log et fallback Resend
-      const errorText = await response.text();
-      console.warn(`[Brevo] Failed (${response.status}): ${errorText} — falling back to Resend`);
-    } catch (error) {
-      console.warn(`[Brevo] Exception: ${error instanceof Error ? error.message : error} — falling back to Resend`);
-    }
+  if (!resendApiKey) {
+    return { success: false, error: "No email provider configured (Resend API key missing)" };
   }
 
-  // Resend (provider par défaut ou fallback)
-  if (resendApiKey) {
-    try {
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${resendApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from,
-          to: [to],
-          subject,
-          html,
-        }),
-      });
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [to],
+        subject,
+        html,
+      }),
+    });
 
-      if (response.ok) {
-        const result = await response.json();
-        console.log(`[Resend] Email sent to ${to}: id=${result.id}`);
-        return { success: true, id: result.id, provider: "resend" };
-      }
-
-      const errorText = await response.text();
-      console.error(`[Resend] Failed (${response.status}): ${errorText}`);
-      return { success: false, error: `Resend error: ${response.status} - ${errorText}` };
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error(`[Resend] Exception: ${msg}`);
-      return { success: false, error: msg };
+    if (response.ok) {
+      const result = await response.json();
+      console.log(`[Resend] Email sent to ${to}: id=${result.id}`);
+      return { success: true, id: result.id };
     }
-  }
 
-  return { success: false, error: "No email provider configured" };
+    const errorText = await response.text();
+    console.error(`[Resend] Failed (${response.status}): ${errorText}`);
+    return { success: false, error: `Resend error: ${response.status} - ${errorText}` };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[Resend] Exception: ${msg}`);
+    return { success: false, error: msg };
+  }
 }
 
 // Templates HTML par défaut (fallback si pas en base)
@@ -1350,8 +1286,6 @@ export const sendVerificationEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     })),
-    brevoApiKey: v.optional(v.string()),
-    emailProvider: v.optional(v.string()),
     appUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -1360,7 +1294,7 @@ export const sendVerificationEmail = internalAction({
       const fromEmail = args.emailConfig?.fromEmail || process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
       const fromName = args.emailConfig?.fromName || process.env.RESEND_FROM_NAME || "Animigo";
 
-      if (!apiKey && !args.brevoApiKey) {
+      if (!apiKey) {
         console.error("No email API key configured");
         return { success: false, error: "Email service not configured" };
       }
@@ -1403,10 +1337,7 @@ export const sendVerificationEmail = internalAction({
         from: fromStr,
         subject,
         html,
-        provider: (args.emailProvider as "brevo" | "resend") || "resend",
         resendApiKey: apiKey,
-        brevoApiKey: args.brevoApiKey,
-        ...getBrevoTemplateArgs(template, variables),
       });
 
       if (!result.success) {
@@ -1420,11 +1351,9 @@ export const sendVerificationEmail = internalAction({
         template: templateSlug,
         status: "sent",
         resendId: result.id,
-        provider: result.provider as "brevo" | "resend" | undefined,
-        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
       });
 
-      return { success: true, id: result.id, provider: result.provider };
+      return { success: true, id: result.id };
     } catch (error) {
       console.error("Failed to send verification email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
@@ -1457,8 +1386,6 @@ export const sendNewReservationRequestEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     })),
-    brevoApiKey: v.optional(v.string()),
-    emailProvider: v.optional(v.string()),
     appUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -1470,8 +1397,8 @@ export const sendNewReservationRequestEmail = internalAction({
       const fromEmail = args.emailConfig?.fromEmail || process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
       const fromName = args.emailConfig?.fromName || process.env.RESEND_FROM_NAME || "Animigo";
 
-      if (!apiKey && !args.brevoApiKey) {
-        console.error("No API key configured (neither Resend nor Brevo)");
+      if (!apiKey) {
+        console.error("No Resend API key configured");
         return { success: false, error: "Email service not configured" };
       }
 
@@ -1535,10 +1462,7 @@ export const sendNewReservationRequestEmail = internalAction({
         from: fromStr,
         subject,
         html,
-        provider: (args.emailProvider as "brevo" | "resend") || "resend",
         resendApiKey: apiKey,
-        brevoApiKey: args.brevoApiKey,
-        ...getBrevoTemplateArgs(template, variables),
       });
 
       if (!result.success) {
@@ -1547,7 +1471,7 @@ export const sendNewReservationRequestEmail = internalAction({
 
       console.log("New reservation email sent successfully:", result);
 
-      return { success: true, id: result.id, provider: result.provider };
+      return { success: true, id: result.id };
     } catch (error) {
       console.error("Failed to send new reservation request email:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -1573,8 +1497,6 @@ export const sendReservationAcceptedEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     }),
-    brevoApiKey: v.optional(v.string()),
-    emailProvider: v.optional(v.string()),
     appUrl: v.optional(v.string()),
     paymentDeadlineHours: v.optional(v.number()),
   },
@@ -1619,10 +1541,7 @@ export const sendReservationAcceptedEmail = internalAction({
         from: fromStr,
         subject,
         html,
-        provider: (args.emailProvider as "brevo" | "resend") || "resend",
         resendApiKey: args.emailConfig.apiKey,
-        brevoApiKey: args.brevoApiKey,
-        ...getBrevoTemplateArgs(template, variables),
       });
 
       if (!result.success) {
@@ -1636,12 +1555,10 @@ export const sendReservationAcceptedEmail = internalAction({
         template: "reservation_accepted",
         status: "sent",
         resendId: result.id,
-        provider: result.provider as "brevo" | "resend" | undefined,
-        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
       });
 
       console.log("Reservation accepted email sent successfully:", result);
-      return { success: true, id: result.id, provider: result.provider };
+      return { success: true, id: result.id };
     } catch (error) {
       console.error("Failed to send reservation accepted email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
@@ -1673,7 +1590,7 @@ export const resendVerificationEmail = action({
       context: "registration",
     });
 
-    // Récupérer la config email (y compris Brevo)
+    // Récupérer la config email
     const configs = await ctx.runQuery(internal.api.emailInternal.getEmailConfigs);
 
     const result = await ctx.runAction(internal.api.email.sendVerificationEmail, {
@@ -1687,8 +1604,6 @@ export const resendVerificationEmail = action({
         fromEmail: configs.fromEmail || undefined,
         fromName: configs.fromName || undefined,
       } : undefined,
-      brevoApiKey: configs.brevoApiKey || undefined,
-      emailProvider: configs.emailProvider || undefined,
     });
 
     return result;
@@ -1710,8 +1625,6 @@ export const sendPasswordResetEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     })),
-    brevoApiKey: v.optional(v.string()),
-    emailProvider: v.optional(v.string()),
     appUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -1720,7 +1633,7 @@ export const sendPasswordResetEmail = internalAction({
       const fromEmail = args.emailConfig?.fromEmail || process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
       const fromName = args.emailConfig?.fromName || process.env.RESEND_FROM_NAME || "Animigo";
 
-      if (!apiKey && !args.brevoApiKey) {
+      if (!apiKey) {
         return { success: false, error: "Email service not configured" };
       }
 
@@ -1749,10 +1662,7 @@ export const sendPasswordResetEmail = internalAction({
         from: fromStr,
         subject,
         html,
-        provider: (args.emailProvider as "brevo" | "resend") || "resend",
         resendApiKey: apiKey,
-        brevoApiKey: args.brevoApiKey,
-        ...getBrevoTemplateArgs(template, variables),
       });
 
       if (!result.success) {
@@ -1766,11 +1676,9 @@ export const sendPasswordResetEmail = internalAction({
         template: "password_reset",
         status: "sent",
         resendId: result.id,
-        provider: result.provider as "brevo" | "resend" | undefined,
-        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
       });
 
-      return { success: true, id: result.id, provider: result.provider };
+      return { success: true, id: result.id };
     } catch (error) {
       console.error("Failed to send password reset email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
@@ -1796,8 +1704,6 @@ export const sendMissionAutoRefusedEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     }),
-    brevoApiKey: v.optional(v.string()),
-    emailProvider: v.optional(v.string()),
     appUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -1831,10 +1737,7 @@ export const sendMissionAutoRefusedEmail = internalAction({
         from: fromStr,
         subject,
         html,
-        provider: (args.emailProvider as "brevo" | "resend") || "resend",
         resendApiKey: args.emailConfig.apiKey,
-        brevoApiKey: args.brevoApiKey,
-        ...getBrevoTemplateArgs(template, variables),
       });
 
       if (!result.success) {
@@ -1848,11 +1751,9 @@ export const sendMissionAutoRefusedEmail = internalAction({
         template: "mission_auto_refused",
         status: "sent",
         resendId: result.id,
-        provider: result.provider as "brevo" | "resend" | undefined,
-        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
       });
 
-      return { success: true, id: result.id, provider: result.provider };
+      return { success: true, id: result.id };
     } catch (error) {
       console.error("Failed to send mission auto-refused email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
@@ -1874,8 +1775,6 @@ export const sendMissionAutoExpiredClientEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     }),
-    brevoApiKey: v.optional(v.string()),
-    emailProvider: v.optional(v.string()),
     appUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -1909,10 +1808,7 @@ export const sendMissionAutoExpiredClientEmail = internalAction({
         from: fromStr,
         subject,
         html,
-        provider: (args.emailProvider as "brevo" | "resend") || "resend",
         resendApiKey: args.emailConfig.apiKey,
-        brevoApiKey: args.brevoApiKey,
-        ...getBrevoTemplateArgs(template, variables),
       });
 
       if (!result.success) {
@@ -1926,11 +1822,9 @@ export const sendMissionAutoExpiredClientEmail = internalAction({
         template: "mission_auto_expired_client",
         status: "sent",
         resendId: result.id,
-        provider: result.provider as "brevo" | "resend" | undefined,
-        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
       });
 
-      return { success: true, id: result.id, provider: result.provider };
+      return { success: true, id: result.id };
     } catch (error) {
       console.error("Failed to send mission auto-expired client email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
@@ -1952,8 +1846,6 @@ export const sendMissionAutoExpiredAnnouncerEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     }),
-    brevoApiKey: v.optional(v.string()),
-    emailProvider: v.optional(v.string()),
     appUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -1987,10 +1879,7 @@ export const sendMissionAutoExpiredAnnouncerEmail = internalAction({
         from: fromStr,
         subject,
         html,
-        provider: (args.emailProvider as "brevo" | "resend") || "resend",
         resendApiKey: args.emailConfig.apiKey,
-        brevoApiKey: args.brevoApiKey,
-        ...getBrevoTemplateArgs(template, variables),
       });
 
       if (!result.success) {
@@ -2004,11 +1893,9 @@ export const sendMissionAutoExpiredAnnouncerEmail = internalAction({
         template: "mission_auto_expired_announcer",
         status: "sent",
         resendId: result.id,
-        provider: result.provider as "brevo" | "resend" | undefined,
-        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
       });
 
-      return { success: true, id: result.id, provider: result.provider };
+      return { success: true, id: result.id };
     } catch (error) {
       console.error("Failed to send mission auto-expired announcer email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
@@ -2046,8 +1933,6 @@ export const sendPaymentReceiptEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     }),
-    brevoApiKey: v.optional(v.string()),
-    emailProvider: v.optional(v.string()),
     appUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -2119,10 +2004,7 @@ export const sendPaymentReceiptEmail = internalAction({
         from: fromStr,
         subject,
         html,
-        provider: (args.emailProvider as "brevo" | "resend") || "resend",
         resendApiKey: args.emailConfig.apiKey,
-        brevoApiKey: args.brevoApiKey,
-        ...getBrevoTemplateArgs(template, variables),
       });
 
       if (!result.success) {
@@ -2136,11 +2018,9 @@ export const sendPaymentReceiptEmail = internalAction({
         template: "payment_receipt",
         status: "sent",
         resendId: result.id,
-        provider: result.provider as "brevo" | "resend" | undefined,
-        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
       });
 
-      return { success: true, id: result.id, provider: result.provider };
+      return { success: true, id: result.id };
     } catch (error) {
       console.error("Failed to send payment receipt email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
@@ -2168,8 +2048,6 @@ export const sendCancellationAnnouncerEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     }),
-    brevoApiKey: v.optional(v.string()),
-    emailProvider: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     try {
@@ -2207,10 +2085,7 @@ export const sendCancellationAnnouncerEmail = internalAction({
         from: fromStr,
         subject,
         html,
-        provider: (args.emailProvider as "brevo" | "resend") || "resend",
         resendApiKey: args.emailConfig.apiKey,
-        brevoApiKey: args.brevoApiKey,
-        ...getBrevoTemplateArgs(template, variables),
       });
 
       if (!result.success) {
@@ -2224,11 +2099,9 @@ export const sendCancellationAnnouncerEmail = internalAction({
         template: "mission_cancelled_by_client",
         status: "sent",
         resendId: result.id,
-        provider: result.provider as "brevo" | "resend" | undefined,
-        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
       });
 
-      return { success: true, id: result.id, provider: result.provider };
+      return { success: true, id: result.id };
     } catch (error) {
       console.error("Failed to send cancellation announcer email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
@@ -2254,8 +2127,6 @@ export const sendCancellationClientEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     }),
-    brevoApiKey: v.optional(v.string()),
-    emailProvider: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     try {
@@ -2292,10 +2163,7 @@ export const sendCancellationClientEmail = internalAction({
         from: fromStr,
         subject,
         html,
-        provider: (args.emailProvider as "brevo" | "resend") || "resend",
         resendApiKey: args.emailConfig.apiKey,
-        brevoApiKey: args.brevoApiKey,
-        ...getBrevoTemplateArgs(template, variables),
       });
 
       if (!result.success) {
@@ -2309,11 +2177,9 @@ export const sendCancellationClientEmail = internalAction({
         template: "mission_cancelled_by_client_confirmation",
         status: "sent",
         resendId: result.id,
-        provider: result.provider as "brevo" | "resend" | undefined,
-        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
       });
 
-      return { success: true, id: result.id, provider: result.provider };
+      return { success: true, id: result.id };
     } catch (error) {
       console.error("Failed to send cancellation client email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
@@ -2336,8 +2202,6 @@ export const sendMissionValidatedByClientEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     }),
-    brevoApiKey: v.optional(v.string()),
-    emailProvider: v.optional(v.string()),
     appUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -2372,10 +2236,7 @@ export const sendMissionValidatedByClientEmail = internalAction({
         from: fromStr,
         subject,
         html,
-        provider: (args.emailProvider as "brevo" | "resend") || "resend",
         resendApiKey: args.emailConfig.apiKey,
-        brevoApiKey: args.brevoApiKey,
-        ...getBrevoTemplateArgs(template, variables),
       });
 
       if (!result.success) {
@@ -2389,11 +2250,9 @@ export const sendMissionValidatedByClientEmail = internalAction({
         template: "mission_validated_by_client",
         status: "sent",
         resendId: result.id,
-        provider: result.provider as "brevo" | "resend" | undefined,
-        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
       });
 
-      return { success: true, id: result.id, provider: result.provider };
+      return { success: true, id: result.id };
     } catch (error) {
       console.error("Failed to send mission validated by client email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
@@ -2418,8 +2277,6 @@ export const sendAdminRefundClientEmail = internalAction({
       fromName: v.optional(v.string()),
     }),
     appUrl: v.optional(v.string()),
-    brevoApiKey: v.optional(v.string()),
-    emailProvider: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     try {
@@ -2454,10 +2311,7 @@ export const sendAdminRefundClientEmail = internalAction({
         from: fromStr,
         subject,
         html,
-        provider: (args.emailProvider as "brevo" | "resend") || "resend",
         resendApiKey: args.emailConfig.apiKey,
-        brevoApiKey: args.brevoApiKey,
-        ...getBrevoTemplateArgs(template, variables),
       });
 
       if (!result.success) {
@@ -2471,11 +2325,9 @@ export const sendAdminRefundClientEmail = internalAction({
         template: "admin_refund_client",
         status: "sent",
         resendId: result.id,
-        provider: result.provider as "brevo" | "resend" | undefined,
-        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
       });
 
-      return { success: true, id: result.id, provider: result.provider };
+      return { success: true, id: result.id };
     } catch (error) {
       console.error("Failed to send admin refund client email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
@@ -2494,8 +2346,6 @@ export const sendAccountDeactivatedEmail = internalAction({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     }),
-    brevoApiKey: v.optional(v.string()),
-    emailProvider: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     try {
@@ -2524,10 +2374,7 @@ export const sendAccountDeactivatedEmail = internalAction({
         from: fromStr,
         subject,
         html,
-        provider: (args.emailProvider as "brevo" | "resend") || "resend",
         resendApiKey: args.emailConfig.apiKey,
-        brevoApiKey: args.brevoApiKey,
-        ...getBrevoTemplateArgs(template, variables),
       });
 
       if (!result.success) {
@@ -2541,11 +2388,9 @@ export const sendAccountDeactivatedEmail = internalAction({
         template: "account_deactivated",
         status: "sent",
         resendId: result.id,
-        provider: result.provider as "brevo" | "resend" | undefined,
-        brevoMessageId: result.provider === "brevo" ? result.id : undefined,
       });
 
-      return { success: true, id: result.id, provider: result.provider };
+      return { success: true, id: result.id };
     } catch (error) {
       console.error("Failed to send account deactivated email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };

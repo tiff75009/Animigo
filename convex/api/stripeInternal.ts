@@ -338,9 +338,9 @@ export const markPaymentPaid = internalMutation({
       const receiptAlreadySent = freshPayment?.receiptEmailSent === true;
 
       const announcer = await ctx.db.get(mission.announcerId);
-      const { emailConfig: receiptEmailConfig, brevoApiKey: receiptBrevoKey, emailProvider: receiptProvider, appUrl: receiptAppUrl } = await getEmailConfigFromDb(ctx.db);
+      const { emailConfig: receiptEmailConfig, appUrl: receiptAppUrl } = await getEmailConfigFromDb(ctx.db);
 
-      if ((receiptEmailConfig || receiptBrevoKey) && client?.email && !receiptAlreadySent) {
+      if (receiptEmailConfig && client?.email && !receiptAlreadySent) {
         const isPro = announcer?.accountType === "annonceur_pro" && !!announcer?.siret;
         const announcerDisplayName = announcer
           ? `${announcer.firstName} ${announcer.lastName.charAt(0)}.`
@@ -371,8 +371,6 @@ export const markPaymentPaid = internalMutation({
             cardBrand: args.cardBrand || "",
             cardLast4: args.cardLast4 || "",
             emailConfig: receiptEmailConfig || { apiKey: "" },
-            brevoApiKey: receiptBrevoKey,
-            emailProvider: receiptProvider,
             appUrl: receiptAppUrl,
           }
         );

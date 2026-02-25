@@ -67,7 +67,7 @@ export default function EmailLogsPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-white">Logs Email</h1>
-        <p className="text-slate-400 mt-1">Suivi des emails envoyés et tracking Brevo</p>
+        <p className="text-slate-400 mt-1">Suivi des emails envoyés par la plateforme</p>
       </div>
 
       {/* Stats */}
@@ -94,19 +94,6 @@ export default function EmailLogsPage() {
               <p className={`text-xl font-bold ${stat.color}`}>{stat.value}</p>
             </motion.div>
           ))}
-        </div>
-      )}
-
-      {/* Provider breakdown */}
-      {stats && (stats.byProvider.brevo > 0 || stats.byProvider.resend > 0) && (
-        <div className="flex gap-4 text-sm">
-          <span className="text-slate-500">Providers (30j) :</span>
-          {stats.byProvider.brevo > 0 && (
-            <span className="text-blue-400">Brevo: {stats.byProvider.brevo}</span>
-          )}
-          {stats.byProvider.resend > 0 && (
-            <span className="text-purple-400">Resend: {stats.byProvider.resend}</span>
-          )}
         </div>
       )}
 
@@ -148,7 +135,6 @@ export default function EmailLogsPage() {
           className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
         >
           <option value="all">Tous les providers</option>
-          <option value="brevo">Brevo</option>
           <option value="resend">Resend</option>
         </select>
       </div>
@@ -192,7 +178,7 @@ export default function EmailLogsPage() {
                     </td>
                     <td className="px-4 py-3">
                       {log.provider ? (
-                        <span className={`text-xs ${log.provider === "brevo" ? "text-blue-400" : "text-purple-400"}`}>
+                        <span className="text-xs text-purple-400">
                           {log.provider}
                         </span>
                       ) : (

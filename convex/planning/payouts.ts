@@ -125,8 +125,8 @@ export const confirmMissionEnd = mutation({
     });
 
     // Email annonceur
-    const { emailConfig, brevoApiKey, emailProvider, appUrl } = await getEmailConfigFromDb(ctx.db);
-    if (emailConfig || brevoApiKey) {
+    const { emailConfig, appUrl } = await getEmailConfigFromDb(ctx.db);
+    if (emailConfig) {
       const animalName = mission.animals?.length
         ? mission.animals.map((a: any) => a.name).join(", ")
         : mission.animal?.name || "Animal";
@@ -140,8 +140,6 @@ export const confirmMissionEnd = mutation({
         startDate: mission.startDate,
         endDate: mission.endDate,
         emailConfig,
-        brevoApiKey,
-        emailProvider,
         appUrl,
       });
     }

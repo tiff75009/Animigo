@@ -365,8 +365,6 @@ export const adminRefundMission = action({
           fromEmail: emailConfigs.fromEmail || undefined,
           fromName: emailConfigs.fromName || undefined,
         } : undefined,
-        brevoApiKey: emailConfigs?.brevoApiKey || undefined,
-        emailProvider: emailConfigs?.emailProvider || undefined,
         appUrl: appUrlConfig || undefined,
       });
 
@@ -400,8 +398,6 @@ export const markAdminRefund = internalMutation({
       fromEmail: v.optional(v.string()),
       fromName: v.optional(v.string()),
     })),
-    brevoApiKey: v.optional(v.string()),
-    emailProvider: v.optional(v.string()),
     appUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -478,8 +474,6 @@ export const markAdminRefund = internalMutation({
         refundAmount: args.refundAmount,
         reason: args.reason || "Remboursement administratif",
         emailConfig: args.emailConfig,
-        brevoApiKey: args.brevoApiKey,
-        emailProvider: args.emailProvider,
         appUrl: args.appUrl,
       });
     }
