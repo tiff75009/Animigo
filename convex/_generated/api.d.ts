@@ -13,6 +13,7 @@ import type * as admin_categoryTypes from "../admin/categoryTypes.js";
 import type * as admin_commissions from "../admin/commissions.js";
 import type * as admin_config from "../admin/config.js";
 import type * as admin_credits from "../admin/credits.js";
+import type * as admin_dataReset from "../admin/dataReset.js";
 import type * as admin_devPresence from "../admin/devPresence.js";
 import type * as admin_disputeReasons from "../admin/disputeReasons.js";
 import type * as admin_disputes from "../admin/disputes.js";
@@ -140,6 +141,7 @@ declare const fullApi: ApiFromModules<{
   "admin/commissions": typeof admin_commissions;
   "admin/config": typeof admin_config;
   "admin/credits": typeof admin_credits;
+  "admin/dataReset": typeof admin_dataReset;
   "admin/devPresence": typeof admin_devPresence;
   "admin/disputeReasons": typeof admin_disputeReasons;
   "admin/disputes": typeof admin_disputes;

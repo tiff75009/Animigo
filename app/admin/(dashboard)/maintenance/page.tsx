@@ -17,6 +17,7 @@ import {
   Clock,
 } from "lucide-react";
 import { Id, Doc } from "@/convex/_generated/dataModel";
+import { DataResetSection } from "./data-reset-section";
 
 export default function MaintenancePage() {
   const { token } = useAdminAuth();
@@ -539,6 +540,9 @@ export default function MaintenancePage() {
             </div>
           </div>
         </motion.div>
+
+        {/* Réinitialisation des données */}
+        <DataResetSection token={token} />
       </div>
     </div>
   );
