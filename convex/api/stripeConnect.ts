@@ -6,6 +6,7 @@ import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import Stripe from "stripe";
 import { ConvexError } from "convex/values";
+import { createStripeClient } from "../lib/stripeFactory";
 
 /**
  * Stripe Connect Custom - Gestion des comptes annonceurs
@@ -55,7 +56,7 @@ export const createCustomAccount = internalAction({
     }
 
     try {
-      const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+      const stripe = createStripeClient(args.stripeSecretKey);
 
       // Créer le compte Custom
       const account = await stripe.accounts.create({
@@ -135,7 +136,7 @@ export const addBankAccount = internalAction({
     console.log("Account:", args.stripeAccountId);
 
     try {
-      const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+      const stripe = createStripeClient(args.stripeSecretKey);
 
       // Déterminer le pays depuis l'IBAN (2 premières lettres)
       const country = args.iban.substring(0, 2).toUpperCase();
@@ -192,7 +193,7 @@ export const checkAccountStatus = internalAction({
     console.log("=== checkAccountStatus START ===");
 
     try {
-      const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+      const stripe = createStripeClient(args.stripeSecretKey);
 
       const account = await stripe.accounts.retrieve(args.stripeAccountId);
 
@@ -238,7 +239,7 @@ export const createTransfer = internalAction({
     console.log("Amount:", args.amount, "to", args.stripeAccountId);
 
     try {
-      const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+      const stripe = createStripeClient(args.stripeSecretKey);
 
       const transfer = await stripe.transfers.create({
         amount: args.amount,
@@ -277,7 +278,7 @@ export const createInstantPayout = internalAction({
     console.log("=== createInstantPayout START ===");
 
     try {
-      const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+      const stripe = createStripeClient(args.stripeSecretKey);
 
       // Créer un payout sur le compte connecté
       const payout = await stripe.payouts.create(
@@ -321,7 +322,7 @@ export const createStandardPayout = internalAction({
     console.log("=== createStandardPayout START ===");
 
     try {
-      const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+      const stripe = createStripeClient(args.stripeSecretKey);
 
       const payout = await stripe.payouts.create(
         {
@@ -382,7 +383,7 @@ export const createStripeAccountDirect = action({
     }
 
     try {
-      const stripe = new Stripe(stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+      const stripe = createStripeClient(stripeSecretKey);
 
       // Créer le compte Custom avec le token
       console.log("Création du compte Custom...");
@@ -479,7 +480,7 @@ export const updateStripeAccountProfile = action({
     }
 
     try {
-      const stripe = new Stripe(stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+      const stripe = createStripeClient(stripeSecretKey);
 
       // Mettre à jour le business_profile
       const account = await stripe.accounts.update(args.stripeAccountId, {
@@ -534,7 +535,7 @@ export const deleteStripeAccount = action({
     }
 
     try {
-      const stripe = new Stripe(stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+      const stripe = createStripeClient(stripeSecretKey);
 
       // Supprimer le compte Stripe
       await stripe.accounts.del(args.stripeAccountId);

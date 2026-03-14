@@ -4,6 +4,7 @@
 import { internalAction } from "../_generated/server";
 import { v } from "convex/values";
 import Stripe from "stripe";
+import { createStripeClient } from "../lib/stripeFactory";
 
 /**
  * Crée un Stripe Customer + SetupIntent pour ajouter une carte (sans paiement)
@@ -21,7 +22,7 @@ export const createStripeCustomerAndSetupIntent = internalAction({
   handler: async (ctx, args) => {
     console.log("=== createStripeCustomerAndSetupIntent START ===");
 
-    const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+    const stripe = createStripeClient(args.stripeSecretKey);
 
     // Créer le Customer Stripe
     const customer = await stripe.customers.create({
@@ -104,7 +105,7 @@ export const createSetupIntent = internalAction({
   handler: async (ctx, args) => {
     console.log("=== createSetupIntent START ===");
 
-    const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+    const stripe = createStripeClient(args.stripeSecretKey);
 
     const setupIntent = await stripe.setupIntents.create({
       customer: args.stripeCustomerId,
@@ -151,7 +152,7 @@ export const detachPaymentMethod = internalAction({
   handler: async (ctx, args) => {
     console.log("=== detachPaymentMethod START ===");
 
-    const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+    const stripe = createStripeClient(args.stripeSecretKey);
 
     try {
       await stripe.paymentMethods.detach(args.stripePaymentMethodId);
@@ -179,7 +180,7 @@ export const updatePaymentIntentForSavedCard = internalAction({
   handler: async (ctx, args) => {
     console.log("=== updatePaymentIntentForSavedCard START ===");
 
-    const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+    const stripe = createStripeClient(args.stripeSecretKey);
 
     // Mettre à jour le PI avec customer + payment_method
     await stripe.paymentIntents.update(args.paymentIntentId, {
@@ -222,7 +223,7 @@ export const updatePaymentIntentForSave = internalAction({
   handler: async (ctx, args) => {
     console.log("=== updatePaymentIntentForSave START ===");
 
-    const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+    const stripe = createStripeClient(args.stripeSecretKey);
 
     await stripe.paymentIntents.update(args.paymentIntentId, {
       customer: args.stripeCustomerId,
@@ -256,7 +257,7 @@ export const preparePaymentIntentForSave = internalAction({
   handler: async (ctx, args) => {
     console.log("=== preparePaymentIntentForSave START ===");
 
-    const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+    const stripe = createStripeClient(args.stripeSecretKey);
     const convexApiUrl = `${args.convexUrl}/api/mutation`;
 
     let customerId = args.existingCustomerId;
@@ -356,7 +357,7 @@ export const saveCardAfterPayment = internalAction({
     console.log("=== saveCardAfterPayment START ===");
     console.log("PI:", args.paymentIntentId);
 
-    const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+    const stripe = createStripeClient(args.stripeSecretKey);
 
     try {
       // 1. Récupérer le PaymentIntent depuis Stripe

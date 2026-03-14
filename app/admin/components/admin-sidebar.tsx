@@ -117,6 +117,7 @@ export function AdminSidebar() {
         { label: "Invitations Admin", href: "/admin/invitations", icon: UserPlus },
         { label: "Maintenance", href: "/admin/maintenance", icon: Wrench },
         { label: "Dev Test", href: "/admin/dev-test", icon: FlaskConical },
+        { label: "Test Réservations", href: "/admin/test-reservations", icon: ShieldCheck },
       ],
     },
   ], [moderationStats, pendingVerifications, reservationsNeedingAction, pendingSapDeclarations, openDisputes, openTickets]);

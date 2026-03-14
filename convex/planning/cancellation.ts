@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { internal } from "../_generated/api";
 import { getEmailConfigFromDb } from "../api/emailInternal";
+import { formatPrice } from "../lib/formatting";
 
 // ============================================
 // HELPERS
@@ -42,9 +43,8 @@ async function getConfigValue(
   return config?.value ?? defaultValue;
 }
 
-function formatPriceCents(cents: number): string {
-  return (cents / 100).toFixed(2).replace(".", ",") + " \u20ac";
-}
+// formatPrice importé depuis ../lib/formatting
+const formatPriceCents = formatPrice;
 
 async function countSessionBreakdown(
   ctx: any,
@@ -98,14 +98,19 @@ async function getAnnouncerPolicy(
   };
 }
 
-async function calculateRefund(
+export async function calculateRefund(
   ctx: any,
   mission: any,
-  payment: any | null
+  payment: any | null,
+  simulationOptions?: {
+    simulatedNow?: number;
+    overrideCancellationCount?: number;
+  }
 ): Promise<{
   canCancel: boolean;
   refundAmount: number;
   platformFeeRetained: number;
+  stripeFeeRetained: number;
   announcerRetained: number;
   reason: string;
   cancellationCount: number;
@@ -125,6 +130,7 @@ async function calculateRefund(
       canCancel: true,
       refundAmount: 0,
       platformFeeRetained: 0,
+      stripeFeeRetained: 0,
       announcerRetained: 0,
       reason: "Annulation gratuite (pas encore payé)",
       cancellationCount: 0,
@@ -140,6 +146,7 @@ async function calculateRefund(
         canCancel: false,
         refundAmount: 0,
         platformFeeRetained: 0,
+        stripeFeeRetained: 0,
         announcerRetained: 0,
         reason: "Impossible d'annuler une prestation uni-séance en cours",
         cancellationCount: 0,
@@ -156,6 +163,7 @@ async function calculateRefund(
           canCancel: false,
           refundAmount: 0,
           platformFeeRetained: 0,
+          stripeFeeRetained: 0,
           announcerRetained: 0,
           reason: "Toutes les séances ont été effectuées, annulation impossible",
           cancellationCount: 0,
@@ -164,15 +172,18 @@ async function calculateRefund(
 
       const totalAmount = payment.amount;
       const platformFee = mission.platformFee || payment.platformFee || 0;
+      const stripeFee = mission.stripeFee || 0;
       const announcerEarnings = mission.announcerEarnings || payment.announcerEarnings || 0;
 
       const amountPerSession = Math.round(totalAmount / totalSessions);
       const pastSessionsAmount = amountPerSession * pastSessions;
       const remainingAmount = totalAmount - pastSessionsAmount;
 
-      // Commission plateforme proportionnelle aux séances restantes
+      // Commission plateforme et frais Stripe proportionnels aux séances restantes
       const platformFeePerSession = Math.round(platformFee / totalSessions);
       const platformFeeRemaining = platformFeePerSession * remainingSessions;
+      const stripeFeePerSession = Math.round(stripeFee / totalSessions);
+      const stripeFeeRemaining = stripeFeePerSession * remainingSessions;
 
       const announcerPolicy = await getAnnouncerPolicy(ctx, mission.announcerId);
 
@@ -190,12 +201,12 @@ async function calculateRefund(
       };
 
       if (announcerPolicy.refundMode === "per_session") {
-        // Mode par séance : remboursement intégral des séances restantes - commission plateforme
-        const refundAmount = Math.max(0, remainingAmount - platformFeeRemaining);
+        const refundAmount = Math.max(0, remainingAmount - platformFeeRemaining - stripeFeeRemaining);
         return {
           canCancel: true,
           refundAmount,
           platformFeeRetained: platformFeeRemaining,
+          stripeFeeRetained: stripeFeeRemaining,
           announcerRetained: 0,
           reason: `Remboursement pro-rata : ${remainingSessions}/${totalSessions} séance${remainingSessions > 1 ? "s" : ""} restante${remainingSessions > 1 ? "s" : ""} remboursée${remainingSessions > 1 ? "s" : ""}`,
           cancellationCount,
@@ -207,12 +218,13 @@ async function calculateRefund(
       const announcerEarningsPerSession = Math.round(announcerEarnings / totalSessions);
       const remainingAnnouncerEarnings = announcerEarningsPerSession * remainingSessions;
       const announcerRetained = Math.round(remainingAnnouncerEarnings * (announcerPolicy.commissionPercent / 100));
-      const refundAmount = Math.max(0, remainingAmount - platformFeeRemaining - announcerRetained);
+      const refundAmount = Math.max(0, remainingAmount - platformFeeRemaining - stripeFeeRemaining - announcerRetained);
 
       return {
         canCancel: true,
         refundAmount,
         platformFeeRetained: platformFeeRemaining,
+        stripeFeeRetained: stripeFeeRemaining,
         announcerRetained,
         reason: `Remboursement pro-rata : ${remainingSessions}/${totalSessions} séance${remainingSessions > 1 ? "s" : ""} restante${remainingSessions > 1 ? "s" : ""} (annonceur conserve ${announcerPolicy.commissionPercent}%)`,
         cancellationCount,
@@ -227,6 +239,7 @@ async function calculateRefund(
       canCancel: true,
       refundAmount: 0,
       platformFeeRetained: 0,
+      stripeFeeRetained: 0,
       announcerRetained: 0,
       reason: "Annulation gratuite (pas de paiement capturé)",
       cancellationCount: 0,
@@ -255,7 +268,7 @@ async function calculateRefund(
     await getConfigValue(ctx, "cancellation_last_minute_grace_hours", "6"), 10
   );
 
-  const now = Date.now();
+  const now = simulationOptions?.simulatedNow ?? Date.now();
   const paidAt = payment.paidAt || payment.capturedAt || payment.authorizedAt || payment.createdAt;
   const hoursSincePaid = (now - paidAt) / (1000 * 60 * 60);
 
@@ -267,20 +280,21 @@ async function calculateRefund(
   const isLastMinuteBooking = hoursBeforeStartAtBooking < lastMinuteThresholdHours;
   const effectiveGracePeriodHours = isLastMinuteBooking ? lastMinuteGraceHours : gracePeriodHours;
 
-  const cancellationCount = await getClientCancellationCount(
-    ctx, mission.clientId, counterPeriodMonths
-  );
+  const cancellationCount = simulationOptions?.overrideCancellationCount ??
+    await getClientCancellationCount(ctx, mission.clientId, counterPeriodMonths);
 
   const totalAmount = payment.amount;
   const platformFee = mission.platformFee || payment.platformFee || 0;
+  const stripeFee = mission.stripeFee || 0;
   const announcerEarnings = mission.announcerEarnings || payment.announcerEarnings || 0;
 
-  // 1. Grâce post-paiement → remboursement 100% (réduite si last-minute)
+  // 1. Grâce post-paiement → remboursement 100% (plateforme absorbe les frais Stripe)
   if (hoursSincePaid <= effectiveGracePeriodHours) {
     return {
       canCancel: true,
       refundAmount: totalAmount,
       platformFeeRetained: 0,
+      stripeFeeRetained: 0,
       announcerRetained: 0,
       reason: isLastMinuteBooking
         ? `Remboursement intégral (grâce last-minute : ${effectiveGracePeriodHours}h après paiement)`
@@ -289,52 +303,58 @@ async function calculateRefund(
     };
   }
 
-  // 2. Plus de 48h avant le début → remboursement total - commission
+  // 2. Plus de 48h avant le début → remboursement total - commission - frais Stripe
   if (hoursBeforeStart > thresholdHours) {
+    const refund = Math.max(0, totalAmount - platformFee - stripeFee);
     return {
       canCancel: true,
-      refundAmount: totalAmount - platformFee,
+      refundAmount: refund,
       platformFeeRetained: platformFee,
+      stripeFeeRetained: stripeFee,
       announcerRetained: 0,
-      reason: `Remboursement moins la commission plateforme (plus de ${thresholdHours}h avant le début)`,
+      reason: `Remboursement moins commission et frais Stripe (plus de ${thresholdHours}h avant le début)`,
       cancellationCount,
     };
   }
 
   // 3. Moins de 48h → selon compteur
   if (cancellationCount === 0) {
+    const refund = Math.max(0, totalAmount - platformFee - stripeFee);
     return {
       canCancel: true,
-      refundAmount: totalAmount - platformFee,
+      refundAmount: refund,
       platformFeeRetained: platformFee,
+      stripeFeeRetained: stripeFee,
       announcerRetained: 0,
-      reason: "Première annulation : remboursement moins la commission plateforme",
+      reason: "Première annulation : remboursement moins commission et frais Stripe",
       cancellationCount,
     };
   }
 
   if (cancellationCount === 1) {
     const announcerRetained = Math.round(announcerEarnings * (secondPercent / 100));
-    const refund = Math.max(0, totalAmount - platformFee - announcerRetained);
+    const refund = Math.max(0, totalAmount - platformFee - stripeFee - announcerRetained);
     return {
       canCancel: true,
       refundAmount: refund,
       platformFeeRetained: platformFee,
+      stripeFeeRetained: stripeFee,
       announcerRetained,
-      reason: `2ème annulation : l'annonceur conserve ${secondPercent}% de ses gains`,
+      reason: `2ème annulation : l'annonceur conserve ${secondPercent}% de ses gains (frais Stripe retenus)`,
       cancellationCount,
     };
   }
 
   // 3ème+ annulation → annonceur conserve thirdPercent% de ses gains
   const announcerRetained3rd = Math.round(announcerEarnings * (thirdPercent / 100));
-  const refund3rd = Math.max(0, totalAmount - platformFee - announcerRetained3rd);
+  const refund3rd = Math.max(0, totalAmount - platformFee - stripeFee - announcerRetained3rd);
   return {
     canCancel: true,
     refundAmount: refund3rd,
     platformFeeRetained: platformFee,
+    stripeFeeRetained: stripeFee,
     announcerRetained: announcerRetained3rd,
-    reason: `${cancellationCount + 1}ème annulation : l'annonceur conserve ${thirdPercent}% de ses gains`,
+    reason: `${cancellationCount + 1}ème annulation : l'annonceur conserve ${thirdPercent}% de ses gains (frais Stripe retenus)`,
     cancellationCount,
   };
 }

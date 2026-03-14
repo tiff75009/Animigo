@@ -5,6 +5,7 @@ import { internalAction } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import Stripe from "stripe";
+import { createStripeClient } from "../lib/stripeFactory";
 
 /**
  * Traite les événements webhook Stripe
@@ -33,9 +34,7 @@ export const handleStripeWebhook = internalAction({
       throw new Error("Clé secrète Stripe non configurée");
     }
 
-    const stripe = new Stripe(stripeSecretKey, {
-      apiVersion: "2024-12-18.acacia",
-    });
+    const stripe = createStripeClient(stripeSecretKey);
 
     let event: Stripe.Event;
 

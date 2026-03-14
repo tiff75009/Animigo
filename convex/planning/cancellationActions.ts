@@ -4,6 +4,8 @@
 import { internalAction } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
+import { createStripeClient } from "../lib/stripeFactory";
+import { formatPrice, formatDate } from "../lib/formatting";
 
 export const processStripeRefund = internalAction({
   args: {
@@ -14,10 +16,7 @@ export const processStripeRefund = internalAction({
   },
   handler: async (ctx, args) => {
     try {
-      const Stripe = (await import("stripe")).default;
-      const stripe = new Stripe(args.stripeSecretKey, {
-        apiVersion: "2024-12-18.acacia",
-      });
+      const stripe = createStripeClient(args.stripeSecretKey);
 
       // Tenter le remboursement avec reverse_transfer pour inverser
       // le transfert Connect automatique (transfer_data.destination)
@@ -55,10 +54,7 @@ export const capturePartialPaymentIntent = internalAction({
   },
   handler: async (ctx, args) => {
     try {
-      const Stripe = (await import("stripe")).default;
-      const stripe = new Stripe(args.stripeSecretKey, {
-        apiVersion: "2024-12-18.acacia",
-      });
+      const stripe = createStripeClient(args.stripeSecretKey);
 
       // Capturer uniquement le montant retenu, le reste est libéré automatiquement
       const paymentIntent = await stripe.paymentIntents.capture(
@@ -83,10 +79,7 @@ export const cancelStripePaymentIntent = internalAction({
   },
   handler: async (ctx, args) => {
     try {
-      const Stripe = (await import("stripe")).default;
-      const stripe = new Stripe(args.stripeSecretKey, {
-        apiVersion: "2024-12-18.acacia",
-      });
+      const stripe = createStripeClient(args.stripeSecretKey);
 
       // Vérifier le vrai statut du PI côté Stripe avant d'agir
       const pi = await stripe.paymentIntents.retrieve(args.paymentIntentId);
@@ -152,12 +145,7 @@ export const sendCancellationEmail = internalAction({
       const fromName = args.emailConfig.fromName || "Animigo";
       const siteName = "Animigo";
 
-      const formatPrice = (cents: number) =>
-        (cents / 100).toFixed(2).replace(".", ",") + " \u20ac";
-      const formatDate = (dateStr: string) => {
-        const [year, month, day] = dateStr.split("-");
-        return `${day}/${month}/${year}`;
-      };
+      // formatPrice et formatDate importés depuis ../lib/formatting
 
       const subject = args.isAnnouncer
         ? `Une réservation a été annulée - ${siteName}`

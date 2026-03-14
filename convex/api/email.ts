@@ -18,16 +18,8 @@ function replaceVariables(
   return result;
 }
 
-// Helper pour formater un prix en euros
-function formatPrice(cents: number): string {
-  return (cents / 100).toFixed(2).replace(".", ",") + " €";
-}
-
-// Helper pour formater une date
-function formatDate(dateStr: string): string {
-  const [year, month, day] = dateStr.split("-");
-  return `${day}/${month}/${year}`;
-}
+// Helpers formatage centralisés
+import { formatPrice, formatDate } from "../lib/formatting";
 
 // ─── Email Provider Helper ───────────────────────────────────────────────
 // Envoie un email via Resend.
@@ -2330,6 +2322,193 @@ export const sendAdminRefundClientEmail = internalAction({
       return { success: true, id: result.id };
     } catch (error) {
       console.error("Failed to send admin refund client email:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  },
+});
+
+// ─── Emails annulation PAR L'ANNONCEUR ─────────────────────────────────
+
+// Email au client quand l'annonceur annule la mission
+export const sendCancellationByAnnouncerClientEmail = internalAction({
+  args: {
+    clientEmail: v.string(),
+    clientName: v.string(),
+    announcerName: v.string(),
+    serviceName: v.string(),
+    animalName: v.string(),
+    startDate: v.string(),
+    endDate: v.string(),
+    totalAmount: v.number(),
+    refundAmount: v.number(),
+    cancellationReason: v.string(),
+    emailConfig: v.object({
+      apiKey: v.string(),
+      fromEmail: v.optional(v.string()),
+      fromName: v.optional(v.string()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const fromEmail = args.emailConfig.fromEmail || "onboarding@resend.dev";
+      const fromName = args.emailConfig.fromName || "Animigo";
+      const siteName = "Animigo";
+
+      const subject = `Votre réservation a été annulée par le prestataire - ${siteName}`;
+      const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
+<div style="padding: 40px 20px; background-color: #f4f4f5;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+    <div style="background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%); padding: 40px 30px; text-align: center;">
+      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">Réservation annulée</h1>
+    </div>
+    <div style="padding: 40px 30px;">
+      <h2 style="margin: 0 0 20px 0; color: #1e293b; font-size: 24px;">Bonjour ${args.clientName},</h2>
+      <p style="margin: 0 0 20px 0; color: #475569; font-size: 16px; line-height: 1.6;">
+        ${args.announcerName} a annulé votre réservation pour "<strong>${args.serviceName}</strong>".
+      </p>
+      <div style="margin: 20px 0; padding: 20px; background-color: #f0f9ff; border-radius: 12px; border-left: 4px solid #0ea5e9;">
+        <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">Détails</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Service :</strong> ${args.serviceName}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Animal :</strong> ${args.animalName}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> Du ${formatDate(args.startDate)} au ${formatDate(args.endDate)}</p>
+      </div>
+      ${args.refundAmount > 0 ? `
+      <div style="margin: 20px 0; padding: 20px; background-color: #ecfdf5; border-radius: 12px; border-left: 4px solid #10b981;">
+        <p style="margin: 0 0 10px 0; font-weight: bold; color: #065f46;">Remboursement intégral</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Montant remboursé :</strong> ${formatPrice(args.refundAmount)}</p>
+        <p style="margin: 5px 0; color: #475569; font-size: 14px;">Le remboursement apparaîtra sur votre relevé sous 5-10 jours ouvrés.</p>
+      </div>
+      ` : ""}
+      ${args.cancellationReason ? `
+      <div style="margin: 20px 0; padding: 20px; background-color: #fef3c7; border-radius: 12px; border-left: 4px solid #f59e0b;">
+        <p style="margin: 0 0 5px 0; font-weight: bold; color: #92400e;">Raison :</p>
+        <p style="margin: 0; color: #78350f;">${args.cancellationReason}</p>
+      </div>
+      ` : ""}
+      <p style="margin: 20px 0 0 0; color: #475569; font-size: 14px;">
+        Nous vous invitons à rechercher un autre prestataire sur ${siteName}.
+      </p>
+    </div>
+    <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+      <p style="margin: 0; color: #94a3b8; font-size: 12px;">&copy; 2025 ${siteName}. Tous droits réservés.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+
+      const fromStr = `${fromName} <${fromEmail}>`;
+      const result = await sendEmailViaProvider({
+        to: args.clientEmail,
+        from: fromStr,
+        subject,
+        html,
+        resendApiKey: args.emailConfig.apiKey,
+      });
+
+      await safeLogEmail(ctx, {
+        to: args.clientEmail,
+        from: fromStr,
+        subject,
+        template: "mission_cancelled_by_announcer_client",
+        status: result.success ? "sent" : "failed",
+        resendId: result.id,
+        errorMessage: result.error,
+      });
+
+      return result;
+    } catch (error) {
+      console.error("Failed to send cancellation by announcer email to client:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  },
+});
+
+// Email de confirmation à l'annonceur quand il annule
+export const sendCancellationByAnnouncerConfirmEmail = internalAction({
+  args: {
+    announcerEmail: v.string(),
+    announcerName: v.string(),
+    clientName: v.string(),
+    serviceName: v.string(),
+    animalName: v.string(),
+    startDate: v.string(),
+    endDate: v.string(),
+    cancellationReason: v.string(),
+    emailConfig: v.object({
+      apiKey: v.string(),
+      fromEmail: v.optional(v.string()),
+      fromName: v.optional(v.string()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const fromEmail = args.emailConfig.fromEmail || "onboarding@resend.dev";
+      const fromName = args.emailConfig.fromName || "Animigo";
+      const siteName = "Animigo";
+
+      const subject = `Confirmation d'annulation de votre réservation - ${siteName}`;
+      const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
+<div style="padding: 40px 20px; background-color: #f4f4f5;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+    <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 40px 30px; text-align: center;">
+      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">Annulation confirmée</h1>
+    </div>
+    <div style="padding: 40px 30px;">
+      <h2 style="margin: 0 0 20px 0; color: #1e293b; font-size: 24px;">Bonjour ${args.announcerName},</h2>
+      <p style="margin: 0 0 20px 0; color: #475569; font-size: 16px; line-height: 1.6;">
+        Vous avez annulé la réservation de ${args.clientName} pour "<strong>${args.serviceName}</strong>".
+        Le client sera remboursé intégralement.
+      </p>
+      <div style="margin: 20px 0; padding: 20px; background-color: #f0f9ff; border-radius: 12px; border-left: 4px solid #0ea5e9;">
+        <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">Détails</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Service :</strong> ${args.serviceName}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Animal :</strong> ${args.animalName}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> Du ${formatDate(args.startDate)} au ${formatDate(args.endDate)}</p>
+      </div>
+      ${args.cancellationReason ? `
+      <div style="margin: 20px 0; padding: 20px; background-color: #fef3c7; border-radius: 12px; border-left: 4px solid #f59e0b;">
+        <p style="margin: 0 0 5px 0; font-weight: bold; color: #92400e;">Votre raison :</p>
+        <p style="margin: 0; color: #78350f;">${args.cancellationReason}</p>
+      </div>
+      ` : ""}
+    </div>
+    <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+      <p style="margin: 0; color: #94a3b8; font-size: 12px;">&copy; 2025 ${siteName}. Tous droits réservés.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+
+      const fromStr = `${fromName} <${fromEmail}>`;
+      const result = await sendEmailViaProvider({
+        to: args.announcerEmail,
+        from: fromStr,
+        subject,
+        html,
+        resendApiKey: args.emailConfig.apiKey,
+      });
+
+      await safeLogEmail(ctx, {
+        to: args.announcerEmail,
+        from: fromStr,
+        subject,
+        template: "mission_cancelled_by_announcer_confirm",
+        status: result.success ? "sent" : "failed",
+        resendId: result.id,
+        errorMessage: result.error,
+      });
+
+      return result;
+    } catch (error) {
+      console.error("Failed to send cancellation confirmation to announcer:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
     }
   },

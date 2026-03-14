@@ -5,9 +5,11 @@ import { internalAction } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import Stripe from "stripe";
+import { createStripeClient } from "../lib/stripeFactory";
+import { formatPrice, formatDate } from "../lib/formatting";
 
 /**
- * Helper pour récupérer le client Stripe
+ * Helper pour récupérer le client Stripe depuis la config Convex.
  */
 async function getStripeClient(ctx: any): Promise<Stripe> {
   const secretKey = await ctx.runQuery(
@@ -16,7 +18,7 @@ async function getStripeClient(ctx: any): Promise<Stripe> {
   if (!secretKey) {
     throw new Error("Stripe non configuré - clé secrète manquante");
   }
-  return new Stripe(secretKey, { apiVersion: "2024-12-18.acacia" });
+  return createStripeClient(secretKey);
 }
 
 /**
@@ -51,7 +53,7 @@ export const createPaymentIntent = internalAction({
     console.log("=== createPaymentIntent START ===");
 
     try {
-      const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+      const stripe = createStripeClient(args.stripeSecretKey);
       const appUrl = args.appUrl || "http://localhost:3000";
 
       // Créer le PaymentIntent avec paiement immédiat
@@ -173,14 +175,8 @@ export const createCheckoutSession = internalAction({
 
     try {
       // Utiliser la clé passée en paramètre
-      const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+      const stripe = createStripeClient(args.stripeSecretKey);
       const appUrl = args.appUrl || "http://localhost:3000";
-
-      // Formater les dates pour l'affichage
-      const formatDate = (dateStr: string) => {
-        const [year, month, day] = dateStr.split("-");
-        return `${day}/${month}/${year}`;
-      };
 
       const startDateFormatted = formatDate(args.startDate);
       const endDateFormatted = formatDate(args.endDate);
@@ -240,8 +236,107 @@ export const createCheckoutSession = internalAction({
 });
 
 /**
- * Envoyer l'email de demande de paiement
- * Utilise le template "reservation_accepted" du système de templates
+ * Génère le HTML de l'email de paiement (template fallback).
+ * Source unique pour éviter la duplication du template.
+ */
+function buildPaymentEmailHtml(params: {
+  clientFirstName: string;
+  announcerName: string;
+  serviceName: string;
+  startDate: string;
+  endDate: string;
+  animalName?: string;
+  amount: number;
+  paymentUrl: string;
+  siteName: string;
+}): string {
+  const { clientFirstName, announcerName, serviceName, startDate, endDate, animalName, amount, paymentUrl, siteName } = params;
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
+<div style="padding: 40px 20px; background-color: #f4f4f5;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+    <div style="background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%); padding: 40px 30px; text-align: center;">
+      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">Bonne nouvelle !</h1>
+      <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.9); font-size: 16px;">Votre réservation a été acceptée</p>
+    </div>
+    <div style="padding: 40px 30px;">
+      <h2 style="margin: 0 0 20px 0; color: #1e293b; font-size: 24px;">Bonjour ${clientFirstName} !</h2>
+      <p style="margin: 0 0 20px 0; color: #475569; font-size: 16px; line-height: 1.6;">
+        ${announcerName} a accepté votre demande de réservation. Pour confirmer définitivement votre prestation, veuillez procéder au paiement sécurisé.
+      </p>
+      <div style="margin: 20px 0; padding: 20px; background-color: #f0f9ff; border-radius: 12px; border-left: 4px solid #0ea5e9;">
+        <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">Récapitulatif</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Service :</strong> ${serviceName}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Prestataire :</strong> ${announcerName}</p>
+        <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> Du ${formatDate(startDate)} au ${formatDate(endDate)}</p>
+        ${animalName ? `<p style="margin: 5px 0; color: #475569;"><strong>Animal :</strong> ${animalName}</p>` : ""}
+        <p style="margin: 10px 0 0 0; font-size: 20px; font-weight: bold; color: #0369a1;">Montant : ${formatPrice(amount)}</p>
+      </div>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${paymentUrl}" style="display: inline-block; background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 50px; font-weight: bold; font-size: 16px;">Procéder au paiement</a>
+      </div>
+      <div style="margin-top: 20px; padding: 15px; background-color: #fef3c7; border-radius: 12px;">
+        <p style="margin: 0; color: #92400e; font-size: 14px;"><strong>Important :</strong> Ce lien expire dans 1 heure.</p>
+      </div>
+      <div style="margin-top: 20px; padding: 15px; background-color: #ecfdf5; border-radius: 12px;">
+        <p style="margin: 0; color: #065f46; font-size: 14px;"><strong>Paiement sécurisé :</strong> Votre paiement sera encaissé immédiatement pour confirmer la réservation.</p>
+      </div>
+    </div>
+    <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+      <p style="margin: 0; color: #94a3b8; font-size: 12px;">&copy; 2025 ${siteName}. Tous droits réservés.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+}
+
+/**
+ * Envoie un email via Resend. Helper interne partagé.
+ */
+async function sendEmailViaResend(params: {
+  apiKey: string;
+  fromEmail: string;
+  fromName: string;
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<{ success: boolean; id?: string; error?: string }> {
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${params.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: `${params.fromName} <${params.fromEmail}>`,
+        to: [params.to],
+        subject: params.subject,
+        html: params.html,
+      }),
+    });
+
+    const responseText = await response.text();
+    if (!response.ok) {
+      console.error("Erreur envoi email:", responseText);
+      return { success: false, error: responseText };
+    }
+
+    const result = JSON.parse(responseText);
+    console.log("Email envoyé:", result.id);
+    return { success: true, id: result.id };
+  } catch (error) {
+    console.error("Erreur envoi email:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+/**
+ * Envoyer l'email de demande de paiement.
+ * Utilise le template "reservation_accepted" si disponible, sinon fallback HTML.
  */
 export const sendPaymentEmail = internalAction({
   args: {
@@ -257,42 +352,22 @@ export const sendPaymentEmail = internalAction({
     paymentUrl: v.string(),
   },
   handler: async (ctx, args) => {
-    console.log("=== sendPaymentEmail START ===");
-
-    // Récupérer la config email
-    const configs = await ctx.runQuery(
-      internal.api.emailInternal.getEmailConfigs
-    );
-
+    const configs = await ctx.runQuery(internal.api.emailInternal.getEmailConfigs);
     if (!configs.apiKey) {
-      console.error("Email service not configured");
       return { success: false, error: "Email service not configured" };
     }
 
     const fromEmail = configs.fromEmail || "onboarding@resend.dev";
     const fromName = configs.fromName || "Animigo";
     const siteName = "Animigo";
+    const clientFirstName = args.clientName.split(" ")[0];
 
-    // Récupérer le template depuis la base de données
+    // Essayer le template DB en priorité
     const template = await ctx.runQuery(
       internal.admin.emailTemplates.getTemplateBySlug,
       { slug: "reservation_accepted" }
     );
 
-    // Formater les dates et le prix
-    const formatDate = (dateStr: string) => {
-      const [year, month, day] = dateStr.split("-");
-      return `${day}/${month}/${year}`;
-    };
-
-    const formatPrice = (cents: number) => {
-      return (cents / 100).toFixed(2).replace(".", ",") + " \u20ac";
-    };
-
-    // Extraire le prénom du nom complet
-    const clientFirstName = args.clientName.split(" ")[0];
-
-    // Variables à remplacer dans le template
     const variables: Record<string, string> = {
       firstName: clientFirstName,
       siteName,
@@ -306,92 +381,27 @@ export const sendPaymentEmail = internalAction({
       expirationTime: "1 heure",
     };
 
-    // Fonction pour remplacer les variables {{variable}} dans une chaîne
-    const replaceVariables = (text: string): string => {
-      return text.replace(/\{\{(\w+)\}\}/g, (match, key) => {
-        return variables[key] !== undefined ? variables[key] : match;
-      });
-    };
-
-    // Utiliser le template ou fallback sur un sujet/contenu par défaut
     let subject: string;
     let html: string;
 
-    if (template && template.htmlContent) {
-      subject = replaceVariables(template.subject);
-      html = replaceVariables(template.htmlContent);
+    if (template?.htmlContent) {
+      const replaceVars = (text: string) =>
+        text.replace(/\{\{(\w+)\}\}/g, (match, key) => variables[key] ?? match);
+      subject = replaceVars(template.subject);
+      html = replaceVars(template.htmlContent);
     } else {
-      // Fallback si le template n'existe pas
       subject = `Votre réservation a été acceptée - Finalisez le paiement - ${siteName}`;
-      html = `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
-<div style="padding: 40px 20px; background-color: #f4f4f5;">
-  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-    <div style="background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%); padding: 40px 30px; text-align: center;">
-      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">🎉 Bonne nouvelle !</h1>
-      <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.9); font-size: 16px;">Votre réservation a été acceptée</p>
-    </div>
-    <div style="padding: 40px 30px;">
-      <h2 style="margin: 0 0 20px 0; color: #1e293b; font-size: 24px;">Bonjour ${clientFirstName} !</h2>
-      <p style="margin: 0 0 20px 0; color: #475569; font-size: 16px; line-height: 1.6;">
-        ${args.announcerName} a accepté votre demande de réservation. Pour confirmer définitivement votre prestation, veuillez procéder au paiement sécurisé.
-      </p>
-      <div style="margin: 20px 0; padding: 20px; background-color: #f0f9ff; border-radius: 12px; border-left: 4px solid #0ea5e9;">
-        <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">📋 Récapitulatif</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Service :</strong> ${args.serviceName}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Prestataire :</strong> ${args.announcerName}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> Du ${formatDate(args.startDate)} au ${formatDate(args.endDate)}</p>
-        ${args.animalName ? `<p style="margin: 5px 0; color: #475569;"><strong>Animal :</strong> ${args.animalName}</p>` : ""}
-        <p style="margin: 10px 0 0 0; font-size: 20px; font-weight: bold; color: #0369a1;">Montant : ${formatPrice(args.amount)}</p>
-      </div>
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="${args.paymentUrl}" style="display: inline-block; background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 50px; font-weight: bold; font-size: 16px;">💳 Procéder au paiement</a>
-      </div>
-      <div style="margin-top: 20px; padding: 15px; background-color: #fef3c7; border-radius: 12px;">
-        <p style="margin: 0; color: #92400e; font-size: 14px;">⏰ <strong>Important :</strong> Ce lien expire dans 1 heure.</p>
-      </div>
-      <div style="margin-top: 20px; padding: 15px; background-color: #ecfdf5; border-radius: 12px;">
-        <p style="margin: 0; color: #065f46; font-size: 14px;">🔒 <strong>Paiement sécurisé :</strong> Votre paiement sera encaissé immédiatement pour confirmer la réservation.</p>
-      </div>
-    </div>
-    <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
-      <p style="margin: 0; color: #94a3b8; font-size: 12px;">© 2025 ${siteName}. Tous droits réservés.</p>
-    </div>
-  </div>
-</div>
-</body>
-</html>`;
+      html = buildPaymentEmailHtml({
+        clientFirstName, ...args, siteName,
+      });
     }
 
-    // Envoyer l'email via Resend
-    try {
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${configs.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: `${fromName} <${fromEmail}>`,
-          to: [args.clientEmail],
-          subject,
-          html,
-        }),
-      });
+    const result = await sendEmailViaResend({
+      apiKey: configs.apiKey, fromEmail, fromName,
+      to: args.clientEmail, subject, html,
+    });
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        console.error("Erreur envoi email:", result);
-        return { success: false, error: result.message || "Erreur envoi email" };
-      }
-
-      console.log("Email envoyé:", result.id);
-
-      // Logger l'email
+    if (result.success && result.id) {
       await ctx.runMutation(internal.api.emailInternal.logEmail, {
         to: args.clientEmail,
         from: `${fromName} <${fromEmail}>`,
@@ -400,21 +410,15 @@ export const sendPaymentEmail = internalAction({
         status: "sent",
         resendId: result.id,
       });
-
-      return { success: true, id: result.id };
-    } catch (error) {
-      console.error("Erreur envoi email:", error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      };
     }
+
+    return result;
   },
 });
 
 /**
- * Envoyer l'email de demande de paiement (version sans appels runQuery/runMutation)
- * Utilisé par createCheckoutSession pour éviter les problèmes Convex self-hosted
+ * Envoyer l'email de demande de paiement (version directe, config passée en params).
+ * Même template que sendPaymentEmail, sans appels runQuery/runMutation.
  */
 export const sendPaymentEmailDirect = internalAction({
   args: {
@@ -427,7 +431,6 @@ export const sendPaymentEmailDirect = internalAction({
     animalName: v.optional(v.string()),
     amount: v.number(),
     paymentUrl: v.string(),
-    // Config email passée directement
     emailConfig: v.optional(v.object({
       apiKey: v.string(),
       fromEmail: v.optional(v.string()),
@@ -435,112 +438,40 @@ export const sendPaymentEmailDirect = internalAction({
     })),
   },
   handler: async (ctx, args) => {
-    console.log("=== sendPaymentEmailDirect START ===");
-
     const apiKey = args.emailConfig?.apiKey;
     if (!apiKey) {
-      console.error("Email service not configured - no API key");
       return { success: false, error: "Email service not configured" };
     }
 
     const fromEmail = args.emailConfig?.fromEmail || "onboarding@resend.dev";
     const fromName = args.emailConfig?.fromName || "Animigo";
     const siteName = "Animigo";
-
-    // Formater les dates et le prix
-    const formatDate = (dateStr: string) => {
-      const [year, month, day] = dateStr.split("-");
-      return `${day}/${month}/${year}`;
-    };
-
-    const formatPrice = (cents: number) => {
-      return (cents / 100).toFixed(2).replace(".", ",") + " €";
-    };
-
-    // Extraire le prénom du nom complet
     const clientFirstName = args.clientName.split(" ")[0];
 
-    const subject = `Votre réservation a été acceptée - Finalisez le paiement - ${siteName}`;
-    const html = `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5;">
-<div style="padding: 40px 20px; background-color: #f4f4f5;">
-  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-    <div style="background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%); padding: 40px 30px; text-align: center;">
-      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">🎉 Bonne nouvelle !</h1>
-      <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.9); font-size: 16px;">Votre réservation a été acceptée</p>
-    </div>
-    <div style="padding: 40px 30px;">
-      <h2 style="margin: 0 0 20px 0; color: #1e293b; font-size: 24px;">Bonjour ${clientFirstName} !</h2>
-      <p style="margin: 0 0 20px 0; color: #475569; font-size: 16px; line-height: 1.6;">
-        ${args.announcerName} a accepté votre demande de réservation. Pour confirmer définitivement votre prestation, veuillez procéder au paiement sécurisé.
-      </p>
-      <div style="margin: 20px 0; padding: 20px; background-color: #f0f9ff; border-radius: 12px; border-left: 4px solid #0ea5e9;">
-        <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">📋 Récapitulatif</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Service :</strong> ${args.serviceName}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Prestataire :</strong> ${args.announcerName}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> Du ${formatDate(args.startDate)} au ${formatDate(args.endDate)}</p>
-        ${args.animalName ? `<p style="margin: 5px 0; color: #475569;"><strong>Animal :</strong> ${args.animalName}</p>` : ""}
-        <p style="margin: 10px 0 0 0; font-size: 20px; font-weight: bold; color: #0369a1;">Montant : ${formatPrice(args.amount)}</p>
-      </div>
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="${args.paymentUrl}" style="display: inline-block; background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 50px; font-weight: bold; font-size: 16px;">💳 Procéder au paiement</a>
-      </div>
-      <div style="margin-top: 20px; padding: 15px; background-color: #fef3c7; border-radius: 12px;">
-        <p style="margin: 0; color: #92400e; font-size: 14px;">⏰ <strong>Important :</strong> Ce lien expire dans 1 heure.</p>
-      </div>
-      <div style="margin-top: 20px; padding: 15px; background-color: #ecfdf5; border-radius: 12px;">
-        <p style="margin: 0; color: #065f46; font-size: 14px;">🔒 <strong>Paiement sécurisé :</strong> Votre paiement sera encaissé immédiatement pour confirmer la réservation.</p>
-      </div>
-    </div>
-    <div style="background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;">
-      <p style="margin: 0; color: #94a3b8; font-size: 12px;">© 2025 ${siteName}. Tous droits réservés.</p>
-    </div>
-  </div>
-</div>
-</body>
-</html>`;
-
-    // Envoyer l'email via Resend
-    try {
-      console.log("Sending payment email to:", args.clientEmail);
-
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: `${fromName} <${fromEmail}>`,
-          to: [args.clientEmail],
-          subject,
-          html,
-        }),
-      });
-
-      const responseText = await response.text();
-
-      if (!response.ok) {
-        console.error("Erreur envoi email:", responseText);
-        return { success: false, error: responseText };
-      }
-
-      const result = JSON.parse(responseText);
-      console.log("Email envoyé avec succès:", result.id);
-
-      return { success: true, id: result.id };
-    } catch (error) {
-      console.error("Erreur envoi email:", error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      };
-    }
+    return sendEmailViaResend({
+      apiKey, fromEmail, fromName,
+      to: args.clientEmail,
+      subject: `Votre réservation a été acceptée - Finalisez le paiement - ${siteName}`,
+      html: buildPaymentEmailHtml({
+        clientFirstName, ...args, siteName,
+      }),
+    });
   },
 });
+
+/**
+ * Récupère l'URL du reçu Stripe depuis un PaymentIntent.
+ */
+async function getReceiptUrl(stripe: Stripe, pi: any): Promise<string | undefined> {
+  if (!pi.latest_charge) return undefined;
+  const chargeId = typeof pi.latest_charge === "string" ? pi.latest_charge : pi.latest_charge.id;
+  try {
+    const charge = await stripe.charges.retrieve(chargeId);
+    return charge.receipt_url || undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Capturer un PaymentIntent (après confirmation client ou auto-capture)
@@ -549,68 +480,40 @@ export const capturePayment = internalAction({
   args: {
     paymentIntentId: v.string(),
     missionId: v.id("missions"),
-    stripeSecretKey: v.string(), // Passé depuis la mutation appelante
+    stripeSecretKey: v.string(),
   },
   handler: async (ctx, args) => {
-    console.log("=== capturePayment START ===");
-    console.log("PaymentIntent:", args.paymentIntentId);
+    console.log("=== capturePayment START ===", args.paymentIntentId);
 
-    const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+    const stripe = createStripeClient(args.stripeSecretKey);
 
     try {
-      // Vérifier le statut du PI avant de tenter la capture
       const piCheck = await stripe.paymentIntents.retrieve(args.paymentIntentId);
 
+      // Déjà capturé → juste mettre à jour la base
       if (piCheck.status === "succeeded") {
-        // Déjà capturé (paiement immédiat ou capture automatique)
-        console.log("PaymentIntent déjà capturé (succeeded), mise à jour base uniquement:", piCheck.id);
-
-        let receiptUrl: string | undefined;
-        if (piCheck.latest_charge) {
-          const chargeId = typeof piCheck.latest_charge === "string" ? piCheck.latest_charge : piCheck.latest_charge.id;
-          const charge = await stripe.charges.retrieve(chargeId);
-          receiptUrl = charge.receipt_url || undefined;
-        }
-
+        const receiptUrl = await getReceiptUrl(stripe, piCheck);
         await ctx.runMutation(internal.api.stripeInternal.markPaymentCaptured, {
           missionId: args.missionId,
           paymentIntentId: args.paymentIntentId,
           receiptUrl,
         });
-
         return { success: true, alreadyCaptured: true };
       }
 
       if (piCheck.status === "canceled") {
-        console.log("PaymentIntent annulé, skip capture:", piCheck.id);
         return { success: false, reason: "canceled" };
       }
 
       if (piCheck.status !== "requires_capture") {
-        console.log(`PaymentIntent status inattendu: ${piCheck.status}, skip capture:`, piCheck.id);
         return { success: false, reason: `unexpected_status_${piCheck.status}` };
       }
 
-      const paymentIntent = await stripe.paymentIntents.capture(
-        args.paymentIntentId
-      );
-
+      // Capturer le paiement
+      const paymentIntent = await stripe.paymentIntents.capture(args.paymentIntentId);
       console.log("PaymentIntent captured:", paymentIntent.id);
 
-      // Récupérer l'URL du reçu si disponible
-      let receiptUrl: string | undefined;
-      if (paymentIntent.latest_charge) {
-        if (typeof paymentIntent.latest_charge === "string") {
-          const charge = await stripe.charges.retrieve(
-            paymentIntent.latest_charge
-          );
-          receiptUrl = charge.receipt_url || undefined;
-        } else {
-          receiptUrl = paymentIntent.latest_charge.receipt_url || undefined;
-        }
-      }
-
-      // Mettre à jour la base
+      const receiptUrl = await getReceiptUrl(stripe, paymentIntent);
       await ctx.runMutation(internal.api.stripeInternal.markPaymentCaptured, {
         missionId: args.missionId,
         paymentIntentId: args.paymentIntentId,
@@ -619,9 +522,7 @@ export const capturePayment = internalAction({
 
       return { success: true, paymentIntent };
     } catch (error: any) {
-      // Gérer l'erreur "already captured" comme un succès
       if (error?.code === "payment_intent_unexpected_state") {
-        console.log("PaymentIntent déjà dans un état final, mise à jour base:", args.paymentIntentId);
         await ctx.runMutation(internal.api.stripeInternal.markPaymentCaptured, {
           missionId: args.missionId,
           paymentIntentId: args.paymentIntentId,
@@ -648,7 +549,7 @@ export const cancelPaymentAuthorization = internalAction({
     console.log("=== cancelPaymentAuthorization START ===");
     console.log("PaymentIntent:", args.paymentIntentId);
 
-    const stripe = new Stripe(args.stripeSecretKey, { apiVersion: "2024-12-18.acacia" });
+    const stripe = createStripeClient(args.stripeSecretKey);
 
     try {
       await stripe.paymentIntents.cancel(args.paymentIntentId, {
@@ -741,7 +642,7 @@ export const testConnection = internalAction({
         };
       }
 
-      const stripe = new Stripe(secretKey, { apiVersion: "2024-12-18.acacia" });
+      const stripe = createStripeClient(secretKey);
 
       // Tester la connexion en récupérant le solde (permission minimale)
       const balance = await stripe.balance.retrieve();

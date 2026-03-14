@@ -3,6 +3,7 @@ import { mutation, query, internalMutation } from "../_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { internal } from "../_generated/api";
+import { getEmailConfigFromDb } from "../api/emailInternal";
 
 // Types pour les missions
 export type MissionStatus =
@@ -689,7 +690,8 @@ export const refuseMission = mutation({
 });
 
 /**
- * Annuler une mission
+ * Annuler une mission (par l'annonceur)
+ * Remboursement intégral au client + notifications + emails
  */
 export const cancelMission = mutation({
   args: {
@@ -721,15 +723,31 @@ export const cancelMission = mutation({
       throw new ConvexError("Cette mission ne peut pas être annulée");
     }
 
+    const now = Date.now();
+
     // Libérer les places dans les créneaux collectifs si applicable
     if (mission.sessionType === "collective" && mission.collectiveSlotIds && mission.collectiveSlotIds.length > 0) {
       const animalCount = mission.animalCount || 1;
-      for (const slotId of mission.collectiveSlotIds) {
-        const slot = await ctx.db.get(slotId);
-        if (slot) {
-          await ctx.db.patch(slotId, {
-            bookedAnimals: Math.max(0, slot.bookedAnimals - animalCount),
-            updatedAt: Date.now(),
+
+      // Libérer les slots ET marquer les bookings comme annulés
+      const bookings = await ctx.db
+        .query("collectiveSlotBookings")
+        .withIndex("by_mission", (q: any) => q.eq("missionId", args.missionId))
+        .collect();
+
+      for (const booking of bookings) {
+        if (booking.status === "booked") {
+          const slot = await ctx.db.get(booking.slotId);
+          if (slot) {
+            await ctx.db.patch(booking.slotId, {
+              bookedAnimals: Math.max(0, slot.bookedAnimals - animalCount),
+              updatedAt: now,
+            });
+          }
+          await ctx.db.patch(booking._id, {
+            status: "cancelled",
+            cancelledAt: now,
+            updatedAt: now,
           });
         }
       }
@@ -738,12 +756,154 @@ export const cancelMission = mutation({
     await ctx.db.patch(args.missionId, {
       status: "cancelled",
       cancelledBy: "announcer",
-      cancelledAt: Date.now(),
+      cancelledAt: now,
       cancellationReason: args.reason,
       refundAmount: mission.amount,
       announcerRetainedAmount: 0,
-      updatedAt: Date.now(),
+      updatedAt: now,
     });
+
+    // Remboursement Stripe si paiement capturé
+    let payment = null;
+    if (mission.stripePaymentId) {
+      payment = await ctx.db.get(mission.stripePaymentId);
+    }
+
+    if (payment?.paymentIntentId) {
+      const stripeSecretKeyConfig = await ctx.db
+        .query("systemConfig")
+        .withIndex("by_key", (q) => q.eq("key", "stripe_secret_key"))
+        .first();
+
+      if (stripeSecretKeyConfig?.value) {
+        if (payment.status === "captured") {
+          // Paiement immédiat capturé → remboursement intégral
+          await ctx.scheduler.runAfter(
+            0,
+            internal.planning.cancellationActions.processStripeRefund,
+            {
+              missionId: args.missionId,
+              paymentIntentId: payment.paymentIntentId,
+              refundAmount: payment.amount,
+              stripeSecretKey: stripeSecretKeyConfig.value,
+            }
+          );
+
+          await ctx.db.patch(payment._id, {
+            refundedAmount: payment.amount,
+            updatedAt: now,
+          });
+        } else if (payment.status === "authorized" || payment.status === "pending") {
+          // Annuler le PaymentIntent (gère aussi le cas succeeded côté Stripe)
+          await ctx.scheduler.runAfter(
+            0,
+            internal.planning.cancellationActions.cancelStripePaymentIntent,
+            {
+              paymentIntentId: payment.paymentIntentId,
+              stripeSecretKey: stripeSecretKeyConfig.value,
+              missionId: args.missionId,
+              refundAmount: payment.amount,
+            }
+          );
+
+          await ctx.db.patch(payment._id, {
+            status: "cancelled",
+            cancelledAt: now,
+            refundedAmount: payment.amount,
+            updatedAt: now,
+          });
+        }
+      }
+    }
+
+    // Notifications
+    const client = await ctx.db.get(mission.clientId);
+    const announcer = await ctx.db.get(mission.announcerId);
+    const clientName = client
+      ? `${client.firstName} ${client.lastName.charAt(0)}.`
+      : "Client";
+    const announcerName = announcer
+      ? `${announcer.firstName} ${announcer.lastName.charAt(0)}.`
+      : "Annonceur";
+
+    const formatPriceCents = (cents: number) =>
+      (cents / 100).toFixed(2).replace(".", ",") + " €";
+
+    // Notification au client
+    if (client) {
+      const refundMessage = mission.amount > 0 && payment
+        ? `Remboursement intégral de ${formatPriceCents(mission.amount)} en cours (délai : 5-10 jours ouvrés).`
+        : "";
+      await ctx.db.insert("notifications", {
+        userId: mission.clientId,
+        type: "mission_cancelled",
+        title: "Réservation annulée par l'annonceur",
+        message: `${announcerName} a annulé la réservation "${mission.serviceName}". ${refundMessage}`,
+        linkType: "mission",
+        linkId: args.missionId,
+        linkUrl: "/client/reservations",
+        isRead: false,
+        createdAt: now,
+        expiresAt: now + 30 * 24 * 60 * 60 * 1000,
+      });
+    }
+
+    // Notification à l'annonceur (confirmation)
+    if (announcer) {
+      await ctx.db.insert("notifications", {
+        userId: mission.announcerId,
+        type: "mission_cancelled",
+        title: "Réservation annulée",
+        message: `Vous avez annulé la réservation "${mission.serviceName}" avec ${clientName}. Le client sera remboursé intégralement.`,
+        linkType: "mission",
+        linkId: args.missionId,
+        linkUrl: "/dashboard/missions",
+        isRead: false,
+        createdAt: now,
+        expiresAt: now + 30 * 24 * 60 * 60 * 1000,
+      });
+    }
+
+    // Emails d'annulation
+    const { emailConfig } = await getEmailConfigFromDb(ctx.db);
+
+    if (emailConfig && client) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.api.email.sendCancellationByAnnouncerClientEmail,
+        {
+          clientEmail: client.email,
+          clientName: client.firstName,
+          announcerName: announcerName,
+          serviceName: mission.serviceName,
+          animalName: mission.animal?.name || "Animal",
+          startDate: mission.startDate,
+          endDate: mission.endDate,
+          totalAmount: mission.amount,
+          refundAmount: mission.amount,
+          cancellationReason: args.reason,
+          emailConfig: emailConfig || { apiKey: "" },
+        }
+      );
+    }
+
+    if (emailConfig && announcer) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.api.email.sendCancellationByAnnouncerConfirmEmail,
+        {
+          announcerEmail: announcer.email,
+          announcerName: announcer.firstName,
+          clientName: clientName,
+          serviceName: mission.serviceName,
+          animalName: mission.animal?.name || "Animal",
+          startDate: mission.startDate,
+          endDate: mission.endDate,
+          cancellationReason: args.reason,
+          emailConfig: emailConfig || { apiKey: "" },
+        }
+      );
+    }
 
     return { success: true };
   },
