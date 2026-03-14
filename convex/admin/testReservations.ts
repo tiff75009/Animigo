@@ -1345,75 +1345,131 @@ export const simulateCancelByClient = mutation({
 
     const { refundAmount, announcerRetained, platformFeeRetained, reason: refundReason, cancellationCount, sessionBreakdown } = refundResult;
 
-    // Patcher la mission
+    // Libérer les créneaux collectifs (aligné sur prod)
+    if (
+      mission.sessionType === "collective" &&
+      mission.collectiveSlotIds &&
+      mission.collectiveSlotIds.length > 0
+    ) {
+      const animalCount = mission.animalCount || 1;
+      const bookings = await ctx.db
+        .query("collectiveSlotBookings")
+        .withIndex("by_mission", (q: any) => q.eq("missionId", args.missionId))
+        .collect();
+
+      for (const booking of bookings) {
+        if (booking.status === "booked") {
+          const slot = await ctx.db.get(booking.slotId);
+          if (slot) {
+            await ctx.db.patch(booking.slotId, {
+              bookedAnimals: Math.max(0, slot.bookedAnimals - animalCount),
+              updatedAt: now,
+            });
+          }
+          await ctx.db.patch(booking._id, {
+            status: "cancelled",
+            cancelledAt: now,
+            updatedAt: now,
+          });
+        }
+      }
+    }
+
+    // Patcher la mission (aligné sur prod — paymentStatus géré par webhook/patch Stripe)
     await ctx.db.patch(args.missionId, {
       status: "cancelled",
       cancelledBy: "client",
       cancelledAt: now,
       cancellationReason: args.reason || `Test : ${refundReason}`,
-      paymentStatus: (payment && ["captured", "authorized"].includes(payment.status) && refundAmount > 0) ? "refunded" : mission.paymentStatus,
       refundAmount,
       announcerRetainedAmount: announcerRetained,
       updatedAt: now,
     });
 
-    // Remboursement / annulation Stripe
+    // Gestion Stripe selon le statut du paiement (aligné sur prod)
     if (payment?.paymentIntentId) {
       const stripeSecretKeyConfig = await ctx.db
         .query("systemConfig")
         .withIndex("by_key", (q: any) => q.eq("key", "stripe_secret_key"))
         .first();
+
       if (stripeSecretKeyConfig?.value) {
-        if (refundAmount > 0 && ["captured", "authorized"].includes(payment.status)) {
-          await ctx.scheduler.runAfter(0, internal.planning.cancellationActions.processStripeRefund, {
-            missionId: args.missionId,
-            paymentIntentId: payment.paymentIntentId,
-            refundAmount,
-            stripeSecretKey: stripeSecretKeyConfig.value,
+        if (payment.status === "captured") {
+          // Paiement déjà capturé → remboursement classique
+          if (refundAmount > 0) {
+            await ctx.scheduler.runAfter(0, internal.planning.cancellationActions.processStripeRefund, {
+              missionId: args.missionId,
+              paymentIntentId: payment.paymentIntentId,
+              refundAmount,
+              stripeSecretKey: stripeSecretKeyConfig.value,
+            });
+            await ctx.db.patch(payment._id, {
+              refundedAmount: refundAmount,
+              updatedAt: now,
+            });
+          }
+        } else if (payment.status === "authorized") {
+          // Pré-autorisation : distinguer refund total vs partiel
+          const retainedAmount = (payment.amount || 0) - refundAmount;
+
+          if (retainedAmount <= 0) {
+            // Remboursement total → cancel ou refund selon le vrai statut Stripe
+            await ctx.scheduler.runAfter(0, internal.planning.cancellationActions.cancelStripePaymentIntent, {
+              paymentIntentId: payment.paymentIntentId,
+              stripeSecretKey: stripeSecretKeyConfig.value,
+              missionId: args.missionId,
+              refundAmount,
+            });
+          } else {
+            // Remboursement partiel → capturer uniquement le montant retenu
+            await ctx.scheduler.runAfter(0, internal.planning.cancellationActions.capturePartialPaymentIntent, {
+              missionId: args.missionId,
+              paymentIntentId: payment.paymentIntentId,
+              amountToCapture: retainedAmount,
+              stripeSecretKey: stripeSecretKeyConfig.value,
+            });
+          }
+
+          await ctx.db.patch(payment._id, {
+            status: retainedAmount <= 0 ? "cancelled" : "captured",
+            ...(retainedAmount <= 0 ? { cancelledAt: now } : { capturedAt: now }),
+            refundedAmount: refundAmount,
+            updatedAt: now,
           });
-          await ctx.db.patch(payment._id, { refundedAmount: refundAmount, updatedAt: now });
-        } else if (!["captured", "authorized"].includes(payment.status)) {
+        } else if (payment.status === "pending") {
+          // Paiement en attente → annuler le PaymentIntent
           await ctx.scheduler.runAfter(0, internal.planning.cancellationActions.cancelStripePaymentIntent, {
             paymentIntentId: payment.paymentIntentId,
             stripeSecretKey: stripeSecretKeyConfig.value,
           });
-          await ctx.db.patch(payment._id, { status: "cancelled", cancelledAt: now, updatedAt: now });
+          await ctx.db.patch(payment._id, {
+            status: "cancelled",
+            cancelledAt: now,
+            updatedAt: now,
+          });
         }
       }
     }
 
-    // Notifications
+    // Notifications (aligné sur prod — mêmes messages et formatage)
     const client = await ctx.db.get(mission.clientId);
     const announcer = await ctx.db.get(mission.announcerId);
-    // formatPrice importé depuis ../lib/formatting
+    const clientName = client
+      ? `${client.firstName} ${client.lastName.charAt(0)}.`
+      : "Client";
+    const announcerName = announcer
+      ? `${announcer.firstName} ${announcer.lastName.charAt(0)}.`
+      : "Annonceur";
 
-    const refundMsg = refundAmount > 0
-      ? `Remboursement de ${formatPrice(refundAmount)} en cours.`
-      : "Aucun remboursement applicable.";
-    const retainedMsg = announcerRetained > 0
-      ? ` L'annonceur conserve ${formatPrice(announcerRetained)}.`
-      : "";
-
-    if (client) {
-      await ctx.db.insert("notifications", {
-        userId: mission.clientId,
-        type: "mission_cancelled",
-        title: "Réservation annulée",
-        message: `Votre réservation "${mission.serviceName}" a été annulée. ${refundMsg}${retainedMsg} Règle : ${refundReason}`,
-        linkType: "mission",
-        linkId: args.missionId,
-        linkUrl: "/client/reservations",
-        isRead: false,
-        createdAt: now,
-        expiresAt: now + 30 * 24 * 60 * 60 * 1000,
-      });
-    }
     if (announcer) {
+      const announcerNotifMessage = announcerRetained > 0
+        ? `${clientName} a annulé "${mission.serviceName}". Vous conservez ${formatPrice(announcerRetained)}. Règle : ${refundReason}`
+        : `${clientName} a annulé "${mission.serviceName}". ${refundAmount > 0 ? `Remboursement client : ${formatPrice(refundAmount)}.` : ""} Règle : ${refundReason}`;
       await ctx.db.insert("notifications", {
         userId: mission.announcerId,
         type: "mission_cancelled",
         title: "Réservation annulée par le client",
-        message: `${client?.firstName || "Le client"} a annulé "${mission.serviceName}". ${refundMsg}${retainedMsg}`,
+        message: announcerNotifMessage,
         linkType: "mission",
         linkId: args.missionId,
         linkUrl: "/dashboard/missions",
@@ -1423,43 +1479,61 @@ export const simulateCancelByClient = mutation({
       });
     }
 
-    // Emails d'annulation (comme en prod)
+    if (client) {
+      const refundMessage = refundAmount > 0
+        ? `Remboursement de ${formatPrice(refundAmount)} en cours (délai : 5-10 jours ouvrés).${platformFeeRetained > 0 ? ` Commission retenue : ${formatPrice(platformFeeRetained)}.` : ""}`
+        : "Aucun remboursement applicable.";
+      await ctx.db.insert("notifications", {
+        userId: mission.clientId,
+        type: "mission_cancelled",
+        title: "Votre réservation a été annulée",
+        message: `Votre réservation "${mission.serviceName}" avec ${announcerName} a été annulée. ${refundMessage} Règle : ${refundReason}`,
+        linkType: "mission",
+        linkId: args.missionId,
+        linkUrl: "/client/missions",
+        isRead: false,
+        createdAt: now,
+        expiresAt: now + 30 * 24 * 60 * 60 * 1000,
+      });
+    }
+
+    // Emails d'annulation (aligné sur prod — mêmes fonctions email modernes)
     const { emailConfig } = await getEmailConfigFromDb(ctx.db);
-    if (emailConfig) {
-      if (client?.email) {
-        await ctx.scheduler.runAfter(0, internal.planning.cancellationActions.sendCancellationEmail, {
-          recipientEmail: client.email,
-          recipientName: client.firstName,
-          clientName: `${client.firstName} ${client.lastName}`,
-          serviceName: mission.serviceName,
-          animalName: mission.animal?.name || "Animal",
-          startDate: mission.startDate,
-          endDate: mission.endDate,
-          totalAmount: mission.amount,
-          refundAmount,
-          announcerRetained,
-          cancellationReason: args.reason || refundReason,
-          isAnnouncer: false,
-          emailConfig,
-        });
-      }
-      if (announcer?.email) {
-        await ctx.scheduler.runAfter(0, internal.planning.cancellationActions.sendCancellationEmail, {
-          recipientEmail: announcer.email,
-          recipientName: announcer.firstName,
-          clientName: `${client?.firstName || "Le client"} ${client?.lastName || ""}`,
-          serviceName: mission.serviceName,
-          animalName: mission.animal?.name || "Animal",
-          startDate: mission.startDate,
-          endDate: mission.endDate,
-          totalAmount: mission.amount,
-          refundAmount,
-          announcerRetained,
-          cancellationReason: args.reason || refundReason,
-          isAnnouncer: true,
-          emailConfig,
-        });
-      }
+
+    // Email à l'annonceur
+    if (announcer && emailConfig) {
+      await ctx.scheduler.runAfter(0, internal.api.email.sendCancellationAnnouncerEmail, {
+        announcerEmail: announcer.email,
+        announcerName: announcer.firstName,
+        clientName,
+        serviceName: mission.serviceName,
+        animalName: mission.animal?.name || "Animal",
+        startDate: mission.startDate,
+        endDate: mission.endDate,
+        totalAmount: mission.amount,
+        refundAmount,
+        announcerRetained,
+        cancellationReason: args.reason || refundReason,
+        cancellationRule: refundReason,
+        emailConfig: emailConfig || { apiKey: "" },
+      });
+    }
+
+    // Email au client
+    if (client && emailConfig) {
+      await ctx.scheduler.runAfter(0, internal.api.email.sendCancellationClientEmail, {
+        clientEmail: client.email,
+        clientName: client.firstName,
+        serviceName: mission.serviceName,
+        animalName: mission.animal?.name || "Animal",
+        startDate: mission.startDate,
+        endDate: mission.endDate,
+        totalAmount: mission.amount,
+        refundAmount,
+        platformFeeRetained,
+        cancellationRule: refundReason,
+        emailConfig: emailConfig || { apiKey: "" },
+      });
     }
 
     return {
@@ -1522,7 +1596,7 @@ export const simulateCancelByAnnouncer = mutation({
       payment = await ctx.db.get(mission.stripePaymentId);
     }
 
-    // Annulation annonceur → remboursement intégral au client (règle prod)
+    // Annulation annonceur → remboursement intégral au client (aligné sur prod)
     const refundAmount = (payment && ["captured", "authorized"].includes(payment.status)) ? payment.amount : 0;
 
     await ctx.db.patch(args.missionId, {
@@ -1530,48 +1604,69 @@ export const simulateCancelByAnnouncer = mutation({
       cancelledBy: "announcer",
       cancelledAt: now,
       cancellationReason: args.reason || "Test : annulation annonceur",
-      paymentStatus: (payment && ["captured", "authorized"].includes(payment.status)) ? "refunded" : mission.paymentStatus,
-      refundAmount,
+      refundAmount: mission.amount,
       announcerRetainedAmount: 0,
       updatedAt: now,
     });
 
-    // Remboursement Stripe
+    // Gestion Stripe (aligné sur prod — mêmes cas que cancelMission)
     if (payment?.paymentIntentId) {
       const stripeSecretKeyConfig = await ctx.db
         .query("systemConfig")
         .withIndex("by_key", (q: any) => q.eq("key", "stripe_secret_key"))
         .first();
+
       if (stripeSecretKeyConfig?.value) {
-        if (payment.status === "captured" && refundAmount > 0) {
+        if (payment.status === "captured") {
+          // Paiement immédiat capturé → remboursement intégral
           await ctx.scheduler.runAfter(0, internal.planning.cancellationActions.processStripeRefund, {
             missionId: args.missionId,
             paymentIntentId: payment.paymentIntentId,
-            refundAmount,
+            refundAmount: payment.amount,
             stripeSecretKey: stripeSecretKeyConfig.value,
           });
-          await ctx.db.patch(payment._id, { refundedAmount: refundAmount, updatedAt: now });
-        } else if (payment.status !== "captured") {
+          await ctx.db.patch(payment._id, {
+            refundedAmount: payment.amount,
+            updatedAt: now,
+          });
+        } else if (payment.status === "authorized" || payment.status === "pending") {
+          // Annuler le PaymentIntent (gère aussi le cas succeeded côté Stripe)
           await ctx.scheduler.runAfter(0, internal.planning.cancellationActions.cancelStripePaymentIntent, {
             paymentIntentId: payment.paymentIntentId,
             stripeSecretKey: stripeSecretKeyConfig.value,
+            missionId: args.missionId,
+            refundAmount: payment.amount,
           });
-          await ctx.db.patch(payment._id, { status: "cancelled", cancelledAt: now, updatedAt: now });
+          await ctx.db.patch(payment._id, {
+            status: "cancelled",
+            cancelledAt: now,
+            refundedAmount: payment.amount,
+            updatedAt: now,
+          });
         }
       }
     }
 
-    // Notifications
+    // Notifications (aligné sur prod — mêmes messages)
     const client = await ctx.db.get(mission.clientId);
     const announcer = await ctx.db.get(mission.announcerId);
-    // formatPrice importé depuis ../lib/formatting
+    const clientName = client
+      ? `${client.firstName} ${client.lastName.charAt(0)}.`
+      : "Client";
+    const announcerName = announcer
+      ? `${announcer.firstName} ${announcer.lastName.charAt(0)}.`
+      : "Annonceur";
 
+    // Notification au client
     if (client) {
+      const refundMessage = mission.amount > 0 && payment
+        ? `Remboursement intégral de ${formatPrice(mission.amount)} en cours (délai : 5-10 jours ouvrés).`
+        : "";
       await ctx.db.insert("notifications", {
         userId: mission.clientId,
         type: "mission_cancelled",
         title: "Réservation annulée par l'annonceur",
-        message: `${announcer?.firstName || "L'annonceur"} a annulé "${mission.serviceName}". Remboursement intégral de ${formatPrice(refundAmount)} en cours.`,
+        message: `${announcerName} a annulé la réservation "${mission.serviceName}". ${refundMessage}`,
         linkType: "mission",
         linkId: args.missionId,
         linkUrl: "/client/reservations",
@@ -1580,12 +1675,14 @@ export const simulateCancelByAnnouncer = mutation({
         expiresAt: now + 30 * 24 * 60 * 60 * 1000,
       });
     }
+
+    // Notification à l'annonceur (confirmation)
     if (announcer) {
       await ctx.db.insert("notifications", {
         userId: mission.announcerId,
         type: "mission_cancelled",
         title: "Réservation annulée",
-        message: `Vous avez annulé "${mission.serviceName}". Le client sera remboursé intégralement.`,
+        message: `Vous avez annulé la réservation "${mission.serviceName}" avec ${clientName}. Le client sera remboursé intégralement.`,
         linkType: "mission",
         linkId: args.missionId,
         linkUrl: "/dashboard/missions",
@@ -1595,21 +1692,36 @@ export const simulateCancelByAnnouncer = mutation({
       });
     }
 
-    // Emails
+    // Emails (aligné sur prod — email client + email confirmation annonceur)
     const { emailConfig } = await getEmailConfigFromDb(ctx.db);
+
     if (emailConfig && client) {
       await ctx.scheduler.runAfter(0, internal.api.email.sendCancellationByAnnouncerClientEmail, {
         clientEmail: client.email,
         clientName: client.firstName,
-        announcerName: `${announcer?.firstName || "Annonceur"} ${announcer?.lastName?.charAt(0) || ""}.`,
+        announcerName,
         serviceName: mission.serviceName,
         animalName: mission.animal?.name || "Animal",
         startDate: mission.startDate,
         endDate: mission.endDate,
         totalAmount: mission.amount,
-        refundAmount,
+        refundAmount: mission.amount,
         cancellationReason: args.reason || "Test : annulation annonceur",
-        emailConfig,
+        emailConfig: emailConfig || { apiKey: "" },
+      });
+    }
+
+    if (emailConfig && announcer) {
+      await ctx.scheduler.runAfter(0, internal.api.email.sendCancellationByAnnouncerConfirmEmail, {
+        announcerEmail: announcer.email,
+        announcerName: announcer.firstName,
+        clientName,
+        serviceName: mission.serviceName,
+        animalName: mission.animal?.name || "Animal",
+        startDate: mission.startDate,
+        endDate: mission.endDate,
+        cancellationReason: args.reason || "Test : annulation annonceur",
+        emailConfig: emailConfig || { apiKey: "" },
       });
     }
 

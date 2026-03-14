@@ -65,11 +65,18 @@ export const confirmMissionEnd = mutation({
       throw new ConvexError("La mission est déjà confirmée");
     }
 
-    // Vérifier qu'il n'y a pas de réclamation ouverte
+    // Vérifier s'il y a une réclamation ouverte avec blocage paiement
+    let hasActiveDispute = false;
     if (mission.hasDispute && mission.disputeId) {
       const existingDispute = await ctx.db.get(mission.disputeId);
       if (existingDispute && (existingDispute.status === "open" || existingDispute.status === "investigating")) {
-        throw new ConvexError("Impossible de confirmer : une réclamation est en cours de traitement");
+        if (existingDispute.paymentBlocked) {
+          // Dispute avec blocage → on confirme mais on ne déclenche pas le paiement
+          hasActiveDispute = true;
+        } else {
+          // Dispute ouverte sans blocage → empêcher la confirmation
+          throw new ConvexError("Impossible de confirmer : une réclamation est en cours de traitement");
+        }
       }
     }
 
@@ -107,10 +114,11 @@ export const confirmMissionEnd = mutation({
     }
 
     // Marquer la mission comme confirmée et prête pour versement
+    // (sauf si une dispute avec blocage est en cours)
     await ctx.db.patch(args.missionId, {
       clientConfirmedAt: now,
-      readyForPayout: true,
-      payoutScheduledFor,
+      readyForPayout: !hasActiveDispute,
+      payoutScheduledFor: hasActiveDispute ? undefined : payoutScheduledFor,
       updatedAt: now,
     });
 
@@ -145,7 +153,7 @@ export const confirmMissionEnd = mutation({
     }
 
     // Si mode instantané et pas de blocage, déclencher le versement immédiat
-    if (payoutMode === "instant" && announcer.stripeAccountId && !isPaymentBlocked) {
+    if (payoutMode === "instant" && announcer.stripeAccountId && !hasActiveDispute) {
       // Récupérer la clé Stripe
       const stripeSecretKeyConfig = await ctx.db
         .query("systemConfig")
