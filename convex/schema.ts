@@ -214,6 +214,7 @@ export default defineSchema({
     // SAP (Services à la Personne)
     isSapApproved: v.optional(v.boolean()),
     sapApprovedAt: v.optional(v.number()),
+    sapApprovalNumber: v.optional(v.string()), // Numéro d'agrément SAP
 
     updatedAt: v.number(),
   })
@@ -743,6 +744,7 @@ export default defineSchema({
     hasReview: v.optional(v.boolean()),
     hasDispute: v.optional(v.boolean()),
     disputeId: v.optional(v.id("disputes")),
+    invoiceId: v.optional(v.id("invoices")),
 
     // Archivage (soft-delete)
     isArchived: v.optional(v.boolean()),
@@ -1292,6 +1294,8 @@ export default defineSchema({
       v.literal("payment_captured"),      // Annonceur: paiement capturé
       v.literal("payout_sent"),           // Annonceur: virement envoyé
       v.literal("payment_refunded"),     // Client: remboursement effectué
+      v.literal("invoice_available"),     // Client: facture disponible
+      v.literal("receipt_available"),     // Client: reçu disponible
 
       // Avis
       v.literal("review_received"),       // Annonceur: nouvel avis
@@ -1512,6 +1516,7 @@ export default defineSchema({
       total: v.number(),
     })),
     vatRate: v.optional(v.number()), // Taux TVA appliqué (10 ou 20)
+    documentType: v.optional(v.union(v.literal("invoice"), v.literal("receipt"))),
     pdfStorageId: v.optional(v.id("_storage")), // ID du PDF stocké
     pdfUrl: v.optional(v.string()),        // URL du PDF généré
     sentAt: v.optional(v.number()),
@@ -2067,4 +2072,23 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_mission", ["missionId"])
     .index("by_created", ["createdAt"]),
+
+  // Templates PDF pour factures/reçus (éditeur admin pdfme)
+  pdfTemplates: defineTable({
+    name: v.string(),           // "Facture Pro", "Reçu Particulier"
+    slug: v.string(),           // "invoice_pro", "receipt_particulier"
+    documentType: v.union(v.literal("invoice"), v.literal("receipt")),
+    // Type d'annonceur ciblé : micro-entreprise, société, ou tous
+    targetCompanyType: v.optional(v.union(
+      v.literal("micro_enterprise"),
+      v.literal("regular_company"),
+      v.literal("all"),
+    )),
+    templateJson: v.string(),   // JSON sérialisé du schema pdfme
+    basePdfStorageId: v.optional(v.id("_storage")),
+    isDefault: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_slug", ["slug"])
+    .index("by_document_type", ["documentType"]),
 });

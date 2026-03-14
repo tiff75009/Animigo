@@ -277,9 +277,15 @@ function InvoiceRow({
 }) {
   const [downloading, setDownloading] = useState(false);
 
-  // Query pour les détails complets (pour la génération PDF)
+  // Query pour les détails complets (pour la génération PDF jsPDF fallback)
   const invoiceDetails = useQuery(
     api.services.invoices.getInvoiceDetails,
+    { token, invoiceId: invoice._id }
+  );
+
+  // Query pour le bundle pdfme (template admin + inputs)
+  const pdfBundle = useQuery(
+    api.services.pdfGeneratorQueries.getInvoicePdfBundle,
     { token, invoiceId: invoice._id }
   );
 
@@ -288,6 +294,23 @@ function InvoiceRow({
     setDownloading(true);
 
     try {
+      // 1. Si un template admin pdfme est configuré, générer côté client avec pdfme
+      if (pdfBundle?.templateJson) {
+        const { generatePdfFromTemplate } = await import("@/app/lib/generatePdfFromTemplate");
+        const blob = await generatePdfFromTemplate(pdfBundle.templateJson, pdfBundle.inputs);
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `Facture_${invoiceDetails.invoiceNumber}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      // 2. Fallback : génération jsPDF côté client (pas de template admin)
       const pdfData: InvoiceData = {
         invoiceNumber: invoiceDetails.invoiceNumber,
         createdAt: invoiceDetails.createdAt,
@@ -324,7 +347,6 @@ function InvoiceRow({
 
       const blob = await generateInvoicePdf(pdfData);
 
-      // Télécharger
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;

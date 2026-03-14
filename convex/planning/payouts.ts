@@ -122,6 +122,11 @@ export const confirmMissionEnd = mutation({
       updatedAt: now,
     });
 
+    // Auto-génération facture/reçu
+    await ctx.scheduler.runAfter(0, internal.services.invoiceHelpers.autoGenerateInvoice, {
+      missionId: args.missionId,
+    });
+
     // Notification annonceur (push)
     const client = await ctx.db.get(session.userId);
     const clientName = client ? `${client.firstName} ${client.lastName.charAt(0)}.` : "Un client";
@@ -264,6 +269,11 @@ export const autoConfirmMissions = internalMutation({
           readyForPayout: !isPaymentBlocked,
           payoutScheduledFor: isPaymentBlocked ? undefined : payoutScheduledFor,
           updatedAt: now,
+        });
+
+        // Auto-génération facture/reçu
+        await ctx.scheduler.runAfter(0, internal.services.invoiceHelpers.autoGenerateInvoice, {
+          missionId: mission._id,
         });
 
         // Notifications auto-validation

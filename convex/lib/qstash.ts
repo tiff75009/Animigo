@@ -13,6 +13,8 @@ export type NotificationType =
   | "payment_captured"
   | "payout_sent"
   | "review_received"
+  | "invoice_available"
+  | "receipt_available"
   | "new_message"
   | "welcome"
   | "reminder"

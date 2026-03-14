@@ -91,6 +91,7 @@ export function AdminSidebar() {
         { label: "Commissions", href: "/admin/commissions", icon: Percent },
         { label: "Paiements & Délais", href: "/admin/paiements", icon: CreditCard },
         { label: "Comptes Connect", href: "/admin/stripe-connect", icon: Landmark },
+        { label: "Templates PDF", href: "/admin/pdf-templates", icon: FileText },
       ],
     },
     {

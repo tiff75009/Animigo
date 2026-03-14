@@ -462,3 +462,53 @@ export async function notifySystem(params: {
     linkUrl: params.linkUrl,
   });
 }
+
+// ============================================
+// FACTURES / REÇUS
+// ============================================
+
+/**
+ * Notifier le client qu'une facture/reçu est disponible
+ */
+export async function sendInvoiceAvailableNotification(params: {
+  userId: Id<"users">;
+  missionId: Id<"missions">;
+  invoiceId: Id<"invoices">;
+  documentType: "invoice" | "receipt";
+  invoiceNumber: string;
+  serviceName: string;
+}) {
+  const isInvoice = params.documentType === "invoice";
+  const docLabel = isInvoice ? "facture" : "reçu";
+
+  await queueNotification({
+    userId: params.userId as string,
+    type: isInvoice ? "invoice_available" : "receipt_available",
+    title: isInvoice ? "Facture disponible" : "Reçu disponible",
+    message: `Votre ${docLabel} ${params.invoiceNumber} pour "${params.serviceName}" est disponible`,
+    linkType: "payment",
+    linkId: params.invoiceId as string,
+    linkUrl: `/client/factures`,
+  });
+}
+
+/**
+ * Notifier le client que la prestation est terminée
+ */
+export async function sendServiceCompletedNotification(params: {
+  userId: Id<"users">;
+  missionId: Id<"missions">;
+  announcerName: string;
+  serviceName: string;
+  startDate: string;
+}) {
+  await queueNotification({
+    userId: params.userId as string,
+    type: "mission_completed",
+    title: "Prestation terminée",
+    message: `La prestation "${params.serviceName}" avec ${params.announcerName} est terminée. Vous pouvez laisser un avis.`,
+    linkType: "mission",
+    linkId: params.missionId as string,
+    linkUrl: `/client/reservations/${params.missionId}`,
+  });
+}

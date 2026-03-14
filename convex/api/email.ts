@@ -1234,6 +1234,163 @@ const DEFAULT_TEMPLATES: Record<string, { subject: string; html: string }> = {
 </body>
 </html>`,
   },
+  invoice_available: {
+    subject: "Votre facture {{invoiceNumber}} est disponible - {{siteName}}",
+    html: `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Facture disponible</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+<tr><td align="center" style="padding:40px 20px;">
+  <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+    <tr>
+      <td align="center" style="background-color:#FF6B6B;padding:40px 30px;">
+        <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:bold;">&#128062; {{siteName}}</h1>
+        <p style="margin:10px 0 0 0;color:#ffffff;font-size:14px;">Votre facture est disponible</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:40px 30px;">
+        <h2 style="margin:0 0 20px 0;color:#1e293b;font-size:24px;">Bonjour {{clientName}} !</h2>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          Votre facture <strong>{{invoiceNumber}}</strong> pour le service <strong>{{serviceName}}</strong> du {{missionDate}} est maintenant disponible.
+        </p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center" style="padding:30px 0;">
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{downloadUrl}}" style="height:52px;v-text-anchor:middle;width:280px;" arcsize="50%" fillcolor="#FF6B6B" stroke="f"><v:textbox inset="0,0,0,0"><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Voir ma facture</center></v:textbox></v:roundrect><![endif]-->
+              <!--[if !mso]><!--><a href="{{downloadUrl}}" style="display:inline-block;background-color:#FF6B6B;color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:bold;font-size:16px;">Voir ma facture</a><!--<![endif]-->
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="background-color:#f8fafc;padding:30px;border-top:1px solid #e2e8f0;">
+        <p style="margin:0;color:#94a3b8;font-size:12px;">&copy; 2025 {{siteName}}. Tous droits reserves.</p>
+      </td>
+    </tr>
+  </table>
+  <!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
+</body>
+</html>`,
+  },
+  receipt_available: {
+    subject: "Votre recu {{receiptNumber}} est disponible - {{siteName}}",
+    html: `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Recu disponible</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+<tr><td align="center" style="padding:40px 20px;">
+  <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+    <tr>
+      <td align="center" style="background-color:#4ECDC4;padding:40px 30px;">
+        <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:bold;">&#128062; {{siteName}}</h1>
+        <p style="margin:10px 0 0 0;color:#ffffff;font-size:14px;">Votre recu est disponible</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:40px 30px;">
+        <h2 style="margin:0 0 20px 0;color:#1e293b;font-size:24px;">Bonjour {{clientName}} !</h2>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          Votre recu <strong>{{receiptNumber}}</strong> pour le service <strong>{{serviceName}}</strong> du {{missionDate}} est maintenant disponible.
+        </p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center" style="padding:30px 0;">
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{downloadUrl}}" style="height:52px;v-text-anchor:middle;width:280px;" arcsize="50%" fillcolor="#4ECDC4" stroke="f"><v:textbox inset="0,0,0,0"><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Voir mon recu</center></v:textbox></v:roundrect><![endif]-->
+              <!--[if !mso]><!--><a href="{{downloadUrl}}" style="display:inline-block;background-color:#4ECDC4;color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:bold;font-size:16px;">Voir mon recu</a><!--<![endif]-->
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="background-color:#f8fafc;padding:30px;border-top:1px solid #e2e8f0;">
+        <p style="margin:0;color:#94a3b8;font-size:12px;">&copy; 2025 {{siteName}}. Tous droits reserves.</p>
+      </td>
+    </tr>
+  </table>
+  <!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
+</body>
+</html>`,
+  },
+  service_completed_confirmation: {
+    subject: "Prestation terminee - {{serviceName}} - {{siteName}}",
+    html: `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Prestation terminee</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+<tr><td align="center" style="padding:40px 20px;">
+  <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+    <tr>
+      <td align="center" style="background-color:#10B981;padding:40px 30px;">
+        <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:bold;">&#128062; {{siteName}}</h1>
+        <p style="margin:10px 0 0 0;color:#ffffff;font-size:14px;">Prestation terminee avec succes</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:40px 30px;">
+        <h2 style="margin:0 0 20px 0;color:#1e293b;font-size:24px;">Bonjour {{clientName}} !</h2>
+        <p style="margin:0 0 20px 0;color:#475569;font-size:16px;line-height:1.6;">
+          La prestation <strong>{{serviceName}}</strong> avec <strong>{{announcerName}}</strong> pour <strong>{{petName}}</strong> du {{missionDate}} est maintenant terminee.
+        </p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:20px;background-color:#f0fdf4;border-left:4px solid #10B981;border-radius:8px;">
+              <p style="margin:0;color:#166534;font-size:14px;">Vous pouvez laisser un avis sur votre experience depuis votre espace client.</p>
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center" style="padding:30px 0;">
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{reviewUrl}}" style="height:52px;v-text-anchor:middle;width:280px;" arcsize="50%" fillcolor="#10B981" stroke="f"><v:textbox inset="0,0,0,0"><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Laisser un avis</center></v:textbox></v:roundrect><![endif]-->
+              <!--[if !mso]><!--><a href="{{reviewUrl}}" style="display:inline-block;background-color:#10B981;color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:bold;font-size:16px;">Laisser un avis</a><!--<![endif]-->
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="background-color:#f8fafc;padding:30px;border-top:1px solid #e2e8f0;">
+        <p style="margin:0;color:#94a3b8;font-size:12px;">&copy; 2025 {{siteName}}. Tous droits reserves.</p>
+      </td>
+    </tr>
+  </table>
+  <!--[if mso]></td></tr></table><![endif]-->
+</td></tr>
+</table>
+</body>
+</html>`,
+  },
 };
 
 // Helper pour récupérer un template (utilise les templates par défaut - bypass database pour éviter le bug des appels internes)
@@ -2572,6 +2729,82 @@ export const sendAccountDeactivatedEmail = internalAction({
       return { success: true, id: result.id };
     } catch (error) {
       console.error("Failed to send account deactivated email:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  },
+});
+
+// Email de disponibilité de facture/reçu
+export const sendDocumentAvailableEmail = internalAction({
+  args: {
+    recipientEmail: v.string(),
+    recipientName: v.string(),
+    documentType: v.union(v.literal("invoice"), v.literal("receipt")),
+    documentNumber: v.string(),
+    serviceName: v.string(),
+    missionDate: v.string(),
+    emailConfig: v.object({
+      apiKey: v.string(),
+      fromEmail: v.optional(v.string()),
+      fromName: v.optional(v.string()),
+    }),
+    appUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const fromEmail = args.emailConfig.fromEmail || "onboarding@resend.dev";
+      const fromName = args.emailConfig.fromName || "Animigo";
+      const siteName = "Animigo";
+      const appUrl = args.appUrl || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+      const slug = args.documentType === "invoice" ? "invoice_available" : "receipt_available";
+      const template = getTemplate(slug);
+      if (!template) {
+        return { success: false, error: "Template not found" };
+      }
+
+      const variables: Record<string, string | number | undefined> = {
+        clientName: args.recipientName,
+        serviceName: args.serviceName,
+        missionDate: formatDate(args.missionDate),
+        siteName,
+        downloadUrl: `${appUrl}/client/factures`,
+      };
+
+      if (args.documentType === "invoice") {
+        variables.invoiceNumber = args.documentNumber;
+      } else {
+        variables.receiptNumber = args.documentNumber;
+      }
+
+      const subject = replaceVariables(template.subject, variables);
+      const html = replaceVariables(template.htmlContent, variables);
+      const fromStr = `${fromName} <${fromEmail}>`;
+
+      const result = await sendEmailViaProvider({
+        to: args.recipientEmail,
+        from: fromStr,
+        subject,
+        html,
+        resendApiKey: args.emailConfig.apiKey,
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || "Email send failed");
+      }
+
+      await safeLogEmail(ctx, {
+        to: args.recipientEmail,
+        from: fromStr,
+        subject,
+        template: slug,
+        status: "sent",
+        resendId: result.id,
+      });
+
+      return { success: true, id: result.id };
+    } catch (error) {
+      console.error("Failed to send document available email:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
     }
   },
