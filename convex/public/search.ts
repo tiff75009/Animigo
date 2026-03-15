@@ -478,10 +478,10 @@ export const searchAnnouncers = query({
         if (matchingServices.length === 0) continue;
       }
 
-      // 6. Filtrer par type d'animal si spécifié
+      // 6. Filtrer par type d'animal si spécifié (animalTypes vide = accepte tout)
       if (args.animalType) {
         matchingServices = matchingServices.filter((s) =>
-          s.animalTypes.includes(args.animalType!)
+          !s.animalTypes || s.animalTypes.length === 0 || s.animalTypes.includes(args.animalType!)
         );
         if (matchingServices.length === 0) continue;
       }
@@ -1019,7 +1019,7 @@ export const searchAnnouncersInternal = query({
       }
       if (args.animalType) {
         matchingServices = matchingServices.filter((s) =>
-          s.animalTypes.includes(args.animalType!)
+          !s.animalTypes || s.animalTypes.length === 0 || s.animalTypes.includes(args.animalType!)
         );
         if (matchingServices.length === 0) continue;
       }
@@ -1198,6 +1198,11 @@ interface FormuleResult {
   nextSlot?: NextSlot;
   collectiveSlots?: CollectiveSlotInfo[];
   spotsLeft?: number; // Pour créneaux collectifs
+  capacityInfo?: {
+    isCapacityBased: boolean;
+    maxCapacity: number;
+    minRemainingCapacity: number;
+  };
 }
 
 // Arguments communs pour la recherche de formules
@@ -1269,7 +1274,8 @@ export const searchFormules = query({
     // Filtrer les conditions restantes en JavaScript (moins coûteux car déjà pré-filtré)
     services = services.filter((s) => {
       if (args.excludeCategory && s.category === args.excludeCategory) return false;
-      if (args.animalType && !s.animalTypes?.includes(args.animalType)) return false;
+      // Si animalTypes n'est pas défini, le service accepte tous les types
+      if (args.animalType && s.animalTypes && s.animalTypes.length > 0 && !s.animalTypes.includes(args.animalType)) return false;
       return true;
     });
 
@@ -1327,6 +1333,21 @@ export const searchFormules = query({
       batchLoadAvailability(ctx, userIds),
       batchLoadMissions(ctx, userIds),
     ]);
+
+    // Build set of capacity-based category slugs
+    const capacityBasedCategories = new Set<string>();
+    for (const [slug, cat] of categoriesMap.entries()) {
+      if (cat.isCapacityBased) {
+        capacityBasedCategories.add(slug);
+      } else if (cat.parentCategoryId) {
+        for (const parentCat of categoriesMap.values()) {
+          if (String(parentCat._id) === String(cat.parentCategoryId) && parentCat.isCapacityBased) {
+            capacityBasedCategories.add(slug);
+            break;
+          }
+        }
+      }
+    }
 
     for (const service of services) {
       // Récupérer l'annonceur depuis le cache (Phase 2 batch loading)
@@ -1588,6 +1609,52 @@ export const searchFormules = query({
           }
         }
 
+        // Capacity info for capacity-based categories (garde)
+        let capacityInfo: { isCapacityBased: boolean; maxCapacity: number; minRemainingCapacity: number } | undefined;
+        const isCapBased = capacityBasedCategories.has(service.category);
+        if (isCapBased) {
+          const maxCap = profile?.maxAnimalsPerSlot ?? 1;
+          const announcerMissionsForCap = missionsMap.get(announcer._id) ?? [];
+
+          const catDoc = categoriesMap.get(service.category);
+          const parentId = catDoc?.parentCategoryId;
+          const relevantSlugs = new Set<string>();
+          relevantSlugs.add(service.category);
+          if (parentId) {
+            for (const [slug, cat] of categoriesMap.entries()) {
+              if (String(cat.parentCategoryId) === String(parentId)) {
+                relevantSlugs.add(slug);
+              }
+            }
+          } else if (catDoc?.isCapacityBased) {
+            for (const [slug, cat] of categoriesMap.entries()) {
+              if (cat.parentCategoryId && String(cat.parentCategoryId) === String(catDoc._id)) {
+                relevantSlugs.add(slug);
+              }
+            }
+          }
+
+          const catMissions = announcerMissionsForCap.filter(m => relevantSlugs.has(m.serviceCategory));
+
+          if (args.startDate && args.endDate) {
+            let minRemaining = maxCap;
+            const capStart = new Date(args.startDate);
+            const capEnd = new Date(args.endDate);
+            for (let d = new Date(capStart); d <= capEnd; d.setDate(d.getDate() + 1)) {
+              const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+              const count = catMissions.filter(m => m.startDate <= dateStr && m.endDate >= dateStr).length;
+              const remaining = Math.max(0, maxCap - count);
+              if (remaining < minRemaining) minRemaining = remaining;
+            }
+            capacityInfo = { isCapacityBased: true, maxCapacity: maxCap, minRemainingCapacity: minRemaining };
+          } else if (args.date) {
+            const count = catMissions.filter(m => m.startDate <= args.date! && m.endDate >= args.date!).length;
+            capacityInfo = { isCapacityBased: true, maxCapacity: maxCap, minRemainingCapacity: Math.max(0, maxCap - count) };
+          } else {
+            capacityInfo = { isCapacityBased: true, maxCapacity: maxCap, minRemainingCapacity: maxCap };
+          }
+        }
+
         results.push({
           formuleId: variant._id,
           formuleName: variant.name,
@@ -1635,6 +1702,7 @@ export const searchFormules = query({
           nextSlot,
           collectiveSlots: collectiveSlots.length > 0 ? collectiveSlots : undefined,
           spotsLeft,
+          capacityInfo,
         });
       }
     }
@@ -1734,7 +1802,8 @@ export const searchFormulesInternal = query({
 
     services = services.filter((s) => {
       if (args.excludeCategory && s.category === args.excludeCategory) return false;
-      if (args.animalType && !s.animalTypes?.includes(args.animalType)) return false;
+      // Si animalTypes n'est pas défini, le service accepte tous les types
+      if (args.animalType && s.animalTypes && s.animalTypes.length > 0 && !s.animalTypes.includes(args.animalType)) return false;
       return true;
     });
 
@@ -1784,6 +1853,21 @@ export const searchFormulesInternal = query({
       batchLoadAvailability(ctx, userIds),
       batchLoadMissions(ctx, userIds),
     ]);
+
+    // Build set of capacity-based category slugs
+    const capacityBasedCategories = new Set<string>();
+    for (const [slug, cat] of categoriesMap.entries()) {
+      if (cat.isCapacityBased) {
+        capacityBasedCategories.add(slug);
+      } else if (cat.parentCategoryId) {
+        for (const parentCat of categoriesMap.values()) {
+          if (String(parentCat._id) === String(cat.parentCategoryId) && parentCat.isCapacityBased) {
+            capacityBasedCategories.add(slug);
+            break;
+          }
+        }
+      }
+    }
 
     for (const service of services) {
       const announcer = usersMap.get(service.userId);
@@ -2139,6 +2223,52 @@ export const searchFormulesInternal = query({
           }
         }
 
+        // Capacity info for capacity-based categories (garde)
+        let capacityInfo: { isCapacityBased: boolean; maxCapacity: number; minRemainingCapacity: number } | undefined;
+        const isCapBased = capacityBasedCategories.has(service.category);
+        if (isCapBased) {
+          const maxCap = profile?.maxAnimalsPerSlot ?? 1;
+          const announcerMissionsForCap = missionsMap.get(announcer._id) ?? [];
+
+          const catDoc2 = categoriesMap.get(service.category);
+          const parentId = catDoc2?.parentCategoryId;
+          const relevantSlugs = new Set<string>();
+          relevantSlugs.add(service.category);
+          if (parentId) {
+            for (const [slug, cat] of categoriesMap.entries()) {
+              if (String(cat.parentCategoryId) === String(parentId)) {
+                relevantSlugs.add(slug);
+              }
+            }
+          } else if (catDoc2?.isCapacityBased) {
+            for (const [slug, cat] of categoriesMap.entries()) {
+              if (cat.parentCategoryId && String(cat.parentCategoryId) === String(catDoc2._id)) {
+                relevantSlugs.add(slug);
+              }
+            }
+          }
+
+          const catMissions = announcerMissionsForCap.filter(m => relevantSlugs.has(m.serviceCategory));
+
+          if (args.startDate && args.endDate) {
+            let minRemaining = maxCap;
+            const capStart = new Date(args.startDate);
+            const capEnd = new Date(args.endDate);
+            for (let d = new Date(capStart); d <= capEnd; d.setDate(d.getDate() + 1)) {
+              const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+              const count = catMissions.filter(m => m.startDate <= dateStr && m.endDate >= dateStr).length;
+              const remaining = Math.max(0, maxCap - count);
+              if (remaining < minRemaining) minRemaining = remaining;
+            }
+            capacityInfo = { isCapacityBased: true, maxCapacity: maxCap, minRemainingCapacity: minRemaining };
+          } else if (args.date) {
+            const count = catMissions.filter(m => m.startDate <= args.date! && m.endDate >= args.date!).length;
+            capacityInfo = { isCapacityBased: true, maxCapacity: maxCap, minRemainingCapacity: Math.max(0, maxCap - count) };
+          } else {
+            capacityInfo = { isCapacityBased: true, maxCapacity: maxCap, minRemainingCapacity: maxCap };
+          }
+        }
+
         results.push({
           formuleId: variant._id,
           formuleName: variant.name,
@@ -2186,6 +2316,7 @@ export const searchFormulesInternal = query({
           nextSlot,
           collectiveSlots: collectiveSlots.length > 0 ? collectiveSlots : undefined,
           spotsLeft,
+          capacityInfo,
         });
       }
     }
@@ -3432,8 +3563,8 @@ export const searchServices = query({
         // Exclure une catégorie si spécifiée
         if (args.excludeCategory && service.category === args.excludeCategory) continue;
 
-        // Filtrer par type d'animal
-        if (args.animalType && !service.animalTypes.includes(args.animalType)) continue;
+        // Filtrer par type d'animal (animalTypes vide = accepte tout)
+        if (args.animalType && service.animalTypes && service.animalTypes.length > 0 && !service.animalTypes.includes(args.animalType)) continue;
 
         // Filtrer par lieu de prestation
         if (args.serviceLocation && args.serviceLocation.length > 0) {

@@ -27,6 +27,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { formatPrice, formatDistance } from "./helpers";
+import { ANIMAL_TYPES } from "./constants";
+
+// Map rapide id → emoji
+const animalEmojiMap = new Map(ANIMAL_TYPES.map((a) => [a.id, a.emoji]));
 
 // Composant coeur animé avec particules
 function AnimatedHeart({
@@ -182,6 +186,11 @@ export interface FormuleResult {
   nextSlot?: NextSlot;
   collectiveSlots?: CollectiveSlotInfo[];
   spotsLeft?: number;
+  capacityInfo?: {
+    isCapacityBased: boolean;
+    maxCapacity: number;
+    minRemainingCapacity: number;
+  };
 }
 
 export interface SearchDates {
@@ -635,6 +644,32 @@ export function FormuleCardGrid({
                 <span className="font-medium text-purple-600">{formule.numberOfSessions} séances</span>
               </div>
             )}
+
+            {/* Places disponibles (garde) */}
+            {formule.capacityInfo && formule.capacityInfo.isCapacityBased && (
+              <div className="flex items-center gap-1.5 col-span-2">
+                <Users className="w-3.5 h-3.5 text-secondary" />
+                <span className={cn(
+                  "font-semibold",
+                  formule.capacityInfo.minRemainingCapacity <= 2
+                    ? "text-orange-600"
+                    : "text-secondary"
+                )}>
+                  {formule.capacityInfo.minRemainingCapacity} place{formule.capacityInfo.minRemainingCapacity > 1 ? "s" : ""} dispo{formule.capacityInfo.minRemainingCapacity > 1 ? "s" : ""} sur {formule.capacityInfo.maxCapacity}
+                </span>
+              </div>
+            )}
+
+            {/* Types d'animaux acceptés */}
+            {formule.animalTypes && formule.animalTypes.length > 0 && (
+              <div className="flex items-center gap-1 col-span-2">
+                {formule.animalTypes.map((type) => (
+                  <span key={type} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-50 rounded-full text-[10px] font-medium text-amber-700 border border-amber-100" title={type}>
+                    {animalEmojiMap.get(type) || "🐾"}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Badges SAP */}
@@ -867,6 +902,27 @@ export function FormuleCardList({
                 <span className="flex items-center gap-1 text-purple-600">
                   <Sparkles className="w-3.5 h-3.5 text-purple-500" />
                   {formule.numberOfSessions} séances
+                </span>
+              )}
+              {formule.capacityInfo && formule.capacityInfo.isCapacityBased && (
+                <span className={cn(
+                  "flex items-center gap-1 font-semibold",
+                  formule.capacityInfo.minRemainingCapacity <= 2
+                    ? "text-orange-600"
+                    : "text-secondary"
+                )}>
+                  <Users className="w-3.5 h-3.5" />
+                  {formule.capacityInfo.minRemainingCapacity}/{formule.capacityInfo.maxCapacity} place{formule.capacityInfo.minRemainingCapacity > 1 ? "s" : ""}
+                </span>
+              )}
+              {/* Types d'animaux acceptés */}
+              {formule.animalTypes && formule.animalTypes.length > 0 && (
+                <span className="flex items-center gap-1">
+                  {formule.animalTypes.map((type) => (
+                    <span key={type} className="inline-flex items-center px-1 py-0.5 bg-amber-50 rounded-full text-[10px] border border-amber-100" title={type}>
+                      {animalEmojiMap.get(type) || "🐾"}
+                    </span>
+                  ))}
                 </span>
               )}
             </div>

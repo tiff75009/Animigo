@@ -266,11 +266,15 @@ export default function RecherchePage() {
 
   // Synchroniser le filtre animalType quand des animaux sont sélectionnés
   useEffect(() => {
-    if (selectedAnimalTypes && selectedAnimalTypes.length === 1) {
+    if (selectedAnimalIds.length === 0) {
+      // Aucun animal sélectionné : retirer le filtre par type
+      setHookAnimalType(null);
+      setUrlParams({ animal: null });
+    } else if (selectedAnimalTypes && selectedAnimalTypes.length === 1) {
       // Un seul type d'animal sélectionné : appliquer le filtre
       setHookAnimalType(selectedAnimalTypes[0]);
       setUrlParams({ animal: selectedAnimalTypes[0] });
-    } else if (selectedAnimalIds.length > 0 && selectedAnimalTypes && selectedAnimalTypes.length > 1) {
+    } else if (selectedAnimalTypes && selectedAnimalTypes.length > 1) {
       // Plusieurs types différents : ne pas filtrer par type
       setHookAnimalType(null);
       setUrlParams({ animal: null });

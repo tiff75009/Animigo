@@ -196,6 +196,11 @@ export interface FormuleResult {
   dayEndTime?: string;
   includeOvernightStay?: boolean;
   clientBillingMode?: string;
+  capacityInfo?: {
+    isCapacityBased: boolean;
+    maxCapacity: number;
+    minRemainingCapacity: number;
+  };
   nextSlot?: NextSlot;
   collectiveSlots?: CollectiveSlotInfo[];
   spotsLeft?: number;
