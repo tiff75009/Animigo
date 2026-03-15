@@ -10,5 +10,7 @@ export { default as BookingStepBar, useBookingSteps } from "./BookingStepBar";
 export { default as CollectiveSlotPicker } from "./CollectiveSlotPicker";
 export { default as MultiSessionCalendar } from "./MultiSessionCalendar";
 export type { SelectedSession } from "./MultiSessionCalendar";
+export { default as LoginForm } from "./LoginForm";
+export { default as FormuleFilters, getFilteredFormules } from "./FormuleFilters";
 export * from "./types";
 export * from "./pricing";

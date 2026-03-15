@@ -231,7 +231,7 @@ export default function AnnouncerActionBar({
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.9, y: 10 }}
                 transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                className="absolute right-0 top-full mt-3 w-72 bg-white rounded-2xl shadow-2xl shadow-black/15 border border-gray-100 overflow-hidden"
+                className="absolute right-0 top-full mt-3 w-[calc(100vw-2rem)] sm:w-72 max-w-72 bg-white rounded-2xl shadow-2xl shadow-black/15 border border-gray-100 overflow-hidden"
               >
                 {/* Header */}
                 <div className="p-4 bg-gradient-to-r from-primary/5 via-secondary/5 to-purple-500/5 border-b border-gray-100">

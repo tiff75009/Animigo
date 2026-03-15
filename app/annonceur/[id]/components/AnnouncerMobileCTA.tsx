@@ -1,15 +1,14 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useScrollLock } from "@/app/hooks/useScrollLock";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
-import { X, ArrowRight, Check, ShoppingCart, Calendar, Clock, CreditCard, Eye, PawPrint, MapPin, Home, Plus, ChevronLeft, AlertTriangle, Dog, LogIn, Mail, Lock, Loader2, Users, Package } from "lucide-react";
+import { X, ArrowRight, Check, ShoppingCart, Calendar, Clock, CreditCard, Eye, PawPrint, MapPin, Home, Plus, ChevronLeft, AlertTriangle, Dog, LogIn, Users, Package } from "lucide-react";
 import GuestAnimalVerification, { type GuestAnimalData } from "@/app/reserver/[announcerId]/components/GuestAnimalVerification";
 import { ServiceData, FormuleData } from "./types";
 import { cn } from "@/app/lib/utils";
-import { setAuthToken as storeAuthToken } from "@/app/lib/authToken";
+import MobileBottomSheet from "./mobile/MobileBottomSheet";
 import {
   BookingSummary,
   BookingCalendar,
@@ -19,6 +18,7 @@ import {
   SelectableOptionCard,
   AddressSelector,
   GuestAddressSelector,
+  LoginForm,
   type BookingSelection,
   type PriceBreakdown,
   type CalendarEntry,
@@ -300,10 +300,6 @@ export default function AnnouncerMobileCTA({
 
   // État pour le sheet de connexion
   const [isLoginSheetOpen, setIsLoginSheetOpen] = useState(false);
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-  const [loginError, setLoginError] = useState("");
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // États pour les filtres de formules
   const [filterSessionType, setFilterSessionType] = useState<"all" | "individual" | "collective">("all");
@@ -372,72 +368,10 @@ export default function AnnouncerMobileCTA({
     setFilterAnimal("all");
   };
 
-  // Mutation pour la connexion
-  const loginMutation = useMutation(api.auth.login.login);
 
-  // Gérer la connexion
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!loginEmail || !loginPassword) {
-      setLoginError("Veuillez remplir tous les champs");
-      return;
-    }
-
-    setIsLoggingIn(true);
-    setLoginError("");
-
-    try {
-      const result = await loginMutation({
-        email: loginEmail.toLowerCase().trim(),
-        password: loginPassword,
-      });
-
-      if (result.success && result.token) {
-        // Stocker le token
-        await storeAuthToken(result.token);
-        // Notifier le parent
-        onLoginSuccess?.(result.token);
-        // Fermer le sheet
-        setIsLoginSheetOpen(false);
-        // Reset le formulaire
-        setLoginEmail("");
-        setLoginPassword("");
-      } else {
-        setLoginError(result.error || "Erreur de connexion");
-      }
-    } catch (error) {
-      setLoginError("Une erreur est survenue");
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
-  // Bloquer le scroll du body quand une modale est ouverte (mobile uniquement)
-  useEffect(() => {
-    const isAnySheetOpen = isSheetOpen || isCalendarSheetOpen || isStepSheetOpen || isLoginSheetOpen;
-    // Vérifier si on est sur mobile (écran < 768px)
-    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-
-    if (isAnySheetOpen && isMobile) {
-      // Sauvegarder la position de scroll actuelle
-      const scrollY = window.scrollY;
-      document.body.style.position = 'fixed';
-      document.body.style.top = `-${scrollY}px`;
-      document.body.style.left = '0';
-      document.body.style.right = '0';
-      document.body.style.overflow = 'hidden';
-
-      return () => {
-        // Restaurer le scroll
-        document.body.style.position = '';
-        document.body.style.top = '';
-        document.body.style.left = '';
-        document.body.style.right = '';
-        document.body.style.overflow = '';
-        window.scrollTo(0, scrollY);
-      };
-    }
-  }, [isSheetOpen, isCalendarSheetOpen, isStepSheetOpen, isLoginSheetOpen]);
+  // Bloquer le scroll du body quand une modale est ouverte
+  const isAnySheetOpen = isSheetOpen || isCalendarSheetOpen || isStepSheetOpen || isLoginSheetOpen;
+  useScrollLock(isAnySheetOpen);
 
   // Determine if duration-based blocking is enabled
   const enableDurationBasedBlocking = Boolean(bookingService?.enableDurationBasedBlocking && bookingVariant?.duration);
@@ -1340,7 +1274,7 @@ export default function AnnouncerMobileCTA({
   return (
     <>
       {/* Fixed Bottom Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 md:hidden z-40 p-4">
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 lg:hidden z-40 p-4">
         <div className="flex items-center gap-3">
           {renderPriceSection()}
           <motion.button
@@ -1354,7 +1288,7 @@ export default function AnnouncerMobileCTA({
       </div>
 
       {/* Spacer for mobile CTA */}
-      <div className="h-24 md:hidden" />
+      <div className="h-24 lg:hidden" />
 
       {/* Sheet (Portal) */}
       {typeof document !== "undefined" &&
@@ -1368,7 +1302,7 @@ export default function AnnouncerMobileCTA({
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   onClick={() => setIsSheetOpen(false)}
-                  className="fixed inset-0 bg-black/50 z-[9998] md:hidden"
+                  className="fixed inset-0 bg-black/50 z-[9998] lg:hidden"
                   style={{ touchAction: 'none' }}
                 />
 
@@ -1378,7 +1312,7 @@ export default function AnnouncerMobileCTA({
                   animate={{ y: 0 }}
                   exit={{ y: "100%" }}
                   transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                  className="fixed inset-x-0 bottom-0 bg-white rounded-t-2xl z-[9999] md:hidden flex flex-col"
+                  className="fixed inset-x-0 bottom-0 bg-white rounded-t-2xl z-[9999] lg:hidden flex flex-col"
                   style={{
                     maxHeight: '85dvh',
                     height: 'auto',
@@ -1720,7 +1654,7 @@ export default function AnnouncerMobileCTA({
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   onClick={() => setIsCalendarSheetOpen(false)}
-                  className="fixed inset-0 bg-black/50 z-[9998] md:hidden"
+                  className="fixed inset-0 bg-black/50 z-[9998] lg:hidden"
                   style={{ touchAction: 'none' }}
                 />
 
@@ -1730,7 +1664,7 @@ export default function AnnouncerMobileCTA({
                   animate={{ y: 0 }}
                   exit={{ y: "100%" }}
                   transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                  className="fixed inset-x-0 bottom-0 bg-white rounded-t-2xl z-[9999] md:hidden flex flex-col"
+                  className="fixed inset-x-0 bottom-0 bg-white rounded-t-2xl z-[9999] lg:hidden flex flex-col"
                   style={{
                     maxHeight: '90dvh',
                     height: 'auto',
@@ -1952,7 +1886,7 @@ export default function AnnouncerMobileCTA({
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   onClick={() => setIsStepSheetOpen(false)}
-                  className="fixed inset-0 bg-black/50 z-[9998] md:hidden"
+                  className="fixed inset-0 bg-black/50 z-[9998] lg:hidden"
                   style={{ touchAction: 'none' }}
                 />
 
@@ -1962,7 +1896,7 @@ export default function AnnouncerMobileCTA({
                   animate={{ y: 0 }}
                   exit={{ y: "100%" }}
                   transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                  className="fixed inset-x-0 bottom-0 bg-white rounded-t-2xl z-[9999] md:hidden flex flex-col"
+                  className="fixed inset-x-0 bottom-0 bg-white rounded-t-2xl z-[9999] lg:hidden flex flex-col"
                   style={{
                     maxHeight: '90dvh',
                     height: 'auto',
@@ -2468,138 +2402,20 @@ export default function AnnouncerMobileCTA({
           document.body
         )}
 
-      {/* Login Sheet (Portal) */}
-      {typeof document !== "undefined" &&
-        createPortal(
-          <AnimatePresence>
-            {isLoginSheetOpen && (
-              <>
-                {/* Backdrop */}
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onClick={() => setIsLoginSheetOpen(false)}
-                  className="fixed inset-0 bg-black/50 z-[9998] md:hidden"
-                  style={{ touchAction: 'none' }}
-                />
-
-                {/* Login Sheet */}
-                <motion.div
-                  initial={{ y: "100%" }}
-                  animate={{ y: 0 }}
-                  exit={{ y: "100%" }}
-                  transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                  className="fixed inset-x-0 bottom-0 bg-white rounded-t-2xl z-[9999] md:hidden flex flex-col"
-                  style={{
-                    maxHeight: '85dvh',
-                    height: 'auto',
-                  }}
-                >
-                  {/* Header */}
-                  <div className="flex items-center justify-between p-4 border-b border-gray-100 flex-shrink-0">
-                    <h3 className="text-lg font-semibold text-gray-900">Connexion</h3>
-                    <button
-                      onClick={() => setIsLoginSheetOpen(false)}
-                      className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                    >
-                      <X className="w-5 h-5 text-gray-500" />
-                    </button>
-                  </div>
-
-                  {/* Form */}
-                  <form onSubmit={handleLogin} className="flex-1 overflow-y-auto p-4 space-y-4">
-                    <p className="text-sm text-gray-500">
-                      Connectez-vous pour accéder à toutes les fonctionnalités et réserver plus facilement.
-                    </p>
-
-                    {loginError && (
-                      <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
-                        {loginError}
-                      </div>
-                    )}
-
-                    <div className="space-y-3">
-                      <div>
-                        <label htmlFor="mobile-login-email" className="block text-sm font-medium text-gray-700 mb-1">
-                          Email
-                        </label>
-                        <div className="relative">
-                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                          <input
-                            id="mobile-login-email"
-                            type="email"
-                            value={loginEmail}
-                            onChange={(e) => setLoginEmail(e.target.value)}
-                            placeholder="votre@email.com"
-                            className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                            autoComplete="email"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label htmlFor="mobile-login-password" className="block text-sm font-medium text-gray-700 mb-1">
-                          Mot de passe
-                        </label>
-                        <div className="relative">
-                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                          <input
-                            id="mobile-login-password"
-                            type="password"
-                            value={loginPassword}
-                            onChange={(e) => setLoginPassword(e.target.value)}
-                            placeholder="••••••••"
-                            className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                            autoComplete="current-password"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </form>
-
-                  {/* Footer */}
-                  <div className="p-4 border-t border-gray-100 flex-shrink-0 space-y-3">
-                    <button
-                      type="submit"
-                      onClick={handleLogin}
-                      disabled={isLoggingIn}
-                      className={cn(
-                        "w-full py-3.5 font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors",
-                        isLoggingIn
-                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                          : "bg-gradient-to-r from-primary to-primary/90 text-white shadow-lg shadow-primary/25"
-                      )}
-                    >
-                      {isLoggingIn ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Connexion...
-                        </>
-                      ) : (
-                        <>
-                          <LogIn className="w-4 h-4" />
-                          Se connecter
-                        </>
-                      )}
-                    </button>
-
-                    <p className="text-center text-sm text-gray-500">
-                      Pas encore de compte ?{" "}
-                      <a href="/inscription" className="text-primary font-medium">
-                        Inscrivez-vous
-                      </a>
-                    </p>
-                  </div>
-
-                  {/* Safe area spacer */}
-                  <div className="h-2 flex-shrink-0" />
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>,
-          document.body
-        )}
+      {/* Login Sheet */}
+      <MobileBottomSheet
+        isOpen={isLoginSheetOpen}
+        onClose={() => setIsLoginSheetOpen(false)}
+        title="Connexion"
+      >
+        <LoginForm
+          onLoginSuccess={(token) => {
+            onLoginSuccess?.(token);
+            setIsLoginSheetOpen(false);
+          }}
+          onClose={() => setIsLoginSheetOpen(false)}
+        />
+      </MobileBottomSheet>
     </>
   );
 }

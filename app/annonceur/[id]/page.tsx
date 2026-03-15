@@ -1035,9 +1035,9 @@ export default function AnnouncerProfilePage() {
 
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-4 py-6 sm:py-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
           {/* Left Column - Main Content */}
-          <div className="md:col-span-2 space-y-6 sm:space-y-8">
+          <div className="lg:col-span-2 space-y-6 sm:space-y-8">
             {/* Tab: Formules - Selected service with formules and options */}
             {activeTab === "formules" && (
               <AnnouncerFormules
@@ -1132,7 +1132,7 @@ export default function AnnouncerProfilePage() {
           </div>
 
           {/* Right Column - Booking Card ou Insight Card (Sticky) */}
-          <div className="hidden md:block">
+          <div className="hidden lg:block">
             {isAnnouncer ? (
               <AnnouncerInsightCard
                 announcer={announcer}
