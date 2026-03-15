@@ -121,9 +121,11 @@ export default function AnnouncerProfilePage() {
   useEffect(() => {
     if (hasInitializedFromUrl) return;
 
-    // Vérifier si on a des paramètres de retour
-    const hasReturnParams = urlStartDate || urlSlotIds || urlSessions;
+    // Vérifier si on a des paramètres de retour (dates, créneaux, ou animaux)
+    const hasReturnParams = urlStartDate || urlSlotIds || urlSessions || urlAnimalIds;
     if (!hasReturnParams) return;
+
+    const parsedAnimalIds = urlAnimalIds ? urlAnimalIds.split(",").filter(Boolean) : [];
 
     setBookingSelection(prev => ({
       ...prev,
@@ -137,8 +139,9 @@ export default function AnnouncerProfilePage() {
       selectedSessions: urlSessions ? (() => { try { return JSON.parse(urlSessions); } catch { return prev.selectedSessions; } })() : prev.selectedSessions,
       animalCount: urlAnimalCount ? parseInt(urlAnimalCount, 10) || 1 : prev.animalCount,
       selectedAnimalType: urlAnimalType || prev.selectedAnimalType,
-      selectedAnimalIds: urlAnimalIds ? urlAnimalIds.split(",").filter(Boolean) : prev.selectedAnimalIds,
+      selectedAnimalIds: parsedAnimalIds.length > 0 ? parsedAnimalIds : prev.selectedAnimalIds,
     }));
+
     setHasInitializedFromUrl(true);
 
     // Mettre à jour le mois du calendrier si on a une date
@@ -294,7 +297,15 @@ export default function AnnouncerProfilePage() {
   }));
 
   // State for selected animals in collective sessions (supports multiple selection)
-  const [selectedAnimalIds, setSelectedAnimalIds] = useState<string[]>([]);
+  const [selectedAnimalIds, setSelectedAnimalIds] = useState<string[]>(() => {
+    // Pré-remplir depuis l'URL si animalIds est présent
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const ids = params.get("animalIds");
+      if (ids) return ids.split(",").filter(Boolean);
+    }
+    return [];
+  });
 
   // État pour la vérification de l'animal (invités - chien ou chat)
   const [guestAnimalData, setGuestAnimalData] = useState<GuestAnimalData | null>(null);
@@ -415,6 +426,9 @@ export default function AnnouncerProfilePage() {
   // Nettoyer les animaux sélectionnés si leur type n'est plus compatible
   useEffect(() => {
     if (selectedAnimalIds.length === 0) return;
+    // Ne pas filtrer tant que les animaux de l'utilisateur ne sont pas chargés
+    // sinon tous les IDs seraient supprimés car find() retourne undefined
+    if (!userAnimalsData || userAnimals.length === 0) return;
 
     // Filtrer les animaux compatibles (par type uniquement, comparaison insensible à la casse)
     const acceptedTypes = (bookingVariant?.animalTypes || []).map((t: string) => t.toLowerCase());
@@ -433,7 +447,7 @@ export default function AnnouncerProfilePage() {
         animalCount: Math.max(1, compatibleIds.length),
       }));
     }
-  }, [bookingVariant, userAnimals, selectedAnimalIds]);
+  }, [bookingVariant, userAnimals, userAnimalsData, selectedAnimalIds]);
 
   // Calculate price breakdown
   const priceBreakdown = useMemo((): PriceBreakdown | null => {
@@ -565,15 +579,24 @@ export default function AnnouncerProfilePage() {
     for (const service of announcer.services) {
       const formule = service.formules?.find((f: { id: string }) => f.id === formuleQueryParam);
       if (formule) {
-        // Sélectionner le service et la formule
+        // Lire les animalIds depuis l'URL pour les préserver lors de la pré-sélection
+        const urlIds = typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("animalIds")?.split(",").filter(Boolean) || []
+          : [];
+
+        // Sélectionner le service et la formule en préservant les animaux de l'URL
         setBookingSelection((prev) => ({
           ...prev,
           selectedServiceId: service.id,
           selectedVariantId: formule.id,
           selectedOptionIds: [],
-          selectedAnimalIds: [],
-          animalCount: 1,
+          selectedAnimalIds: urlIds.length > 0 ? urlIds : prev.selectedAnimalIds,
+          animalCount: urlIds.length > 0 ? urlIds.length : prev.animalCount,
         }));
+        // Synchroniser le state local si des animaux viennent de l'URL
+        if (urlIds.length > 0) {
+          setSelectedAnimalIds(urlIds);
+        }
         // Mettre à jour le service slug dans l'URL
         setSelectedServiceSlug(service.categorySlug ?? service.categoryId ?? null);
         // Nettoyer le paramètre formule de l'URL (on garde juste service)
