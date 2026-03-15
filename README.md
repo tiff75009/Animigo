@@ -451,10 +451,24 @@ app/
       CategorySelector.tsx  # Selecteur hierarchique de categories
     shared/            # Composants partages entre pages
       CategoryDisplay.tsx  # Affichage configurable des categories
+  annonceur/[id]/      # Page profil annonceur
+    components/
+      booking/         # Composants de reservation partages
+        BookingCalendar.tsx
+        CollectiveSlotPicker.tsx
+        MultiSessionCalendar.tsx
+        FormuleFilters.tsx    # Filtres formules mutualises
+        LoginForm.tsx          # Formulaire connexion autonome
+        BookingSummary.tsx
+        SelectableFormuleCard.tsx
+        SelectableOptionCard.tsx
+      mobile/
+        MobileBottomSheet.tsx  # Bottom sheet generique
   hooks/               # Hooks React personnalises
     useAuth.ts
     useAdminAuth.ts
     usePlanning.ts
+    useScrollLock.ts     # Hook blocage scroll pour modales
   lib/                 # Utilitaires
 
 convex/
@@ -578,6 +592,57 @@ Utilisation de Framer Motion avec des variants predefinies :
 ---
 
 ## Changelog recent
+
+### v0.30.0 - Optimisation Responsive Page Annonceur
+
+- **Refactoring du composant MobileCTA** (2605 → 2083 lignes, -20%)
+  - Remplacement de 4 portals inline (Formule Sheet, Calendar Sheet, Step Sheet, Login Sheet) par le composant generique `MobileBottomSheet`
+  - Suppression de `createPortal`, `AnimatePresence` et imports inutilises (`X`, `Dog`)
+  - Extraction du formulaire de connexion dans `LoginForm` (composant reutilisable)
+
+- **Composants partages extraits** (`app/annonceur/[id]/components/booking/`)
+  - `FormuleFilters` : filtres par type de seance, lieu et animal — mutualise entre desktop et mobile
+  - `getFilteredFormules()` : helper de filtrage partage
+  - `LoginForm` : formulaire connexion autonome avec mutation, etats et UI
+  - `MobileBottomSheet` : bottom sheet generique avec portal, backdrop, animation spring, header/footer/contenu personnalisables
+
+- **Hook `useScrollLock`** (`app/hooks/useScrollLock.ts`)
+  - Remplace la manipulation manuelle de `document.body.style` par un hook avec ref et cleanup robuste
+  - Restaure la position de scroll apres fermeture de modale
+
+- **Breakpoint tablette (md → lg)**
+  - Changement de `md:hidden` a `lg:hidden` sur toute la page annonceur (10+ occurrences)
+  - Les tablettes (< 1024px) recoivent desormais l'experience mobile (bottom sheets au lieu de sidebar)
+  - Grid : `grid-cols-1 lg:grid-cols-3`
+
+- **Menu partage responsive**
+  - `AnnouncerActionBar` : largeur du dropdown ajustee `w-[calc(100vw-2rem)] sm:w-72 max-w-72`
+
+- **Optimisation calendriers (`React.memo`)**
+  - `BookingCalendar`, `CollectiveSlotPicker`, `MultiSessionCalendar` enveloppes dans `memo()` pour eviter les re-rendus inutiles lors du changement de filtres ou d'etats non lies
+
+### v0.29.0 - Recherche Avancee, Profil Public et Pre-remplissage Reservation
+
+- **Refactoring page recherche** (`/recherche`)
+  - Calcul de prix intelligent avec affichage du meilleur prix par formule
+  - Responsive mobile ameliore pour les cartes et filtres
+  - Correction du reset des filtres date qui ne se propageait pas au hook de recherche
+  - Correction deselection animal + capacite garde + animaux acceptes dans les filtres
+
+- **Pre-remplissage reservation depuis la recherche**
+  - Passage des animaux selectionnes via URL params (`animalIds`) vers la page annonceur
+  - Pre-selection automatique des animaux dans le formulaire de reservation (desktop et mobile)
+  - Utilisation de `useRef` pour capturer les valeurs URL avant que `nuqs` ne les nettoie
+  - Synchronisation des deux etats d'animaux (`bookingSelection.selectedAnimalIds` et `selectedAnimalIds`)
+
+- **Correction modale mobile pour utilisateurs connectes**
+  - La modale ne s'ouvre plus sur l'etape "verification animal" (etape invites) pour les connectes
+  - Ajout du flag `isAuthLoading` pour attendre la resolution de l'auth avant de determiner les etapes
+  - L'etape "dog" est conditionnee a `!isLoggedIn`
+
+- **Profil public annonceur**
+  - Alignement des prix entre la page recherche et la page annonceur
+  - Affichage coherent du prix avec commission
 
 ### v0.28.0 - Securite, SEO, Performance et Corrections UX
 
