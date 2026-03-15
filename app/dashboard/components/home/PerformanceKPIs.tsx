@@ -40,7 +40,7 @@ function Tooltip({ text }: { text: string }) {
 }
 
 export function PerformanceKPIs({ kpis }: PerformanceKPIsProps) {
-  if (kpis.totalMissions === 0) return null;
+  if (!kpis || kpis.totalMissions === 0) return null;
 
   const items = [
     {

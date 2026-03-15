@@ -327,11 +327,6 @@ export default function FilterSidebar({
                 onChange={() => updateFilter("sortBy", "price_desc")}
               />
               <FilterRadio
-                label="Mieux notés"
-                checked={filters.sortBy === "rating"}
-                onChange={() => updateFilter("sortBy", "rating")}
-              />
-              <FilterRadio
                 label="Plus proches"
                 checked={filters.sortBy === "distance"}
                 onChange={() => updateFilter("sortBy", "distance")}

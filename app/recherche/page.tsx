@@ -9,22 +9,21 @@ import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/app/hooks/useAuth";
 import { useGeolocation } from "@/app/hooks/useGeolocation";
 import {
-  Search,
-  MapPin,
   ChevronDown,
   SlidersHorizontal,
   Calendar,
   X,
   Sparkles,
-  LayoutGrid,
-  List,
   Layers,
   Home,
   Scissors,
-  LocateFixed,
-  Loader2,
+  Minus,
+  Plus,
+  PawPrint,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
+import { DatePickerDropdown } from "./components/DatePickerDropdown";
 import { useFormuleSearch, type FormuleResult } from "@/app/hooks/useSearch";
 import { Id } from "@/convex/_generated/dataModel";
 
@@ -64,13 +63,86 @@ interface CategoriesData {
   rootCategories: SubcategoryData[];
 }
 import { Navbar } from "@/app/components/navbar";
-import { LocationSearchBar } from "@/app/components/search";
 import FilterSidebar from "@/app/components/search/FilterSidebar";
-import {
-  ANIMAL_TYPES,
-  radiusOptions,
-} from "@/app/components/platform";
-import { FormuleCardGrid, FormuleCardList, AnnouncerCarouselCard, type AnnouncerGroup } from "@/app/components/platform/FormuleCard";
+import { ANIMAL_TYPES } from "@/app/components/platform";
+import { FormuleCardGrid, FormuleCardList, AnnouncerCarouselCard, type AnnouncerGroup, type SearchDates, computeTotalPrice, getPriceWithCommission } from "@/app/components/platform/FormuleCard";
+import { formatPrice } from "@/app/components/platform/helpers";
+import PawLoader from "@/app/components/ui/PawLoader";
+import { FilterDropdown, ViewModeToggle, EmptyState } from "./components/SearchComponents";
+import { LocationBar } from "./components/LocationBar";
+
+// Résumé prix minimum pour la garde
+function SearchSummary({ results, searchDates }: { results: FormuleResult[]; searchDates: SearchDates }) {
+  const summary = useMemo(() => {
+    if (results.length === 0) return null;
+
+    const hasDateRange = !!(searchDates?.startDate && searchDates?.endDate);
+
+    let minPrice = Infinity;
+    let minLabel = "";
+
+    for (const f of results) {
+      if (hasDateRange) {
+        // Prix total multi-jours via computeTotalPrice
+        const estimate = computeTotalPrice(f, searchDates);
+        if (estimate && estimate.total < minPrice) {
+          minPrice = estimate.total;
+          minLabel = estimate.label;
+        }
+      } else {
+        // Prix unitaire avec commission
+        const price = getPriceWithCommission(f.price, f.announcerStatusType);
+        if (price < minPrice) {
+          minPrice = price;
+          const unit = f.priceUnit === "hour" ? "heure" : f.priceUnit === "half_day" ? "demi-journée" : f.priceUnit === "day" ? "jour" : f.priceUnit;
+          minLabel = unit;
+        }
+      }
+    }
+
+    return { minPrice, minLabel, count: results.length, hasDateRange };
+  }, [results, searchDates]);
+
+  if (!summary || summary.minPrice === Infinity) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mb-4 p-3 bg-gradient-to-r from-primary/5 to-secondary/5 rounded-2xl border border-primary/10"
+    >
+      <div className="flex items-center gap-3">
+        <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10">
+          <Home className="w-5 h-5 text-primary" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-gray-900">
+            Garde à partir de{" "}
+            <span className="text-primary">{formatPrice(summary.minPrice)}</span>
+            {summary.hasDateRange ? (
+              <span className="text-gray-500 font-normal"> · {summary.minLabel}</span>
+            ) : (
+              <span className="text-gray-500 font-normal">/{summary.minLabel}</span>
+            )}
+          </p>
+          <p className="text-xs text-gray-500">
+            {summary.count} prestation{summary.count > 1 ? "s" : ""} disponible{summary.count > 1 ? "s" : ""}
+            {searchDates?.startDate && searchDates?.endDate && (
+              <> · {new Date(searchDates.startDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} → {new Date(searchDates.endDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</>
+            )}
+          </p>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// Créneaux horaires par tranche de 30 minutes
+const TIME_SLOTS = Array.from({ length: 36 }, (_, i) => {
+  const hour = Math.floor(i / 2) + 6; // De 06:00 à 23:30
+  const min = i % 2 === 0 ? "00" : "30";
+  return `${hour.toString().padStart(2, "0")}:${min}`;
+});
 
 // Nuqs parsers for URL state
 const searchParamsParsers = {
@@ -81,6 +153,9 @@ const searchParamsParsers = {
   date: parseAsString,
   startDate: parseAsString,
   endDate: parseAsString,
+  startTime: parseAsString,
+  endTime: parseAsString,
+  animals: parseAsInteger.withDefault(1),
   view: parseAsStringLiteral(["grid", "list"] as const).withDefault("grid"),
 };
 
@@ -115,16 +190,47 @@ export default function RecherchePage() {
     setCategory: setHookCategory,
     setRadius: setHookRadius,
     setDate: setHookDate,
+    setDateRange: setHookDateRange,
+    setGardeTimes: setHookGardeTimes,
+    setNumberOfAnimals: setHookNumberOfAnimals,
     updateAdvancedFilters,
     resetAdvancedFilters,
     resetAllFilters: resetHookFilters,
   } = useFormuleSearch();
+
+  // Pattern anti-rejeu animations : une fois les résultats chargés, on désactive les initial
+  const hasLoadedRef = useRef(false);
+  if (results && results.length > 0 && !hasLoadedRef.current) {
+    hasLoadedRef.current = true;
+  }
+  const animInitial = hasLoadedRef.current ? false : { opacity: 0, y: 20 };
 
   // Récupérer les coordonnées du profil utilisateur (client ou annonceur)
   const userLocation = useQuery(
     api.client.profile.getClientCoordinates,
     token ? { token } : "skip"
   );
+
+  // Récupérer les animaux de l'utilisateur connecté
+  const userAnimals = useQuery(
+    api.animals.getUserAnimals,
+    token ? { token } : "skip"
+  );
+
+  // Animaux sélectionnés par l'utilisateur dans la barre de recherche
+  const [selectedAnimalIds, setSelectedAnimalIds] = useState<string[]>([]);
+
+  // Dériver les types d'animaux sélectionnés pour le filtre de recherche
+  const selectedAnimalTypes = useMemo(() => {
+    if (!userAnimals || selectedAnimalIds.length === 0) return null;
+    const types = new Set<string>();
+    for (const animal of userAnimals) {
+      if (selectedAnimalIds.includes(animal.id)) {
+        types.add(animal.type);
+      }
+    }
+    return types.size > 0 ? Array.from(types) : null;
+  }, [userAnimals, selectedAnimalIds]);
 
   // State pour savoir si on a déjà initialisé la localisation depuis le profil
   const [hasInitializedFromProfile, setHasInitializedFromProfile] = useState(false);
@@ -148,19 +254,28 @@ export default function RecherchePage() {
   // Sync URL params with hook state
   useEffect(() => {
     setHookSearchMode(urlParams.mode);
-  }, [urlParams.mode, setHookSearchMode]);
-
-  useEffect(() => {
     setHookAnimalType(urlParams.animal);
-  }, [urlParams.animal, setHookAnimalType]);
-
-  useEffect(() => {
     setHookRadius(urlParams.radius);
-  }, [urlParams.radius, setHookRadius]);
-
-  useEffect(() => {
     setHookDate(urlParams.date);
-  }, [urlParams.date, setHookDate]);
+    if (urlParams.startDate && urlParams.endDate) {
+      setHookDateRange(urlParams.startDate, urlParams.endDate);
+    }
+    setHookGardeTimes(urlParams.startTime, urlParams.endTime);
+    setHookNumberOfAnimals(urlParams.animals);
+  }, [urlParams.mode, urlParams.animal, urlParams.radius, urlParams.date, urlParams.startDate, urlParams.endDate, urlParams.startTime, urlParams.endTime, urlParams.animals, setHookSearchMode, setHookAnimalType, setHookRadius, setHookDate, setHookDateRange, setHookGardeTimes, setHookNumberOfAnimals]);
+
+  // Synchroniser le filtre animalType quand des animaux sont sélectionnés
+  useEffect(() => {
+    if (selectedAnimalTypes && selectedAnimalTypes.length === 1) {
+      // Un seul type d'animal sélectionné : appliquer le filtre
+      setHookAnimalType(selectedAnimalTypes[0]);
+      setUrlParams({ animal: selectedAnimalTypes[0] });
+    } else if (selectedAnimalIds.length > 0 && selectedAnimalTypes && selectedAnimalTypes.length > 1) {
+      // Plusieurs types différents : ne pas filtrer par type
+      setHookAnimalType(null);
+      setUrlParams({ animal: null });
+    }
+  }, [selectedAnimalTypes, selectedAnimalIds.length, setHookAnimalType, setUrlParams]);
 
   // URL setters
   const setSearchMode = useCallback((mode: "garde" | "services") => {
@@ -192,8 +307,12 @@ export default function RecherchePage() {
     setUrlParams({ startDate: start, endDate: end, date: null });
   }, [setUrlParams]);
 
+  const setNumberOfAnimals = useCallback((n: number) => {
+    setUrlParams({ animals: n });
+  }, [setUrlParams]);
+
   const resetDateFilters = useCallback(() => {
-    setUrlParams({ date: null, startDate: null, endDate: null });
+    setUrlParams({ date: null, startDate: null, endDate: null, startTime: null, endTime: null });
   }, [setUrlParams]);
 
   const resetAllFilters = useCallback(() => {
@@ -205,6 +324,9 @@ export default function RecherchePage() {
       date: null,
       startDate: null,
       endDate: null,
+      startTime: null,
+      endTime: null,
+      animals: 1,
     });
     resetHookFilters();
   }, [setUrlParams, resetHookFilters]);
@@ -254,6 +376,8 @@ export default function RecherchePage() {
     }
   }, [urlParams.category, categoriesData, setHookCategory]);
 
+  const router = useRouter();
+
   // Favoris
   const favoriteIds = useQuery(
     api.client.favorites.getFavoriteIds,
@@ -262,9 +386,8 @@ export default function RecherchePage() {
   const toggleFavorite = useMutation(api.client.favorites.toggle);
   const [togglingFavoriteId, setTogglingFavoriteId] = useState<string | null>(null);
 
-  const handleToggleFavorite = async (formuleId: string) => {
+  const handleToggleFavorite = useCallback(async (formuleId: string) => {
     if (!token) {
-      // Rediriger vers connexion si pas connecté
       router.push("/connexion?redirect=/recherche");
       return;
     }
@@ -280,15 +403,146 @@ export default function RecherchePage() {
     } finally {
       setTogglingFavoriteId(null);
     }
-  };
+  }, [token, router, toggleFavorite]);
 
   // Regroupement par annonceur
   const [isGrouped, setIsGrouped] = useState(false);
 
+  const [showFilters, setShowFilters] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const heroSearchRef = useRef<HTMLDivElement>(null);
+  const filtersRef = useRef<HTMLDivElement>(null);
+  const datePickerRef = useRef<HTMLDivElement>(null);
+
+  // Détecter quand la barre de recherche hero sort de la vue
+  useEffect(() => {
+    const target = heroSearchRef.current;
+    if (!target) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsScrolled(!entry.isIntersecting),
+      { threshold: 0, rootMargin: "-80px 0px 0px 0px" }
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
+
+  // Flatten categories from hierarchical structure
+  const flattenedCategories = useMemo<ServiceCategory[]>(() => {
+    if (!categoriesData) return [];
+    const result: ServiceCategory[] = [];
+
+    categoriesData.parentCategories.forEach((parent) => {
+      parent.subcategories.forEach((sub) => {
+        result.push({
+          id: sub.id,
+          slug: sub.slug,
+          name: sub.name,
+          icon: sub.icon || "📋",
+          imageUrl: sub.imageUrl ?? undefined,
+          billingType: sub.billingType as "hourly" | "daily" | "flexible" | undefined,
+        });
+      });
+    });
+
+    categoriesData.rootCategories.forEach((cat) => {
+      result.push({
+        id: cat.id,
+        slug: cat.slug,
+        name: cat.name,
+        icon: cat.icon || "📋",
+        imageUrl: cat.imageUrl ?? undefined,
+        billingType: cat.billingType as "hourly" | "daily" | "flexible" | undefined,
+      });
+    });
+
+    return result;
+  }, [categoriesData]);
+
+  // Filter out "garde" category from services when in services mode
+  const filteredCategories = useMemo(() =>
+    flattenedCategories.filter((cat: ServiceCategory) =>
+      filters.searchMode === "services" ? cat.slug !== "garde" : true
+    ), [flattenedCategories, filters.searchMode]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (filtersRef.current && !filtersRef.current.contains(e.target as Node)) {
+        setOpenDropdown(null);
+      }
+      if (datePickerRef.current && !datePickerRef.current.contains(e.target as Node)) {
+        setShowDatePicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const hasAdvancedFilters = useMemo(() =>
+    advancedFilters.sortBy !== "relevance" ||
+    advancedFilters.accountTypes.length > 0 ||
+    advancedFilters.verifiedOnly ||
+    advancedFilters.withPhotoOnly ||
+    advancedFilters.hasGarden !== null ||
+    advancedFilters.hasVehicle !== null ||
+    advancedFilters.ownsAnimals.length > 0 ||
+    advancedFilters.noAnimals ||
+    advancedFilters.priceRange.min !== null ||
+    advancedFilters.priceRange.max !== null,
+  [advancedFilters]);
+
+  const hasAnyFilter = useMemo(() =>
+    hasAdvancedFilters ||
+    !!filters.category ||
+    !!filters.animalType ||
+    !!filters.date ||
+    !!filters.startDate,
+  [hasAdvancedFilters, filters.category, filters.animalType, filters.date, filters.startDate]);
+
+  const activeFiltersCount = useMemo(() => [
+    filters.category,
+    filters.animalType,
+    filters.date || filters.startDate,
+    hasAdvancedFilters,
+  ].filter(Boolean).length, [filters.category, filters.animalType, filters.date, filters.startDate, hasAdvancedFilters]);
+
+
+  // Infos de dates pour le calcul du prix total dans les cartes
+  const searchDates = useMemo<SearchDates>(() => ({
+    startDate: urlParams.startDate,
+    endDate: urlParams.endDate,
+    startTime: urlParams.startTime,
+    endTime: urlParams.endTime,
+    numberOfAnimals: urlParams.animals,
+  }), [urlParams.startDate, urlParams.endDate, urlParams.startTime, urlParams.endTime, urlParams.animals]);
+
+  // Re-tri client-side pour les recherches multi-jours (le backend trie par prix unitaire)
+  const sortedResults = useMemo(() => {
+    const hasDateRange = !!(searchDates?.startDate && searchDates?.endDate);
+    const sortBy = advancedFilters.sortBy;
+
+    if (!hasDateRange || (sortBy !== "price_asc" && sortBy !== "price_desc")) {
+      return results;
+    }
+
+    // Calculer le prix total pour chaque résultat et trier
+    const withTotal = results.map((f) => {
+      const estimate = computeTotalPrice(f, searchDates);
+      return { formule: f, total: estimate?.total ?? getPriceWithCommission(f.price, f.announcerStatusType) };
+    });
+
+    withTotal.sort((a, b) =>
+      sortBy === "price_asc" ? a.total - b.total : b.total - a.total
+    );
+
+    return withTotal.map((w) => w.formule);
+  }, [results, searchDates, advancedFilters.sortBy]);
+
   const groupedResults = useMemo<AnnouncerGroup[]>(() => {
     if (!isGrouped) return [];
     const map = new Map<string, AnnouncerGroup>();
-    for (const f of results) {
+    for (const f of sortedResults) {
       let group = map.get(f.announcerId);
       if (!group) {
         group = {
@@ -311,111 +565,7 @@ export default function RecherchePage() {
       group.formules.push(f);
     }
     return Array.from(map.values());
-  }, [results, isGrouped]);
-
-  const router = useRouter();
-  const [showFilters, setShowFilters] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const [isScrolled, setIsScrolled] = useState(false);
-  const heroSearchRef = useRef<HTMLDivElement>(null);
-  const filtersRef = useRef<HTMLDivElement>(null);
-  const datePickerRef = useRef<HTMLDivElement>(null);
-
-  // Détecter quand la barre de recherche hero sort de la vue
-  useEffect(() => {
-    const target = heroSearchRef.current;
-    if (!target) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => setIsScrolled(!entry.isIntersecting),
-      { threshold: 0, rootMargin: "-80px 0px 0px 0px" }
-    );
-    observer.observe(target);
-    return () => observer.disconnect();
-  }, []);
-
-  // Flatten categories from hierarchical structure
-  const flattenedCategories: ServiceCategory[] = (() => {
-    if (!categoriesData) return [];
-    const result: ServiceCategory[] = [];
-
-    // Add subcategories from each parent
-    categoriesData.parentCategories.forEach((parent) => {
-      parent.subcategories.forEach((sub) => {
-        result.push({
-          id: sub.id,
-          slug: sub.slug,
-          name: sub.name,
-          icon: sub.icon || "📋",
-          imageUrl: sub.imageUrl ?? undefined,
-          billingType: sub.billingType as "hourly" | "daily" | "flexible" | undefined,
-        });
-      });
-    });
-
-    // Add root categories
-    categoriesData.rootCategories.forEach((cat) => {
-      result.push({
-        id: cat.id,
-        slug: cat.slug,
-        name: cat.name,
-        icon: cat.icon || "📋",
-        imageUrl: cat.imageUrl ?? undefined,
-        billingType: cat.billingType as "hourly" | "daily" | "flexible" | undefined,
-      });
-    });
-
-    return result;
-  })();
-
-  // Filter out "garde" category from services when in services mode
-  const filteredCategories = flattenedCategories.filter((cat: ServiceCategory) =>
-    filters.searchMode === "services" ? cat.slug !== "garde" : true
-  );
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (filtersRef.current && !filtersRef.current.contains(e.target as Node)) {
-        setOpenDropdown(null);
-      }
-      if (datePickerRef.current && !datePickerRef.current.contains(e.target as Node)) {
-        setShowDatePicker(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const hasAdvancedFilters =
-    advancedFilters.sortBy !== "relevance" ||
-    advancedFilters.accountTypes.length > 0 ||
-    advancedFilters.verifiedOnly ||
-    advancedFilters.withPhotoOnly ||
-    advancedFilters.hasGarden !== null ||
-    advancedFilters.hasVehicle !== null ||
-    advancedFilters.ownsAnimals.length > 0 ||
-    advancedFilters.noAnimals ||
-    advancedFilters.priceRange.min !== null ||
-    advancedFilters.priceRange.max !== null;
-
-  const hasAnyFilter =
-    hasAdvancedFilters ||
-    filters.category ||
-    filters.animalType ||
-    filters.date ||
-    filters.startDate;
-
-  const selectedAnimal = filters.animalType
-    ? ANIMAL_TYPES.find((a) => a.id === filters.animalType)
-    : null;
-
-  const activeFiltersCount = [
-    filters.category,
-    filters.animalType,
-    filters.date || filters.startDate,
-    hasAdvancedFilters,
-  ].filter(Boolean).length;
-
+  }, [sortedResults, isGrouped]);
 
   // Géolocalisation : handler pour le bouton "Me localiser"
   const handleGeolocate = useCallback(async () => {
@@ -452,28 +602,10 @@ export default function RecherchePage() {
           <div className="absolute -top-10 right-0 w-96 h-96 bg-gradient-to-bl from-secondary/15 to-transparent rounded-full blur-3xl" />
           <div className="absolute top-1/2 left-1/3 w-48 h-48 bg-gradient-to-tr from-purple/10 to-transparent rounded-full blur-2xl" />
 
-          {/* Floating emojis - hidden on mobile */}
-          <motion.span
-            className="hidden md:block absolute top-24 left-[10%] text-3xl opacity-40"
-            animate={{ y: [0, -10, 0], rotate: [0, 5, 0] }}
-            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-          >
-            🐕
-          </motion.span>
-          <motion.span
-            className="hidden md:block absolute top-32 right-[15%] text-2xl opacity-30"
-            animate={{ y: [0, -8, 0], rotate: [0, -5, 0] }}
-            transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-          >
-            🐈
-          </motion.span>
-          <motion.span
-            className="hidden lg:block absolute bottom-8 left-[20%] text-2xl opacity-25"
-            animate={{ y: [0, -6, 0] }}
-            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-          >
-            🐾
-          </motion.span>
+          {/* Emojis décoratifs statiques */}
+          <span className="hidden md:block absolute top-24 left-[10%] text-3xl opacity-20">🐕</span>
+          <span className="hidden md:block absolute top-32 right-[15%] text-2xl opacity-15">🐈</span>
+          <span className="hidden lg:block absolute bottom-8 left-[20%] text-2xl opacity-10">🐾</span>
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
@@ -558,83 +690,272 @@ export default function RecherchePage() {
               </motion.div>
             </div>
 
-            {/* Barre de recherche + Rayon + Me localiser */}
+            {/* Barre de recherche unifiée style booking */}
             <motion.div
               ref={heroSearchRef}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.15 }}
-              className="mt-4 sm:mt-6 max-w-2xl mx-auto px-4 sm:px-0 relative z-40"
+              className="mt-4 sm:mt-6 max-w-4xl mx-auto px-4 sm:px-0 relative z-40"
             >
-              <div className="flex items-center gap-2">
-                <div className="flex-1">
-                  <LocationSearchBar
-                    value={filters.location}
-                    onChange={setLocation}
-                    placeholder="Rechercher une ville..."
-                    showGeolocationButton={false}
+              <div className="bg-white rounded-2xl shadow-lg shadow-gray-200/50 border border-gray-100 p-2 sm:p-3">
+                {/* Ligne 1 : Ville + Géolocalisation + Rayon */}
+                <div className="mb-2">
+                  <LocationBar
+                    location={filters.location}
+                    onLocationChange={setLocation}
+                    radius={filters.radius}
+                    onRadiusChange={setRadius}
+                    onGeolocate={handleGeolocate}
+                    isGeoLoading={isGeoLoading}
+                    isReverseGeocoding={isReverseGeocoding}
+                    openDropdown={openDropdown}
+                    dropdownId="radius"
+                    onToggleDropdown={setOpenDropdown}
+                    variant="hero"
                   />
                 </div>
-                {/* Bouton Me localiser */}
-                <motion.button
-                  type="button"
-                  onClick={handleGeolocate}
-                  disabled={isGeoLoading || isReverseGeocoding}
-                  className={cn(
-                    "flex items-center justify-center w-12 h-12 rounded-xl border-2 transition-all flex-shrink-0",
-                    filters.location.coordinates
-                      ? "border-primary bg-primary text-white"
-                      : "border-foreground/10 bg-white text-foreground hover:border-primary hover:text-primary",
-                    (isGeoLoading || isReverseGeocoding) && "opacity-50 cursor-not-allowed"
-                  )}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  title="Me localiser"
-                >
-                  {isGeoLoading || isReverseGeocoding ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <LocateFixed className="w-5 h-5" />
-                  )}
-                </motion.button>
-                {/* Radius selector */}
-                <div className="relative flex-shrink-0">
-                  <button
-                    onClick={() => setOpenDropdown(openDropdown === "radius" ? null : "radius")}
-                    className="flex items-center gap-1.5 px-3 sm:px-4 py-3 bg-white border-2 border-foreground/10 rounded-xl text-sm font-medium text-gray-700 hover:border-primary transition-all whitespace-nowrap"
-                  >
-                    <MapPin className="w-4 h-4 text-primary" />
-                    <span>{filters.radius} km</span>
-                    <ChevronDown className={cn("w-3.5 h-3.5 text-gray-400 transition-transform", openDropdown === "radius" && "rotate-180")} />
-                  </button>
-                  <AnimatePresence>
-                    {openDropdown === "radius" && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 4 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 4 }}
-                        transition={{ duration: 0.15 }}
-                        className="absolute top-full right-0 mt-2 py-2 bg-white rounded-xl shadow-xl border border-gray-200 z-[100] min-w-[140px]"
-                      >
-                        {radiusOptions.map((r) => (
-                          <button
-                            key={r}
-                            onClick={() => {
-                              setRadius(r);
-                              setOpenDropdown(null);
-                            }}
+
+                {/* Ligne 2 (mode garde) : Dates + Heures début/fin + Nombre d'animaux */}
+                {filters.searchMode === "garde" && (
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr_auto_auto_auto] gap-2 pt-3 border-t border-gray-100">
+                    {/* Bloc Début */}
+                    <div className="min-w-0">
+                      <label className="flex items-center gap-1 text-[10px] font-bold text-primary uppercase tracking-wider mb-1 px-1">
+                        <Calendar className="w-3 h-3" />
+                        Début de garde
+                      </label>
+                      <div className="flex gap-1.5">
+                        <div className="relative flex-1">
+                          <input
+                            type="date"
+                            value={urlParams.startDate || ""}
+                            min={new Date().toISOString().split("T")[0]}
+                            onChange={(e) => setDateRange(e.target.value || null, urlParams.endDate)}
                             className={cn(
-                              "w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 transition-colors",
-                              filters.radius === r && "bg-primary/5 text-primary font-medium"
+                              "w-full px-3 py-2 rounded-xl text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-primary/30",
+                              urlParams.startDate
+                                ? "bg-primary/5 border-2 border-primary/30 text-gray-900"
+                                : "bg-gray-50 border border-gray-200 text-gray-500"
+                            )}
+                          />
+                        </div>
+                        <select
+                          value={urlParams.startTime || ""}
+                          onChange={(e) => setUrlParams({ startTime: e.target.value || null })}
+                          className={cn(
+                            "w-[85px] px-2 py-2 rounded-xl text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 appearance-none cursor-pointer",
+                            urlParams.startTime
+                              ? "bg-primary/5 border-2 border-primary/30 text-gray-900"
+                              : "bg-gray-50 border border-gray-200 text-gray-500"
+                          )}
+                        >
+                          <option value="">Heure</option>
+                          {TIME_SLOTS.map((t) => (
+                            <option key={t} value={t}>{t}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Flèche séparateur */}
+                    <div className="hidden sm:flex items-end pb-2.5">
+                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                        <ChevronRight className="w-4 h-4 text-primary" />
+                      </div>
+                    </div>
+
+                    {/* Bloc Fin */}
+                    <div className="min-w-0">
+                      <label className="flex items-center gap-1 text-[10px] font-bold text-secondary uppercase tracking-wider mb-1 px-1">
+                        <Calendar className="w-3 h-3" />
+                        Fin de garde
+                      </label>
+                      <div className="flex gap-1.5">
+                        <div className="relative flex-1">
+                          <input
+                            type="date"
+                            value={urlParams.endDate || ""}
+                            min={urlParams.startDate || new Date().toISOString().split("T")[0]}
+                            onChange={(e) => setDateRange(urlParams.startDate, e.target.value || null)}
+                            className={cn(
+                              "w-full px-3 py-2 rounded-xl text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-secondary/30",
+                              urlParams.endDate
+                                ? "bg-secondary/5 border-2 border-secondary/30 text-gray-900"
+                                : "bg-gray-50 border border-gray-200 text-gray-500"
+                            )}
+                          />
+                        </div>
+                        <select
+                          value={urlParams.endTime || ""}
+                          onChange={(e) => setUrlParams({ endTime: e.target.value || null })}
+                          className={cn(
+                            "w-[85px] px-2 py-2 rounded-xl text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-secondary/30 appearance-none cursor-pointer",
+                            urlParams.endTime
+                              ? "bg-secondary/5 border-2 border-secondary/30 text-gray-900"
+                              : "bg-gray-50 border border-gray-200 text-gray-500"
+                          )}
+                        >
+                          <option value="">Heure</option>
+                          {TIME_SLOTS.map((t) => (
+                            <option key={t} value={t}>{t}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Séparateur vertical */}
+                    <div className="hidden sm:flex items-end pb-2">
+                      <div className="h-9 w-px bg-gray-200" />
+                    </div>
+
+                    {/* Animaux — dropdown avec sélection */}
+                    <div className="flex-shrink-0 relative">
+                      <label className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 px-1">
+                        <PawPrint className="w-3 h-3" />
+                        Animaux
+                      </label>
+                      {token && userAnimals && userAnimals.length > 0 ? (
+                        <>
+                          <button
+                            onClick={() => setOpenDropdown(openDropdown === "animals" ? null : "animals")}
+                            className={cn(
+                              "flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all h-[38px] whitespace-nowrap",
+                              selectedAnimalIds.length > 0
+                                ? "bg-primary/5 border-2 border-primary/30 text-gray-900"
+                                : "bg-gray-50 border border-gray-200 text-gray-500 hover:border-gray-300"
                             )}
                           >
-                            {r} km
+                            {selectedAnimalIds.length > 0 ? (
+                              <>
+                                <span className="flex -space-x-1">
+                                  {userAnimals
+                                    .filter((a) => selectedAnimalIds.includes(a.id))
+                                    .slice(0, 3)
+                                    .map((a) => (
+                                      <span key={a.id} className="text-sm">{a.emoji || "🐾"}</span>
+                                    ))}
+                                </span>
+                                <span className="font-bold text-primary">{selectedAnimalIds.length}</span>
+                              </>
+                            ) : (
+                              <>
+                                <PawPrint className="w-4 h-4 text-gray-400" />
+                                <span>Choisir</span>
+                              </>
+                            )}
+                            <ChevronDown className={cn("w-3 h-3 text-gray-400 transition-transform", openDropdown === "animals" && "rotate-180")} />
                           </button>
-                        ))}
-                      </motion.div>
+                          <AnimatePresence>
+                            {openDropdown === "animals" && (
+                              <motion.div
+                                initial={{ opacity: 0, y: 4 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: 4 }}
+                                transition={{ duration: 0.15 }}
+                                className="absolute top-full right-0 mt-2 py-2 bg-white rounded-xl shadow-xl border border-gray-200 z-[100] min-w-[220px]"
+                              >
+                                <div className="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                  Mes animaux
+                                </div>
+                                {userAnimals.map((animal) => {
+                                  const isSelected = selectedAnimalIds.includes(animal.id);
+                                  return (
+                                    <button
+                                      key={animal.id}
+                                      onClick={() => {
+                                        const newIds = isSelected
+                                          ? selectedAnimalIds.filter((id) => id !== animal.id)
+                                          : [...selectedAnimalIds, animal.id];
+                                        setSelectedAnimalIds(newIds);
+                                        setNumberOfAnimals(Math.max(1, newIds.length));
+                                      }}
+                                      className={cn(
+                                        "w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors",
+                                        isSelected && "bg-primary/5"
+                                      )}
+                                    >
+                                      <span className="text-lg">{animal.emoji || "🐾"}</span>
+                                      <div className="flex-1 min-w-0">
+                                        <span className={cn(
+                                          "block text-sm font-medium truncate",
+                                          isSelected ? "text-primary" : "text-gray-700"
+                                        )}>
+                                          {animal.name}
+                                        </span>
+                                        <span className="block text-[11px] text-gray-400 capitalize">{animal.type}</span>
+                                      </div>
+                                      <div className={cn(
+                                        "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors",
+                                        isSelected
+                                          ? "bg-primary border-primary text-white"
+                                          : "border-gray-300"
+                                      )}>
+                                        {isSelected && (
+                                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                          </svg>
+                                        )}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                                {selectedAnimalIds.length > 0 && (
+                                  <div className="border-t border-gray-100 mt-1 pt-1 px-3">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedAnimalIds([]);
+                                        setNumberOfAnimals(1);
+                                      }}
+                                      className="w-full py-1.5 text-xs text-gray-400 hover:text-primary transition-colors text-center"
+                                    >
+                                      Tout désélectionner
+                                    </button>
+                                  </div>
+                                )}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-1 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl h-[38px]">
+                          <button
+                            onClick={() => setNumberOfAnimals(Math.max(1, urlParams.animals - 1))}
+                            disabled={urlParams.animals <= 1}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 hover:border-primary hover:text-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            aria-label="Moins d'animaux"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="text-base font-bold text-gray-800 min-w-[1.5rem] text-center">
+                            {urlParams.animals}
+                          </span>
+                          <button
+                            onClick={() => setNumberOfAnimals(Math.min(10, urlParams.animals + 1))}
+                            disabled={urlParams.animals >= 10}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 hover:border-primary hover:text-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            aria-label="Plus d'animaux"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Bouton effacer */}
+                    {(urlParams.startDate || urlParams.endDate) && (
+                      <div className="flex items-end pb-1.5">
+                        <button
+                          onClick={resetDateFilters}
+                          className="p-2 text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors rounded-xl"
+                          title="Effacer les dates"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
                     )}
-                  </AnimatePresence>
-                </div>
+                  </div>
+                )}
               </div>
             </motion.div>
           </motion.div>
@@ -651,71 +972,20 @@ export default function RecherchePage() {
           )}
         >
           <div className="overflow-hidden">
-            <div className="max-w-2xl mx-auto px-3 py-2 flex items-center gap-2">
-              <div className="flex-1 relative z-40">
-                <LocationSearchBar
-                  value={filters.location}
-                  onChange={setLocation}
-                  placeholder="Rechercher une ville..."
-                  showGeolocationButton={false}
-                />
-              </div>
-              <button
-                type="button"
-                onClick={handleGeolocate}
-                disabled={isGeoLoading || isReverseGeocoding}
-                className={cn(
-                  "flex items-center justify-center w-10 h-10 rounded-xl border-2 transition-all flex-shrink-0",
-                  filters.location.coordinates
-                    ? "border-primary bg-primary text-white"
-                    : "border-foreground/10 bg-white text-foreground hover:border-primary hover:text-primary",
-                  (isGeoLoading || isReverseGeocoding) && "opacity-50 cursor-not-allowed"
-                )}
-                title="Me localiser"
-              >
-                {isGeoLoading || isReverseGeocoding ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <LocateFixed className="w-4 h-4" />
-                )}
-              </button>
-              <div className="relative flex-shrink-0">
-                <button
-                  onClick={() => setOpenDropdown(openDropdown === "radius-sticky" ? null : "radius-sticky")}
-                  className="flex items-center gap-1 px-2.5 py-2 bg-white border-2 border-foreground/10 rounded-xl text-sm font-medium text-gray-700 hover:border-primary transition-all whitespace-nowrap"
-                >
-                  <MapPin className="w-3.5 h-3.5 text-primary" />
-                  <span>{filters.radius} km</span>
-                  <ChevronDown className={cn("w-3 h-3 text-gray-400 transition-transform", openDropdown === "radius-sticky" && "rotate-180")} />
-                </button>
-                <AnimatePresence>
-                  {openDropdown === "radius-sticky" && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 4 }}
-                      transition={{ duration: 0.15 }}
-                      className="absolute top-full right-0 mt-2 py-2 bg-white rounded-xl shadow-xl border border-gray-200 z-[100] min-w-[140px]"
-                    >
-                      {radiusOptions.map((r) => (
-                        <button
-                          key={r}
-                          onClick={() => {
-                            setRadius(r);
-                            setOpenDropdown(null);
-                          }}
-                          className={cn(
-                            "w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 transition-colors",
-                            filters.radius === r && "bg-primary/5 text-primary font-medium"
-                          )}
-                        >
-                          {r} km
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+            <div className="max-w-2xl mx-auto px-3 py-2">
+              <LocationBar
+                location={filters.location}
+                onLocationChange={setLocation}
+                radius={filters.radius}
+                onRadiusChange={setRadius}
+                onGeolocate={handleGeolocate}
+                isGeoLoading={isGeoLoading}
+                isReverseGeocoding={isReverseGeocoding}
+                openDropdown={openDropdown}
+                dropdownId="radius-sticky"
+                onToggleDropdown={setOpenDropdown}
+                variant="sticky"
+              />
             </div>
           </div>
         </div>
@@ -948,14 +1218,22 @@ export default function RecherchePage() {
             </div>
           </div>
 
+          {/* Résumé prix minimum garde */}
+          {!isLoading && results.length > 0 && filters.searchMode === "garde" && (
+            <SearchSummary results={sortedResults} searchDates={searchDates} />
+          )}
+
           {/* Results Content */}
           {isLoading ? (
-            <LoadingSkeletons viewMode={viewMode} />
+            <PawLoader
+              message="Recherche des prestations..."
+              submessage="Nous trouvons les meilleurs services pour votre compagnon"
+            />
           ) : results.length === 0 ? (
             <EmptyState onReset={resetAllFilters} />
           ) : isGrouped ? (
             <motion.div
-              initial={{ opacity: 0 }}
+              initial={hasLoadedRef.current ? false : { opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
               className="space-y-4"
@@ -974,12 +1252,12 @@ export default function RecherchePage() {
             </motion.div>
           ) : viewMode === "grid" ? (
             <motion.div
-              initial={{ opacity: 0 }}
+              initial={hasLoadedRef.current ? false : { opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
               className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
             >
-              {results.map((formule: FormuleResult, index: number) => (
+              {sortedResults.map((formule: FormuleResult, index: number) => (
                 <FormuleCardGrid
                   key={`${formule.announcerId}-${formule.formuleId}`}
                   formule={formule}
@@ -988,17 +1266,18 @@ export default function RecherchePage() {
                   onToggleFavorite={handleToggleFavorite}
                   isTogglingFavorite={togglingFavoriteId === formule.formuleId}
                   isAnnouncer={isAnnouncer}
+                  searchDates={searchDates}
                 />
               ))}
             </motion.div>
           ) : (
             <motion.div
-              initial={{ opacity: 0 }}
+              initial={hasLoadedRef.current ? false : { opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
               className="space-y-4"
             >
-              {results.map((formule: FormuleResult, index: number) => (
+              {sortedResults.map((formule: FormuleResult, index: number) => (
                 <FormuleCardList
                   key={`${formule.announcerId}-${formule.formuleId}`}
                   formule={formule}
@@ -1007,6 +1286,7 @@ export default function RecherchePage() {
                   onToggleFavorite={handleToggleFavorite}
                   isTogglingFavorite={togglingFavoriteId === formule.formuleId}
                   isAnnouncer={isAnnouncer}
+                  searchDates={searchDates}
                 />
               ))}
             </motion.div>
@@ -1015,7 +1295,7 @@ export default function RecherchePage() {
           {/* Load more button */}
           {!isLoading && hasMore && results.length > 0 && (
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={animInitial}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
               className="text-center mt-8"
@@ -1040,7 +1320,7 @@ export default function RecherchePage() {
           {/* No more results hint */}
           {!isLoading && !hasMore && results.length > 0 && (
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={animInitial}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
               className="text-center mt-8"
@@ -1095,589 +1375,3 @@ export default function RecherchePage() {
   );
 }
 
-// Sub-components
-
-function FilterDropdown({
-  label,
-  icon,
-  isActive,
-  isOpen,
-  onToggle,
-  minWidth = "min-w-[200px]",
-  children,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  isActive: boolean;
-  isOpen: boolean;
-  onToggle: () => void;
-  minWidth?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="relative">
-      <button
-        onClick={onToggle}
-        className={cn(
-          "flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all",
-          isActive
-            ? "bg-primary text-white"
-            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-        )}
-      >
-        <span className={cn(typeof icon === "string" ? "" : "")}>{icon}</span>
-        <span>{label}</span>
-        <ChevronDown className={cn("w-3.5 h-3.5 transition-transform duration-200", isOpen && "rotate-180")} />
-      </button>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
-            transition={{ duration: 0.15 }}
-            className={cn(
-              "absolute top-full left-1/2 -translate-x-1/2 mt-2 py-2 bg-white rounded-xl shadow-xl border border-gray-200 z-[100]",
-              minWidth
-            )}
-          >
-            {children}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-function ViewModeToggle({
-  viewMode,
-  setViewMode,
-}: {
-  viewMode: "grid" | "list";
-  setViewMode: (mode: "grid" | "list") => void;
-}) {
-  return (
-    <div className="flex items-center gap-1 p-1.5 bg-gray-100/80 rounded-xl border border-gray-200/50">
-      <motion.button
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-        onClick={() => setViewMode("grid")}
-        className={cn(
-          "relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-          viewMode === "grid"
-            ? "bg-white text-gray-900 shadow-md"
-            : "text-gray-500 hover:text-gray-700"
-        )}
-      >
-        <LayoutGrid className="w-4 h-4" />
-        <span className="hidden sm:inline">Grille</span>
-      </motion.button>
-      <motion.button
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-        onClick={() => setViewMode("list")}
-        className={cn(
-          "relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-          viewMode === "list"
-            ? "bg-white text-gray-900 shadow-md"
-            : "text-gray-500 hover:text-gray-700"
-        )}
-      >
-        <List className="w-4 h-4" />
-        <span className="hidden sm:inline">Liste</span>
-      </motion.button>
-    </div>
-  );
-}
-
-function LoadingSkeletons({ viewMode }: { viewMode: "grid" | "list" }) {
-  if (viewMode === "grid") {
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.05 }}
-            className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100"
-          >
-            <div className="aspect-[4/3] bg-gradient-to-br from-gray-100 to-gray-200 animate-pulse relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
-            </div>
-            <div className="p-5 space-y-3">
-              <div className="h-5 bg-gray-200 rounded-lg w-2/3 animate-pulse" />
-              <div className="h-4 bg-gray-100 rounded-lg w-1/2 animate-pulse" />
-              <div className="flex gap-2">
-                <div className="h-7 bg-gray-100 rounded-lg w-20 animate-pulse" />
-                <div className="h-7 bg-gray-100 rounded-lg w-16 animate-pulse" />
-              </div>
-              <div className="h-12 bg-gradient-to-r from-primary/20 to-primary/10 rounded-xl animate-pulse" />
-            </div>
-          </motion.div>
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <motion.div
-          key={i}
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: i * 0.05 }}
-          className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 flex"
-        >
-          <div className="w-48 h-40 bg-gradient-to-br from-gray-100 to-gray-200 flex-shrink-0 animate-pulse relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
-          </div>
-          <div className="flex-1 p-5 space-y-3">
-            <div className="flex justify-between">
-              <div className="h-6 bg-gray-200 rounded-lg w-1/3 animate-pulse" />
-              <div className="h-6 bg-gray-100 rounded-lg w-20 animate-pulse" />
-            </div>
-            <div className="h-4 bg-gray-100 rounded-lg w-1/4 animate-pulse" />
-            <div className="flex gap-2">
-              <div className="h-7 bg-gray-100 rounded-lg w-16 animate-pulse" />
-              <div className="h-7 bg-gray-100 rounded-lg w-20 animate-pulse" />
-              <div className="h-7 bg-gray-100 rounded-lg w-24 animate-pulse" />
-            </div>
-            <div className="h-11 bg-gradient-to-r from-primary/20 to-primary/10 rounded-xl w-44 animate-pulse" />
-          </div>
-        </motion.div>
-      ))}
-    </div>
-  );
-}
-
-function EmptyState({ onReset }: { onReset: () => void }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="text-center py-16 px-4"
-    >
-      {/* Illustration */}
-      <div className="relative w-32 h-32 mx-auto mb-8">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-secondary/20 rounded-full animate-pulse" />
-        <div className="absolute inset-2 bg-white rounded-full shadow-inner flex items-center justify-center">
-          <div className="relative">
-            <Search className="w-12 h-12 text-gray-300" />
-            <div className="absolute -top-1 -right-1 w-5 h-5 bg-amber-400 rounded-full flex items-center justify-center">
-              <span className="text-xs">?</span>
-            </div>
-          </div>
-        </div>
-        {/* Floating emojis */}
-        <motion.span
-          animate={{ y: [0, -8, 0] }}
-          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute -top-2 -left-2 text-2xl"
-        >
-          🐕
-        </motion.span>
-        <motion.span
-          animate={{ y: [0, -8, 0] }}
-          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut", delay: 0.3 }}
-          className="absolute -top-1 -right-3 text-2xl"
-        >
-          🐱
-        </motion.span>
-        <motion.span
-          animate={{ y: [0, -8, 0] }}
-          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut", delay: 0.6 }}
-          className="absolute -bottom-2 right-0 text-xl"
-        >
-          🐰
-        </motion.span>
-      </div>
-
-      <h3 className="text-2xl font-bold text-gray-900 mb-3">
-        Aucun prestataire trouvé
-      </h3>
-      <p className="text-gray-500 mb-8 max-w-md mx-auto leading-relaxed">
-        Nous n&apos;avons pas trouvé de garde correspondant à vos critères.
-        <br />
-        Essayez d&apos;élargir votre recherche !
-      </p>
-
-      <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={onReset}
-          className="px-6 py-3 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold rounded-xl shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all flex items-center gap-2"
-        >
-          <X className="w-4 h-4" />
-          Effacer tous les filtres
-        </motion.button>
-        <span className="text-gray-400 text-sm">ou</span>
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-colors flex items-center gap-2"
-        >
-          <MapPin className="w-4 h-4" />
-          Changer de localisation
-        </motion.button>
-      </div>
-    </motion.div>
-  );
-}
-
-// Date Picker Dropdown Component (Bottom sheet sur mobile, dropdown sur desktop)
-function DatePickerDropdown({
-  isOpen,
-  mode,
-  selectedDate,
-  startDate,
-  endDate,
-  onDateSelect,
-  onRangeSelect,
-  onClose,
-  accentColor = "primary",
-}: {
-  isOpen: boolean;
-  mode: "single" | "range";
-  selectedDate: string | null;
-  startDate: string | null;
-  endDate: string | null;
-  onDateSelect: (date: string) => void;
-  onRangeSelect: (start: string, end: string) => void;
-  onClose: () => void;
-  accentColor?: "primary" | "secondary";
-}) {
-  const [currentMonth, setCurrentMonth] = useState(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), 1);
-  });
-  const [rangeStart, setRangeStart] = useState<string | null>(startDate);
-  const [rangeEnd, setRangeEnd] = useState<string | null>(endDate);
-  const [selectingEnd, setSelectingEnd] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-
-  // Réinitialiser l'état de sélection quand le modal s'ouvre
-  // pour permettre de resélectionner une nouvelle date de début
-  useEffect(() => {
-    if (isOpen) {
-      setSelectingEnd(false);
-      setRangeStart(startDate);
-      setRangeEnd(endDate);
-    }
-  }, [isOpen, startDate, endDate]);
-
-  // Détecter si on est sur mobile
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 640);
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
-  }, []);
-
-  const monthNames = [
-    "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
-    "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
-  ];
-  const dayNames = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
-
-  const getDaysInMonth = (date: Date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const days: (Date | null)[] = [];
-
-    // Get the day of week (0 = Sunday, adjust for Monday start)
-    let startDay = firstDay.getDay() - 1;
-    if (startDay < 0) startDay = 6;
-
-    // Add empty slots for days before the first of the month
-    for (let i = 0; i < startDay; i++) {
-      days.push(null);
-    }
-
-    // Add all days of the month
-    for (let i = 1; i <= lastDay.getDate(); i++) {
-      days.push(new Date(year, month, i));
-    }
-
-    return days;
-  };
-
-  const formatDate = (date: Date): string => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  };
-
-  const isToday = (date: Date): boolean => {
-    const today = new Date();
-    return date.toDateString() === today.toDateString();
-  };
-
-  const isPast = (date: Date): boolean => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return date < today;
-  };
-
-  const isSelected = (date: Date): boolean => {
-    const dateStr = formatDate(date);
-    if (mode === "single") {
-      return dateStr === selectedDate;
-    }
-    return dateStr === rangeStart || dateStr === rangeEnd;
-  };
-
-  const isInRange = (date: Date): boolean => {
-    if (mode !== "range" || !rangeStart || !rangeEnd) return false;
-    const dateStr = formatDate(date);
-    return dateStr > rangeStart && dateStr < rangeEnd;
-  };
-
-  const handleDayClick = (date: Date) => {
-    if (isPast(date)) return;
-
-    const dateStr = formatDate(date);
-
-    if (mode === "single") {
-      onDateSelect(dateStr);
-    } else {
-      // Range mode
-      if (!rangeStart || selectingEnd === false) {
-        setRangeStart(dateStr);
-        setRangeEnd(null);
-        setSelectingEnd(true);
-      } else {
-        if (dateStr < rangeStart) {
-          // If clicked date is before start, swap
-          setRangeEnd(rangeStart);
-          setRangeStart(dateStr);
-        } else {
-          setRangeEnd(dateStr);
-        }
-        // Submit the range
-        const finalStart = dateStr < rangeStart ? dateStr : rangeStart;
-        const finalEnd = dateStr < rangeStart ? rangeStart : dateStr;
-        onRangeSelect(finalStart, finalEnd);
-      }
-    }
-  };
-
-  const prevMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
-  };
-
-  const nextMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
-  };
-
-  const days = getDaysInMonth(currentMonth);
-  const accentClasses = accentColor === "primary"
-    ? "bg-primary text-white"
-    : "bg-secondary text-white";
-  const rangeClasses = accentColor === "primary"
-    ? "bg-primary/10"
-    : "bg-secondary/10";
-
-  // Contenu du calendrier (partagé entre mobile et desktop)
-  const calendarContent = (
-    <div className="p-4 sm:p-5">
-      {/* Header mobile avec titre et bouton fermer */}
-      <div className="flex items-center justify-between mb-4 sm:hidden">
-        <h3 className="font-semibold text-gray-900 text-lg">
-          {mode === "range" ? "Sélectionner les dates" : "Sélectionner une date"}
-        </h3>
-        <button
-          onClick={onClose}
-          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-          aria-label="Fermer"
-        >
-          <X className="w-5 h-5 text-gray-500" />
-        </button>
-      </div>
-
-      {/* Navigation mois */}
-      <div className="flex items-center justify-between mb-4">
-        <button
-          onClick={prevMonth}
-          className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded-lg transition-colors"
-        >
-          <ChevronDown className="w-5 h-5 rotate-90" />
-        </button>
-        <span className="font-semibold text-gray-900">
-          {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
-        </span>
-        <button
-          onClick={nextMonth}
-          className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded-lg transition-colors"
-        >
-          <ChevronDown className="w-5 h-5 -rotate-90" />
-        </button>
-      </div>
-
-      {/* Day names */}
-      <div className="grid grid-cols-7 gap-1 mb-2">
-        {dayNames.map((day) => (
-          <div key={day} className="text-center text-xs font-medium text-gray-500 py-2">
-            {day}
-          </div>
-        ))}
-      </div>
-
-      {/* Days grid */}
-      <div className="grid grid-cols-7 gap-1">
-        {days.map((date, index) => {
-          if (!date) {
-            return <div key={`empty-${index}`} className="aspect-square" />;
-          }
-
-          const past = isPast(date);
-          const today = isToday(date);
-          const selected = isSelected(date);
-          const inRange = isInRange(date);
-
-          return (
-            <button
-              key={formatDate(date)}
-              onClick={() => handleDayClick(date)}
-              disabled={past}
-              className={cn(
-                "aspect-square flex items-center justify-center text-sm rounded-xl transition-all font-medium",
-                past && "text-gray-300 cursor-not-allowed",
-                !past && !selected && !inRange && "hover:bg-gray-100 active:bg-gray-200",
-                today && !selected && "ring-2 ring-gray-300 ring-offset-1",
-                selected && accentClasses,
-                inRange && rangeClasses
-              )}
-            >
-              {date.getDate()}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Range mode hint */}
-      {mode === "range" && (
-        <div className="mt-4 pt-4 border-t border-gray-100">
-          <p className="text-xs text-gray-500 text-center">
-            {!rangeStart
-              ? "Sélectionnez la date de début"
-              : !rangeEnd
-              ? "Sélectionnez la date de fin"
-              : "Plage sélectionnée"}
-          </p>
-          {rangeStart && rangeEnd && (
-            <p className="text-sm font-medium text-center mt-1 text-gray-700">
-              {new Date(rangeStart).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
-              {" → "}
-              {new Date(rangeEnd).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Quick actions */}
-      <div className="mt-4 pt-4 border-t border-gray-100 flex gap-2">
-        <button
-          onClick={() => {
-            const today = new Date();
-            const dateStr = formatDate(today);
-            if (mode === "single") {
-              onDateSelect(dateStr);
-            } else {
-              setRangeStart(dateStr);
-              setSelectingEnd(true);
-            }
-          }}
-          className="flex-1 px-3 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 rounded-xl transition-colors"
-        >
-          Aujourd&apos;hui
-        </button>
-        <button
-          onClick={() => {
-            const tomorrow = new Date();
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            const dateStr = formatDate(tomorrow);
-            if (mode === "single") {
-              onDateSelect(dateStr);
-            } else {
-              setRangeStart(dateStr);
-              setSelectingEnd(true);
-            }
-          }}
-          className="flex-1 px-3 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 rounded-xl transition-colors"
-        >
-          Demain
-        </button>
-        {mode === "range" && (
-          <button
-            onClick={() => {
-              const start = new Date();
-              start.setDate(start.getDate() + 1);
-              const end = new Date();
-              end.setDate(end.getDate() + 7);
-              onRangeSelect(formatDate(start), formatDate(end));
-            }}
-            className="flex-1 px-3 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 rounded-xl transition-colors"
-          >
-            Semaine
-          </button>
-        )}
-      </div>
-    </div>
-  );
-
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          {/* Overlay - ferme au clic */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className={cn(
-              "fixed inset-0 z-[100]",
-              isMobile ? "bg-black/40" : "bg-transparent"
-            )}
-            onClick={onClose}
-          />
-
-          {/* Mobile: Bottom Sheet */}
-          {isMobile ? (
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="fixed inset-x-0 bottom-0 z-[101] bg-white shadow-xl rounded-t-3xl max-h-[85vh] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Handle bar */}
-              <div className="flex justify-center pt-3 pb-1">
-                <div className="w-12 h-1.5 bg-gray-300 rounded-full" />
-              </div>
-              {calendarContent}
-            </motion.div>
-          ) : (
-            /* Desktop: Dropdown positionné */
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.15 }}
-              className="absolute top-full left-0 mt-2 z-[101] bg-white shadow-2xl border border-gray-200 rounded-2xl w-[340px]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {calendarContent}
-            </motion.div>
-          )}
-        </>
-      )}
-    </AnimatePresence>
-  );
-}

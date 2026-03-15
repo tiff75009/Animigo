@@ -167,9 +167,29 @@ export interface FormuleResult {
   announcerStatusType: "particulier" | "micro_entrepreneur" | "professionnel";
   isSapEligible?: boolean;
   announcerSapApproved?: boolean;
+  // Pricing détaillé pour calcul du total multi-jours
+  pricing?: {
+    hourly?: number;
+    halfDaily?: number;
+    daily?: number;
+    nightly?: number;
+  };
+  workdayHours?: number;
+  dayStartTime?: string;
+  dayEndTime?: string;
+  includeOvernightStay?: boolean;
+  clientBillingMode?: string;
   nextSlot?: NextSlot;
   collectiveSlots?: CollectiveSlotInfo[];
   spotsLeft?: number;
+}
+
+export interface SearchDates {
+  startDate?: string | null;
+  endDate?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  numberOfAnimals?: number;
 }
 
 interface FormuleCardProps {
@@ -179,6 +199,7 @@ interface FormuleCardProps {
   onToggleFavorite?: (formuleId: string) => void;
   isTogglingFavorite?: boolean;
   isAnnouncer?: boolean;
+  searchDates?: SearchDates;
 }
 
 // Helper pour formater la date du prochain créneau
@@ -263,9 +284,158 @@ const statusTypeConfig = {
 } as const;
 
 // Calcule le prix avec commission
-function getPriceWithCommission(price: number, statusType: "particulier" | "micro_entrepreneur" | "professionnel"): number {
+export function getPriceWithCommission(price: number, statusType: "particulier" | "micro_entrepreneur" | "professionnel"): number {
   const rate = COMMISSION_RATES[statusType] || 0.15;
   return Math.round(price * (1 + rate));
+}
+
+// Calcule le nombre de jours et nuits entre deux dates
+function computeStayInfo(startDate: string, endDate: string): { days: number; nights: number } {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diffMs = end.getTime() - start.getTime();
+  const diffDays = Math.max(1, Math.round(diffMs / (1000 * 60 * 60 * 24)));
+  // Nombre de nuits = nombre de jours entre les deux dates
+  // Si même jour, 0 nuit. Si J → J+1, 1 nuit.
+  const nights = diffDays;
+  // Nombre de jours de garde = nuits + 1 (jour d'arrivée + jour de départ)
+  const days = diffDays + 1;
+  return { days, nights };
+}
+
+// Convertit un horaire "HH:MM" en minutes depuis minuit
+function timeToMinutes(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + (m || 0);
+}
+
+// Calcule le prix total estimé pour un séjour (logique alignée sur calculateSmartPrice)
+export function computeTotalPrice(
+  formule: FormuleResult,
+  searchDates?: SearchDates,
+): { total: number; label: string } | null {
+  if (!searchDates?.startDate || !searchDates?.endDate) return null;
+
+  const { days, nights } = computeStayInfo(searchDates.startDate, searchDates.endDate);
+  const animals = searchDates.numberOfAnimals || 1;
+
+  // Paramètres de tarification de la formule
+  const pricing = formule.pricing;
+  const workdayHours = formule.workdayHours || 8;
+  const dayStartTime = formule.dayStartTime || "08:00";
+  const dayEndTime = formule.dayEndTime || "19:00";
+  const includeOvernight = formule.includeOvernightStay || false;
+  const billingMode = formule.clientBillingMode;
+
+  // Dériver les tarifs manquants à partir des tarifs disponibles
+  const hourlyRate = pricing?.hourly || (pricing?.daily ? Math.round(pricing.daily / workdayHours) : 0);
+  const halfDailyRate = pricing?.halfDaily || (pricing?.daily ? Math.round(pricing.daily / 2) : (hourlyRate ? hourlyRate * (workdayHours / 2) : 0));
+  const dailyRate = pricing?.daily || (hourlyRate ? hourlyRate * workdayHours : 0);
+  const nightlyRate = (includeOvernight && pricing?.nightly) ? pricing.nightly : 0;
+
+  // Taux de commission selon le statut de l'annonceur
+  const commissionRate = COMMISSION_RATES[formule.announcerStatusType] || 0.15;
+
+  // Tarif de base (journalier ou prix unitaire de la formule)
+  const baseRate = dailyRate || formule.price;
+  if (!baseRate) return null;
+
+  // Calcule le montant et le type de facturation pour une durée partielle
+  // En mode round_half_day : toujours arrondir (≤ demi-journée → demi-journée, sinon → journée)
+  // En mode round_full_day : toujours journée complète
+  const calcPartial = (hours: number): { amount: number; isHalf: boolean } => {
+    if (hours >= workdayHours) {
+      return { amount: dailyRate || baseRate, isHalf: false };
+    }
+    if (billingMode === "round_full_day") {
+      return { amount: dailyRate || baseRate, isHalf: false };
+    }
+    if (billingMode === "round_half_day") {
+      if (hours <= workdayHours / 2) {
+        return { amount: halfDailyRate, isHalf: true };
+      }
+      return { amount: dailyRate || baseRate, isHalf: false };
+    }
+    // Mode exact_hourly
+    if (hourlyRate > 0) {
+      const amt = Math.round(hourlyRate * hours);
+      return { amount: dailyRate > 0 ? Math.min(amt, dailyRate) : amt, isHalf: false };
+    }
+    return { amount: dailyRate || baseRate, isHalf: false };
+  };
+
+  let serviceTotal = 0;
+  let label = "";
+
+  if (days === 1) {
+    // Même jour
+    if (searchDates.startTime && searchDates.endTime) {
+      const hours = Math.max(0, (timeToMinutes(searchDates.endTime) - timeToMinutes(searchDates.startTime)) / 60);
+      const result = calcPartial(hours);
+      serviceTotal = result.amount;
+      label = result.isHalf ? "½ journée" : "1 jour";
+    } else {
+      serviceTotal = dailyRate || baseRate;
+      label = "1 jour";
+    }
+  } else {
+    // Multi-jours : compter en jours complets + demi-journées pour un label lisible
+
+    // Premier jour
+    let firstDay = { amount: dailyRate || baseRate, isHalf: false };
+    if (searchDates.startTime) {
+      const hours = Math.max(0, (timeToMinutes(dayEndTime) - timeToMinutes(searchDates.startTime)) / 60);
+      firstDay = calcPartial(hours);
+    }
+
+    // Jours complets entre le premier et le dernier
+    const fullDays = Math.max(0, days - 2);
+    const fullDaysAmount = fullDays * (dailyRate || baseRate);
+
+    // Dernier jour
+    let lastDay = { amount: dailyRate || baseRate, isHalf: false };
+    if (searchDates.endTime) {
+      const hours = Math.max(0, (timeToMinutes(searchDates.endTime) - timeToMinutes(dayStartTime)) / 60);
+      lastDay = calcPartial(hours);
+    }
+
+    // Nuitées
+    const nightsAmount = includeOvernight ? nights * nightlyRate : 0;
+
+    serviceTotal = firstDay.amount + fullDaysAmount + lastDay.amount + nightsAmount;
+
+    // Construire un label lisible : "X jours et demi" ou "X jours"
+    const halfCount = (firstDay.isHalf ? 1 : 0) + (lastDay.isHalf ? 1 : 0);
+    const fullCount = (firstDay.isHalf ? 0 : 1) + fullDays + (lastDay.isHalf ? 0 : 1);
+
+    if (halfCount === 0) {
+      label = `${fullCount} jour${fullCount > 1 ? "s" : ""}`;
+    } else if (halfCount === 1) {
+      if (fullCount === 0) {
+        label = "½ journée";
+      } else {
+        label = `${fullCount} jour${fullCount > 1 ? "s" : ""} et demi`;
+      }
+    } else {
+      // 2 demi-journées = 1 jour de plus en label
+      label = `${fullCount + 1} jour${fullCount + 1 > 1 ? "s" : ""}`;
+    }
+
+    if (includeOvernight && nights > 0 && nightlyRate > 0) {
+      label += `, ${nights} nuit${nights > 1 ? "s" : ""}`;
+    }
+  }
+
+  // Multiplier par le nombre d'animaux
+  if (animals > 1) {
+    serviceTotal *= animals;
+    label += ` × ${animals} animaux`;
+  }
+
+  // Appliquer la commission pour obtenir le prix client
+  const total = Math.round(serviceTotal * (1 + commissionRate));
+
+  return { total, label };
 }
 
 // Grid View Card - Design structuré en colonnes
@@ -276,6 +446,7 @@ export function FormuleCardGrid({
   onToggleFavorite,
   isTogglingFavorite = false,
   isAnnouncer = false,
+  searchDates,
 }: FormuleCardProps) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -287,6 +458,7 @@ export function FormuleCardGrid({
 
   const finalPrice = getPriceWithCommission(formule.price, formule.announcerStatusType);
   const priceLabel = priceUnitLabels[formule.priceUnit] || formule.priceUnit;
+  const totalEstimate = computeTotalPrice(formule, searchDates);
 
   const shortDistance = formule.announcerDistance !== undefined
     ? formule.announcerDistance < 1
@@ -480,7 +652,19 @@ export function FormuleCardGrid({
         <div className="px-4 pb-4">
           <div className="flex items-center justify-between gap-3 p-3 bg-gradient-to-r from-gray-50 to-gray-50/50 rounded-xl">
             <div>
-              {formule.numberOfSessions && formule.numberOfSessions > 1 ? (
+              {totalEstimate ? (
+                <>
+                  <span className="text-xl font-black bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
+                    {formatPrice(totalEstimate.total)}
+                  </span>
+                  <span className="block text-[11px] text-gray-400">
+                    {totalEstimate.label}
+                  </span>
+                  <span className="block text-[10px] text-gray-300">
+                    {formatPrice(finalPrice)}/{priceLabel || "jour"}
+                  </span>
+                </>
+              ) : formule.numberOfSessions && formule.numberOfSessions > 1 ? (
                 <>
                   <span className="text-xl font-black bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
                     {formatPrice(finalPrice * formule.numberOfSessions)}
@@ -529,6 +713,7 @@ export function FormuleCardList({
   onToggleFavorite,
   isTogglingFavorite = false,
   isAnnouncer = false,
+  searchDates,
 }: FormuleCardProps) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -540,6 +725,7 @@ export function FormuleCardList({
 
   const finalPrice = getPriceWithCommission(formule.price, formule.announcerStatusType);
   const priceLabel = priceUnitLabels[formule.priceUnit] || formule.priceUnit;
+  const totalEstimate = computeTotalPrice(formule, searchDates);
 
   const shortDistance = formule.announcerDistance !== undefined
     ? formule.announcerDistance < 1
@@ -730,7 +916,19 @@ export function FormuleCardList({
               <div className="flex items-center gap-3 ml-auto">
                 {/* Prix */}
                 <div className="text-right">
-                  {formule.numberOfSessions && formule.numberOfSessions > 1 ? (
+                  {totalEstimate ? (
+                    <>
+                      <span className="text-lg font-black bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
+                        {formatPrice(totalEstimate.total)}
+                      </span>
+                      <span className="block text-[10px] text-gray-400">
+                        {totalEstimate.label}
+                      </span>
+                      <span className="block text-[9px] text-gray-300">
+                        {formatPrice(finalPrice)}/{priceLabel || "jour"}
+                      </span>
+                    </>
+                  ) : formule.numberOfSessions && formule.numberOfSessions > 1 ? (
                     <>
                       <span className="text-lg font-black text-gray-900">
                         {formatPrice(finalPrice * formule.numberOfSessions)}

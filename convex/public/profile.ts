@@ -161,6 +161,7 @@ export const getPublicProfileBySlug = query({
               sessionType: variant.sessionType,
               numberOfSessions: variant.numberOfSessions,
               maxAnimalsPerSession: variant.maxAnimalsPerSession,
+              duration: variant.duration ?? null,
             })),
           };
         })
@@ -192,6 +193,36 @@ export const getPublicProfileBySlug = query({
         }));
     }
 
+    // Récupérer les préférences utilisateur (horaires d'acceptation)
+    const preferences = await ctx.db
+      .query("userPreferences")
+      .withIndex("by_user", (q: any) => q.eq("userId", user._id))
+      .first();
+
+    // Récupérer les taux de commission et Stripe depuis systemConfig
+    const getConfigValue = async (key: string, defaultValue: number) => {
+      const config = await ctx.db
+        .query("systemConfig")
+        .withIndex("by_key", (q: any) => q.eq("key", key))
+        .first();
+      return config ? parseFloat(config.value) : defaultValue;
+    };
+
+    // Déterminer le type de commission selon le type de compte
+    let commissionType = "particulier";
+    if (user.accountType === "annonceur_pro") {
+      commissionType = user.companyType === "micro_enterprise" ? "micro_entrepreneur" : "professionnel";
+    }
+
+    const commissionRate = await getConfigValue(`commission_${commissionType}`,
+      commissionType === "particulier" ? 15 : commissionType === "micro_entrepreneur" ? 12 : 10
+    );
+    const stripeFeeRate = await getConfigValue("stripe_fee_rate", 3);
+    const vatRate = await getConfigValue("commission_vat_rate", 20);
+
+    // TVA uniquement pour les pros assujettis (pas micro-entrepreneurs)
+    const isVatApplicable = user.accountType === "annonceur_pro" && user.companyType !== "micro_enterprise";
+
     // Déterminer le type de membre
     const memberSince = new Date(user.createdAt).getFullYear().toString();
 
@@ -219,8 +250,15 @@ export const getPublicProfileBySlug = query({
       isDisplayingLogo: !!(profile?.listingDisplayImage === "logo" && profile?.companyLogoUrl),
       coverImage: profile?.coverImageUrl || null,
       bio: profile?.description || profile?.bio || null,
-      location: profile?.location || profile?.city || null,
+      location: (() => {
+        // Ne pas exposer la rue/numéro — afficher uniquement ville, CP, pays
+        const parts: string[] = [];
+        if (profile?.city) parts.push(profile.city);
+        if (profile?.postalCode) parts.push(profile.postalCode);
+        return parts.length > 0 ? parts.join(", ") : (profile?.location || null);
+      })(),
       city: profile?.city || null,
+      postalCode: profile?.postalCode || null,
       coordinates: profile?.coordinates || null,
       radius: profile?.radius || null,
       // Équipement (pour annonceurs)
@@ -250,13 +288,29 @@ export const getPublicProfileBySlug = query({
       services,
       // Créneaux collectifs futurs
       collectiveSlots,
+      // Infos booking (buffers, horaires)
+      bookingSettings: {
+        bufferBefore: profile?.bufferBefore ?? 0,
+        bufferAfter: profile?.bufferAfter ?? 0,
+        acceptReservationsFrom: preferences?.acceptReservationsFrom ?? "08:00",
+        acceptReservationsTo: preferences?.acceptReservationsTo ?? "20:00",
+      },
+      // Infos prix (commission, TVA, Stripe)
+      pricing: {
+        commissionRate,
+        stripeFeeRate,
+        vatRate: isVatApplicable ? vatRate : 0,
+        isVatApplicable,
+        companyType: user.companyType ?? null,
+      },
     };
   },
 });
 
 /**
- * Query publique pour les disponibilités d'un annonceur par mois.
- * Retourne uniquement les statuts (pas les détails de missions/réservations).
+ * Query publique pour les disponibilités d'un annonceur.
+ * Croise les disponibilités explicites avec les missions réservées
+ * pour calculer le vrai statut de chaque jour.
  */
 export const getPublicAvailability = query({
   args: {
@@ -276,33 +330,201 @@ export const getPublicAvailability = query({
         .withIndex("by_slug", (q) => q.eq("slug", args.slug))
         .first();
     }
-    if (!user || !user.isActive) return [];
+    if (!user || !user.isActive) return { availability: [], collectiveSlots: [] };
 
-    // Récupérer les disponibilités
-    const availabilities = await ctx.db
+    // Récupérer les disponibilités explicites
+    const allAvailabilities = await ctx.db
       .query("availability")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .collect();
 
-    const filtered = availabilities.filter(
-      (a) => a.date >= args.startDate && a.date <= args.endDate
+    // Map des disponibilités par date : garder TOUTES les entrées par date
+    // Un annonceur peut avoir plusieurs entrées par date (une par categoryTypeId)
+    const availByDate = new Map<string, (typeof allAvailabilities)>();
+    for (const a of allAvailabilities) {
+      if (a.date < args.startDate || a.date > args.endDate) continue;
+      const existing = availByDate.get(a.date) || [];
+      existing.push(a);
+      availByDate.set(a.date, existing);
+    }
+
+    // Récupérer les missions actives (ni annulées ni refusées)
+    const missions = await ctx.db
+      .query("missions")
+      .withIndex("by_announcer", (q: any) => q.eq("announcerId", user._id))
+      .collect();
+
+    const activeMissions = missions.filter(
+      (m) => m.status !== "cancelled" && m.status !== "refused"
     );
 
     // Récupérer les créneaux collectifs actifs sur la période
-    const collectiveSlots = await ctx.db
+    const allCollectiveSlots = await ctx.db
       .query("collectiveSlots")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .collect();
 
-    const activeSlots = collectiveSlots.filter(
+    const activeSlots = allCollectiveSlots.filter(
       (s) => s.isActive && !s.isCancelled && s.date >= args.startDate && s.date <= args.endDate
     );
 
+    // Récupérer la capacité max et buffers depuis le profil
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .first();
+    const maxAnimalsPerSlot = profile?.maxAnimalsPerSlot ?? 1;
+    const bufferBefore = profile?.bufferBefore ?? 0;
+    const bufferAfter = profile?.bufferAfter ?? 0;
+
+    // Récupérer les horaires d'acceptation des réservations
+    const preferences = await ctx.db
+      .query("userPreferences")
+      .withIndex("by_user", (q: any) => q.eq("userId", user._id))
+      .first();
+    const acceptFrom = preferences?.acceptReservationsFrom ?? "08:00";
+    const acceptTo = preferences?.acceptReservationsTo ?? "20:00";
+
+    // Helper: ajouter/soustraire des minutes à un horaire "HH:MM"
+    const addMinutes = (time: string, mins: number): string => {
+      const [h, m] = time.split(":").map(Number);
+      const total = Math.max(0, Math.min(1440, h * 60 + m + mins));
+      return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+    };
+
+    // Générer toutes les dates de la plage
+    const allDates: string[] = [];
+    const start = new Date(args.startDate + "T00:00:00");
+    const end = new Date(args.endDate + "T00:00:00");
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      allDates.push(
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+      );
+    }
+
+    const todayDate = new Date();
+    const todayStr = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, "0")}-${String(todayDate.getDate()).padStart(2, "0")}`;
+
+    // Helper: vérifier si deux plages de dates se chevauchent
+    const datesOverlap = (s1: string, e1: string, s2: string, e2: string) =>
+      s1 <= e2 && e1 >= s2;
+
+    // Construire le calendrier enrichi
+    const availability: {
+      date: string;
+      status: "available" | "partial" | "unavailable" | "booked_partial" | "booked_full";
+      timeSlots: { startTime: string; endTime: string }[];
+      bookedSlots: { startTime: string; endTime: string }[];
+      bookedCount: number;
+      maxCapacity: number;
+    }[] = [];
+
+    for (const date of allDates) {
+      if (date < todayStr) {
+        availability.push({ date, status: "unavailable", timeSlots: [], bookedSlots: [], bookedCount: 0, maxCapacity: maxAnimalsPerSlot });
+        continue;
+      }
+
+      const dayAvails = availByDate.get(date) || [];
+      // Vérifier si au moins une entrée est "available" ou "partial"
+      const hasExplicitAvail = dayAvails.some((a) => a.status === "available" || a.status === "partial");
+      // Vérifier si toutes les entrées sont explicitement "unavailable"
+      const allExplicitUnavail = dayAvails.length > 0 && dayAvails.every((a) => a.status === "unavailable");
+      // Récupérer les timeSlots de la première entrée disponible
+      const bestAvail = dayAvails.find((a) => a.status === "available" || a.status === "partial");
+      const bestStatus = bestAvail?.status ?? (dayAvails[0]?.status);
+
+      // Missions actives ce jour
+      const dayMissions = activeMissions.filter((m) => datesOverlap(m.startDate, m.endDate, date, date));
+
+      // Calculer les créneaux réservés avec buffers
+      const bookedSlots: { startTime: string; endTime: string }[] = [];
+      for (const m of dayMissions) {
+        if (m.startTime && m.endTime) {
+          bookedSlots.push({
+            startTime: addMinutes(m.startTime, -bufferBefore),
+            endTime: addMinutes(m.endTime, bufferAfter),
+          });
+        }
+      }
+
+      // Créneaux collectifs ce jour
+      const dayCollective = activeSlots.filter((s) => s.date === date);
+      // Ajouter les collectifs aux créneaux bloqués
+      for (const s of dayCollective) {
+        bookedSlots.push({
+          startTime: addMinutes(s.startTime, -bufferBefore),
+          endTime: addMinutes(s.endTime, bufferAfter),
+        });
+      }
+
+      // Trier les créneaux réservés
+      bookedSlots.sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+      // Pas de dispo explicite, pas de missions, pas de collectifs → indisponible
+      if (!hasExplicitAvail && dayMissions.length === 0 && dayCollective.length === 0) {
+        availability.push({ date, status: "unavailable", timeSlots: [], bookedSlots: [], bookedCount: 0, maxCapacity: maxAnimalsPerSlot });
+        continue;
+      }
+
+      // Créneaux collectifs sans missions ni dispo explicite → partial (il y a des créneaux dispo)
+      if (!hasExplicitAvail && dayMissions.length === 0 && dayCollective.length > 0) {
+        const allFull = dayCollective.every((s) => (s.bookedAnimals ?? 0) >= s.maxAnimals);
+        availability.push({
+          date,
+          status: allFull ? "booked_full" : "booked_partial",
+          timeSlots: [],
+          bookedSlots,
+          bookedCount: 0,
+          maxCapacity: maxAnimalsPerSlot,
+        });
+        continue;
+      }
+
+      // Indisponibilité explicite (toutes les entrées sont "unavailable")
+      if (allExplicitUnavail && !hasExplicitAvail) {
+        availability.push({ date, status: "unavailable", timeSlots: [], bookedSlots, bookedCount: dayMissions.length, maxCapacity: maxAnimalsPerSlot });
+        continue;
+      }
+
+      const bookedCount = dayMissions.length;
+      const timeSlots = bestAvail?.timeSlots || [];
+
+      if (bookedCount === 0 && dayCollective.length === 0) {
+        // Aucune réservation → disponible (si dispo explicite)
+        availability.push({
+          date,
+          status: hasExplicitAvail ? (bestStatus === "partial" ? "partial" : "available") : "unavailable",
+          timeSlots: timeSlots as { startTime: string; endTime: string }[],
+          bookedSlots: [],
+          bookedCount: 0,
+          maxCapacity: maxAnimalsPerSlot,
+        });
+      } else if (bookedCount >= maxAnimalsPerSlot) {
+        // Capacité maximale atteinte → complet (rouge)
+        availability.push({
+          date,
+          status: "booked_full",
+          timeSlots: timeSlots as { startTime: string; endTime: string }[],
+          bookedSlots,
+          bookedCount,
+          maxCapacity: maxAnimalsPerSlot,
+        });
+      } else {
+        // Des réservations mais encore de la place → partiellement occupé (orange)
+        availability.push({
+          date,
+          status: "booked_partial",
+          timeSlots: timeSlots as { startTime: string; endTime: string }[],
+          bookedSlots,
+          bookedCount,
+          maxCapacity: maxAnimalsPerSlot,
+        });
+      }
+    }
+
     return {
-      availability: filtered.map((a) => ({
-        date: a.date,
-        status: a.status,
-      })),
+      availability,
       collectiveSlots: activeSlots.map((s) => ({
         id: s._id,
         variantId: s.variantId,
@@ -312,6 +534,12 @@ export const getPublicAvailability = query({
         maxAnimals: s.maxAnimals,
         bookedAnimals: s.bookedAnimals ?? 0,
       })),
+      bookingSettings: {
+        bufferBefore,
+        bufferAfter,
+        acceptFrom,
+        acceptTo,
+      },
     };
   },
 });

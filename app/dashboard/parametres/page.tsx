@@ -2034,8 +2034,6 @@ function PlanningTab() {
   // Local state for user preferences
   const [acceptReservationsFrom, setAcceptReservationsFrom] = useState("08:00");
   const [acceptReservationsTo, setAcceptReservationsTo] = useState("20:00");
-  const [billingMode, setBillingMode] = useState<"round_up" | "exact">("round_up");
-  const [roundUpThreshold, setRoundUpThreshold] = useState(2);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
@@ -2050,8 +2048,6 @@ function PlanningTab() {
     if (preferences) {
       setAcceptReservationsFrom(preferences.acceptReservationsFrom ?? "08:00");
       setAcceptReservationsTo(preferences.acceptReservationsTo ?? "20:00");
-      setBillingMode(preferences.billingMode ?? "round_up");
-      setRoundUpThreshold(preferences.roundUpThreshold ?? 2);
     }
   }, [preferences]);
 
@@ -2078,8 +2074,6 @@ function PlanningTab() {
         token,
         acceptReservationsFrom,
         acceptReservationsTo,
-        billingMode,
-        roundUpThreshold,
       });
 
       // Sauvegarder les temps de préparation (buffers)
@@ -2106,35 +2100,6 @@ function PlanningTab() {
     }
   };
 
-  // Example overflow hours (user can see how billing works)
-  const [exampleOverflow, setExampleOverflow] = useState(3);
-
-  // Calculate example billing
-  const calculateExample = () => {
-    const effectiveThreshold = Math.min(roundUpThreshold, halfDayHours);
-
-    if (billingMode === "exact") {
-      if (exampleOverflow === 0) {
-        return `1 journée (${workdayHours}h)`;
-      }
-      return `1 journée (${workdayHours}h) + ${exampleOverflow}h supplémentaires facturées au tarif horaire`;
-    } else {
-      if (exampleOverflow === 0) {
-        return `1 journée (${workdayHours}h)`;
-      }
-      if (exampleOverflow >= effectiveThreshold) {
-        const halfDaysNeeded = Math.ceil(exampleOverflow / halfDayHours);
-        if (halfDaysNeeded === 1) {
-          return `1 journée et demie (${workdayHours + halfDayHours}h facturées)`;
-        } else if (halfDaysNeeded === 2) {
-          return `2 journées (${workdayHours * 2}h facturées)`;
-        } else {
-          return `1 journée + ${halfDaysNeeded} demi-journées (${workdayHours + halfDayHours * halfDaysNeeded}h facturées)`;
-        }
-      }
-      return `1 journée (${workdayHours}h) + ${exampleOverflow}h supplémentaires`;
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -2281,137 +2246,6 @@ function PlanningTab() {
         </div>
       </SectionCard>
 
-      {/* Billing Mode */}
-      <SectionCard title="Mode de facturation" icon={Calculator}>
-        <div className="space-y-6">
-          <p className="text-sm text-text-light">
-            Choisissez comment facturer les dépassements d&apos;horaires.
-          </p>
-
-          {/* Billing Mode Options */}
-          <div className="space-y-3">
-            <motion.button
-              onClick={() => setBillingMode("round_up")}
-              className={cn(
-                "w-full p-4 rounded-xl border-2 text-left transition-colors",
-                billingMode === "round_up"
-                  ? "border-primary bg-primary/5"
-                  : "border-gray-200 hover:border-gray-300"
-              )}
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-            >
-              <div className="flex items-start gap-3">
-                <div className={cn(
-                  "w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5",
-                  billingMode === "round_up" ? "border-primary bg-primary" : "border-gray-300"
-                )}>
-                  {billingMode === "round_up" && <Check className="w-3 h-3 text-white" />}
-                </div>
-                <div>
-                  <p className="font-semibold text-foreground">Arrondir à la demi-journée</p>
-                  <p className="text-sm text-text-light mt-1">
-                    Si le dépassement atteint le seuil, facturer une demi-journée ou journée complète.
-                  </p>
-                </div>
-              </div>
-            </motion.button>
-
-            <motion.button
-              onClick={() => setBillingMode("exact")}
-              className={cn(
-                "w-full p-4 rounded-xl border-2 text-left transition-colors",
-                billingMode === "exact"
-                  ? "border-primary bg-primary/5"
-                  : "border-gray-200 hover:border-gray-300"
-              )}
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-            >
-              <div className="flex items-start gap-3">
-                <div className={cn(
-                  "w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5",
-                  billingMode === "exact" ? "border-primary bg-primary" : "border-gray-300"
-                )}>
-                  {billingMode === "exact" && <Check className="w-3 h-3 text-white" />}
-                </div>
-                <div>
-                  <p className="font-semibold text-foreground">Facturer les heures exactes</p>
-                  <p className="text-sm text-text-light mt-1">
-                    Facturer le tarif journée + les heures supplémentaires au tarif horaire.
-                  </p>
-                </div>
-              </div>
-            </motion.button>
-          </div>
-
-          {/* Round Up Threshold (only if round_up mode) */}
-          {billingMode === "round_up" && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-            >
-              <label className="block text-sm font-medium text-foreground mb-2">
-                Seuil d&apos;arrondi (heures)
-              </label>
-              <p className="text-xs text-text-light mb-3">
-                Si le dépassement est supérieur ou égal à ce seuil, arrondir à la demi-journée supérieure.
-              </p>
-              <div className="flex items-center gap-4">
-                <input
-                  type="range"
-                  min={1}
-                  max={Math.max(halfDayHours, 2)}
-                  value={Math.min(roundUpThreshold, halfDayHours)}
-                  onChange={(e) => setRoundUpThreshold(Number(e.target.value))}
-                  className="flex-1 accent-primary"
-                />
-                <div className="w-20 px-3 py-2 bg-gray-100 rounded-lg text-center font-semibold text-primary">
-                  {Math.min(roundUpThreshold, halfDayHours)}h
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {/* Example */}
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-            <h4 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
-              <AlertCircle className="w-4 h-4" />
-              Exemple de facturation
-            </h4>
-
-            {/* Interactive example */}
-            <div className="mb-3">
-              <label className="block text-xs text-blue-700 mb-2">
-                Simuler une réservation : 1 journée + heures supplémentaires
-              </label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="range"
-                  min={0}
-                  max={halfDayHours * 2}
-                  value={exampleOverflow}
-                  onChange={(e) => setExampleOverflow(Number(e.target.value))}
-                  className="flex-1 accent-blue-600"
-                />
-                <div className="w-16 px-2 py-1 bg-blue-100 rounded text-center text-sm font-semibold text-blue-800">
-                  +{exampleOverflow}h
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-blue-100/50 rounded-lg p-3">
-              <p className="text-sm text-blue-700">
-                Réservation de <span className="font-semibold">{workdayHours + exampleOverflow} heures</span> ({workdayHours}h + {exampleOverflow}h) :
-              </p>
-              <p className="text-sm text-blue-800 font-medium mt-1">
-                <ChevronRight className="w-4 h-4 inline" /> {calculateExample()}
-              </p>
-            </div>
-          </div>
-        </div>
-      </SectionCard>
 
       {/* Politique d'annulation */}
       <SectionCard icon={Ban} title="Politique d'annulation">

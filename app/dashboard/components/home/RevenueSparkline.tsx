@@ -22,6 +22,7 @@ function formatCurrency(amount: number) {
 }
 
 export function RevenueSparkline({ data }: RevenueSparklineProps) {
+  if (!data) return null;
   const hasData = data.some((m) => m.earnings > 0);
   if (!hasData) return null;
 

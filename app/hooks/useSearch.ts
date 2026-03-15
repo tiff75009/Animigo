@@ -98,10 +98,15 @@ export interface SearchFilters {
   endDate: string | null; // "YYYY-MM-DD"
   // Pour plage horaire (allowRangeBooking + même jour)
   endTime: string | null; // "HH:MM"
+  // Heures de début/fin de la garde
+  gardeStartTime: string | null; // "HH:MM"
+  gardeEndTime: string | null; // "HH:MM"
   // Options
   includeUnavailable: boolean;
   // Mode de recherche
   searchMode: "garde" | "services" | null;
+  // Nombre d'animaux (pour garde)
+  numberOfAnimals: number;
 }
 
 export interface NextSlot {
@@ -179,6 +184,18 @@ export interface FormuleResult {
   announcerStatusType: "particulier" | "micro_entrepreneur" | "professionnel";
   isSapEligible?: boolean;
   announcerSapApproved?: boolean;
+  // Pricing détaillé pour calcul du total multi-jours
+  pricing?: {
+    hourly?: number;
+    halfDaily?: number;
+    daily?: number;
+    nightly?: number;
+  };
+  workdayHours?: number;
+  dayStartTime?: string;
+  dayEndTime?: string;
+  includeOvernightStay?: boolean;
+  clientBillingMode?: string;
   nextSlot?: NextSlot;
   collectiveSlots?: CollectiveSlotInfo[];
   spotsLeft?: number;
@@ -194,8 +211,11 @@ const initialFilters: SearchFilters = {
   startDate: null,
   endDate: null,
   endTime: null,
+  gardeStartTime: null,
+  gardeEndTime: null,
   includeUnavailable: false,
   searchMode: "garde", // Par défaut en mode garde
+  numberOfAnimals: 1,
 };
 
 // Taille de page commune pour tous les hooks
@@ -1125,6 +1145,11 @@ export function useFormuleSearch() {
       radiusKm?: number;
       date?: string;
       time?: string;
+      startDate?: string;
+      endDate?: string;
+      startTime?: string;
+      endTime?: string;
+      numberOfAnimals?: number;
       sessionType?: "individual" | "collective";
       serviceLocation?: ("announcer_home" | "client_home")[];
       accountTypes?: string[];
@@ -1166,6 +1191,25 @@ export function useFormuleSearch() {
       if (filters.time) {
         args.time = filters.time;
       }
+    }
+
+    // Plage de dates (garde)
+    if (filters.startDate && filters.endDate) {
+      args.startDate = filters.startDate;
+      args.endDate = filters.endDate;
+    }
+
+    // Heures de début/fin (garde)
+    if (filters.gardeStartTime) {
+      args.startTime = filters.gardeStartTime;
+    }
+    if (filters.gardeEndTime) {
+      args.endTime = filters.gardeEndTime;
+    }
+
+    // Nombre d'animaux
+    if (filters.numberOfAnimals > 1) {
+      args.numberOfAnimals = filters.numberOfAnimals;
     }
 
     // Filtres avancés
@@ -1316,6 +1360,18 @@ export function useFormuleSearch() {
     setFilters((prev) => ({ ...prev, time }));
   }, []);
 
+  const setDateRange = useCallback((startDate: string | null, endDate: string | null) => {
+    setFilters((prev) => ({ ...prev, startDate, endDate, date: null }));
+  }, []);
+
+  const setGardeTimes = useCallback((gardeStartTime: string | null, gardeEndTime: string | null) => {
+    setFilters((prev) => ({ ...prev, gardeStartTime, gardeEndTime }));
+  }, []);
+
+  const setNumberOfAnimals = useCallback((numberOfAnimals: number) => {
+    setFilters((prev) => ({ ...prev, numberOfAnimals }));
+  }, []);
+
   const setSearchMode = useCallback((mode: "garde" | "services" | null) => {
     setFilters((prev) => ({
       ...prev,
@@ -1355,6 +1411,9 @@ export function useFormuleSearch() {
     setRadius,
     setDate,
     setTime,
+    setDateRange,
+    setGardeTimes,
+    setNumberOfAnimals,
     setSearchMode,
     resetFilters,
     updateAdvancedFilters,

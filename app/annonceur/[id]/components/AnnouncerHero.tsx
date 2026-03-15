@@ -156,9 +156,11 @@ export default function AnnouncerHero({
               <div className="flex-1 text-center sm:text-left min-w-0">
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                   <div>
-                    <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
-                      {announcer.firstName} {announcer.lastName.charAt(0)}.
-                    </h1>
+                    <Link href={`/profil/${announcer.username || slug}`}>
+                      <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate hover:text-primary transition-colors">
+                        {announcer.firstName} {announcer.lastName.charAt(0)}.
+                      </h1>
+                    </Link>
                     {announcer.username && (
                       <span className="text-sm text-gray-400">@{announcer.username}</span>
                     )}

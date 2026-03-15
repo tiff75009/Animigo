@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useMemo, useCallback, memo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   MapPin,
@@ -22,18 +23,14 @@ import {
   Car,
   Baby,
   CigaretteOff,
-  Cigarette,
   Utensils,
   Shield,
   ShieldCheck,
   ImageIcon,
   PawPrint,
-  MessageSquare,
   Heart,
-  Sparkles,
   Check,
   X as XIcon,
-  Loader2,
   Camera,
   ExternalLink,
   Pencil,
@@ -43,322 +40,537 @@ import {
   Users,
   ThumbsUp,
   MessageSquarePlus,
+  ArrowRight,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { Navbar } from "@/app/components/navbar";
 import ImageLightbox from "@/app/components/ui/ImageLightbox";
 import { useAuth } from "@/app/hooks/useAuth";
+import { getAuthToken } from "@/app/lib/authToken";
+import ShareModal from "./components/ShareModal";
+import {
+  animalEmojis,
+  calculateAge,
+  type AnimalData,
+  type ReviewData,
+  type FormuleData,
+  type ServiceData,
+  type PricingInfo,
+  type SelectedFormule,
+  type CollectiveSlotData,
+  getFormuleDisplayPrice,
+  formatPriceCents,
+  computeClientPrice,
+} from "./components/types";
 
-// Emojis pour les types d'animaux
-const animalEmojis: Record<string, string> = {
-  chien: "🐕",
-  chat: "🐱",
-  oiseau: "🐦",
-  rongeur: "🐹",
-  poisson: "🐠",
-  reptile: "🦎",
-  nac: "🐾",
-};
+// ──────────────────────────────────────────────────────
+// Calendrier public des disponibilités — vues 3j / semaine / mois
+// ──────────────────────────────────────────────────────
+type AvailView = "3days" | "week" | "month";
 
-// Labels pour le genre
-const genderLabels: Record<string, string> = {
-  male: "Mâle",
-  female: "Femelle",
-  unknown: "Non précisé",
-};
+function formatDateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
-// Labels pour la taille
-const sizeLabels: Record<string, string> = {
-  petit: "Petit",
-  moyen: "Moyen",
-  grand: "Grand",
-  "très grand": "Très grand",
-  tres_grand: "Très grand",
-};
+const shortDayNames = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
+const fullDayNames = ["L", "M", "M", "J", "V", "S", "D"];
+const monthNamesShort = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
+const monthNamesFull = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
-// Calculer l'âge à partir de la date de naissance
-function calculateAge(birthDate: string | null | undefined): number | null {
-  if (!birthDate) return null;
-  const birth = new Date(birthDate);
+const PublicAvailabilityCalendar = memo(function PublicAvailabilityCalendar({ slug, selectedFormuleId, selectedFormuleDuration }: { slug: string; selectedFormuleId?: string | null; selectedFormuleDuration?: number | null }) {
+  const [view, setView] = useState<AvailView>("3days");
+  const [offset, setOffset] = useState(0);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
   const today = new Date();
-  let age = today.getFullYear() - birth.getFullYear();
-  const monthDiff = today.getMonth() - birth.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-    age--;
-  }
-  return age > 0 ? age : null;
-}
+  today.setHours(0, 0, 0, 0);
+  const todayKey = formatDateKey(today);
 
-// Type pour les animaux
-interface AnimalData {
-  id: string;
-  name: string;
-  slug: string;
-  type: string;
-  breed?: string | null;
-  gender?: string;
-  birthDate?: string | null;
-  weight?: number | null;
-  size?: string | null;
-  description?: string | null;
-  profilePhoto?: string | null;
-  galleryPhotos?: string[];
-  goodWithChildren?: boolean | null;
-  goodWithDogs?: boolean | null;
-  goodWithCats?: boolean | null;
-  goodWithOtherAnimals?: boolean | null;
-  behaviorTraits?: string[];
-}
+  // Calculer la plage de dates selon la vue
+  const { days, startDate, endDate, label } = (() => {
+    if (view === "month") {
+      const baseMonth = new Date(today.getFullYear(), today.getMonth() + offset, 1);
+      const y = baseMonth.getFullYear();
+      const m = baseMonth.getMonth();
+      const daysInMonth = new Date(y, m + 1, 0).getDate();
+      const allDays: Date[] = [];
+      for (let i = 1; i <= daysInMonth; i++) allDays.push(new Date(y, m, i));
+      return {
+        days: allDays,
+        startDate: formatDateKey(allDays[0]),
+        endDate: formatDateKey(allDays[allDays.length - 1]),
+        label: `${monthNamesFull[m]} ${y}`,
+      };
+    }
+    const count = view === "3days" ? 3 : 7;
+    const base = new Date(today);
+    base.setDate(base.getDate() + offset * count);
+    const allDays: Date[] = [];
+    for (let i = 0; i < count; i++) {
+      const d = new Date(base);
+      d.setDate(d.getDate() + i);
+      allDays.push(d);
+    }
+    const first = allDays[0];
+    const last = allDays[allDays.length - 1];
+    const lbl = first.getMonth() === last.getMonth()
+      ? `${first.getDate()} – ${last.getDate()} ${monthNamesShort[first.getMonth()]}`
+      : `${first.getDate()} ${monthNamesShort[first.getMonth()]} – ${last.getDate()} ${monthNamesShort[last.getMonth()]}`;
+    return { days: allDays, startDate: formatDateKey(first), endDate: formatDateKey(last), label: lbl };
+  })();
 
-// Type pour les avis
-interface ReviewData {
-  id: string;
-  rating: number;
-  comment?: string | null;
-  createdAt: number;
-  reviewer: {
-    firstName: string;
-    lastName: string;
+  const data = useQuery(api.public.profile.getPublicAvailability, { slug, startDate, endDate });
+
+  // Helpers
+  type DayStatus = "available" | "partial" | "unavailable" | "booked_partial" | "booked_full" | "none";
+  const getDayStatus = (dateKey: string): DayStatus => {
+    if (!data) return "none";
+    const dayEntry = data.availability.find((a: any) => a.date === dateKey);
+    if (!dayEntry) return "none";
+    return dayEntry.status as DayStatus;
   };
-}
 
-// Type pour les formules
-interface FormuleData {
-  id: string;
-  name: string;
-  description?: string | null;
-  basePrice?: number | null;
-  priceUnit?: string | null;
-  pricePerHour?: number | null;
-  pricePerHalfDay?: number | null;
-  pricePerDay?: number | null;
-  pricePerWeek?: number | null;
-  pricePerMonth?: number | null;
-  animalTypes?: string[];
-  sessionType?: "individual" | "collective" | null;
-  numberOfSessions?: number | null;
-  maxAnimalsPerSession?: number | null;
-}
+  const getDayInfo = (dateKey: string) => {
+    if (!data) return null;
+    return data.availability.find((a: any) => a.date === dateKey) || null;
+  };
 
-// Type pour les services
-interface ServiceData {
-  id: string;
-  categoryName: string;
-  categorySlug?: string;
-  categoryIcon: string;
-  animalTypes: string[];
-  formules: FormuleData[];
-}
+  const getSlotsForDate = (dateKey: string): CollectiveSlotData[] => {
+    if (!data) return [];
+    const slots = data.collectiveSlots.filter((s: any) => s.date === dateKey) as CollectiveSlotData[];
+    if (selectedFormuleId) return slots.filter((s) => s.variantId === selectedFormuleId);
+    return slots;
+  };
 
-// Type pour les créneaux collectifs
-interface CollectiveSlotData {
-  id: string;
-  variantId: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  maxAnimals: number;
-  bookedAnimals: number;
-}
+  // Helper: convertir "HH:MM" en minutes
+  const toMinutes = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+  const fromMinutes = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
-// Helper: prix d'affichage d'une formule
-function getFormuleDisplayPrice(f: FormuleData): { price: number; unit: string } | null {
-  if (f.pricePerDay && f.pricePerDay > 0) return { price: f.pricePerDay, unit: "/jour" };
-  if (f.pricePerHour && f.pricePerHour > 0) return { price: f.pricePerHour, unit: "/h" };
-  if (f.pricePerHalfDay && f.pricePerHalfDay > 0) return { price: f.pricePerHalfDay, unit: "/½j" };
-  if (f.pricePerWeek && f.pricePerWeek > 0) return { price: f.pricePerWeek, unit: "/sem" };
-  if (f.pricePerMonth && f.pricePerMonth > 0) return { price: f.pricePerMonth, unit: "/mois" };
-  if (f.basePrice && f.basePrice > 0) {
-    const unitLabel: Record<string, string> = { hour: "/h", half_day: "/½j", day: "/jour", week: "/sem", month: "/mois", flat: "" };
-    return { price: f.basePrice, unit: unitLabel[f.priceUnit || ""] || "" };
-  }
-  return null;
-}
+  // Générer les créneaux disponibles basés sur la durée de la formule
+  const getTimeSlotsForDate = (dateKey: string): { startTime: string; endTime: string }[] => {
+    if (!data) return [];
+    const dayEntry = data.availability.find((a: any) => a.date === dateKey);
+    if (!dayEntry || (dayEntry.status !== "available" && dayEntry.status !== "partial" && dayEntry.status !== "booked_partial")) return [];
 
-function formatPriceCents(cents: number): string {
-  return (cents / 100).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + " €";
-}
+    const settings = (data as any).bookingSettings;
+    const acceptFrom = settings?.acceptFrom ?? "08:00";
+    const acceptTo = settings?.acceptTo ?? "20:00";
+    const bufferBefore = settings?.bufferBefore ?? 0;
+    const bufferAfter = settings?.bufferAfter ?? 0;
 
-// ──────────────────────────────────────────────────────
-// Calendrier public des disponibilités (style planning)
-// ──────────────────────────────────────────────────────
-function PublicAvailabilityCalendar({ slug }: { slug: string }) {
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+    const duration = selectedFormuleDuration ?? 60; // Défaut 60 min
+    const step = 30; // Pas de 30 minutes
 
-  const year = currentMonth.getFullYear();
-  const month = currentMonth.getMonth();
-
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDayOfMonth = new Date(year, month, 1).getDay();
-  const adjustedFirstDay = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
-
-  const startDate = `${year}-${String(month + 1).padStart(2, "0")}-01`;
-  const endDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`;
-
-  const formatDate = (d: number) =>
-    `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-
-  // Query publique
-  const data = useQuery(api.public.profile.getPublicAvailability, {
-    slug,
-    startDate,
-    endDate,
-  });
-
-  const today = new Date();
-  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-
-  const monthNames = [
-    "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
-    "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
-  ];
-  const dayNames = ["L", "M", "M", "J", "V", "S", "D"];
-
-  // Fond du jour
-  const getDayBg = (dateKey: string): string => {
-    if (!data) return "";
-    const dayAvails = data.availability.filter((a) => a.date === dateKey);
-    const hasAvailable = dayAvails.some((a) => a.status === "available");
-    const hasPartial = dayAvails.some((a) => a.status === "partial");
-    const allUnavailable = dayAvails.length > 0 && dayAvails.every((a) => a.status === "unavailable");
-
-    if (dayAvails.length === 0) return "";
-    if (allUnavailable) return "bg-gray-100 border-gray-300";
-
-    // Créneaux collectifs ce jour
-    const daySlots = data.collectiveSlots.filter((s) => s.date === dateKey);
-    const hasBookedSlots = daySlots.some((s) => s.bookedAnimals > 0);
-
-    if (!hasBookedSlots) {
-      if (hasAvailable) return "bg-green-50 border-green-200";
-      if (hasPartial) return "bg-orange-50 border-orange-200";
-      return "";
+    // Plages disponibles de la journée
+    const availWindows: { start: number; end: number }[] = [];
+    if (dayEntry.timeSlots && dayEntry.timeSlots.length > 0) {
+      for (const ts of dayEntry.timeSlots) {
+        availWindows.push({ start: toMinutes(ts.startTime), end: toMinutes(ts.endTime) });
+      }
+    } else {
+      // Jour entièrement dispo → utiliser les horaires d'acceptation
+      availWindows.push({ start: toMinutes(acceptFrom), end: toMinutes(acceptTo) });
     }
 
-    if (hasAvailable || hasPartial) return "bg-orange-50 border-orange-200";
-    return "bg-red-50 border-red-200";
+    // Créneaux réservés (avec buffers déjà appliqués côté backend)
+    const booked: { start: number; end: number }[] = (dayEntry.bookedSlots || []).map((s: any) => ({
+      start: toMinutes(s.startTime),
+      end: toMinutes(s.endTime),
+    }));
+
+    // Générer les créneaux par pas de 30 min
+    const slots: { startTime: string; endTime: string }[] = [];
+    for (const window of availWindows) {
+      for (let t = window.start; t + duration <= window.end; t += step) {
+        const slotStart = t;
+        const slotEnd = t + duration;
+        // Vérifier que le créneau + buffers ne chevauche aucun créneau réservé
+        const effectiveStart = slotStart - bufferBefore;
+        const effectiveEnd = slotEnd + bufferAfter;
+        const hasConflict = booked.some((b) => effectiveStart < b.end && effectiveEnd > b.start);
+        if (!hasConflict) {
+          slots.push({ startTime: fromMinutes(slotStart), endTime: fromMinutes(slotEnd) });
+        }
+      }
+    }
+
+    return slots;
   };
 
-  // Créneaux collectifs par date
-  const getSlotsForDate = (dateKey: string) => {
-    if (!data) return [];
-    return data.collectiveSlots.filter((s) => s.date === dateKey);
+  // Taux de remplissage (jours avec au moins une place dispo)
+  const fillRate = (() => {
+    if (!data) return null;
+    const futureDays = days.filter(d => formatDateKey(d) >= todayKey);
+    if (futureDays.length === 0) return null;
+    const availCount = futureDays.filter(d => {
+      const s = getDayStatus(formatDateKey(d));
+      return s === "available" || s === "partial" || s === "booked_partial";
+    }).length;
+    return Math.round((availCount / futureDays.length) * 100);
+  })();
+
+  const statusConfig: Record<DayStatus, { dot: string; bg: string; border: string; text: string; label: string }> = {
+    available: { dot: "bg-emerald-400", bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-700", label: "Dispo" },
+    partial: { dot: "bg-amber-400", bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-700", label: "Partiel" },
+    booked_partial: { dot: "bg-orange-400", bg: "bg-orange-50", border: "border-orange-200", text: "text-orange-700", label: "Occupé" },
+    booked_full: { dot: "bg-red-400", bg: "bg-red-50", border: "border-red-200", text: "text-red-600", label: "Complet" },
+    unavailable: { dot: "bg-gray-300", bg: "bg-gray-50", border: "border-gray-200", text: "text-gray-400", label: "Indispo" },
+    none: { dot: "bg-gray-200", bg: "", border: "border-gray-100", text: "text-gray-900", label: "—" },
   };
 
   return (
-    <div className="max-w-md mx-auto">
-      {/* Header navigation */}
+    <div>
+      {/* Tabs de vue */}
+      <div className="flex items-center gap-1 p-0.5 bg-gray-100 rounded-xl mb-4">
+        {([["3days", "3 jours"], ["week", "Semaine"], ["month", "Mois"]] as const).map(([key, lbl]) => (
+          <button
+            key={key}
+            onClick={() => { setView(key); setOffset(0); }}
+            className={cn(
+              "flex-1 text-[11px] font-semibold py-1.5 rounded-lg transition-all",
+              view === key ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+            )}
+          >
+            {lbl}
+          </button>
+        ))}
+      </div>
+
+      {/* Navigation + taux de remplissage */}
       <div className="flex items-center justify-between mb-3">
         <button
-          onClick={() => setCurrentMonth(new Date(year, month - 1, 1))}
-          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+          onClick={() => setOffset(o => o - 1)}
+          className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
         >
-          <ChevronLeft className="w-4 h-4 text-gray-700" />
+          <ChevronLeft className="w-4 h-4 text-gray-600" />
         </button>
-        <h4 className="text-sm font-semibold text-gray-900 capitalize">
-          {monthNames[month]} {year}
-        </h4>
+        <div className="text-center">
+          <p className="text-xs font-semibold text-gray-900">{label}</p>
+          {fillRate !== null && (
+            <p className={cn("text-[10px] font-medium mt-0.5", fillRate >= 60 ? "text-emerald-600" : fillRate >= 30 ? "text-amber-600" : "text-gray-400")}>
+              {fillRate}% disponible
+            </p>
+          )}
+        </div>
         <button
-          onClick={() => setCurrentMonth(new Date(year, month + 1, 1))}
-          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+          onClick={() => setOffset(o => o + 1)}
+          className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
         >
-          <ChevronRight className="w-4 h-4 text-gray-700" />
+          <ChevronRight className="w-4 h-4 text-gray-600" />
         </button>
       </div>
 
-      {/* Jours de la semaine */}
-      <div className="grid grid-cols-7 gap-0.5 mb-1">
-        {dayNames.map((day, i) => (
-          <div key={i} className="text-center text-[11px] font-medium text-gray-400 py-1">
-            {day}
-          </div>
-        ))}
-      </div>
+      {/* Message si aucune disponibilité configurée */}
+      {data && data.availability.length > 0 && data.availability.every((a: any) => a.status === "unavailable") && data.collectiveSlots.length === 0 && (
+        <div className="text-center py-4 mb-3">
+          <Calendar className="w-6 h-6 text-gray-300 mx-auto mb-1.5" />
+          <p className="text-xs text-gray-500">Aucune disponibilité configurée</p>
+          <p className="text-[10px] text-gray-400 mt-0.5">Contactez l&apos;annonceur pour connaître ses créneaux</p>
+        </div>
+      )}
 
-      {/* Grille du calendrier */}
-      <div className="grid grid-cols-7 gap-0.5">
-        {Array.from({ length: adjustedFirstDay }).map((_, i) => (
-          <div key={`empty-${i}`} className="h-12" />
-        ))}
+      {/* Formule sélectionnée indicator */}
+      {selectedFormuleId && (
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 mb-3 bg-primary/5 border border-primary/15 rounded-lg">
+          <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+          <span className="text-[10px] text-primary font-medium">Filtré par formule sélectionnée</span>
+        </div>
+      )}
 
-        {Array.from({ length: daysInMonth }).map((_, index) => {
-          const day = index + 1;
-          const dateKey = formatDate(day);
-          const isToday = dateKey === todayKey;
-          const isPast = dateKey < todayKey;
-          const bgClass = getDayBg(dateKey);
-          const daySlots = getSlotsForDate(dateKey);
+      {/* Vue 3 jours / Semaine */}
+      {view !== "month" ? (
+        <div className={cn("grid gap-1.5", view === "3days" ? "grid-cols-3" : "grid-cols-7")}>
+          {days.map((day) => {
+            const dateKey = formatDateKey(day);
+            const isToday = dateKey === todayKey;
+            const isPast = dateKey < todayKey;
+            const status = getDayStatus(dateKey);
+            const cfg = statusConfig[status];
+            const slots = getSlotsForDate(dateKey);
 
+            const isClickable = !isPast && status !== "unavailable" && status !== "none";
+            const isDateSelected = selectedDate === dateKey;
+
+            return (
+              <div
+                key={dateKey}
+                onClick={() => isClickable && setSelectedDate(isDateSelected ? null : dateKey)}
+                className={cn(
+                  "rounded-xl border p-2 transition-colors",
+                  isPast ? "opacity-40 border-gray-100" : `${cfg.border}`,
+                  isToday && !isDateSelected && "ring-1 ring-primary/40",
+                  isClickable && "cursor-pointer hover:shadow-md",
+                  isDateSelected && "ring-2 ring-primary border-primary/30 shadow-md"
+                )}
+              >
+                {/* Jour */}
+                <div className="text-center mb-1.5">
+                  <p className={cn("text-[10px] font-medium", isPast ? "text-gray-400" : "text-gray-500")}>
+                    {shortDayNames[day.getDay()]}
+                  </p>
+                  <p className={cn(
+                    "text-lg font-bold leading-tight",
+                    isDateSelected ? "text-primary" : isToday ? "text-primary" : isPast ? "text-gray-300" : "text-gray-900"
+                  )}>
+                    {day.getDate()}
+                  </p>
+                </div>
+                {/* Statut */}
+                <div className={cn("flex items-center justify-center gap-1 px-1.5 py-1 rounded-lg text-[10px] font-semibold", cfg.bg, cfg.text)}>
+                  <div className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
+                  {cfg.label}
+                </div>
+                {/* Créneaux collectifs */}
+                {slots.length > 0 && (
+                  <div className="mt-1.5 space-y-0.5">
+                    {slots.slice(0, view === "3days" ? 3 : 2).map((slot) => {
+                      const placesLeft = slot.maxAnimals - slot.bookedAnimals;
+                      const fillPct = slot.maxAnimals > 0 ? (slot.bookedAnimals / slot.maxAnimals) * 100 : 0;
+                      return (
+                        <div key={slot.id} className="bg-purple-50 rounded-md px-1.5 py-1 border border-purple-100">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[9px] font-medium text-purple-700">{slot.startTime}–{slot.endTime}</span>
+                            <span className={cn("text-[9px] font-bold", placesLeft > 0 ? "text-purple-600" : "text-gray-400")}>
+                              {placesLeft > 0 ? `${placesLeft} pl.` : "Complet"}
+                            </span>
+                          </div>
+                          <div className="h-1 bg-purple-100 rounded-full mt-0.5 overflow-hidden">
+                            <div className={cn("h-full rounded-full", fillPct >= 100 ? "bg-gray-400" : "bg-purple-500")} style={{ width: `${Math.min(fillPct, 100)}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {slots.length > (view === "3days" ? 3 : 2) && (
+                      <p className="text-[9px] text-purple-400 text-center">+{slots.length - (view === "3days" ? 3 : 2)}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* Vue Mois */
+        (() => {
+          const firstDay = days[0];
+          const firstDowRaw = firstDay.getDay();
+          const adjustedFirst = firstDowRaw === 0 ? 6 : firstDowRaw - 1;
           return (
-            <div
-              key={day}
-              className={cn(
-                "h-12 rounded-md border p-0.5 flex flex-col transition-colors overflow-hidden",
-                isPast
-                  ? "bg-gray-50 border-gray-100 opacity-50"
-                  : isToday
-                    ? "border-primary bg-primary/5"
-                    : bgClass || "border-gray-100"
-              )}
-            >
-              <span className={cn(
-                "text-[10px] font-medium leading-none mb-0.5",
-                isPast ? "text-gray-400" : isToday ? "text-primary font-bold" : "text-gray-900"
-              )}>
-                {day}
-              </span>
+            <>
+              <div className="grid grid-cols-7 gap-0.5 mb-0.5">
+                {fullDayNames.map((d, i) => (
+                  <div key={i} className="text-center text-[10px] font-medium text-gray-400 py-0.5">{d}</div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 gap-0.5">
+                {Array.from({ length: adjustedFirst }).map((_, i) => (
+                  <div key={`e-${i}`} className="h-10" />
+                ))}
+                {days.map((day) => {
+                  const dateKey = formatDateKey(day);
+                  const isToday = dateKey === todayKey;
+                  const isPast = dateKey < todayKey;
+                  const status = getDayStatus(dateKey);
+                  const cfg = statusConfig[status];
+                  const slots = getSlotsForDate(dateKey);
+                  const isClickable = !isPast && status !== "unavailable" && status !== "none";
+                  const isDateSelected = selectedDate === dateKey;
 
-              {/* Créneaux collectifs */}
-              <div className="flex-1 flex flex-col gap-px overflow-hidden">
-                {daySlots.slice(0, 2).map((slot) => {
-                  const placesLeft = slot.maxAnimals - slot.bookedAnimals;
                   return (
                     <div
-                      key={slot.id}
+                      key={dateKey}
+                      onClick={() => isClickable && setSelectedDate(isDateSelected ? null : dateKey)}
                       className={cn(
-                        "h-2.5 rounded-sm text-white text-[7px] leading-[10px] px-0.5 truncate",
-                        placesLeft <= 0 ? "bg-purple-300" : "bg-purple-500"
+                        "h-10 rounded-lg border flex flex-col items-center justify-center transition-colors relative",
+                        isPast ? "opacity-40 border-gray-50" : cfg.border,
+                        isToday && !isDateSelected && "ring-1 ring-primary/40",
+                        !isPast && status !== "none" && cfg.bg,
+                        isClickable && "cursor-pointer hover:shadow-sm",
+                        isDateSelected && "ring-2 ring-primary border-primary/30 shadow-sm"
                       )}
                     >
-                      {slot.bookedAnimals}/{slot.maxAnimals}
+                      <span className={cn(
+                        "text-[11px] font-semibold",
+                        isDateSelected ? "text-primary" : isToday ? "text-primary" : isPast ? "text-gray-300" : cfg.text === "text-gray-900" ? "text-gray-900" : cfg.text
+                      )}>
+                        {day.getDate()}
+                      </span>
+                      {slots.length > 0 && !isPast && (
+                        <div className="flex gap-0.5 mt-0.5">
+                          {slots.slice(0, 3).map((s) => (
+                            <div key={s.id} className={cn("w-1 h-1 rounded-full", s.bookedAnimals >= s.maxAnimals ? "bg-gray-400" : "bg-purple-500")} />
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
-                {daySlots.length > 2 && (
-                  <span className="text-[7px] text-gray-400 leading-none">+{daySlots.length - 2}</span>
+              </div>
+            </>
+          );
+        })()
+      )}
+
+      {/* Détail du jour sélectionné */}
+      <AnimatePresence>
+        {selectedDate && (() => {
+          const selDay = new Date(selectedDate + "T00:00:00");
+          const status = getDayStatus(selectedDate);
+          const cfg = statusConfig[status];
+          const timeSlots = getTimeSlotsForDate(selectedDate);
+          const collectiveSlots = getSlotsForDate(selectedDate);
+          const dayInfo = getDayInfo(selectedDate);
+          const bookedCount = (dayInfo as any)?.bookedCount ?? 0;
+          const maxCapacity = (dayInfo as any)?.maxCapacity ?? 1;
+          const remainingPlaces = Math.max(0, maxCapacity - bookedCount);
+          const hasContent = timeSlots.length > 0 || collectiveSlots.length > 0 || bookedCount > 0;
+          const dayLabel = `${shortDayNames[selDay.getDay()]} ${selDay.getDate()} ${monthNamesShort[selDay.getMonth()]}`;
+
+          return (
+            <motion.div
+              key={selectedDate}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <div className="mt-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className={cn("w-2 h-2 rounded-full", cfg.dot)} />
+                    <span className="text-xs font-bold text-gray-900">{dayLabel}</span>
+                    <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-md", cfg.bg, cfg.text)}>
+                      {cfg.label}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setSelectedDate(null)}
+                    className="p-0.5 hover:bg-gray-200 rounded transition-colors"
+                  >
+                    <XIcon className="w-3.5 h-3.5 text-gray-400" />
+                  </button>
+                </div>
+
+                {/* Capacité */}
+                {bookedCount > 0 && (
+                  <div className="flex items-center gap-2 px-2.5 py-2 mb-2 bg-white rounded-lg border border-gray-100">
+                    <Users className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-gray-600">{bookedCount} réservation{bookedCount > 1 ? "s" : ""}</span>
+                        <span className={cn("text-[11px] font-bold", remainingPlaces > 0 ? "text-emerald-600" : "text-red-500")}>
+                          {remainingPlaces > 0 ? `${remainingPlaces} place${remainingPlaces > 1 ? "s" : ""} restante${remainingPlaces > 1 ? "s" : ""}` : "Complet"}
+                        </span>
+                      </div>
+                      <div className="h-1.5 bg-gray-100 rounded-full mt-1 overflow-hidden">
+                        <div
+                          className={cn("h-full rounded-full transition-all", bookedCount >= maxCapacity ? "bg-red-400" : "bg-orange-400")}
+                          style={{ width: `${Math.min((bookedCount / maxCapacity) * 100, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {hasContent || timeSlots.length > 0 ? (
+                  <div className="space-y-2">
+                    {/* Créneaux horaires disponibles */}
+                    {timeSlots.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                          Créneaux disponibles{selectedFormuleDuration ? ` (${selectedFormuleDuration} min)` : ""}
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {timeSlots.map((slot, i) => (
+                            <div key={i} className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 border border-emerald-100 rounded-lg">
+                              <Clock className="w-3 h-3 text-emerald-600" />
+                              <span className="text-[11px] font-semibold text-emerald-700">{slot.startTime} – {slot.endTime}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Message si aucun créneau disponible pour cette durée */}
+                    {timeSlots.length === 0 && (status === "available" || status === "partial" || status === "booked_partial") && (
+                      <div className="text-center py-2">
+                        <p className="text-xs text-gray-500">
+                          {selectedFormuleDuration
+                            ? `Aucun créneau de ${selectedFormuleDuration} min disponible`
+                            : "Sélectionnez une formule pour voir les créneaux"}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Créneaux collectifs */}
+                    {collectiveSlots.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Séances collectives</p>
+                        <div className="space-y-1.5">
+                          {collectiveSlots.map((slot) => {
+                            const placesLeft = slot.maxAnimals - slot.bookedAnimals;
+                            const fillPct = slot.maxAnimals > 0 ? (slot.bookedAnimals / slot.maxAnimals) * 100 : 0;
+                            return (
+                              <div key={slot.id} className="flex items-center gap-2.5 px-2.5 py-2 bg-white rounded-lg border border-purple-100">
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  <Clock className="w-3 h-3 text-purple-500" />
+                                  <span className="text-[11px] font-semibold text-purple-700">{slot.startTime} – {slot.endTime}</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="h-1.5 bg-purple-100 rounded-full overflow-hidden">
+                                    <div className={cn("h-full rounded-full transition-all", fillPct >= 100 ? "bg-gray-400" : "bg-purple-500")} style={{ width: `${Math.min(fillPct, 100)}%` }} />
+                                  </div>
+                                </div>
+                                <span className={cn("text-[10px] font-bold flex-shrink-0", placesLeft > 0 ? "text-purple-600" : "text-gray-400")}>
+                                  {placesLeft > 0 ? `${placesLeft}/${slot.maxAnimals} pl.` : "Complet"}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-2">
+                    <p className="text-xs text-gray-500">
+                      {selectedFormuleDuration
+                        ? "Aucun créneau disponible pour cette durée"
+                        : "Sélectionnez une formule pour voir les créneaux"}
+                    </p>
+                  </div>
                 )}
               </div>
-            </div>
+            </motion.div>
           );
-        })}
-      </div>
+        })()}
+      </AnimatePresence>
 
-      {/* Légende */}
-      <div className="flex flex-wrap items-center justify-center gap-3 mt-3 pt-3 border-t border-gray-100">
-        <div className="flex items-center gap-1">
-          <div className="w-2.5 h-2.5 rounded-sm bg-green-50 border border-green-200" />
-          <span className="text-[10px] text-gray-500">Disponible</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-2.5 h-2.5 rounded-sm bg-orange-50 border border-orange-200" />
-          <span className="text-[10px] text-gray-500">Partiel</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-2.5 h-2.5 rounded-sm bg-red-50 border border-red-200" />
-          <span className="text-[10px] text-gray-500">Complet</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-2.5 h-2.5 rounded-sm bg-gray-100 border border-gray-300" />
-          <span className="text-[10px] text-gray-500">Indisponible</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-4 h-2 rounded-sm bg-purple-500" />
-          <span className="text-[10px] text-gray-500">Collectif</span>
-        </div>
+      {/* Légende compacte */}
+      <div className="flex flex-wrap items-center justify-center gap-2 mt-3 pt-3 border-t border-gray-100">
+        {([
+          ["Dispo", "bg-emerald-400"],
+          ["Occupé", "bg-orange-400"],
+          ["Complet", "bg-red-400"],
+          ["Indispo", "bg-gray-300"],
+        ] as const).map(([lbl, dot]) => (
+          <div key={lbl} className="flex items-center gap-1">
+            <div className={cn("w-2 h-2 rounded-full", dot)} />
+            <span className="text-[10px] text-gray-500">{lbl}</span>
+          </div>
+        ))}
+        {data && data.collectiveSlots.length > 0 && (
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-full bg-purple-500" />
+            <span className="text-[10px] text-gray-500">Collectif</span>
+          </div>
+        )}
       </div>
     </div>
   );
-}
+});
 
 export default function PublicProfilePage() {
   const params = useParams();
@@ -372,17 +584,101 @@ export default function PublicProfilePage() {
   // États
   const [isBioExpanded, setIsBioExpanded] = useState(false);
   const [galleryLightboxIndex, setGalleryLightboxIndex] = useState<number | null>(null);
+  const [showAllReviews, setShowAllReviews] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [togglingFavoriteId, setTogglingFavoriteId] = useState<string | null>(null);
+  const [selectedFormule, setSelectedFormule] = useState<SelectedFormule | null>(null);
+  const reviewsRef = useRef<HTMLDivElement>(null);
+
+  // Auth
+  const token = getAuthToken();
+  const isClient = authUser?.accountType === "utilisateur";
+
+  // Favoris
+  const favoriteIds = useQuery(
+    api.client.favorites.getFavoriteIds,
+    token ? { token } : "skip"
+  );
+  const toggleFavorite = useMutation(api.client.favorites.toggle);
+
+  const handleToggleFavorite = useCallback(async (formuleId: string) => {
+    if (!token) return;
+    setTogglingFavoriteId(formuleId);
+    try {
+      await toggleFavorite({ token, formuleId: formuleId as Id<"serviceVariants"> });
+    } catch {
+      // silently fail
+    } finally {
+      setTogglingFavoriteId(null);
+    }
+  }, [token, toggleFavorite]);
 
   // Récupérer les données du profil
   const profileData = useQuery(api.public.profile.getPublicProfileBySlug, { slug });
 
-  // Loading
+  // Track si les données ont déjà été chargées (évite de rejouer les animations)
+  const hasLoadedRef = useRef(false);
+  if (profileData && !hasLoadedRef.current) {
+    hasLoadedRef.current = true;
+  }
+  // Désactiver les animations initiales après le premier chargement
+  const animInitial = hasLoadedRef.current ? false : { opacity: 0, y: 20 };
+
+  // Loading — Skeleton
   if (profileData === undefined) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-8 h-8 text-primary animate-spin" />
-          <p className="text-gray-500">Chargement du profil...</p>
+      <div className="min-h-screen bg-background">
+        <Navbar hideSpacers />
+        <section className="pt-16 pb-8">
+          {/* Cover skeleton */}
+          <div className="relative h-48 sm:h-64 md:h-80 bg-gradient-to-br from-gray-200 via-gray-100 to-gray-200 animate-pulse" />
+
+          {/* Profile card skeleton */}
+          <div className="max-w-6xl mx-auto px-4 -mt-20 relative z-10">
+            <div className="bg-white rounded-3xl shadow-xl border border-gray-100/80 p-6 sm:p-8">
+              <div className="flex flex-col sm:flex-row gap-5 sm:gap-6">
+                {/* Avatar skeleton */}
+                <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-3xl bg-gray-200 animate-pulse mx-auto sm:mx-0 flex-shrink-0" />
+                <div className="flex-1 space-y-3">
+                  <div className="h-8 bg-gray-200 rounded-xl w-48 animate-pulse mx-auto sm:mx-0" />
+                  <div className="h-4 bg-gray-100 rounded-lg w-32 animate-pulse mx-auto sm:mx-0" />
+                  <div className="flex flex-wrap gap-3 justify-center sm:justify-start mt-3">
+                    <div className="h-8 bg-gray-100 rounded-xl w-24 animate-pulse" />
+                    <div className="h-8 bg-gray-100 rounded-xl w-32 animate-pulse" />
+                    <div className="h-8 bg-gray-100 rounded-xl w-28 animate-pulse" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Content skeleton */}
+        <div className="max-w-6xl mx-auto px-4 pb-12">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-lg border border-gray-100 space-y-4">
+                <div className="h-6 bg-gray-200 rounded-lg w-32 animate-pulse" />
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="h-12 bg-gray-100 rounded-xl animate-pulse" />
+                  ))}
+                </div>
+              </div>
+              <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-lg border border-gray-100 space-y-4">
+                <div className="h-6 bg-gray-200 rounded-lg w-24 animate-pulse" />
+                <div className="space-y-3">
+                  {Array.from({ length: 2 }).map((_, i) => (
+                    <div key={i} className="h-20 bg-gray-100 rounded-2xl animate-pulse" />
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="space-y-6">
+              <div className="bg-white rounded-3xl p-5 shadow-lg border border-gray-100 h-72 animate-pulse" />
+              <div className="bg-white rounded-3xl p-5 shadow-lg border border-gray-100 h-48 animate-pulse" />
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -446,6 +742,7 @@ export default function PublicProfilePage() {
               src={profileData.coverImage}
               alt="Couverture"
               fill
+              sizes="100vw"
               className="object-cover"
               priority
             />
@@ -480,14 +777,7 @@ export default function PublicProfilePage() {
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={() => {
-                  if (navigator.share) {
-                    navigator.share({
-                      title: `Profil de ${profileData.firstName}`,
-                      url: window.location.href,
-                    });
-                  }
-                }}
+                onClick={() => setShowShareModal(true)}
                 className="p-2.5 bg-white/90 backdrop-blur-sm rounded-full shadow-lg hover:bg-white transition-colors"
               >
                 <Share2 className="w-5 h-5 text-gray-700" />
@@ -497,9 +787,9 @@ export default function PublicProfilePage() {
         </div>
 
         {/* Profile Card */}
-        <div className="max-w-4xl mx-auto px-4 -mt-20 relative z-10">
+        <div className="max-w-6xl mx-auto px-4 -mt-20 relative z-10">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={animInitial}
             animate={{ opacity: 1, y: 0 }}
             className="bg-white rounded-3xl shadow-xl border border-gray-100/80"
           >
@@ -646,7 +936,7 @@ export default function PublicProfilePage() {
       </section>
 
       {/* Main Content — 2 colonnes sur desktop */}
-      <main className="max-w-5xl mx-auto px-4 pb-12">
+      <main className={cn("max-w-6xl mx-auto px-4 pb-12", profileData.isAnnouncer && isClient && !isOwnProfile && "pb-24")}>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
           {/* ═══ COLONNE GAUCHE (2/3) ═══ */}
@@ -655,7 +945,7 @@ export default function PublicProfilePage() {
             {/* À propos — Équipement + Zone d'intervention */}
             {profileData.isAnnouncer && (
               <motion.section
-                initial={{ opacity: 0, y: 20 }}
+                initial={animInitial}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
                 className="bg-white rounded-3xl p-6 sm:p-8 shadow-lg border border-gray-100 space-y-6"
@@ -737,10 +1027,44 @@ export default function PublicProfilePage() {
               </motion.section>
             )}
 
+            {/* Types d'animaux acceptés */}
+            {profileData.isAnnouncer && profileData.services && profileData.services.length > 0 && (() => {
+              const allAnimalTypes = Array.from(new Set(
+                (profileData.services as ServiceData[]).flatMap(s => s.animalTypes)
+              ));
+              if (allAnimalTypes.length === 0) return null;
+              return (
+                <motion.section
+                  initial={animInitial}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.12 }}
+                  className="bg-white rounded-3xl p-6 sm:p-8 shadow-lg border border-gray-100"
+                >
+                  <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-3">
+                    <span className="p-2 bg-gradient-to-br from-amber-100 to-orange-100 rounded-xl">
+                      <PawPrint className="w-5 h-5 text-amber-600" />
+                    </span>
+                    Animaux acceptés
+                  </h2>
+                  <div className="flex flex-wrap gap-2">
+                    {allAnimalTypes.map((type) => (
+                      <span
+                        key={type}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-100 rounded-xl text-sm font-medium text-gray-800"
+                      >
+                        <span className="text-lg">{animalEmojis[type.toLowerCase()] || "🐾"}</span>
+                        {type.charAt(0).toUpperCase() + type.slice(1)}
+                      </span>
+                    ))}
+                  </div>
+                </motion.section>
+              );
+            })()}
+
             {/* Tarifs */}
             {profileData.isAnnouncer && profileData.services && profileData.services.length > 0 && (
               <motion.section
-                initial={{ opacity: 0, y: 20 }}
+                initial={animInitial}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.15 }}
                 className="bg-white rounded-3xl p-6 sm:p-8 shadow-lg border border-gray-100"
@@ -763,18 +1087,95 @@ export default function PublicProfilePage() {
                       <div className="divide-y divide-gray-100">
                         {service.formules.map((formule: FormuleData) => {
                           const displayPrice = getFormuleDisplayPrice(formule);
+                          const isFav = favoriteIds?.includes(formule.id as Id<"serviceVariants">);
+                          const isSelected = selectedFormule?.formuleId === formule.id;
                           return (
-                            <div key={formule.id} className="flex items-center justify-between px-4 py-3 gap-3">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <p className="text-sm font-medium text-gray-900">{formule.name}</p>
-                                  {formule.sessionType === "collective" && <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[10px] font-bold rounded">Collectif</span>}
-                                  {(formule.numberOfSessions ?? 0) > 1 && <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded">{formule.numberOfSessions} séances</span>}
+                            <button
+                              key={formule.id}
+                              type="button"
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedFormule(null);
+                                } else {
+                                  setSelectedFormule({
+                                    formuleId: formule.id,
+                                    formuleName: formule.name,
+                                    serviceSlug: service.categorySlug || "",
+                                    serviceName: service.categoryName,
+                                    serviceIcon: service.categoryIcon,
+                                    price: displayPrice,
+                                    duration: formule.duration,
+                                  });
+                                }
+                              }}
+                              className={cn(
+                                "w-full text-left px-4 py-3 transition-colors cursor-pointer",
+                                isSelected
+                                  ? "bg-primary/5 ring-1 ring-inset ring-primary/30"
+                                  : "hover:bg-gray-50"
+                              )}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <p className={cn("text-sm font-medium", isSelected ? "text-primary" : "text-gray-900")}>{formule.name}</p>
+                                    {formule.sessionType === "collective" && <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[10px] font-bold rounded">Collectif</span>}
+                                    {(formule.numberOfSessions ?? 0) > 1 && <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded">{formule.numberOfSessions} séances</span>}
+                                  </div>
+                                  {formule.description && <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{formule.description}</p>}
+                                  {formule.animalTypes && formule.animalTypes.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      {formule.animalTypes.map((type) => (
+                                        <span key={type} className="text-[10px] px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded-full">
+                                          {animalEmojis[type.toLowerCase()] || "🐾"} {type}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
-                                {formule.description && <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{formule.description}</p>}
+                                <div className="flex items-center gap-2">
+                                  {displayPrice && (() => {
+                                    const pricingData = (profileData as any).pricing as PricingInfo | undefined;
+                                    const clientPrice = pricingData ? computeClientPrice(displayPrice.price, pricingData) : null;
+                                    return (
+                                      <div className="text-right flex-shrink-0">
+                                        {clientPrice && clientPrice.tva > 0 ? (
+                                          <>
+                                            <span className="text-[10px] text-gray-400 line-through block">{formatPriceCents(displayPrice.price)} HT</span>
+                                            <span className="text-sm font-bold text-primary">{formatPriceCents(clientPrice.total)}{displayPrice.unit}</span>
+                                            <span className="text-[9px] text-gray-400 block">TTC · frais inclus</span>
+                                          </>
+                                        ) : clientPrice ? (
+                                          <>
+                                            <span className="text-sm font-bold text-primary">{formatPriceCents(clientPrice.total)}{displayPrice.unit}</span>
+                                            <span className="text-[9px] text-gray-400 block">frais inclus</span>
+                                          </>
+                                        ) : (
+                                          <span className="text-sm font-bold text-primary">{formatPriceCents(displayPrice.price)}{displayPrice.unit}</span>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+                                  {token && (
+                                    <span
+                                      role="button"
+                                      tabIndex={0}
+                                      onClick={(e) => { e.stopPropagation(); handleToggleFavorite(formule.id); }}
+                                      onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); handleToggleFavorite(formule.id); } }}
+                                      className="p-1.5 hover:bg-gray-100 rounded-full transition-colors"
+                                      aria-label={isFav ? "Retirer des favoris" : "Ajouter aux favoris"}
+                                    >
+                                      <Heart className={cn("w-4 h-4 transition-colors", isFav ? "fill-red-500 text-red-500" : "text-gray-300 hover:text-red-400")} />
+                                    </span>
+                                  )}
+                                  {isSelected && (
+                                    <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                                      <Check className="w-3 h-3 text-white" />
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                              {displayPrice && <span className="text-sm font-bold text-primary whitespace-nowrap">{formatPriceCents(displayPrice.price)}{displayPrice.unit}</span>}
-                            </div>
+                            </button>
                           );
                         })}
                       </div>
@@ -787,7 +1188,7 @@ export default function PublicProfilePage() {
             {/* Animaux de compagnie */}
             {profileData.animals.length > 0 && (
               <motion.section
-                initial={{ opacity: 0, y: 20 }}
+                initial={animInitial}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
                 className="bg-white rounded-3xl p-6 sm:p-8 shadow-lg border border-gray-100"
@@ -806,7 +1207,7 @@ export default function PublicProfilePage() {
                     return (
                       <Link key={animal.id} href={`/profil/${slug}/animaux/${animal.slug}`}>
                         <motion.div
-                          initial={{ opacity: 0, y: 20 }}
+                          initial={animInitial}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: 0.2 + index * 0.05 }}
                           whileHover={{ scale: 1.02, y: -2 }}
@@ -859,7 +1260,7 @@ export default function PublicProfilePage() {
             {/* Galerie photos */}
             {profileData.gallery.filter((p: string) => p && typeof p === "string" && p.trim() !== "").length > 0 && (
               <motion.section
-                initial={{ opacity: 0, y: 20 }}
+                initial={animInitial}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.25 }}
                 className="bg-white rounded-3xl p-6 sm:p-8 shadow-lg border border-gray-100"
@@ -881,7 +1282,7 @@ export default function PublicProfilePage() {
                       onClick={() => setGalleryLightboxIndex(index)}
                       className={cn("relative aspect-square rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-shadow", index === 0 && "sm:col-span-2 sm:row-span-2")}
                     >
-                      <Image src={photo} alt={`Photo ${index + 1}`} fill className="object-cover hover:scale-105 transition-transform duration-300" />
+                      <Image src={photo} alt={`Photo ${index + 1}`} fill sizes="(max-width: 640px) 50vw, 33vw" className="object-cover hover:scale-105 transition-transform duration-300" />
                       {index === 5 && profileData.gallery.length > 6 && (
                         <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                           <span className="text-white font-bold text-xl">+{profileData.gallery.length - 6}</span>
@@ -895,12 +1296,12 @@ export default function PublicProfilePage() {
           </div>
 
           {/* ═══ COLONNE DROITE (1/3) ═══ */}
-          <div className="space-y-6">
+          <div className="space-y-6 lg:sticky lg:top-20 lg:self-start">
 
-            {/* Disponibilités — calendrier mensuel */}
+            {/* Disponibilités */}
             {profileData.isAnnouncer && (
               <motion.section
-                initial={{ opacity: 0, y: 20 }}
+                initial={animInitial}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.15 }}
                 className="bg-white rounded-3xl p-5 shadow-lg border border-gray-100"
@@ -911,13 +1312,13 @@ export default function PublicProfilePage() {
                   </span>
                   Disponibilités
                 </h2>
-                <PublicAvailabilityCalendar slug={slug} />
+                <PublicAvailabilityCalendar slug={slug} selectedFormuleId={selectedFormule?.formuleId} selectedFormuleDuration={selectedFormule?.duration} />
               </motion.section>
             )}
 
             {/* Avis & Recommandation */}
             <motion.section
-              initial={{ opacity: 0, y: 20 }}
+              initial={animInitial}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
               className="bg-white rounded-3xl p-5 shadow-lg border border-gray-100"
@@ -960,10 +1361,33 @@ export default function PublicProfilePage() {
                 </div>
               </div>
 
+              {/* Répartition par étoiles */}
+              {profileData.reviewCount > 0 && (
+                <div className="space-y-1.5 mb-4">
+                  {[5, 4, 3, 2, 1].map((stars) => {
+                    const count = profileData.reviews.filter((r: ReviewData) => r.rating === stars).length;
+                    const pct = profileData.reviewCount > 0 ? (count / profileData.reviewCount) * 100 : 0;
+                    return (
+                      <div key={stars} className="flex items-center gap-2">
+                        <span className="text-[11px] text-gray-500 w-4 text-right">{stars}</span>
+                        <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-amber-400 rounded-full transition-all duration-500"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className="text-[11px] text-gray-400 w-6">{count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               {/* Derniers avis */}
               {profileData.reviews.length > 0 ? (
-                <div className="space-y-3">
-                  {profileData.reviews.slice(0, 3).map((review: ReviewData) => (
+                <div className="space-y-3" ref={reviewsRef}>
+                  {profileData.reviews.slice(0, showAllReviews ? undefined : 3).map((review: ReviewData) => (
                     <div key={review.id} className="p-3 bg-gray-50 rounded-xl">
                       <div className="flex items-center justify-between gap-2 mb-1.5">
                         <div className="flex items-center gap-2">
@@ -985,8 +1409,11 @@ export default function PublicProfilePage() {
                     </div>
                   ))}
                   {profileData.reviews.length > 3 && (
-                    <button className="w-full py-2.5 text-sm text-primary font-medium hover:bg-primary/5 rounded-xl transition-colors">
-                      Voir les {profileData.reviewCount} avis
+                    <button
+                      onClick={() => setShowAllReviews(!showAllReviews)}
+                      className="w-full py-2.5 text-sm text-primary font-medium hover:bg-primary/5 rounded-xl transition-colors"
+                    >
+                      {showAllReviews ? "Voir moins" : `Voir les ${profileData.reviewCount} avis`}
                     </button>
                   )}
                 </div>
@@ -1011,6 +1438,99 @@ export default function PublicProfilePage() {
         onClose={() => setGalleryLightboxIndex(null)}
         onNavigate={setGalleryLightboxIndex}
         altPrefix={`Photo de ${profileData.firstName}`}
+      />
+
+      {/* CTA Sticky — dynamique selon la formule sélectionnée */}
+      {profileData.isAnnouncer && isClient && !isOwnProfile && (
+        <AnimatePresence>
+          {selectedFormule ? (
+            <motion.div
+              key="selected"
+              initial={{ y: 80, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 80, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-2xl safe-bottom"
+            >
+              <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="text-lg flex-shrink-0">{selectedFormule.serviceIcon}</span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-gray-900 truncate">{selectedFormule.formuleName}</p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {selectedFormule.serviceName}
+                      {selectedFormule.price && (() => {
+                        const pricingData = (profileData as any).pricing as PricingInfo | undefined;
+                        const clientPrice = pricingData ? computeClientPrice(selectedFormule.price.price, pricingData) : null;
+                        return <> · <span className="font-semibold text-primary">{formatPriceCents(clientPrice?.total ?? selectedFormule.price.price)}{selectedFormule.price.unit}</span>{clientPrice && <span className="text-[10px] text-gray-400 ml-1">{clientPrice.tva > 0 ? "TTC" : ""} frais inclus</span>}</>;
+                      })()}
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href={`/annonceur/${profileData.username || profileData.slug}?formule=${selectedFormule.formuleId}`}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-primary text-white font-semibold rounded-full hover:bg-primary/90 transition-colors shadow-lg whitespace-nowrap"
+                >
+                  Réserver
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+            </motion.div>
+          ) : profileData.services && profileData.services.length > 0 ? (
+            <motion.div
+              key="default"
+              initial={{ y: 80, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 80, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-2xl safe-bottom"
+            >
+              <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  {profileData.profileImage && (
+                    <Image
+                      src={profileData.profileImage}
+                      alt={profileData.firstName}
+                      width={40}
+                      height={40}
+                      className="w-10 h-10 rounded-xl object-cover flex-shrink-0"
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-gray-900 truncate">{profileData.firstName} {profileData.lastName.charAt(0)}.</p>
+                    {(() => {
+                      const cheapest = (profileData.services as ServiceData[])
+                        .flatMap(s => s.formules)
+                        .map(f => getFormuleDisplayPrice(f))
+                        .filter(Boolean)
+                        .sort((a, b) => a!.price - b!.price)[0];
+                      return cheapest ? (
+                        <p className="text-xs text-gray-500">À partir de {formatPriceCents(cheapest.price)}{cheapest.unit}</p>
+                      ) : null;
+                    })()}
+                  </div>
+                </div>
+                <Link
+                  href={`/annonceur/${profileData.username || profileData.slug}`}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white font-semibold rounded-full hover:bg-gray-800 transition-colors shadow-lg whitespace-nowrap text-sm"
+                >
+                  Voir les prestations
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      )}
+
+      {/* Modale de partage */}
+      <ShareModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        profileName={profileData.firstName}
+        profileLastInitial={profileData.lastName?.charAt(0) || ""}
+        profileImage={profileData.profileImage}
+        location={profileData.location}
       />
     </div>
   );
