@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -167,7 +167,7 @@ const getDayName = (dateStr: string): string => {
   return new Date(dateStr).toLocaleDateString("fr-FR", { weekday: "long" });
 };
 
-export default function CollectiveSlotPicker({
+export default memo(function CollectiveSlotPicker({
   variantId,
   numberOfSessions,
   sessionInterval,
@@ -811,4 +811,4 @@ export default function CollectiveSlotPicker({
       )}
     </div>
   );
-}
+});

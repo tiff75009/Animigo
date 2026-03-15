@@ -2,9 +2,8 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useScrollLock } from "@/app/hooks/useScrollLock";
-import { createPortal } from "react-dom";
-import { motion, AnimatePresence } from "framer-motion";
-import { X, ArrowRight, Check, ShoppingCart, Calendar, Clock, CreditCard, Eye, PawPrint, MapPin, Home, Plus, ChevronLeft, AlertTriangle, Dog, LogIn, Users, Package } from "lucide-react";
+import { motion } from "framer-motion";
+import { ArrowRight, Check, ShoppingCart, Calendar, Clock, CreditCard, Eye, PawPrint, MapPin, Home, Plus, ChevronLeft, AlertTriangle, LogIn, Users, Package } from "lucide-react";
 import GuestAnimalVerification, { type GuestAnimalData } from "@/app/reserver/[announcerId]/components/GuestAnimalVerification";
 import { ServiceData, FormuleData } from "./types";
 import { cn } from "@/app/lib/utils";
@@ -19,6 +18,8 @@ import {
   AddressSelector,
   GuestAddressSelector,
   LoginForm,
+  FormuleFilters,
+  getFilteredFormules,
   type BookingSelection,
   type PriceBreakdown,
   type CalendarEntry,
@@ -305,61 +306,6 @@ export default function AnnouncerMobileCTA({
   const [filterSessionType, setFilterSessionType] = useState<"all" | "individual" | "collective">("all");
   const [filterLocation, setFilterLocation] = useState<"all" | "announcer_home" | "client_home" | "both">("all");
   const [filterAnimal, setFilterAnimal] = useState<string>("all");
-
-  // Labels pour les animaux
-  const animalLabels: Record<string, string> = {
-    chien: "Chien",
-    chat: "Chat",
-    oiseau: "Oiseau",
-    rongeur: "Rongeur",
-    reptile: "Reptile",
-    poisson: "Poisson",
-    nac: "NAC",
-  };
-
-  // Collecter tous les types d'animaux des formules
-  const allAnimalsInFormules = useMemo(() => {
-    const animals = new Set<string>();
-    services.forEach(service => {
-      service.formules.forEach((formule) => {
-        formule.animalTypes?.forEach((type: string) => animals.add(type));
-      });
-    });
-    return Array.from(animals);
-  }, [services]);
-
-  // Filtrer les formules selon les critères
-  const getFilteredFormules = (formules: FormuleData[]) => {
-    return formules.filter((formule) => {
-      // Filtre par type de séance
-      if (filterSessionType !== "all") {
-        const isCollective = formule.sessionType === "collective";
-        if (filterSessionType === "collective" && !isCollective) return false;
-        if (filterSessionType === "individual" && isCollective) return false;
-      }
-
-      // Filtre par lieu
-      if (filterLocation !== "all") {
-        const formuleLocation = formule.serviceLocation || "both";
-        if (filterLocation !== "both" && formuleLocation !== "both" && formuleLocation !== filterLocation) {
-          return false;
-        }
-      }
-
-      // Filtre par type d'animal
-      if (filterAnimal !== "all") {
-        const formuleAnimals = formule.animalTypes || [];
-        if (formuleAnimals.length > 0 && !formuleAnimals.includes(filterAnimal)) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  };
-
-  // Vérifier si des filtres sont actifs
-  const hasActiveFilters = filterSessionType !== "all" || filterLocation !== "all" || filterAnimal !== "all";
 
   // Réinitialiser les filtres
   const resetFilters = () => {
@@ -1290,1117 +1236,833 @@ export default function AnnouncerMobileCTA({
       {/* Spacer for mobile CTA */}
       <div className="h-24 lg:hidden" />
 
-      {/* Sheet (Portal) */}
-      {typeof document !== "undefined" &&
-        createPortal(
-          <AnimatePresence>
-            {isSheetOpen && (
-              <>
-                {/* Backdrop - bloque les interactions en dessous */}
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onClick={() => setIsSheetOpen(false)}
-                  className="fixed inset-0 bg-black/50 z-[9998] lg:hidden"
-                  style={{ touchAction: 'none' }}
-                />
+      {/* Formule/Summary Sheet */}
+      <MobileBottomSheet
+        isOpen={isSheetOpen}
+        onClose={() => setIsSheetOpen(false)}
+        title={hasFullBooking ? "Récapitulatif" : "Choisir une prestation"}
+      >
+        {hasFullBooking && bookingService && bookingVariant && bookingSelection ? (
+          <div className="space-y-4">
+            <BookingSummary
+              service={bookingService}
+              variant={bookingVariant}
+              selection={bookingSelection}
+              priceBreakdown={priceBreakdown ?? null}
+              commissionRate={commissionRate}
+              vatRate={vatRate}
+              stripeFeeRate={stripeFeeRate}
+              isRangeMode={isRangeMode}
+              animalCount={selectedAnimalIds.length > 0 ? selectedAnimalIds.length : animalCount}
+              announcerFirstName={announcerFirstName}
+              announcerStatusType={announcerStatusType}
+              requiresAnimalVerification={requiresAnimalVerification}
+              guestAnimalValid={guestAnimalValid}
+              guestAnimalError={guestAnimalError}
+              compact
+            />
 
-                {/* Sheet - avec support clavier mobile */}
-                <motion.div
-                  initial={{ y: "100%" }}
-                  animate={{ y: 0 }}
-                  exit={{ y: "100%" }}
-                  transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                  className="fixed inset-x-0 bottom-0 bg-white rounded-t-2xl z-[9999] lg:hidden flex flex-col"
-                  style={{
-                    maxHeight: '85dvh',
-                    height: 'auto',
-                  }}
+            <div className="space-y-3">
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={handleConfirmBooking}
+                className="w-full py-3.5 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold rounded-xl shadow-lg shadow-primary/25 flex items-center justify-center gap-2"
+              >
+                <Eye className="w-4 h-4" />
+                Vérifier la réservation
+              </motion.button>
+
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  setIsSheetOpen(false);
+                  onFinalize?.();
+                }}
+                className="w-full py-3.5 border-2 border-secondary bg-secondary/5 text-secondary font-semibold rounded-xl flex items-center justify-center gap-2 hover:bg-secondary/10 transition-colors"
+              >
+                <CreditCard className="w-4 h-4" />
+                Finaliser la réservation
+                <ArrowRight className="w-4 h-4" />
+              </motion.button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <span className="p-2 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-xl">
+                <Package className="w-5 h-5 text-primary" />
+              </span>
+              <h3 className="text-lg font-bold text-gray-900">Choisir une formule</h3>
+            </div>
+
+            <FormuleFilters
+              services={services}
+              filterSessionType={filterSessionType}
+              filterLocation={filterLocation}
+              filterAnimal={filterAnimal}
+              onFilterSessionTypeChange={setFilterSessionType}
+              onFilterLocationChange={setFilterLocation}
+              onFilterAnimalChange={setFilterAnimal}
+              onReset={resetFilters}
+            />
+
+            {services.map((service, index) => {
+              const filteredFormules = getFilteredFormules(service.formules, filterSessionType, filterLocation, filterAnimal);
+              if (filteredFormules.length === 0) return null;
+
+              return (
+                <div
+                  key={service.id.toString()}
+                  className={cn(
+                    index > 0 && "pt-3 border-t border-gray-100"
+                  )}
                 >
-                  {/* Sheet Header */}
-                  <div className="flex items-center justify-between p-4 border-b border-gray-100 flex-shrink-0">
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      {hasFullBooking ? "Récapitulatif" : "Choisir une prestation"}
-                    </h3>
-                    <button
-                      onClick={() => setIsSheetOpen(false)}
-                      className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                    >
-                      <X className="w-5 h-5 text-gray-500" />
-                    </button>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-lg">{service.categoryIcon}</span>
+                    <span className="font-semibold text-gray-900">
+                      {service.categoryName}
+                    </span>
                   </div>
 
-                  {/* Sheet Content - zone scrollable */}
-                  <div
-                    className="flex-1 overflow-y-auto p-4"
-                    style={{
-                      WebkitOverflowScrolling: 'touch',
-                      overscrollBehavior: 'contain',
-                      minHeight: 0,
-                    }}
-                  >
-                    {hasFullBooking && bookingService && bookingVariant && bookingSelection ? (
-                      // Show booking summary
-                      <div className="space-y-4">
-                        <BookingSummary
-                          service={bookingService}
-                          variant={bookingVariant}
-                          selection={bookingSelection}
-                          priceBreakdown={priceBreakdown ?? null}
-                          commissionRate={commissionRate}
-                          vatRate={vatRate}
-                          stripeFeeRate={stripeFeeRate}
-                          isRangeMode={isRangeMode}
-                          animalCount={selectedAnimalIds.length > 0 ? selectedAnimalIds.length : animalCount}
-                          announcerFirstName={announcerFirstName}
-                          announcerStatusType={announcerStatusType}
-                          requiresAnimalVerification={requiresAnimalVerification}
-                          guestAnimalValid={guestAnimalValid}
-                          guestAnimalError={guestAnimalError}
-                          compact
-                        />
+                  <div className="space-y-3">
+                    {filteredFormules.map((formule) => {
+                      const isGarde = isGardeService(service);
+                      const { price: formulePrice, unit: formuleUnit } = getFormuleBestPrice(formule, isGarde);
+                      return (
+                        <motion.button
+                          key={formule.id.toString()}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => {
+                            setIsSheetOpen(false);
+                            onBook?.();
+                          }}
+                          className="w-full p-4 bg-white border border-gray-200 rounded-xl hover:border-primary/50 hover:bg-primary/5 transition-all text-left"
+                        >
+                          <div className="flex items-start justify-between gap-3 mb-2">
+                            <p className="font-semibold text-gray-900">{formule.name}</p>
+                            <span className="text-lg font-bold text-primary flex-shrink-0">
+                              {formatPrice(calculatePriceWithCommission(formulePrice, commissionRate))}€
+                              <span className="text-xs font-normal text-gray-500">
+                                {formuleUnit ? `/${formuleUnit}` : ""}
+                              </span>
+                            </span>
+                          </div>
 
-                        {/* Buttons */}
-                        <div className="space-y-3">
-                          {/* Vérifier la réservation */}
-                          <motion.button
-                            whileTap={{ scale: 0.98 }}
-                            onClick={handleConfirmBooking}
-                            className="w-full py-3.5 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold rounded-xl shadow-lg shadow-primary/25 flex items-center justify-center gap-2"
-                          >
-                            <Eye className="w-4 h-4" />
-                            Vérifier la réservation
-                          </motion.button>
+                          {formule.description && (
+                            <p className="text-sm text-gray-500 mb-3 line-clamp-2">{formule.description}</p>
+                          )}
 
-                          {/* Finaliser directement */}
-                          <motion.button
-                            whileTap={{ scale: 0.98 }}
-                            onClick={() => {
-                              setIsSheetOpen(false);
-                              onFinalize?.();
-                            }}
-                            className="w-full py-3.5 border-2 border-secondary bg-secondary/5 text-secondary font-semibold rounded-xl flex items-center justify-center gap-2 hover:bg-secondary/10 transition-colors"
-                          >
-                            <CreditCard className="w-4 h-4" />
-                            Finaliser la réservation
+                          <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                            {formule.sessionType === "collective" ? (
+                              <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full">
+                                <Users className="w-3 h-3" />
+                                Collectif
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-blue-100 text-blue-600 rounded-full">
+                                <Users className="w-3 h-3" />
+                                Individuel
+                              </span>
+                            )}
+                            {formule.serviceLocation && (
+                              <span className={cn(
+                                "flex items-center gap-1 text-xs px-2 py-0.5 rounded-full",
+                                formule.serviceLocation === "announcer_home" && "bg-primary/10 text-primary",
+                                formule.serviceLocation === "client_home" && "bg-secondary/10 text-secondary",
+                                formule.serviceLocation === "both" && "bg-purple-100 text-purple-600"
+                              )}>
+                                {formule.serviceLocation === "announcer_home" && <><Home className="w-3 h-3" /> Chez le pro</>}
+                                {formule.serviceLocation === "client_home" && <><MapPin className="w-3 h-3" /> À domicile</>}
+                                {formule.serviceLocation === "both" && <><Home className="w-2.5 h-2.5" /><MapPin className="w-2.5 h-2.5" /> Flexible</>}
+                              </span>
+                            )}
+                            {formule.duration && (
+                              <span className="flex items-center gap-1 text-xs text-gray-500">
+                                <Clock className="w-3 h-3" />
+                                {formule.duration} min
+                              </span>
+                            )}
+                            {formule.numberOfSessions && formule.numberOfSessions > 1 && (
+                              <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-purple-100 text-purple-600 rounded-full">
+                                <Calendar className="w-3 h-3" />
+                                {formule.numberOfSessions} séances
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="w-full py-2.5 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold text-sm rounded-xl flex items-center justify-center gap-2">
+                            Réserver maintenant
                             <ArrowRight className="w-4 h-4" />
-                          </motion.button>
-                        </div>
-                      </div>
-                    ) : (
-                      // Show service/formule selection with filters
-                      <div className="space-y-4">
-                        {/* Titre */}
-                        <div className="flex items-center gap-3">
-                          <span className="p-2 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-xl">
-                            <Package className="w-5 h-5 text-primary" />
-                          </span>
-                          <h3 className="text-lg font-bold text-gray-900">Choisir une formule</h3>
-                        </div>
-
-                        {/* Filtres */}
-                        {services.some(s => s.formules.length > 1) && (
-                          <div className="flex flex-wrap gap-2 pb-3 border-b border-gray-100">
-                            {/* Filtre type de séance */}
-                            <button
-                              onClick={() => setFilterSessionType(filterSessionType === "individual" ? "all" : "individual")}
-                              className={cn(
-                                "inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-all",
-                                filterSessionType === "individual"
-                                  ? "bg-primary text-white border-primary"
-                                  : "bg-white text-gray-600 border-gray-200"
-                              )}
-                            >
-                              <Users className="w-3 h-3" />
-                              Individuel
-                            </button>
-                            <button
-                              onClick={() => setFilterSessionType(filterSessionType === "collective" ? "all" : "collective")}
-                              className={cn(
-                                "inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-all",
-                                filterSessionType === "collective"
-                                  ? "bg-primary text-white border-primary"
-                                  : "bg-white text-gray-600 border-gray-200"
-                              )}
-                            >
-                              <Users className="w-3 h-3" />
-                              Collectif
-                            </button>
-
-                            <span className="w-px h-5 bg-gray-200" />
-
-                            {/* Filtre lieu */}
-                            <button
-                              onClick={() => setFilterLocation(filterLocation === "announcer_home" ? "all" : "announcer_home")}
-                              className={cn(
-                                "inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-all",
-                                filterLocation === "announcer_home"
-                                  ? "bg-secondary text-white border-secondary"
-                                  : "bg-white text-gray-600 border-gray-200"
-                              )}
-                            >
-                              <Home className="w-3 h-3" />
-                              Chez le pro
-                            </button>
-                            <button
-                              onClick={() => setFilterLocation(filterLocation === "client_home" ? "all" : "client_home")}
-                              className={cn(
-                                "inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-all",
-                                filterLocation === "client_home"
-                                  ? "bg-secondary text-white border-secondary"
-                                  : "bg-white text-gray-600 border-gray-200"
-                              )}
-                            >
-                              <MapPin className="w-3 h-3" />
-                              À domicile
-                            </button>
-
-                            {/* Filtre animaux si disponible */}
-                            {allAnimalsInFormules.length > 0 && (
-                              <>
-                                <span className="w-px h-5 bg-gray-200" />
-                                <select
-                                  value={filterAnimal}
-                                  onChange={(e) => setFilterAnimal(e.target.value)}
-                                  className={cn(
-                                    "px-2.5 py-1 text-xs rounded-full border transition-all appearance-none pr-6 cursor-pointer",
-                                    filterAnimal !== "all"
-                                      ? "bg-amber-500 text-white border-amber-500"
-                                      : "bg-white text-gray-600 border-gray-200"
-                                  )}
-                                  style={{ backgroundImage: "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")", backgroundPosition: "right 0.25rem center", backgroundRepeat: "no-repeat", backgroundSize: "1em 1em" }}
-                                >
-                                  <option value="all">Animal</option>
-                                  {allAnimalsInFormules.map(animal => (
-                                    <option key={animal} value={animal}>{animalLabels[animal] || animal}</option>
-                                  ))}
-                                </select>
-                              </>
-                            )}
-
-                            {/* Bouton reset */}
-                            {hasActiveFilters && (
-                              <button
-                                onClick={resetFilters}
-                                className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-primary transition-colors"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            )}
                           </div>
-                        )}
-
-                        {/* Liste des formules par service */}
-                        {services.map((service, index) => {
-                          const filteredFormules = getFilteredFormules(service.formules);
-                          if (filteredFormules.length === 0) return null;
-
-                          return (
-                            <div
-                              key={service.id.toString()}
-                              className={cn(
-                                index > 0 && "pt-3 border-t border-gray-100"
-                              )}
-                            >
-                              {/* Service Header */}
-                              <div className="flex items-center gap-2 mb-3">
-                                <span className="text-lg">{service.categoryIcon}</span>
-                                <span className="font-semibold text-gray-900">
-                                  {service.categoryName}
-                                </span>
-                              </div>
-
-                              {/* Formules */}
-                              <div className="space-y-3">
-                                {filteredFormules.map((formule) => {
-                                  const isGarde = isGardeService(service);
-                                  const { price: formulePrice, unit: formuleUnit } = getFormuleBestPrice(
-                                    formule,
-                                    isGarde
-                                  );
-                                  return (
-                                    <motion.button
-                                      key={formule.id.toString()}
-                                      whileTap={{ scale: 0.98 }}
-                                      onClick={() => {
-                                        setIsSheetOpen(false);
-                                        onBook?.();
-                                      }}
-                                      className="w-full p-4 bg-white border border-gray-200 rounded-xl hover:border-primary/50 hover:bg-primary/5 transition-all text-left"
-                                    >
-                                      {/* Titre + Prix */}
-                                      <div className="flex items-start justify-between gap-3 mb-2">
-                                        <p className="font-semibold text-gray-900">
-                                          {formule.name}
-                                        </p>
-                                        <span className="text-lg font-bold text-primary flex-shrink-0">
-                                          {formatPrice(
-                                            calculatePriceWithCommission(formulePrice, commissionRate)
-                                          )}
-                                          €
-                                          <span className="text-xs font-normal text-gray-500">
-                                            {formuleUnit ? `/${formuleUnit}` : ""}
-                                          </span>
-                                        </span>
-                                      </div>
-
-                                      {/* Description */}
-                                      {formule.description && (
-                                        <p className="text-sm text-gray-500 mb-3 line-clamp-2">
-                                          {formule.description}
-                                        </p>
-                                      )}
-
-                                      {/* Badges */}
-                                      <div className="flex flex-wrap items-center gap-1.5 mb-3">
-                                        {formule.sessionType === "collective" ? (
-                                          <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full">
-                                            <Users className="w-3 h-3" />
-                                            Collectif
-                                          </span>
-                                        ) : (
-                                          <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-blue-100 text-blue-600 rounded-full">
-                                            <Users className="w-3 h-3" />
-                                            Individuel
-                                          </span>
-                                        )}
-                                        {formule.serviceLocation && (
-                                          <span className={cn(
-                                            "flex items-center gap-1 text-xs px-2 py-0.5 rounded-full",
-                                            formule.serviceLocation === "announcer_home" && "bg-primary/10 text-primary",
-                                            formule.serviceLocation === "client_home" && "bg-secondary/10 text-secondary",
-                                            formule.serviceLocation === "both" && "bg-purple-100 text-purple-600"
-                                          )}>
-                                            {formule.serviceLocation === "announcer_home" && <><Home className="w-3 h-3" /> Chez le pro</>}
-                                            {formule.serviceLocation === "client_home" && <><MapPin className="w-3 h-3" /> À domicile</>}
-                                            {formule.serviceLocation === "both" && <><Home className="w-2.5 h-2.5" /><MapPin className="w-2.5 h-2.5" /> Flexible</>}
-                                          </span>
-                                        )}
-                                        {formule.duration && (
-                                          <span className="flex items-center gap-1 text-xs text-gray-500">
-                                            <Clock className="w-3 h-3" />
-                                            {formule.duration} min
-                                          </span>
-                                        )}
-                                        {formule.numberOfSessions && formule.numberOfSessions > 1 && (
-                                          <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-purple-100 text-purple-600 rounded-full">
-                                            <Calendar className="w-3 h-3" />
-                                            {formule.numberOfSessions} séances
-                                          </span>
-                                        )}
-                                      </div>
-
-                                      {/* Bouton Réserver */}
-                                      <div className="w-full py-2.5 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold text-sm rounded-xl flex items-center justify-center gap-2">
-                                        Réserver maintenant
-                                        <ArrowRight className="w-4 h-4" />
-                                      </div>
-                                    </motion.button>
-                                  );
-                                })}
-                              </div>
-
-                              {/* Options preview */}
-                              {service.options.length > 0 && (
-                                <p className="text-xs text-gray-500 mt-3 flex items-center gap-1">
-                                  <Check className="w-3 h-3 text-secondary" />
-                                  {service.options.length} option
-                                  {service.options.length > 1 ? "s" : ""} disponible
-                                  {service.options.length > 1 ? "s" : ""}
-                                </p>
-                              )}
-                            </div>
-                          );
-                        })}
-
-                        {/* Message si aucune formule ne correspond aux filtres */}
-                        {services.every(s => getFilteredFormules(s.formules).length === 0) && (
-                          <div className="bg-gray-50 rounded-xl p-6 text-center">
-                            <Package className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                            <p className="text-gray-500 text-sm mb-2">Aucune formule ne correspond aux filtres</p>
-                            <button onClick={resetFilters} className="text-sm text-primary hover:underline font-medium">
-                              Réinitialiser les filtres
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                        </motion.button>
+                      );
+                    })}
                   </div>
 
-                  {/* Safe area spacer */}
-                  <div className="h-6 flex-shrink-0" />
-                </motion.div>
+                  {service.options.length > 0 && (
+                    <p className="text-xs text-gray-500 mt-3 flex items-center gap-1">
+                      <Check className="w-3 h-3 text-secondary" />
+                      {service.options.length} option{service.options.length > 1 ? "s" : ""} disponible{service.options.length > 1 ? "s" : ""}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+
+            {services.every(s => getFilteredFormules(s.formules, filterSessionType, filterLocation, filterAnimal).length === 0) && (
+              <div className="bg-gray-50 rounded-xl p-6 text-center">
+                <Package className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                <p className="text-gray-500 text-sm mb-2">Aucune formule ne correspond aux filtres</p>
+                <button onClick={resetFilters} className="text-sm text-primary hover:underline font-medium">
+                  Réinitialiser les filtres
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </MobileBottomSheet>
+
+      {/* Calendar Sheet */}
+      <MobileBottomSheet
+        isOpen={isCalendarSheetOpen && Boolean(
+          (isCollectiveFormule && bookingVariant && onSlotsSelected) ||
+          (isMultiSessionIndividual && bookingVariant && onSessionsChange && calendarMonth && onMonthChange) ||
+          (calendarMonth && onDateSelect && onEndDateSelect && onTimeSelect && onEndTimeSelect && onOvernightChange && onMonthChange)
+        )}
+        onClose={() => setIsCalendarSheetOpen(false)}
+        maxHeight="90dvh"
+        headerLeft={
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">
+              {isCollectiveFormule
+                ? "Choisissez vos créneaux"
+                : isMultiSessionIndividual
+                ? "Choisissez vos séances"
+                : isRangeMode
+                ? "Choisissez vos dates"
+                : "Choisissez votre créneau"}
+            </h3>
+            {bookingVariant && (
+              <p className="text-sm text-gray-500 flex items-center gap-1">
+                <span>{bookingService?.categoryIcon}</span>
+                {bookingVariant.name}
+                {isCollectiveFormule && (
+                  <span className="ml-2 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full">
+                    {selectedSlotIds.length}/{collectiveNumberOfSessions} séances
+                  </span>
+                )}
+                {isMultiSessionIndividual && (
+                  <span className="ml-2 px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full">
+                    {selectedSessions.length}/{individualNumberOfSessions} séances
+                  </span>
+                )}
+              </p>
+            )}
+          </div>
+        }
+        footer={
+          <motion.button
+            whileTap={{ scale: 0.98 }}
+            onClick={handleCalendarConfirm}
+            disabled={
+              isCollectiveFormule
+                ? !hasAllSlotsSelected
+                : isMultiSessionIndividual
+                  ? !hasAllSessionsSelected
+                  : !bookingSelection?.startDate || !hasRequiredTimeSelection
+            }
+            className={cn(
+              "w-full py-3.5 font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors",
+              (isCollectiveFormule ? hasAllSlotsSelected : isMultiSessionIndividual ? hasAllSessionsSelected : (bookingSelection?.startDate && hasRequiredTimeSelection))
+                ? "bg-gradient-to-r from-primary to-primary/90 text-white shadow-lg shadow-primary/25"
+                : "bg-gray-100 text-gray-400 cursor-not-allowed"
+            )}
+          >
+            {isCollectiveFormule ? (
+              !hasAllSlotsSelected ? (
+                `Sélectionnez ${collectiveNumberOfSessions - selectedSlotIds.length} créneau(x)`
+              ) : (
+                <>
+                  Confirmer
+                  <Check className="w-4 h-4" />
+                </>
+              )
+            ) : isMultiSessionIndividual ? (
+              !hasAllSessionsSelected ? (
+                `Sélectionnez ${individualNumberOfSessions - selectedSessions.length} séance(s)`
+              ) : (
+                <>
+                  Confirmer
+                  <Check className="w-4 h-4" />
+                </>
+              )
+            ) : !bookingSelection?.startDate ? (
+              "Sélectionnez une date"
+            ) : !hasRequiredTimeSelection ? (
+              "Sélectionnez un horaire"
+            ) : (
+              <>
+                Confirmer
+                <Check className="w-4 h-4" />
               </>
             )}
-          </AnimatePresence>,
-          document.body
-        )}
-
-      {/* Calendar Sheet (Portal) */}
-      {typeof document !== "undefined" &&
-        createPortal(
-          <AnimatePresence>
-            {isCalendarSheetOpen && (
-              // Pour les formules collectives, multi-séances individuelles ou calendrier normal
-              (isCollectiveFormule && bookingVariant && onSlotsSelected) ||
-              (isMultiSessionIndividual && bookingVariant && onSessionsChange && calendarMonth && onMonthChange) ||
-              (calendarMonth && onDateSelect && onEndDateSelect && onTimeSelect && onEndTimeSelect && onOvernightChange && onMonthChange)
-            ) && (
-              <>
-                {/* Backdrop - bloque les interactions en dessous */}
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onClick={() => setIsCalendarSheetOpen(false)}
-                  className="fixed inset-0 bg-black/50 z-[9998] lg:hidden"
-                  style={{ touchAction: 'none' }}
-                />
-
-                {/* Calendar Sheet - avec support clavier mobile */}
-                <motion.div
-                  initial={{ y: "100%" }}
-                  animate={{ y: 0 }}
-                  exit={{ y: "100%" }}
-                  transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                  className="fixed inset-x-0 bottom-0 bg-white rounded-t-2xl z-[9999] lg:hidden flex flex-col"
-                  style={{
-                    maxHeight: '90dvh',
-                    height: 'auto',
-                  }}
-                >
-                  {/* Sheet Header */}
-                  <div className="flex items-center justify-between p-4 border-b border-gray-100 flex-shrink-0">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        {isCollectiveFormule
-                          ? "Choisissez vos créneaux"
-                          : isMultiSessionIndividual
-                          ? "Choisissez vos séances"
-                          : isRangeMode
-                          ? "Choisissez vos dates"
-                          : "Choisissez votre créneau"}
-                      </h3>
-                      {bookingVariant && (
-                        <p className="text-sm text-gray-500 flex items-center gap-1">
-                          <span>{bookingService?.categoryIcon}</span>
-                          {bookingVariant.name}
-                          {isCollectiveFormule && (
-                            <span className="ml-2 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full">
-                              {selectedSlotIds.length}/{collectiveNumberOfSessions} séances
-                            </span>
-                          )}
-                          {isMultiSessionIndividual && (
-                            <span className="ml-2 px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full">
-                              {selectedSessions.length}/{individualNumberOfSessions} séances
-                            </span>
-                          )}
-                        </p>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => setIsCalendarSheetOpen(false)}
-                      className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                    >
-                      <X className="w-5 h-5 text-gray-500" />
-                    </button>
-                  </div>
-
-                  {/* Sheet Content - zone scrollable */}
-                  <div
-                    className="flex-1 overflow-y-auto p-4"
-                    style={{
-                      WebkitOverflowScrolling: 'touch',
-                      overscrollBehavior: 'contain',
-                      minHeight: 0,
-                    }}
+          </motion.button>
+        }
+      >
+        {isCollectiveFormule && bookingVariant && onSlotsSelected ? (
+          <div className="space-y-4">
+            {onAnimalCountChange && collectiveMaxAnimals > 1 && (
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                <div>
+                  <p className="font-medium text-gray-900">Nombre d&apos;animaux</p>
+                  <p className="text-sm text-gray-500">
+                    Maximum {collectiveMaxAnimals} par séance
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => onAnimalCountChange(Math.max(1, animalCount - 1))}
+                    disabled={animalCount <= 1}
+                    className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isCollectiveFormule && bookingVariant && onSlotsSelected ? (
-                      // Afficher le CollectiveSlotPicker pour les formules collectives
-                      <div className="space-y-4">
-                        {/* Sélecteur du nombre d'animaux */}
-                        {onAnimalCountChange && collectiveMaxAnimals > 1 && (
-                          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                            <div>
-                              <p className="font-medium text-gray-900">Nombre d'animaux</p>
-                              <p className="text-sm text-gray-500">
-                                Maximum {collectiveMaxAnimals} par séance
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <button
-                                type="button"
-                                onClick={() => onAnimalCountChange(Math.max(1, animalCount - 1))}
-                                disabled={animalCount <= 1}
-                                className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                -
-                              </button>
-                              <span className="w-8 text-center font-semibold text-gray-900">
-                                {animalCount}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => onAnimalCountChange(Math.min(collectiveMaxAnimals, animalCount + 1))}
-                                disabled={animalCount >= collectiveMaxAnimals}
-                                className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                +
-                              </button>
-                            </div>
+                    -
+                  </button>
+                  <span className="w-8 text-center font-semibold text-gray-900">
+                    {animalCount}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onAnimalCountChange(Math.min(collectiveMaxAnimals, animalCount + 1))}
+                    disabled={animalCount >= collectiveMaxAnimals}
+                    className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <CollectiveSlotPicker
+              variantId={bookingVariant.id as string}
+              numberOfSessions={collectiveNumberOfSessions}
+              sessionInterval={collectiveSessionInterval}
+              animalCount={animalCount}
+              animalType={selectedAnimalType}
+              onSlotsSelected={onSlotsSelected}
+              selectedSlotIds={selectedSlotIds}
+            />
+          </div>
+        ) : isMultiSessionIndividual && bookingVariant && onSessionsChange && calendarMonth && onMonthChange ? (
+          <MultiSessionCalendar
+            numberOfSessions={individualNumberOfSessions}
+            sessionInterval={individualSessionInterval}
+            selectedSessions={selectedSessions}
+            onSessionsChange={onSessionsChange}
+            calendarMonth={calendarMonth}
+            availabilityCalendar={availabilityCalendar}
+            variantDuration={variantDuration}
+            bufferBefore={bufferBefore}
+            bufferAfter={bufferAfter}
+            acceptReservationsFrom={acceptReservationsFrom}
+            acceptReservationsTo={acceptReservationsTo}
+            onMonthChange={onMonthChange}
+          />
+        ) : (
+          calendarMonth && onDateSelect && onEndDateSelect && onTimeSelect && onEndTimeSelect && onOvernightChange && onMonthChange && (
+            <BookingCalendar
+              selectedDate={bookingSelection?.startDate ?? null}
+              selectedEndDate={bookingSelection?.endDate ?? null}
+              selectedTime={bookingSelection?.startTime ?? null}
+              selectedEndTime={bookingSelection?.endTime ?? null}
+              includeOvernightStay={bookingSelection?.includeOvernightStay ?? false}
+              calendarMonth={calendarMonth}
+              availabilityCalendar={availabilityCalendar}
+              isRangeMode={isRangeMode}
+              days={days}
+              nights={nights}
+              isCapacityBased={isCapacityBased}
+              maxAnimalsPerSlot={maxAnimalsPerSlot}
+              enableDurationBasedBlocking={enableDurationBasedBlocking}
+              variantDuration={variantDuration}
+              bufferBefore={bufferBefore}
+              bufferAfter={bufferAfter}
+              acceptReservationsFrom={acceptReservationsFrom}
+              acceptReservationsTo={acceptReservationsTo}
+              allowOvernightStay={bookingService?.allowOvernightStay}
+              overnightPrice={bookingService?.overnightPrice}
+              dayStartTime={bookingService?.dayStartTime}
+              dayEndTime={bookingService?.dayEndTime}
+              onDateSelect={onDateSelect}
+              onEndDateSelect={onEndDateSelect}
+              onTimeSelect={onTimeSelect}
+              onEndTimeSelect={onEndTimeSelect}
+              onOvernightChange={onOvernightChange}
+              onMonthChange={onMonthChange}
+            />
+          )
+        )}
+      </MobileBottomSheet>
+
+      {/* Step Sheet pour services garde et vérification chien */}
+      <MobileBottomSheet
+        isOpen={isStepSheetOpen && hasVariantSelected && (isRangeMode || needsLocationStep || isCollectiveFormule || isMultiSessionIndividual || mobileStep === "dog")}
+        onClose={() => setIsStepSheetOpen(false)}
+        maxHeight="90dvh"
+        noPadding
+        headerLeft={
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handlePrevStep}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            >
+              <ChevronLeft className="w-5 h-5 text-gray-500" />
+            </button>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">
+                {mobileStep === "dog" && "Votre animal"}
+                {mobileStep === "animals" && "Vos animaux"}
+                {mobileStep === "location" && (needsAddressOnly ? "Votre adresse" : "Lieu de prestation")}
+                {mobileStep === "dates" && (isRangeMode ? "Dates de garde" : "Date et heure")}
+                {mobileStep === "options" && "Options supplémentaires"}
+                {mobileStep === "summary" && "Récapitulatif"}
+              </h3>
+              {bookingVariant && (
+                <p className="text-sm text-gray-500 flex items-center gap-1">
+                  <span>{bookingService?.categoryIcon}</span>
+                  {bookingVariant.name}
+                </p>
+              )}
+            </div>
+          </div>
+        }
+        footer={
+          <div className="space-y-3">
+            {mobileStep === "summary" ? (
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  setIsStepSheetOpen(false);
+                  onFinalize?.();
+                }}
+                className="w-full py-3.5 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold rounded-xl shadow-lg shadow-primary/25 flex items-center justify-center gap-2"
+              >
+                <CreditCard className="w-4 h-4" />
+                Finaliser la réservation
+                <ArrowRight className="w-4 h-4" />
+              </motion.button>
+            ) : (
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={handleNextStep}
+                disabled={!canProceedToNextStep()}
+                className={cn(
+                  "w-full py-3.5 font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors",
+                  mobileStep === "dog" && guestAnimalError
+                    ? "bg-red-500 text-white cursor-not-allowed"
+                    : canProceedToNextStep()
+                      ? "bg-gradient-to-r from-primary to-primary/90 text-white shadow-lg shadow-primary/25"
+                      : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                )}
+              >
+                {mobileStep === "dog" && guestAnimalError && <AlertTriangle className="w-4 h-4" />}
+                {getStepButtonText()}
+                {canProceedToNextStep() && <ArrowRight className="w-4 h-4" />}
+              </motion.button>
+            )}
+          </div>
+        }
+      >
+        {/* Indicateur d'étapes */}
+        <div className="flex items-center gap-1 px-4 py-3 border-b border-gray-50">
+          {(() => {
+            const steps: MobileBookingStep[] = ["formule"];
+            if (!isLoggedIn && requiresAnimalVerification) steps.push("dog");
+            if (isLoggedIn && compatibleUserAnimals.length > 0) steps.push("animals");
+            steps.push("dates");
+            if (hasOptionsStep) steps.push("options");
+            steps.push("summary");
+
+            return steps.map((step, index) => {
+              const isActive = mobileStep === step;
+              const stepIndex = steps.indexOf(mobileStep);
+              const isPast = step === "formule" || index < stepIndex;
+              const stepNumber = index + 1;
+
+              return (
+                <div key={step} className="flex items-center gap-1 flex-1">
+                  <div className={cn(
+                    "w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium transition-colors flex-shrink-0",
+                    isActive ? "bg-primary text-white" :
+                    isPast ? "bg-secondary/20 text-secondary" :
+                    "bg-gray-100 text-gray-400"
+                  )}>
+                    {isPast ? <Check className="w-3 h-3" /> : stepNumber}
+                  </div>
+                  {index < steps.length - 1 && <div className={cn(
+                    "flex-1 h-0.5 transition-colors",
+                    isPast ? "bg-secondary/20" : "bg-gray-100"
+                  )} />}
+                </div>
+              );
+            });
+          })()}
+        </div>
+
+        {/* Contenu de l'étape */}
+        <div className="p-4">
+          {mobileStep === "dog" && onGuestAnimalDataChange && onGuestAnimalValidationChange && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-500">
+                Renseignez les informations de votre animal pour vérifier qu&apos;il correspond aux critères de cette formule.
+              </p>
+              <GuestAnimalVerification
+                acceptedAnimalTypes={acceptedAnimalTypes}
+                dogRestrictions={dogRestrictions}
+                onAnimalDataChange={onGuestAnimalDataChange}
+                onValidationChange={onGuestAnimalValidationChange}
+                initialData={guestAnimalData}
+              />
+            </div>
+          )}
+
+          {mobileStep === "animals" && isLoggedIn && onAnimalToggle && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-500">
+                Sélectionnez le ou les animaux pour cette garde.
+              </p>
+              {compatibleUserAnimals.length > 0 ? (
+                <div className="space-y-2">
+                  {compatibleUserAnimals.map((animal) => {
+                    const isSelected = selectedAnimalIds.includes(animal.id);
+                    return (
+                      <button
+                        key={animal.id}
+                        type="button"
+                        onClick={() => onAnimalToggle(animal.id, animal.type)}
+                        className={cn(
+                          "w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left",
+                          isSelected
+                            ? "border-primary bg-primary/5"
+                            : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                        )}
+                      >
+                        {animal.profilePhoto ? (
+                          <img
+                            src={animal.profilePhoto}
+                            alt={animal.name}
+                            className="w-12 h-12 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+                            <PawPrint className="w-6 h-6 text-gray-400" />
                           </div>
                         )}
+                        <div className="flex-1">
+                          <p className={cn(
+                            "font-semibold",
+                            isSelected ? "text-primary" : "text-gray-900"
+                          )}>
+                            {animal.name}
+                          </p>
+                          <p className="text-sm text-gray-500 capitalize">
+                            {animal.type}
+                            {animal.breed && ` • ${animal.breed}`}
+                          </p>
+                        </div>
+                        <div className={cn(
+                          "w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all",
+                          isSelected
+                            ? "bg-primary border-primary"
+                            : "border-gray-300 bg-white"
+                        )}>
+                          {isSelected && <Check className="w-4 h-4 text-white" />}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-4 bg-amber-50 rounded-xl text-amber-700 text-sm">
+                  Aucun de vos animaux n&apos;est compatible avec cette formule.
+                </div>
+              )}
+              <p className="text-xs text-gray-400">
+                {selectedAnimalIds.length} animal{selectedAnimalIds.length > 1 ? "x" : ""} sélectionné{selectedAnimalIds.length > 1 ? "s" : ""}
+              </p>
+            </div>
+          )}
 
-                        <CollectiveSlotPicker
-                          variantId={bookingVariant.id as string}
-                          numberOfSessions={collectiveNumberOfSessions}
-                          sessionInterval={collectiveSessionInterval}
-                          animalCount={animalCount}
-                          animalType={selectedAnimalType}
-                          onSlotsSelected={onSlotsSelected}
-                          selectedSlotIds={selectedSlotIds}
+          {mobileStep === "location" && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-500">
+                {isCollectiveFormule && isAnnouncerHomeOnly
+                  ? "Les séances ont lieu chez le prestataire."
+                  : needsAddressOnly
+                    ? "Indiquez l'adresse où aura lieu la prestation."
+                    : "Où souhaitez-vous que la garde ait lieu ?"
+                }
+              </p>
+
+              {isCollectiveFormule && isAnnouncerHomeOnly && (
+                <div className="space-y-4">
+                  <div className="p-4 bg-gray-50 rounded-xl flex items-center gap-3">
+                    <div className="p-2 bg-white rounded-lg">
+                      <Home className="w-5 h-5 text-gray-500" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        Chez {announcerFirstName || "le prestataire"}
+                      </p>
+                      {announcerCity && (
+                        <p className="text-sm text-gray-500">{announcerCity}</p>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 italic px-1">
+                    L&apos;adresse exacte vous sera communiquée une fois la réservation acceptée.
+                  </p>
+
+                  <div className="pt-4 border-t border-gray-100">
+                    <p className="text-sm font-medium text-gray-700 mb-3">
+                      Votre adresse <span className="text-gray-400 font-normal">(pour calculer la distance)</span>
+                    </p>
+                    {isLoggedIn ? (
+                      onAddressSelect && onAddNewAddress && (
+                        <AddressSelector
+                          addresses={clientAddresses}
+                          selectedAddressId={bookingSelection?.selectedAddressId ?? null}
+                          isLoading={isLoadingAddresses}
+                          onSelect={onAddressSelect}
+                          onAddNew={onAddNewAddress}
+                          announcerCoordinates={announcerCoordinates}
+                          announcerRadius={null}
                         />
-                      </div>
-                    ) : isMultiSessionIndividual && bookingVariant && onSessionsChange && calendarMonth && onMonthChange ? (
-                      // Afficher le MultiSessionCalendar pour les formules individuelles multi-séances
-                      <MultiSessionCalendar
-                        numberOfSessions={individualNumberOfSessions}
-                        sessionInterval={individualSessionInterval}
-                        selectedSessions={selectedSessions}
-                        onSessionsChange={onSessionsChange}
-                        calendarMonth={calendarMonth}
-                        availabilityCalendar={availabilityCalendar}
-                        variantDuration={variantDuration}
-                        bufferBefore={bufferBefore}
-                        bufferAfter={bufferAfter}
-                        acceptReservationsFrom={acceptReservationsFrom}
-                        acceptReservationsTo={acceptReservationsTo}
-                        onMonthChange={onMonthChange}
-                      />
+                      )
                     ) : (
-                      // Afficher le calendrier normal
-                      calendarMonth && onDateSelect && onEndDateSelect && onTimeSelect && onEndTimeSelect && onOvernightChange && onMonthChange && (
-                        <BookingCalendar
-                          selectedDate={bookingSelection?.startDate ?? null}
-                          selectedEndDate={bookingSelection?.endDate ?? null}
-                          selectedTime={bookingSelection?.startTime ?? null}
-                          selectedEndTime={bookingSelection?.endTime ?? null}
-                          includeOvernightStay={bookingSelection?.includeOvernightStay ?? false}
-                          calendarMonth={calendarMonth}
-                          availabilityCalendar={availabilityCalendar}
-                          isRangeMode={isRangeMode}
-                          days={days}
-                          nights={nights}
-                          isCapacityBased={isCapacityBased}
-                          maxAnimalsPerSlot={maxAnimalsPerSlot}
-                          enableDurationBasedBlocking={enableDurationBasedBlocking}
-                          variantDuration={variantDuration}
-                          bufferBefore={bufferBefore}
-                          bufferAfter={bufferAfter}
-                          acceptReservationsFrom={acceptReservationsFrom}
-                          acceptReservationsTo={acceptReservationsTo}
-                          allowOvernightStay={bookingService?.allowOvernightStay}
-                          overnightPrice={bookingService?.overnightPrice}
-                          dayStartTime={bookingService?.dayStartTime}
-                          dayEndTime={bookingService?.dayEndTime}
-                          onDateSelect={onDateSelect}
-                          onEndDateSelect={onEndDateSelect}
-                          onTimeSelect={onTimeSelect}
-                          onEndTimeSelect={onEndTimeSelect}
-                          onOvernightChange={onOvernightChange}
-                          onMonthChange={onMonthChange}
+                      onGuestAddressChange && (
+                        <GuestAddressSelector
+                          guestAddress={guestAddress ?? null}
+                          announcerCoordinates={announcerCoordinates}
+                          announcerRadius={null}
+                          onAddressChange={onGuestAddressChange}
                         />
                       )
                     )}
                   </div>
+                </div>
+              )}
 
-                  {/* Confirm button */}
-                  <div className="p-4 border-t border-gray-100 flex-shrink-0">
-                    <motion.button
-                      whileTap={{ scale: 0.98 }}
-                      onClick={handleCalendarConfirm}
-                      disabled={
-                        isCollectiveFormule
-                          ? !hasAllSlotsSelected
-                          : isMultiSessionIndividual
-                            ? !hasAllSessionsSelected
-                            : !bookingSelection?.startDate || !hasRequiredTimeSelection
-                      }
-                      className={cn(
-                        "w-full py-3.5 font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors",
-                        (isCollectiveFormule ? hasAllSlotsSelected : isMultiSessionIndividual ? hasAllSessionsSelected : (bookingSelection?.startDate && hasRequiredTimeSelection))
-                          ? "bg-gradient-to-r from-primary to-primary/90 text-white shadow-lg shadow-primary/25"
-                          : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                      )}
-                    >
-                      {isCollectiveFormule ? (
-                        !hasAllSlotsSelected ? (
-                          `Sélectionnez ${collectiveNumberOfSessions - selectedSlotIds.length} créneau(x)`
-                        ) : (
-                          <>
-                            Confirmer
-                            <Check className="w-4 h-4" />
-                          </>
-                        )
-                      ) : isMultiSessionIndividual ? (
-                        !hasAllSessionsSelected ? (
-                          `Sélectionnez ${individualNumberOfSessions - selectedSessions.length} séance(s)`
-                        ) : (
-                          <>
-                            Confirmer
-                            <Check className="w-4 h-4" />
-                          </>
-                        )
-                      ) : !bookingSelection?.startDate ? (
-                        "Sélectionnez une date"
-                      ) : !hasRequiredTimeSelection ? (
-                        "Sélectionnez un horaire"
-                      ) : (
-                        <>
-                          Confirmer
-                          <Check className="w-4 h-4" />
-                        </>
-                      )}
-                    </motion.button>
-                  </div>
-
-                  {/* Safe area spacer */}
-                  <div className="h-2 flex-shrink-0" />
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>,
-          document.body
-        )}
-
-      {/* Step Sheet pour services garde et vérification chien (Portal) */}
-      {typeof document !== "undefined" &&
-        createPortal(
-          <AnimatePresence>
-            {isStepSheetOpen && hasVariantSelected && (isRangeMode || needsLocationStep || isCollectiveFormule || isMultiSessionIndividual || mobileStep === "dog") && (
-              <>
-                {/* Backdrop - bloque les interactions en dessous */}
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onClick={() => setIsStepSheetOpen(false)}
-                  className="fixed inset-0 bg-black/50 z-[9998] lg:hidden"
-                  style={{ touchAction: 'none' }}
+              {!isAnnouncerHomeOnly && needsLocationChoice && onLocationSelect && (
+                <ServiceLocationSelector
+                  serviceLocation={bookingService?.serviceLocation || "both"}
+                  selectedLocation={bookingSelection?.serviceLocation ?? null}
+                  onSelect={onLocationSelect}
+                  isRangeMode={isRangeMode}
+                  announcerFirstName={announcerFirstName}
                 />
+              )}
 
-                {/* Step Sheet - avec support clavier mobile */}
-                <motion.div
-                  initial={{ y: "100%" }}
-                  animate={{ y: 0 }}
-                  exit={{ y: "100%" }}
-                  transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                  className="fixed inset-x-0 bottom-0 bg-white rounded-t-2xl z-[9999] lg:hidden flex flex-col"
-                  style={{
-                    maxHeight: '90dvh',
-                    height: 'auto',
-                  }}
-                >
-                  {/* Sheet Header avec navigation */}
-                  <div className="flex items-center justify-between p-4 border-b border-gray-100 flex-shrink-0">
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={handlePrevStep}
-                        className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                      >
-                        <ChevronLeft className="w-5 h-5 text-gray-500" />
-                      </button>
+              {!isAnnouncerHomeOnly && bookingSelection?.serviceLocation === "announcer_home" && announcerCity && (
+                <p className="text-xs text-gray-500 italic px-1">
+                  L&apos;adresse exacte vous sera communiquée après acceptation.
+                </p>
+              )}
+
+              {!isAnnouncerHomeOnly && (needsAddressOnly || bookingSelection?.serviceLocation === "client_home") && (
+                <div className={needsLocationChoice ? "mt-4 pt-4 border-t border-gray-100" : ""}>
+                  {isLoggedIn ? (
+                    onAddressSelect && onAddNewAddress && (
+                      <AddressSelector
+                        addresses={clientAddresses}
+                        selectedAddressId={bookingSelection?.selectedAddressId ?? null}
+                        isLoading={isLoadingAddresses}
+                        onSelect={onAddressSelect}
+                        onAddNew={onAddNewAddress}
+                        announcerCoordinates={announcerCoordinates}
+                        announcerRadius={announcerRadius}
+                        onDistanceError={(outOfRange) => setIsAddressOutOfRange(outOfRange)}
+                      />
+                    )
+                  ) : (
+                    onGuestAddressChange && (
+                      <GuestAddressSelector
+                        guestAddress={guestAddress ?? null}
+                        announcerCoordinates={announcerCoordinates}
+                        announcerRadius={announcerRadius}
+                        onAddressChange={onGuestAddressChange}
+                        onDistanceError={setIsAddressOutOfRange}
+                      />
+                    )
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {mobileStep === "dates" && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-500">
+                {isRangeMode
+                  ? "Sélectionnez les dates de la garde."
+                  : isCollectiveFormule
+                    ? `Sélectionnez ${collectiveNumberOfSessions} séance${collectiveNumberOfSessions > 1 ? "s" : ""} collective${collectiveNumberOfSessions > 1 ? "s" : ""}.`
+                    : isMultiSessionIndividual
+                      ? `Sélectionnez ${individualNumberOfSessions} séance${individualNumberOfSessions > 1 ? "s" : ""}.`
+                      : "Sélectionnez une date et un créneau."
+                }
+              </p>
+
+              {isRangeMode && calendarMonth && onDateSelect && onEndDateSelect && onTimeSelect && onEndTimeSelect && onOvernightChange && onMonthChange && (
+                <BookingCalendar
+                  selectedDate={bookingSelection?.startDate ?? null}
+                  selectedEndDate={bookingSelection?.endDate ?? null}
+                  selectedTime={bookingSelection?.startTime ?? null}
+                  selectedEndTime={bookingSelection?.endTime ?? null}
+                  includeOvernightStay={bookingSelection?.includeOvernightStay ?? false}
+                  calendarMonth={calendarMonth}
+                  availabilityCalendar={availabilityCalendar}
+                  isRangeMode={isRangeMode}
+                  days={days}
+                  nights={nights}
+                  isCapacityBased={isCapacityBased}
+                  maxAnimalsPerSlot={maxAnimalsPerSlot}
+                  enableDurationBasedBlocking={enableDurationBasedBlocking}
+                  variantDuration={variantDuration}
+                  bufferBefore={bufferBefore}
+                  bufferAfter={bufferAfter}
+                  acceptReservationsFrom={acceptReservationsFrom}
+                  acceptReservationsTo={acceptReservationsTo}
+                  allowOvernightStay={bookingService?.allowOvernightStay}
+                  overnightPrice={bookingService?.overnightPrice}
+                  dayStartTime={bookingService?.dayStartTime}
+                  dayEndTime={bookingService?.dayEndTime}
+                  onDateSelect={onDateSelect}
+                  onEndDateSelect={onEndDateSelect}
+                  onTimeSelect={onTimeSelect}
+                  onEndTimeSelect={onEndTimeSelect}
+                  onOvernightChange={onOvernightChange}
+                  onMonthChange={onMonthChange}
+                />
+              )}
+
+              {!isRangeMode && isCollectiveFormule && bookingVariant && onSlotsSelected && (
+                <div className="space-y-4">
+                  {onAnimalCountChange && collectiveMaxAnimals > 1 && (
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                       <div>
-                        <h3 className="text-lg font-semibold text-gray-900">
-                          {mobileStep === "dog" && "Votre animal"}
-                          {mobileStep === "animals" && "Vos animaux"}
-                          {mobileStep === "location" && (needsAddressOnly ? "Votre adresse" : "Lieu de prestation")}
-                          {mobileStep === "dates" && (isRangeMode ? "Dates de garde" : "Date et heure")}
-                          {mobileStep === "options" && "Options supplémentaires"}
-                          {mobileStep === "summary" && "Récapitulatif"}
-                        </h3>
-                        {bookingVariant && (
-                          <p className="text-sm text-gray-500 flex items-center gap-1">
-                            <span>{bookingService?.categoryIcon}</span>
-                            {bookingVariant.name}
-                          </p>
-                        )}
+                        <p className="font-medium text-gray-900">Nombre d&apos;animaux</p>
+                        <p className="text-sm text-gray-500">
+                          Maximum {collectiveMaxAnimals} par séance
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => onAnimalCountChange(Math.max(1, animalCount - 1))}
+                          disabled={animalCount <= 1}
+                          className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          -
+                        </button>
+                        <span className="w-8 text-center font-semibold text-gray-900">
+                          {animalCount}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onAnimalCountChange(Math.min(collectiveMaxAnimals, animalCount + 1))}
+                          disabled={animalCount >= collectiveMaxAnimals}
+                          className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          +
+                        </button>
                       </div>
                     </div>
-                    <button
-                      onClick={() => setIsStepSheetOpen(false)}
-                      className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                    >
-                      <X className="w-5 h-5 text-gray-500" />
-                    </button>
-                  </div>
+                  )}
 
-                  {/* Indicateur d'étapes - commence à 1 avec Formule (déjà complétée) */}
-                  <div className="flex items-center gap-1 px-4 py-3 border-b border-gray-50">
-                    {(() => {
-                      // Construire la liste des étapes : Formule (1) est toujours complétée
-                      const steps: MobileBookingStep[] = ["formule"];
-                      if (!isLoggedIn && requiresAnimalVerification) steps.push("dog");
-                      if (isLoggedIn && compatibleUserAnimals.length > 0) steps.push("animals");
-                      steps.push("dates");
-                      if (hasOptionsStep) steps.push("options");
-                      steps.push("summary");
+                  <CollectiveSlotPicker
+                    variantId={bookingVariant.id as string}
+                    numberOfSessions={collectiveNumberOfSessions}
+                    sessionInterval={collectiveSessionInterval}
+                    animalCount={animalCount}
+                    animalType={selectedAnimalType}
+                    onSlotsSelected={onSlotsSelected}
+                    selectedSlotIds={selectedSlotIds}
+                  />
+                </div>
+              )}
 
-                      return steps.map((step, index) => {
-                        const isActive = mobileStep === step;
-                        const stepIndex = steps.indexOf(mobileStep);
-                        // Formule est toujours passée (index 0), les autres dépendent de l'étape actuelle
-                        const isPast = step === "formule" || index < stepIndex;
-                        const stepNumber = index + 1;
+              {!isRangeMode && !isCollectiveFormule && calendarMonth && onMonthChange && onSessionsChange && (
+                <MultiSessionCalendar
+                  numberOfSessions={individualNumberOfSessions}
+                  sessionInterval={individualSessionInterval}
+                  selectedSessions={selectedSessions}
+                  onSessionsChange={onSessionsChange}
+                  calendarMonth={calendarMonth}
+                  availabilityCalendar={availabilityCalendar}
+                  variantDuration={variantDuration}
+                  bufferBefore={bufferBefore}
+                  bufferAfter={bufferAfter}
+                  acceptReservationsFrom={acceptReservationsFrom}
+                  acceptReservationsTo={acceptReservationsTo}
+                  onMonthChange={onMonthChange}
+                />
+              )}
+            </div>
+          )}
 
-                        return (
-                          <div key={step} className="flex items-center gap-1 flex-1">
-                            <div className={cn(
-                              "w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium transition-colors flex-shrink-0",
-                              isActive ? "bg-primary text-white" :
-                              isPast ? "bg-secondary/20 text-secondary" :
-                              "bg-gray-100 text-gray-400"
-                            )}>
-                              {isPast ? <Check className="w-3 h-3" /> : stepNumber}
-                            </div>
-                            {index < steps.length - 1 && <div className={cn(
-                              "flex-1 h-0.5 transition-colors",
-                              isPast ? "bg-secondary/20" : "bg-gray-100"
-                            )} />}
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
+          {mobileStep === "options" && bookingService && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-500">
+                Personnalisez votre réservation avec des options supplémentaires.
+              </p>
+              {bookingService.options.length > 0 ? (
+                <div className="space-y-3">
+                  {bookingService.options.map((option, index) => (
+                    <SelectableOptionCard
+                      key={option.id.toString()}
+                      option={option}
+                      isSelected={selectedOptionIds.includes(option.id.toString())}
+                      commissionRate={commissionRate}
+                      onToggle={() => onOptionToggle?.(option.id.toString())}
+                      showSuggestPulse={selectedOptionIds.length === 0}
+                      animationDelay={index * 0.1}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-gray-500 text-sm">
+                    Aucune option disponible pour ce service
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
-                  {/* Sheet Content - zone scrollable */}
-                  <div
-                    className="flex-1 overflow-y-auto p-4"
-                    style={{
-                      WebkitOverflowScrolling: 'touch',
-                      overscrollBehavior: 'contain',
-                      minHeight: 0, // Important pour flex avec overflow
-                    }}
-                  >
-                    {/* Étape Vérification de l'animal (chien ou chat) */}
-                    {mobileStep === "dog" && onGuestAnimalDataChange && onGuestAnimalValidationChange && (
-                      <div className="space-y-4">
-                        <p className="text-sm text-gray-500">
-                          Renseignez les informations de votre animal pour vérifier qu'il correspond aux critères de cette formule.
-                        </p>
-
-                        <GuestAnimalVerification
-                          acceptedAnimalTypes={acceptedAnimalTypes}
-                          dogRestrictions={dogRestrictions}
-                          onAnimalDataChange={onGuestAnimalDataChange}
-                          onValidationChange={onGuestAnimalValidationChange}
-                          initialData={guestAnimalData}
-                        />
-                      </div>
-                    )}
-
-                    {/* Étape Animaux */}
-                    {mobileStep === "animals" && isLoggedIn && onAnimalToggle && (
-                      <div className="space-y-4">
-                        <p className="text-sm text-gray-500">
-                          Sélectionnez le ou les animaux pour cette garde.
-                        </p>
-
-                        {compatibleUserAnimals.length > 0 ? (
-                          <div className="space-y-2">
-                            {compatibleUserAnimals.map((animal) => {
-                              const isSelected = selectedAnimalIds.includes(animal.id);
-                              return (
-                                <button
-                                  key={animal.id}
-                                  type="button"
-                                  onClick={() => onAnimalToggle(animal.id, animal.type)}
-                                  className={cn(
-                                    "w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left",
-                                    isSelected
-                                      ? "border-primary bg-primary/5"
-                                      : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                                  )}
-                                >
-                                  {animal.profilePhoto ? (
-                                    <img
-                                      src={animal.profilePhoto}
-                                      alt={animal.name}
-                                      className="w-12 h-12 rounded-full object-cover"
-                                    />
-                                  ) : (
-                                    <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
-                                      <PawPrint className="w-6 h-6 text-gray-400" />
-                                    </div>
-                                  )}
-                                  <div className="flex-1">
-                                    <p className={cn(
-                                      "font-semibold",
-                                      isSelected ? "text-primary" : "text-gray-900"
-                                    )}>
-                                      {animal.name}
-                                    </p>
-                                    <p className="text-sm text-gray-500 capitalize">
-                                      {animal.type}
-                                      {animal.breed && ` • ${animal.breed}`}
-                                    </p>
-                                  </div>
-                                  <div className={cn(
-                                    "w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all",
-                                    isSelected
-                                      ? "bg-primary border-primary"
-                                      : "border-gray-300 bg-white"
-                                  )}>
-                                    {isSelected && <Check className="w-4 h-4 text-white" />}
-                                  </div>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="p-4 bg-amber-50 rounded-xl text-amber-700 text-sm">
-                            Aucun de vos animaux n'est compatible avec cette formule.
-                          </div>
-                        )}
-
-                        <p className="text-xs text-gray-400">
-                          {selectedAnimalIds.length} animal{selectedAnimalIds.length > 1 ? "x" : ""} sélectionné{selectedAnimalIds.length > 1 ? "s" : ""}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Étape Lieu */}
-                    {mobileStep === "location" && (
-                      <div className="space-y-4">
-                        <p className="text-sm text-gray-500">
-                          {isCollectiveFormule && isAnnouncerHomeOnly
-                            ? "Les séances ont lieu chez le prestataire."
-                            : needsAddressOnly
-                              ? "Indiquez l'adresse où aura lieu la prestation."
-                              : "Où souhaitez-vous que la garde ait lieu ?"
-                          }
-                        </p>
-
-                        {/* Cas formule collective chez l'annonceur uniquement */}
-                        {isCollectiveFormule && isAnnouncerHomeOnly && (
-                          <div className="space-y-4">
-                            {/* Affichage du lieu de la séance */}
-                            <div className="p-4 bg-gray-50 rounded-xl flex items-center gap-3">
-                              <div className="p-2 bg-white rounded-lg">
-                                <Home className="w-5 h-5 text-gray-500" />
-                              </div>
-                              <div>
-                                <p className="font-medium text-gray-900">
-                                  Chez {announcerFirstName || "le prestataire"}
-                                </p>
-                                {announcerCity && (
-                                  <p className="text-sm text-gray-500">
-                                    {announcerCity}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                            <p className="text-xs text-gray-500 italic px-1">
-                              L'adresse exacte vous sera communiquée une fois la réservation acceptée.
-                            </p>
-
-                            {/* Saisie de l'adresse pour calculer la distance (optionnel) */}
-                            <div className="pt-4 border-t border-gray-100">
-                              <p className="text-sm font-medium text-gray-700 mb-3">
-                                Votre adresse <span className="text-gray-400 font-normal">(pour calculer la distance)</span>
-                              </p>
-                              {isLoggedIn ? (
-                                onAddressSelect && onAddNewAddress && (
-                                  <AddressSelector
-                                    addresses={clientAddresses}
-                                    selectedAddressId={bookingSelection?.selectedAddressId ?? null}
-                                    isLoading={isLoadingAddresses}
-                                    onSelect={onAddressSelect}
-                                    onAddNew={onAddNewAddress}
-                                    announcerCoordinates={announcerCoordinates}
-                                    announcerRadius={null}
-                                  />
-                                )
-                              ) : (
-                                onGuestAddressChange && (
-                                  <GuestAddressSelector
-                                    guestAddress={guestAddress ?? null}
-                                    announcerCoordinates={announcerCoordinates}
-                                    announcerRadius={null}
-                                    onAddressChange={onGuestAddressChange}
-                                  />
-                                )
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Choix du lieu si les deux options sont disponibles */}
-                        {!isAnnouncerHomeOnly && needsLocationChoice && onLocationSelect && (
-                          <ServiceLocationSelector
-                            serviceLocation={bookingService?.serviceLocation || "both"}
-                            selectedLocation={bookingSelection?.serviceLocation ?? null}
-                            onSelect={onLocationSelect}
-                            isRangeMode={isRangeMode}
-                            announcerFirstName={announcerFirstName}
-                          />
-                        )}
-
-                        {/* Afficher la ville si chez l'annonceur */}
-                        {!isAnnouncerHomeOnly && bookingSelection?.serviceLocation === "announcer_home" && announcerCity && (
-                          <p className="text-xs text-gray-500 italic px-1">
-                            L'adresse exacte vous sera communiquée après acceptation.
-                          </p>
-                        )}
-
-                        {/* Sélecteur d'adresse si à domicile ou formule uniquement à domicile */}
-                        {!isAnnouncerHomeOnly && (needsAddressOnly || bookingSelection?.serviceLocation === "client_home") && (
-                          <div className={needsLocationChoice ? "mt-4 pt-4 border-t border-gray-100" : ""}>
-                            {isLoggedIn ? (
-                              onAddressSelect && onAddNewAddress && (
-                                <AddressSelector
-                                  addresses={clientAddresses}
-                                  selectedAddressId={bookingSelection?.selectedAddressId ?? null}
-                                  isLoading={isLoadingAddresses}
-                                  onSelect={onAddressSelect}
-                                  onAddNew={onAddNewAddress}
-                                  announcerCoordinates={announcerCoordinates}
-                                  announcerRadius={announcerRadius}
-                                  onDistanceError={(outOfRange) => setIsAddressOutOfRange(outOfRange)}
-                                />
-                              )
-                            ) : (
-                              onGuestAddressChange && (
-                                <GuestAddressSelector
-                                  guestAddress={guestAddress ?? null}
-                                  announcerCoordinates={announcerCoordinates}
-                                  announcerRadius={announcerRadius}
-                                  onAddressChange={onGuestAddressChange}
-                                  onDistanceError={setIsAddressOutOfRange}
-                                />
-                              )
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Étape Dates */}
-                    {mobileStep === "dates" && (
-                      <div className="space-y-4">
-                        <p className="text-sm text-gray-500">
-                          {isRangeMode
-                            ? "Sélectionnez les dates de la garde."
-                            : isCollectiveFormule
-                              ? `Sélectionnez ${collectiveNumberOfSessions} séance${collectiveNumberOfSessions > 1 ? "s" : ""} collective${collectiveNumberOfSessions > 1 ? "s" : ""}.`
-                              : isMultiSessionIndividual
-                                ? `Sélectionnez ${individualNumberOfSessions} séance${individualNumberOfSessions > 1 ? "s" : ""}.`
-                                : "Sélectionnez une date et un créneau."
-                          }
-                        </p>
-
-                        {/* Calendrier pour services garde (mode plage de dates) */}
-                        {isRangeMode && calendarMonth && onDateSelect && onEndDateSelect && onTimeSelect && onEndTimeSelect && onOvernightChange && onMonthChange && (
-                          <BookingCalendar
-                            selectedDate={bookingSelection?.startDate ?? null}
-                            selectedEndDate={bookingSelection?.endDate ?? null}
-                            selectedTime={bookingSelection?.startTime ?? null}
-                            selectedEndTime={bookingSelection?.endTime ?? null}
-                            includeOvernightStay={bookingSelection?.includeOvernightStay ?? false}
-                            calendarMonth={calendarMonth}
-                            availabilityCalendar={availabilityCalendar}
-                            isRangeMode={isRangeMode}
-                            days={days}
-                            nights={nights}
-                            isCapacityBased={isCapacityBased}
-                            maxAnimalsPerSlot={maxAnimalsPerSlot}
-                            enableDurationBasedBlocking={enableDurationBasedBlocking}
-                            variantDuration={variantDuration}
-                            bufferBefore={bufferBefore}
-                            bufferAfter={bufferAfter}
-                            acceptReservationsFrom={acceptReservationsFrom}
-                            acceptReservationsTo={acceptReservationsTo}
-                            allowOvernightStay={bookingService?.allowOvernightStay}
-                            overnightPrice={bookingService?.overnightPrice}
-                            dayStartTime={bookingService?.dayStartTime}
-                            dayEndTime={bookingService?.dayEndTime}
-                            onDateSelect={onDateSelect}
-                            onEndDateSelect={onEndDateSelect}
-                            onTimeSelect={onTimeSelect}
-                            onEndTimeSelect={onEndTimeSelect}
-                            onOvernightChange={onOvernightChange}
-                            onMonthChange={onMonthChange}
-                          />
-                        )}
-
-                        {/* CollectiveSlotPicker pour formules collectives */}
-                        {!isRangeMode && isCollectiveFormule && bookingVariant && onSlotsSelected && (
-                          <div className="space-y-4">
-                            {/* Sélecteur du nombre d'animaux */}
-                            {onAnimalCountChange && collectiveMaxAnimals > 1 && (
-                              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                                <div>
-                                  <p className="font-medium text-gray-900">Nombre d'animaux</p>
-                                  <p className="text-sm text-gray-500">
-                                    Maximum {collectiveMaxAnimals} par séance
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                  <button
-                                    type="button"
-                                    onClick={() => onAnimalCountChange(Math.max(1, animalCount - 1))}
-                                    disabled={animalCount <= 1}
-                                    className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                    -
-                                  </button>
-                                  <span className="w-8 text-center font-semibold text-gray-900">
-                                    {animalCount}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => onAnimalCountChange(Math.min(collectiveMaxAnimals, animalCount + 1))}
-                                    disabled={animalCount >= collectiveMaxAnimals}
-                                    className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                    +
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-
-                            <CollectiveSlotPicker
-                              variantId={bookingVariant.id as string}
-                              numberOfSessions={collectiveNumberOfSessions}
-                              sessionInterval={collectiveSessionInterval}
-                              animalCount={animalCount}
-                              animalType={selectedAnimalType}
-                              onSlotsSelected={onSlotsSelected}
-                              selectedSlotIds={selectedSlotIds}
-                            />
-                          </div>
-                        )}
-
-                        {/* Calendrier pour formules individuelles (multi-session ou uni-session) */}
-                        {!isRangeMode && !isCollectiveFormule && calendarMonth && onMonthChange && onSessionsChange && (
-                          <MultiSessionCalendar
-                            numberOfSessions={individualNumberOfSessions}
-                            sessionInterval={individualSessionInterval}
-                            selectedSessions={selectedSessions}
-                            onSessionsChange={onSessionsChange}
-                            calendarMonth={calendarMonth}
-                            availabilityCalendar={availabilityCalendar}
-                            variantDuration={variantDuration}
-                            bufferBefore={bufferBefore}
-                            bufferAfter={bufferAfter}
-                            acceptReservationsFrom={acceptReservationsFrom}
-                            acceptReservationsTo={acceptReservationsTo}
-                            onMonthChange={onMonthChange}
-                          />
-                        )}
-                      </div>
-                    )}
-
-                    {/* Étape Options */}
-                    {mobileStep === "options" && bookingService && (
-                      <div className="space-y-4">
-                        <p className="text-sm text-gray-500">
-                          Personnalisez votre réservation avec des options supplémentaires.
-                        </p>
-
-                        {bookingService.options.length > 0 ? (
-                          <div className="space-y-3">
-                            {bookingService.options.map((option, index) => (
-                              <SelectableOptionCard
-                                key={option.id.toString()}
-                                option={option}
-                                isSelected={selectedOptionIds.includes(option.id.toString())}
-                                commissionRate={commissionRate}
-                                onToggle={() => onOptionToggle?.(option.id.toString())}
-                                showSuggestPulse={selectedOptionIds.length === 0}
-                                animationDelay={index * 0.1}
-                              />
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="text-center py-4">
-                            <p className="text-gray-500 text-sm">
-                              Aucune option disponible pour ce service
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Étape Summary */}
-                    {mobileStep === "summary" && bookingService && bookingVariant && bookingSelection && (
-                      <div className="space-y-4">
-                        <BookingSummary
-                          service={bookingService}
-                          variant={bookingVariant}
-                          selection={bookingSelection}
-                          priceBreakdown={priceBreakdown ?? null}
-                          commissionRate={commissionRate}
-                          vatRate={vatRate}
-                          stripeFeeRate={stripeFeeRate}
-                          isRangeMode={isRangeMode}
-                          animalCount={selectedAnimalIds.length > 0 ? selectedAnimalIds.length : animalCount}
-                          announcerFirstName={announcerFirstName}
-                          announcerStatusType={announcerStatusType}
-                          requiresAnimalVerification={requiresAnimalVerification}
-                          guestAnimalValid={guestAnimalValid}
-                          guestAnimalError={guestAnimalError}
-                          compact
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Bouton de navigation */}
-                  <div className="p-4 border-t border-gray-100 flex-shrink-0 space-y-3">
-                    {mobileStep === "summary" ? (
-                      <motion.button
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => {
-                          setIsStepSheetOpen(false);
-                          onFinalize?.();
-                        }}
-                        className="w-full py-3.5 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold rounded-xl shadow-lg shadow-primary/25 flex items-center justify-center gap-2"
-                      >
-                        <CreditCard className="w-4 h-4" />
-                        Finaliser la réservation
-                        <ArrowRight className="w-4 h-4" />
-                      </motion.button>
-                    ) : (
-                      <motion.button
-                        whileTap={{ scale: 0.98 }}
-                        onClick={handleNextStep}
-                        disabled={!canProceedToNextStep()}
-                        className={cn(
-                          "w-full py-3.5 font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors",
-                          mobileStep === "dog" && guestAnimalError
-                            ? "bg-red-500 text-white cursor-not-allowed"
-                            : canProceedToNextStep()
-                              ? "bg-gradient-to-r from-primary to-primary/90 text-white shadow-lg shadow-primary/25"
-                              : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                        )}
-                      >
-                        {mobileStep === "dog" && guestAnimalError && <AlertTriangle className="w-4 h-4" />}
-                        {getStepButtonText()}
-                        {canProceedToNextStep() && <ArrowRight className="w-4 h-4" />}
-                      </motion.button>
-                    )}
-                  </div>
-
-                  {/* Safe area spacer */}
-                  <div className="h-2 flex-shrink-0" />
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>,
-          document.body
-        )}
+          {mobileStep === "summary" && bookingService && bookingVariant && bookingSelection && (
+            <div className="space-y-4">
+              <BookingSummary
+                service={bookingService}
+                variant={bookingVariant}
+                selection={bookingSelection}
+                priceBreakdown={priceBreakdown ?? null}
+                commissionRate={commissionRate}
+                vatRate={vatRate}
+                stripeFeeRate={stripeFeeRate}
+                isRangeMode={isRangeMode}
+                animalCount={selectedAnimalIds.length > 0 ? selectedAnimalIds.length : animalCount}
+                announcerFirstName={announcerFirstName}
+                announcerStatusType={announcerStatusType}
+                requiresAnimalVerification={requiresAnimalVerification}
+                guestAnimalValid={guestAnimalValid}
+                guestAnimalError={guestAnimalError}
+                compact
+              />
+            </div>
+          )}
+        </div>
+      </MobileBottomSheet>
 
       {/* Login Sheet */}
       <MobileBottomSheet

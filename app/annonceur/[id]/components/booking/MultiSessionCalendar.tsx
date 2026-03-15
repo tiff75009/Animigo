@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -179,7 +179,7 @@ const getWeekDays = (monday: Date): { date: Date; dateStr: string }[] => {
   return days;
 };
 
-export default function MultiSessionCalendar({
+export default memo(function MultiSessionCalendar({
   numberOfSessions,
   sessionInterval,
   selectedSessions,
@@ -985,4 +985,4 @@ export default function MultiSessionCalendar({
       )}
     </div>
   );
-}
+});

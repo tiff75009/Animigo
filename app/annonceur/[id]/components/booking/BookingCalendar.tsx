@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, ArrowRight, Calendar, Clock, Moon, Sun, Users, ChevronRight, Check, Pencil, X } from "lucide-react";
@@ -139,7 +139,7 @@ function formatPrice(cents: number): string {
   return (cents / 100).toFixed(2).replace(".", ",") + " €";
 }
 
-export default function BookingCalendar({
+export default memo(function BookingCalendar({
   selectedDate,
   selectedEndDate,
   selectedTime,
@@ -1319,4 +1319,4 @@ export default function BookingCalendar({
       )}
     </div>
   );
-}
+});

@@ -48,6 +48,8 @@ import {
   useBookingSteps,
   CollectiveSlotPicker,
   MultiSessionCalendar,
+  FormuleFilters,
+  getFilteredFormules,
   type BookingSelection,
   type CalendarEntry,
   type ClientAddress,
@@ -287,47 +289,13 @@ export default function AnnouncerFormules({
   const isGarde = isGardeService(service);
   const hasVariantSelected = selectedVariantId !== null && selectedVariantId !== undefined;
 
-  // Collecter tous les types d'animaux uniques dans les formules
-  const allAnimalsInFormules = [...new Set(service.formules.flatMap(f => f.animalTypes || []))];
-
-  // Filtrer les formules
-  const filteredFormules = service.formules.filter(formule => {
-    if (filterSessionType !== "all") {
-      const formuleSessionType = formule.sessionType || "individual";
-      if (formuleSessionType !== filterSessionType) return false;
-    }
-    if (filterLocation !== "all") {
-      if (!formule.serviceLocation) return false;
-      if (filterLocation === "both") {
-        if (formule.serviceLocation !== "both") return false;
-      } else {
-        if (formule.serviceLocation !== filterLocation && formule.serviceLocation !== "both") return false;
-      }
-    }
-    if (filterAnimal !== "all") {
-      if (!formule.animalTypes || !formule.animalTypes.includes(filterAnimal)) return false;
-    }
-    return true;
-  });
-
-  const hasActiveFilters = filterSessionType !== "all" || filterLocation !== "all" || filterAnimal !== "all";
+  // Filtrer les formules via le helper partagé
+  const filteredFormules = getFilteredFormules(service.formules, filterSessionType, filterLocation, filterAnimal);
 
   const resetFilters = () => {
     setFilterSessionType("all");
     setFilterLocation("all");
     setFilterAnimal("all");
-  };
-
-  // Labels pour les animaux
-  const animalLabels: Record<string, string> = {
-    chien: "🐕 Chien",
-    chat: "🐈 Chat",
-    lapin: "🐰 Lapin",
-    rongeur: "🐹 Rongeur",
-    oiseau: "🦜 Oiseau",
-    poisson: "🐠 Poisson",
-    reptile: "🦎 Reptile",
-    nac: "🐾 NAC",
   };
 
   // Trouver la formule sélectionnée pour obtenir sa durée
@@ -847,98 +815,18 @@ export default function AnnouncerFormules({
       </div>
 
       {/* Filtres */}
-      {service.formules.length > 1 && (
-        <div className="mb-4">
-          <div className="flex flex-wrap items-center gap-1.5">
-            {/* Filtre type de séance */}
-            <button
-              onClick={() => setFilterSessionType(filterSessionType === "individual" ? "all" : "individual")}
-              className={cn(
-                "inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-all",
-                filterSessionType === "individual"
-                  ? "bg-primary text-white border-primary"
-                  : "bg-white text-gray-600 border-gray-200"
-              )}
-            >
-              <Users className="w-3 h-3" />
-              Individuel
-            </button>
-            <button
-              onClick={() => setFilterSessionType(filterSessionType === "collective" ? "all" : "collective")}
-              className={cn(
-                "inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-all",
-                filterSessionType === "collective"
-                  ? "bg-primary text-white border-primary"
-                  : "bg-white text-gray-600 border-gray-200"
-              )}
-            >
-              <Users className="w-3 h-3" />
-              Collectif
-            </button>
-
-            <span className="w-px h-4 bg-gray-200" />
-
-            {/* Filtre lieu */}
-            <button
-              onClick={() => setFilterLocation(filterLocation === "announcer_home" ? "all" : "announcer_home")}
-              className={cn(
-                "inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-all",
-                filterLocation === "announcer_home"
-                  ? "bg-secondary text-white border-secondary"
-                  : "bg-white text-gray-600 border-gray-200"
-              )}
-            >
-              <Home className="w-3 h-3" />
-              Pro
-            </button>
-            <button
-              onClick={() => setFilterLocation(filterLocation === "client_home" ? "all" : "client_home")}
-              className={cn(
-                "inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-all",
-                filterLocation === "client_home"
-                  ? "bg-secondary text-white border-secondary"
-                  : "bg-white text-gray-600 border-gray-200"
-              )}
-            >
-              <MapPin className="w-3 h-3" />
-              Domicile
-            </button>
-
-            {/* Filtre animaux si disponible */}
-            {allAnimalsInFormules.length > 0 && (
-              <>
-                <span className="w-px h-4 bg-gray-200" />
-                <select
-                  value={filterAnimal}
-                  onChange={(e) => setFilterAnimal(e.target.value)}
-                  className={cn(
-                    "px-2.5 py-1 text-xs rounded-full border transition-all appearance-none pr-5 cursor-pointer",
-                    filterAnimal !== "all"
-                      ? "bg-amber-500 text-white border-amber-500"
-                      : "bg-white text-gray-600 border-gray-200"
-                  )}
-                  style={{ backgroundImage: "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")", backgroundPosition: "right 0.25rem center", backgroundRepeat: "no-repeat", backgroundSize: "0.9em 0.9em" }}
-                >
-                  <option value="all">Animal</option>
-                  {allAnimalsInFormules.map(animal => (
-                    <option key={animal} value={animal}>{animalLabels[animal] || animal}</option>
-                  ))}
-                </select>
-              </>
-            )}
-
-            {/* Bouton reset */}
-            {hasActiveFilters && (
-              <button
-                onClick={resetFilters}
-                className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-primary transition-colors"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      <div className="mb-4">
+        <FormuleFilters
+          services={[service]}
+          filterSessionType={filterSessionType}
+          filterLocation={filterLocation}
+          filterAnimal={filterAnimal}
+          onFilterSessionTypeChange={setFilterSessionType}
+          onFilterLocationChange={setFilterLocation}
+          onFilterAnimalChange={setFilterAnimal}
+          onReset={resetFilters}
+        />
+      </div>
 
       {/* Liste des formules */}
       {service.formules.length === 0 ? (
