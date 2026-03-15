@@ -17,6 +17,7 @@ import {
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import { getAuthToken } from "@/app/lib/authToken";
 import {
   CreditCard,
   Shield,
@@ -662,8 +663,7 @@ export default function PaymentPage() {
   const [saveCard, setSaveCard] = useState(false);
   const [savedCardError, setSavedCardError] = useState<string | null>(null);
 
-  const token =
-    typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const token = getAuthToken();
 
   // Get Stripe public key
   const stripePublicKey = useQuery(api.api.stripeClient.getPublicKey);

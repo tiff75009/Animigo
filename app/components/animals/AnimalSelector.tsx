@@ -17,6 +17,8 @@ interface AnimalSelectorProps {
   multiSelect?: boolean;
   selectedAnimalIds?: Id<"animals">[];
   onMultiSelect?: (animalIds: Id<"animals">[]) => void;
+  // Filtrer par types d'animaux acceptés (ex: ["chat", "chien"])
+  acceptedAnimalTypes?: string[];
 }
 
 export default function AnimalSelector({
@@ -27,11 +29,19 @@ export default function AnimalSelector({
   multiSelect = false,
   selectedAnimalIds = [],
   onMultiSelect,
+  acceptedAnimalTypes,
 }: AnimalSelectorProps) {
   // Récupérer les animaux de l'utilisateur
-  const animals = useQuery(api.animals.getUserAnimals, { token });
+  const allAnimals = useQuery(api.animals.getUserAnimals, { token });
 
-  const isLoading = animals === undefined;
+  // Filtrer par types acceptés si spécifiés
+  const animals = allAnimals && acceptedAnimalTypes && acceptedAnimalTypes.length > 0
+    ? allAnimals.filter((a: any) =>
+        acceptedAnimalTypes.some(t => t.toLowerCase() === a.type?.toLowerCase())
+      )
+    : allAnimals;
+
+  const isLoading = allAnimals === undefined;
 
   if (isLoading) {
     return (

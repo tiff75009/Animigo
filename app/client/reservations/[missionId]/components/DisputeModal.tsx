@@ -7,6 +7,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/app/lib/utils";
+import { getAuthToken } from "@/app/lib/authToken";
 
 interface DisputeReasonItem {
   _id: Id<"disputeReasons">;
@@ -35,8 +36,7 @@ export function DisputeModal({
   const reasons = useQuery(api.planning.disputes.getDisputeReasons);
   const submitDispute = useMutation(api.planning.disputes.submitDispute);
 
-  const token =
-    typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const token = getAuthToken();
 
   const selectedReason = (reasons as DisputeReasonItem[] | undefined)?.find((r) => r._id === selectedReasonId);
   const canSubmit =

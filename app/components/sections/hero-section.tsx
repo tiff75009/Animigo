@@ -156,6 +156,7 @@ export function HeroSection() {
           src="/header.svg"
           alt="Animigo - Services animaliers"
           fill
+          sizes="(max-width: 1280px) 45vw, 40vw"
           className="object-contain object-right-bottom"
           priority
         />
@@ -173,6 +174,7 @@ export function HeroSection() {
             src="/header.svg"
             alt="Animigo - Services animaliers"
             fill
+            sizes="(max-width: 768px) 100vw, 50vw"
             className="object-contain object-bottom"
             priority
           />

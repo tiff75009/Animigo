@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Shield, Eye, EyeOff, Loader2, AlertCircle, CheckCircle, KeyRound } from "lucide-react";
 import Link from "next/link";
 import { useConvexAction } from "@/app/hooks/useConvexAction";
+import { setAdminToken } from "@/app/lib/authToken";
 
 function InscriptionContent() {
   const router = useRouter();
@@ -93,7 +94,7 @@ function InscriptionContent() {
     });
 
     if (result?.success) {
-      localStorage.setItem("admin_token", result.token);
+      await setAdminToken(result.token);
       router.push("/admin");
     }
   };

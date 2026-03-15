@@ -6,12 +6,13 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { ChevronLeft, Send, CheckCircle } from "lucide-react";
 import { TicketForm } from "@/app/components/support";
+import { getAuthToken } from "@/app/lib/authToken";
 
 export default function ClientNouveauTicketPage() {
   const router = useRouter();
   const [success, setSuccess] = useState<{ ticketNumber: string } | null>(null);
 
-  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const token = getAuthToken();
 
   const handleSuccess = (ticketId: string, ticketNumber: string) => {
     setSuccess({ ticketNumber });

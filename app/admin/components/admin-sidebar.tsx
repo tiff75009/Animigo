@@ -14,6 +14,7 @@ import {
   CalendarCheck, Sparkles, FlaskConical, ShieldCheck, Wallet, Landmark,
   FileText, MapPin, Globe, Layers, ListChecks, Ticket, HelpCircle,
   AlertTriangle, CreditCard, Wrench, Menu, X, ChevronDown, ExternalLink, MailCheck,
+  BarChart3,
 } from "lucide-react";
 
 interface NavItem {
@@ -80,6 +81,7 @@ export function AdminSidebar() {
     {
       title: "SEO", accent: "cyan",
       items: [
+        { label: "Dashboard SEO", href: "/admin/seo/dashboard", icon: BarChart3 },
         { label: "Pages services", href: "/admin/seo/services", icon: FileText },
         { label: "Villes", href: "/admin/seo/villes", icon: MapPin },
         { label: "Pages villes", href: "/admin/seo/pages-villes", icon: Globe },

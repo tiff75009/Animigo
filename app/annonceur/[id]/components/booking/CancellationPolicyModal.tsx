@@ -141,10 +141,17 @@ export default function CancellationPolicyModal({
               )}
 
               {/* Règles communes */}
+              <div className="flex items-start gap-3 p-3 bg-red-50 rounded-xl">
+                <XCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+                <p className="text-sm text-gray-700">
+                  Réservation <span className="font-semibold">de dernière minute</span> (moins de 24h avant le début) : <span className="text-red-600 font-semibold">non remboursable</span>
+                </p>
+              </div>
+
               <div className="flex items-start gap-3 p-3 bg-green-50 rounded-xl">
                 <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
                 <p className="text-sm text-gray-700">
-                  Remboursement intégral dans les <span className="font-semibold">24h après paiement</span>
+                  Remboursement intégral dans les <span className="font-semibold">24h après paiement</span> (sauf réservation de dernière minute)
                 </p>
               </div>
 

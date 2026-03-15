@@ -8,6 +8,7 @@ import Link from "next/link";
 import { Ticket, Plus, Loader2, Search, Filter } from "lucide-react";
 import { TicketCard } from "@/app/components/support";
 import { cn } from "@/app/lib/utils";
+import { getAuthToken } from "@/app/lib/authToken";
 
 type TicketStatus = "open" | "in_progress" | "waiting_user" | "resolved" | "closed";
 
@@ -23,7 +24,7 @@ const statusFilters: { value: TicketStatus | "all"; label: string }[] = [
 export default function ClientTicketsPage() {
   const [statusFilter, setStatusFilter] = useState<TicketStatus | "all">("all");
 
-  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const token = getAuthToken();
 
   const tickets = useQuery(
     api.support.tickets.getMyTickets,

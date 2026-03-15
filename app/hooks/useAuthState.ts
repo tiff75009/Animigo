@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { getAuthToken, getAdminToken, clearAuthTokens } from "@/app/lib/authToken";
 
 export type User = {
   id: string;
@@ -36,8 +37,8 @@ export function useAuthState() {
 
   // Vérifier le token au montage
   useEffect(() => {
-    const authToken = localStorage.getItem("auth_token");
-    const adminToken = localStorage.getItem("admin_token");
+    const authToken = getAuthToken();
+    const adminToken = getAdminToken();
     setToken(authToken || adminToken || null);
     setHasCheckedToken(true);
   }, []);
@@ -59,8 +60,7 @@ export function useAuthState() {
         console.error("Erreur lors de la déconnexion:", e);
       }
     }
-    localStorage.removeItem("auth_token");
-    localStorage.removeItem("admin_token");
+    await clearAuthTokens("all");
     setToken(null);
     // Forcer le rechargement pour nettoyer l'état
     window.location.href = "/";

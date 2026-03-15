@@ -6,6 +6,7 @@ import { Clock, Euro, Calendar, Loader2, MapPin, Phone, MessageSquare, ChevronDo
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { cn } from "@/app/lib/utils";
+import { getAuthToken } from "@/app/lib/authToken";
 import Link from "next/link";
 
 interface Mission {
@@ -206,7 +207,7 @@ export default function MissionsConfirmationPage() {
   const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
-    const storedToken = localStorage.getItem("auth_token");
+    const storedToken = getAuthToken();
     if (storedToken) {
       setToken(storedToken);
     }

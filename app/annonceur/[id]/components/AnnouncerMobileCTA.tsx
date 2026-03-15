@@ -9,6 +9,7 @@ import { X, ArrowRight, Check, ShoppingCart, Calendar, Clock, CreditCard, Eye, P
 import GuestAnimalVerification, { type GuestAnimalData } from "@/app/reserver/[announcerId]/components/GuestAnimalVerification";
 import { ServiceData, FormuleData } from "./types";
 import { cn } from "@/app/lib/utils";
+import { setAuthToken as storeAuthToken } from "@/app/lib/authToken";
 import {
   BookingSummary,
   BookingCalendar,
@@ -391,7 +392,7 @@ export default function AnnouncerMobileCTA({
 
       if (result.success && result.token) {
         // Stocker le token
-        localStorage.setItem("session_token", result.token);
+        await storeAuthToken(result.token);
         // Notifier le parent
         onLoginSuccess?.(result.token);
         // Fermer le sheet

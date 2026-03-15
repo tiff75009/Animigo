@@ -8,6 +8,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useToast } from "@/app/components/ui/toast";
+import { getAuthToken } from "@/app/lib/authToken";
 import { CancelModal } from "./components/CancelModal";
 import { ReviewModal } from "./components/ReviewModal";
 import { DisputeModal } from "./components/DisputeModal";
@@ -26,8 +27,7 @@ export default function ReservationDetailPage() {
   const router = useRouter();
   const { error: toastError } = useToast();
   const missionId = params.missionId as string;
-  const token =
-    typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const token = getAuthToken();
   const [isContacting, setIsContacting] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);

@@ -2,6 +2,7 @@
 import { mutation } from "../_generated/server";
 import { v } from "convex/values";
 import { verifyPassword, generateSessionToken, generateUniqueSlug } from "./utils";
+import { checkRateLimit } from "../lib/rateLimit";
 
 // Types pour les réponses standardisées
 export type LoginResult =
@@ -29,6 +30,13 @@ export const login = mutation({
     password: v.string(),
   },
   handler: async (ctx, args): Promise<LoginResult> => {
+    // Rate limit : 5 tentatives par 15 minutes par email
+    try {
+      await checkRateLimit(ctx, `login:${args.email.toLowerCase()}`, 5, 15 * 60 * 1000);
+    } catch {
+      return { success: false, error: "Trop de tentatives de connexion. Veuillez réessayer dans quelques minutes." };
+    }
+
     // Rechercher l'utilisateur
     const user = await ctx.db
       .query("users")

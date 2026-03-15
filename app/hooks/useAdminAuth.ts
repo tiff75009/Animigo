@@ -4,6 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useRouter, usePathname } from "next/navigation";
+import {
+  initAuthTokens,
+  clearAuthTokens,
+} from "@/app/lib/authToken";
 
 interface AdminUser {
   id: string;
@@ -21,18 +25,16 @@ export function useAdminAuth() {
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    // Vérifier d'abord admin_token, puis auth_token (pour les admins connectés via /connexion)
-    const adminToken = localStorage.getItem("admin_token");
-    const authToken = localStorage.getItem("auth_token");
-
-    if (adminToken) {
-      setToken(adminToken);
-      setTokenSource("admin");
-    } else if (authToken) {
-      setToken(authToken);
-      setTokenSource("auth");
-    }
-    setIsInitialized(true);
+    initAuthTokens().then(({ authToken, adminToken }) => {
+      if (adminToken) {
+        setToken(adminToken);
+        setTokenSource("admin");
+      } else if (authToken) {
+        setToken(authToken);
+        setTokenSource("auth");
+      }
+      setIsInitialized(true);
+    });
   }, []);
 
   const sessionData = useQuery(
@@ -49,11 +51,10 @@ export function useAdminAuth() {
 
   useEffect(() => {
     if (isInitialized && token && sessionData === null) {
-      // Session invalide - nettoyer le token approprié
       if (tokenSource === "admin") {
-        localStorage.removeItem("admin_token");
+        clearAuthTokens("admin");
       } else if (tokenSource === "auth") {
-        localStorage.removeItem("auth_token");
+        clearAuthTokens("auth");
       }
       setToken(null);
       setTokenSource(null);
@@ -62,16 +63,13 @@ export function useAdminAuth() {
       }
     }
 
-    // Rediriger si pas admin
     if (
       isInitialized &&
       sessionData?.user &&
       sessionData.user.role !== "admin"
     ) {
-      // L'utilisateur n'est pas admin - ne pas supprimer auth_token
-      // car c'est peut-être un utilisateur normal connecté
       if (tokenSource === "admin") {
-        localStorage.removeItem("admin_token");
+        clearAuthTokens("admin");
       }
       setToken(null);
       setTokenSource(null);
@@ -86,9 +84,7 @@ export function useAdminAuth() {
     } catch {
       // Ignorer les erreurs
     }
-    // Nettoyer les deux tokens pour une déconnexion complète de l'admin
-    localStorage.removeItem("admin_token");
-    localStorage.removeItem("auth_token");
+    await clearAuthTokens("all");
     setToken(null);
     setTokenSource(null);
     router.push("/admin/connexion");

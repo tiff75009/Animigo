@@ -93,6 +93,7 @@ export function NotificationDropdown({ className }: NotificationDropdownProps) {
       <motion.button
         whileTap={{ scale: 0.95 }}
         onClick={() => setShowNotifications(!showNotifications)}
+        aria-label="Notifications"
         className={cn(
           "relative p-2.5 rounded-xl transition-colors",
           showNotifications

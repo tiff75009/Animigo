@@ -16,6 +16,7 @@ import {
   type SessionTypeFilter,
 } from "./components/ReservationsFilters";
 import { ReservationCard, type EnrichedReservation } from "./components/ReservationCard";
+import { getAuthToken } from "@/app/lib/authToken";
 
 const STORAGE_KEY = "reservations_active_tab";
 const validStatusFilters: StatusFilter[] = [
@@ -29,7 +30,7 @@ function getSavedTab(): StatusFilter {
 }
 
 export default function ReservationsPage() {
-  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const token = getAuthToken();
   const router = useRouter();
   const { error: toastError } = useToast();
 

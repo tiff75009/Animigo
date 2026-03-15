@@ -7,6 +7,7 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/app/lib/utils";
+import { getAuthToken } from "@/app/lib/authToken";
 
 function StarRatingInput({
   value,
@@ -74,8 +75,7 @@ export function ReviewModal({
 
   const submitReview = useMutation(api.planning.reviews.submitReview);
 
-  const token =
-    typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const token = getAuthToken();
 
   const canSubmit =
     qualityRating > 0 &&

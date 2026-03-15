@@ -22,6 +22,7 @@ import {
   TicketMessageBubble,
 } from "@/app/components/support";
 import { cn } from "@/app/lib/utils";
+import { getAuthToken } from "@/app/lib/authToken";
 
 const categoryLabels: Record<string, string> = {
   paiement: "Paiement / Facturation",
@@ -42,7 +43,7 @@ export default function ClientTicketDetailPage() {
   const [showReopenForm, setShowReopenForm] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const token = getAuthToken();
 
   const data = useQuery(
     api.support.tickets.getTicketDetails,

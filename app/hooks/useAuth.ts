@@ -4,6 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useRouter } from "next/navigation";
+import {
+  initAuthTokens,
+  getAuthToken,
+  clearAuthTokens,
+} from "@/app/lib/authToken";
 
 interface User {
   id: string;
@@ -28,11 +33,12 @@ export function useAuth() {
   const [token, setToken] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Charger le token au montage
+  // Charger le token depuis le cookie httpOnly
   useEffect(() => {
-    const storedToken = localStorage.getItem("auth_token");
-    setToken(storedToken);
-    setIsInitialized(true);
+    initAuthTokens().then(({ authToken }) => {
+      setToken(authToken);
+      setIsInitialized(true);
+    });
   }, []);
 
   // Query pour vérifier la session
@@ -53,12 +59,9 @@ export function useAuth() {
   // Gérer la déconnexion si session invalide
   useEffect(() => {
     if (isInitialized && token && sessionData === null) {
-      // Session invalide, nettoyer
-      localStorage.removeItem("auth_token");
-      localStorage.removeItem("user");
+      clearAuthTokens("auth");
       setToken(null);
 
-      // Rediriger si sur une page protégée
       if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
         router.push("/connexion");
       }
@@ -73,11 +76,10 @@ export function useAuth() {
       try {
         await refreshMutation({ token });
       } catch {
-        // Session expirée
-        localStorage.removeItem("auth_token");
+        clearAuthTokens("auth");
         setToken(null);
       }
-    }, 30 * 60 * 1000); // Toutes les 30 minutes
+    }, 30 * 60 * 1000);
 
     return () => clearInterval(interval);
   }, [token, refreshMutation]);
@@ -91,8 +93,7 @@ export function useAuth() {
       // Ignorer les erreurs
     }
 
-    localStorage.removeItem("auth_token");
-    localStorage.removeItem("user");
+    await clearAuthTokens("all");
     setToken(null);
     router.push("/connexion");
   }, [token, logoutMutation, router]);
@@ -106,17 +107,15 @@ export function useAuth() {
       // Ignorer les erreurs
     }
 
-    localStorage.removeItem("auth_token");
-    localStorage.removeItem("user");
+    await clearAuthTokens("all");
     setToken(null);
     router.push("/connexion");
   }, [token, logoutAllMutation, router]);
 
-  // Fonction pour rafraîchir le token depuis le localStorage
-  // Utile après une connexion inline (sans rechargement de page)
+  // Rafraîchir le token depuis le cookie httpOnly
   const refreshToken = useCallback(() => {
-    const storedToken = localStorage.getItem("auth_token");
-    setToken(storedToken);
+    const cachedToken = getAuthToken();
+    setToken(cachedToken);
   }, []);
 
   return {

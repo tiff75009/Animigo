@@ -57,6 +57,8 @@ interface AnnouncerCardProps {
   announcer: AnnouncerResult;
   onShowFormulas: () => void;
   index: number;
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
 }
 
 const availabilityConfig = {
@@ -90,9 +92,9 @@ const statusTypeConfig = {
 } as const;
 
 // Grid View Card
-export function AnnouncerCardGrid({ announcer, onShowFormulas, index }: AnnouncerCardProps) {
+export function AnnouncerCardGrid({ announcer, onShowFormulas, index, isFavorite: isFavoriteProp = false, onToggleFavorite }: AnnouncerCardProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const [isFavorite, setIsFavorite] = useState(false);
+  const isFavorite = isFavoriteProp;
 
   const availInfo = availabilityConfig[announcer.availability.status];
   const distanceText = formatDistance(announcer.distance);
@@ -114,6 +116,7 @@ export function AnnouncerCardGrid({ announcer, onShowFormulas, index }: Announce
             src={announcer.coverImage}
             alt={`Couverture de ${announcer.firstName}`}
             fill
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             className={cn(
               "object-cover transition-transform duration-500",
               isHovered && "scale-105"
@@ -124,6 +127,7 @@ export function AnnouncerCardGrid({ announcer, onShowFormulas, index }: Announce
             src={announcer.profileImage}
             alt={announcer.firstName}
             fill
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             className={cn(
               "object-cover transition-transform duration-500",
               isHovered && "scale-105"
@@ -176,9 +180,10 @@ export function AnnouncerCardGrid({ announcer, onShowFormulas, index }: Announce
           <motion.button
             onClick={(e) => {
               e.stopPropagation();
-              setIsFavorite(!isFavorite);
+              onToggleFavorite?.();
             }}
             whileTap={{ scale: 0.85 }}
+            aria-label={isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
             className={cn(
               "p-2 rounded-full backdrop-blur-sm transition-all shadow-sm",
               isFavorite ? "bg-red-500 text-white" : "bg-white/95 text-gray-400 hover:text-red-500"
@@ -342,8 +347,8 @@ export function AnnouncerCardGrid({ announcer, onShowFormulas, index }: Announce
 }
 
 // List View Card
-export function AnnouncerCardList({ announcer, onShowFormulas, index }: AnnouncerCardProps) {
-  const [isFavorite, setIsFavorite] = useState(false);
+export function AnnouncerCardList({ announcer, onShowFormulas, index, isFavorite: isFavoriteProp = false, onToggleFavorite }: AnnouncerCardProps) {
+  const isFavorite = isFavoriteProp;
 
   const availInfo = availabilityConfig[announcer.availability.status];
   const distanceText = formatDistance(announcer.distance);
@@ -364,6 +369,7 @@ export function AnnouncerCardList({ announcer, onShowFormulas, index }: Announce
               src={announcer.coverImage}
               alt={`Couverture de ${announcer.firstName}`}
               fill
+              sizes="(max-width: 640px) 100vw, 224px"
               className="object-cover group-hover:scale-105 transition-transform duration-500"
             />
           ) : announcer.profileImage ? (
@@ -371,6 +377,7 @@ export function AnnouncerCardList({ announcer, onShowFormulas, index }: Announce
               src={announcer.profileImage}
               alt={announcer.firstName}
               fill
+              sizes="(max-width: 640px) 100vw, 224px"
               className="object-cover group-hover:scale-105 transition-transform duration-500"
             />
           ) : (
@@ -426,9 +433,10 @@ export function AnnouncerCardList({ announcer, onShowFormulas, index }: Announce
           <motion.button
             onClick={(e) => {
               e.stopPropagation();
-              setIsFavorite(!isFavorite);
+              onToggleFavorite?.();
             }}
             whileTap={{ scale: 0.85 }}
+            aria-label={isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
             className={cn(
               "absolute top-3 right-3 p-1.5 rounded-full backdrop-blur-sm transition-all shadow-sm",
               isFavorite ? "bg-red-500 text-white" : "bg-white/95 text-gray-400 hover:text-red-500"

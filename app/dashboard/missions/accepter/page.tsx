@@ -20,6 +20,7 @@ function getFirstName(fullName: string): string {
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import { getAuthToken } from "@/app/lib/authToken";
 
 // Accept Confirmation Modal
 function AcceptModal({
@@ -348,7 +349,7 @@ export default function MissionsAccepterPage() {
 
   // Récupérer le token depuis localStorage
   useEffect(() => {
-    const authToken = localStorage.getItem("auth_token");
+    const authToken = getAuthToken();
     setToken(authToken);
   }, []);
 

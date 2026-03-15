@@ -12,6 +12,7 @@ import {
   generateUniqueSlug,
 } from "./utils";
 import { getEmailConfigFromDb } from "../api/emailInternal";
+import { checkRateLimit } from "../lib/rateLimit";
 
 // Types pour les réponses standardisées
 export type RegisterResult =
@@ -64,6 +65,13 @@ export const registerPro = mutation({
     companyCreationDate: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<RegisterResult> => {
+    // Rate limit : 3 inscriptions par heure par email
+    try {
+      await checkRateLimit(ctx, `register:${args.email.toLowerCase()}`, 3, 60 * 60 * 1000);
+    } catch {
+      return { success: false, error: "Trop de tentatives d'inscription. Veuillez réessayer plus tard." };
+    }
+
     // Validations
     if (!validateEmail(args.email)) {
       return { success: false, error: "Adresse email invalide" };
@@ -211,6 +219,13 @@ export const registerPro = mutation({
 export const registerParticulier = mutation({
   args: baseRegistrationArgs,
   handler: async (ctx, args): Promise<RegisterResult> => {
+    // Rate limit : 3 inscriptions par heure par email
+    try {
+      await checkRateLimit(ctx, `register:${args.email.toLowerCase()}`, 3, 60 * 60 * 1000);
+    } catch {
+      return { success: false, error: "Trop de tentatives d'inscription. Veuillez réessayer plus tard." };
+    }
+
     // Validations
     if (!validateEmail(args.email)) {
       return { success: false, error: "Adresse email invalide" };
@@ -328,6 +343,13 @@ export const registerParticulier = mutation({
 export const registerUtilisateur = mutation({
   args: baseRegistrationArgs,
   handler: async (ctx, args): Promise<RegisterResult> => {
+    // Rate limit : 3 inscriptions par heure par email
+    try {
+      await checkRateLimit(ctx, `register:${args.email.toLowerCase()}`, 3, 60 * 60 * 1000);
+    } catch {
+      return { success: false, error: "Trop de tentatives d'inscription. Veuillez réessayer plus tard." };
+    }
+
     if (!validateEmail(args.email)) {
       return { success: false, error: "Adresse email invalide" };
     }

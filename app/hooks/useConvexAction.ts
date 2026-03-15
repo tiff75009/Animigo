@@ -6,6 +6,7 @@ import { FunctionReference } from "convex/server";
 import { useToast } from "@/app/components/ui/toast";
 import { parseError } from "@/app/lib/errors";
 import { useRouter } from "next/navigation";
+import { clearAuthTokens } from "@/app/lib/authToken";
 
 type MutationArgs<T extends FunctionReference<"mutation">> = T extends FunctionReference<
   "mutation",
@@ -102,7 +103,7 @@ export function useConvexAction<T extends FunctionReference<"mutation">>(
               const redirectUrl = sessionExpiredRedirect ?? (isAdmin ? "/admin/connexion" : "/connexion");
 
               if (isAdmin) {
-                localStorage.removeItem("admin_token");
+                await clearAuthTokens("admin");
               }
 
               toast.warning("Session expirée", "Veuillez vous reconnecter.");
@@ -180,7 +181,7 @@ export function useErrorHandler() {
         const redirectUrl = options?.redirect ?? (isAdmin ? "/admin/connexion" : "/connexion");
 
         if (isAdmin) {
-          localStorage.removeItem("admin_token");
+          clearAuthTokens("admin");
         }
 
         toast.warning(parsed.title, parsed.message);

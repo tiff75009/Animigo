@@ -48,6 +48,7 @@ import { cn } from "@/app/lib/utils";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import CompanyLogoUpload from "@/app/dashboard/components/CompanyLogoUpload";
+import { getAuthToken } from "@/app/lib/authToken";
 
 // Types
 type TabId = "information" | "paiement" | "notification" | "planning" | "annulation" | "sap";
@@ -601,7 +602,7 @@ function InformationTab() {
   // Token et session
   const [token, setToken] = useState<string | null>(null);
   useEffect(() => {
-    setToken(localStorage.getItem("auth_token"));
+    setToken(getAuthToken());
   }, []);
 
   const sessionData = useQuery(
@@ -995,7 +996,7 @@ function PaymentTab() {
   const [stripeInstance, setStripeInstance] = useState<any>(null);
 
   useEffect(() => {
-    setToken(localStorage.getItem("auth_token"));
+    setToken(getAuthToken());
   }, []);
 
   // Queries
@@ -2005,7 +2006,7 @@ function PlanningTab() {
 
   useEffect(() => {
     // Utiliser auth_token pour les utilisateurs connectés
-    setToken(localStorage.getItem("auth_token"));
+    setToken(getAuthToken());
   }, []);
 
   // Fetch user preferences from backend
@@ -2472,7 +2473,7 @@ function AnnulationTab() {
   const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
-    setToken(localStorage.getItem("auth_token"));
+    setToken(getAuthToken());
   }, []);
 
   const [commissionPercent, setCommissionPercent] = useState(0);
@@ -2689,7 +2690,7 @@ function SapTab() {
   const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
-    setToken(localStorage.getItem("auth_token"));
+    setToken(getAuthToken());
   }, []);
 
   // Queries

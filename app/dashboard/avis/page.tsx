@@ -22,6 +22,7 @@ import { cn } from "@/app/lib/utils";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import { getAuthToken } from "@/app/lib/authToken";
 
 // Star Rating Component
 function StarRating({ rating, size = "md" }: { rating: number; size?: "sm" | "md" | "lg" }) {
@@ -359,7 +360,7 @@ export default function AvisPage() {
   const [selectedReview, setSelectedReview] = useState<EnrichedReview | null>(null);
   const [editingReply, setEditingReply] = useState(false);
 
-  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const token = getAuthToken();
 
   const data = useQuery(
     api.planning.reviews.getAnnouncerReviews,

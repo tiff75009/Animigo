@@ -277,8 +277,7 @@ export async function calculateRefund(
 
   // Déterminer si réservation last-minute (payé < Xh avant le début)
   const hoursBeforeStartAtBooking = (startDateTime - paidAt) / (1000 * 60 * 60);
-  const isLastMinuteBooking = hoursBeforeStartAtBooking < lastMinuteThresholdHours;
-  const effectiveGracePeriodHours = isLastMinuteBooking ? lastMinuteGraceHours : gracePeriodHours;
+  const isLastMinuteBooking = hoursBeforeStartAtBooking <= lastMinuteThresholdHours;
 
   const cancellationCount = simulationOptions?.overrideCancellationCount ??
     await getClientCancellationCount(ctx, mission.clientId, counterPeriodMonths);
@@ -288,22 +287,36 @@ export async function calculateRefund(
   const stripeFee = mission.stripeFee || 0;
   const announcerEarnings = mission.announcerEarnings || payment.announcerEarnings || 0;
 
-  // 1. Grâce post-paiement → remboursement 100% (plateforme absorbe les frais Stripe)
-  if (hoursSincePaid <= effectiveGracePeriodHours) {
+  // 1. Réservation last-minute (mission commence ≤ 24h après paiement)
+  //    → Aucun remboursement : l'annonceur a bloqué son créneau, le client s'est engagé
+  //    L'annonceur perçoit 100% de ses gains, la plateforme conserve ses commissions
+  if (isLastMinuteBooking) {
+    return {
+      canCancel: true,
+      refundAmount: 0,
+      platformFeeRetained: platformFee,
+      stripeFeeRetained: stripeFee,
+      announcerRetained: announcerEarnings,
+      reason: `Annulation non remboursable (mission réservée moins de ${lastMinuteThresholdHours}h avant le début)`,
+      cancellationCount,
+    };
+  }
+
+  // 2. Grâce post-paiement → remboursement 100% (plateforme absorbe les frais Stripe)
+  //    Applicable uniquement si la mission ne commence PAS dans les prochaines 24h
+  if (hoursSincePaid <= gracePeriodHours) {
     return {
       canCancel: true,
       refundAmount: totalAmount,
       platformFeeRetained: 0,
       stripeFeeRetained: 0,
       announcerRetained: 0,
-      reason: isLastMinuteBooking
-        ? `Remboursement intégral (grâce last-minute : ${effectiveGracePeriodHours}h après paiement)`
-        : `Remboursement intégral (dans les ${effectiveGracePeriodHours}h après paiement)`,
+      reason: `Remboursement intégral (dans les ${gracePeriodHours}h après paiement)`,
       cancellationCount,
     };
   }
 
-  // 2. Plus de 48h avant le début → remboursement total - commission - frais Stripe
+  // 3. Plus de 48h avant le début → remboursement total - commission - frais Stripe
   if (hoursBeforeStart > thresholdHours) {
     const refund = Math.max(0, totalAmount - platformFee - stripeFee);
     return {
@@ -317,7 +330,7 @@ export async function calculateRefund(
     };
   }
 
-  // 3. Moins de 48h → selon compteur
+  // 4. Moins de 48h → selon compteur
   if (cancellationCount === 0) {
     const refund = Math.max(0, totalAmount - platformFee - stripeFee);
     return {

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { useAuth } from "@/app/hooks/useAuth";
+import { getAuthToken as getStoredAuthToken } from "@/app/lib/authToken";
 import { ShieldAlert } from "lucide-react";
 
 // Import factorized components
@@ -554,7 +555,7 @@ export default function ReserverPage({
   const [authToken, setAuthToken] = useState<string | null>(null);
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setAuthToken(localStorage.getItem("auth_token"));
+      setAuthToken(getStoredAuthToken());
     }
   }, []);
 
@@ -949,7 +950,7 @@ export default function ReserverPage({
     setError(null);
 
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+      const token = getStoredAuthToken();
 
       // Use actual IDs from selected objects, not URL params (which may be slugs)
       if (!selectedService || !selectedVariant) {

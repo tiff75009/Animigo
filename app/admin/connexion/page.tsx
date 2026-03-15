@@ -8,6 +8,7 @@ import { Shield, Eye, EyeOff, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useConvexAction } from "@/app/hooks/useConvexAction";
 import { useAdminAuth } from "@/app/hooks/useAdminAuth";
+import { setAdminToken } from "@/app/lib/authToken";
 
 export default function AdminConnexionPage() {
   const router = useRouter();
@@ -38,7 +39,7 @@ export default function AdminConnexionPage() {
     const result = await adminLogin({ email, password });
 
     if (result?.success) {
-      localStorage.setItem("admin_token", result.token);
+      await setAdminToken(result.token);
       router.push("/admin");
     }
   };

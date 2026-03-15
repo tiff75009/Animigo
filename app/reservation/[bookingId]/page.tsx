@@ -16,6 +16,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/app/hooks/useAuth";
 import { Id } from "@/convex/_generated/dataModel";
+import { getAuthToken, setAuthToken as storeAuthToken } from "@/app/lib/authToken";
 import { type GuestAnimalData } from "@/app/components/animals";
 import ConfirmationModal from "@/app/components/ui/ConfirmationModal";
 import AddressSectionBooking from "./components/AddressSectionBooking";
@@ -49,6 +50,7 @@ export default function ReservationPage({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [acceptedCancellationPolicy, setAcceptedCancellationPolicy] = useState(false);
+  const [isFinalized, setIsFinalized] = useState(false);
 
   // Guest data
   const [guestData, setGuestData] = useState<GuestData>({
@@ -77,7 +79,7 @@ export default function ReservationPage({
 
   // Récupérer le token au chargement
   useEffect(() => {
-    const storedToken = localStorage.getItem("auth_token");
+    const storedToken = getAuthToken();
     if (storedToken) {
       setToken(storedToken);
     }
@@ -401,7 +403,7 @@ export default function ReservationPage({
         password: loginPassword,
       });
       if (result.success && result.token) {
-        localStorage.setItem("auth_token", result.token);
+        await storeAuthToken(result.token);
         setToken(result.token);
         setIsLoggedIn(true);
         setShowLoginForm(false);
@@ -508,6 +510,7 @@ export default function ReservationPage({
         });
 
         if (result.success) {
+          setIsFinalized(true);
           setShowConfirmationModal(false);
           router.push(`/dashboard?tab=missions&success=booking`);
         }
@@ -545,7 +548,8 @@ export default function ReservationPage({
         });
 
         if (result.success && result.token) {
-          localStorage.setItem("auth_token", result.token);
+          await storeAuthToken(result.token);
+          setIsFinalized(true);
           setShowConfirmationModal(false);
           if (result.requiresEmailVerification) {
             router.push(`/reservation/confirmation-email?email=${encodeURIComponent(guestData.email.trim().toLowerCase())}`);
@@ -637,6 +641,18 @@ export default function ReservationPage({
         <div className="text-center">
           <Loader2 className="w-10 h-10 text-primary animate-spin mx-auto mb-4" />
           <p className="text-text-light">Chargement de votre réservation...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Redirection en cours après finalisation
+  if (isFinalized) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 text-primary animate-spin mx-auto mb-4" />
+          <p className="text-text-light">Redirection en cours...</p>
         </div>
       </div>
     );

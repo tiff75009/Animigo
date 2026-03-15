@@ -32,6 +32,7 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { getAuthToken } from "@/app/lib/authToken";
 
 // Types d'animaux
 const ANIMAL_TYPES: Record<string, { name: string; emoji: string }> = {
@@ -66,7 +67,7 @@ interface BreedInfo {
 export default function AnimalProfilePage() {
   const params = useParams();
   const animalId = params.animalId as string;
-  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const token = getAuthToken();
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [breedInfo, setBreedInfo] = useState<BreedInfo | null>(null);
 

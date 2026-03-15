@@ -4,6 +4,7 @@ import { useState } from "react";
 import { User, Lock, Bell, FileCheck, CreditCard } from "lucide-react";
 import { useAuth } from "@/app/hooks/useAuth";
 import { cn } from "@/app/lib/utils";
+import { getAuthToken } from "@/app/lib/authToken";
 import { ProfilTab } from "./components/ProfilTab";
 import { SecuriteTab } from "./components/SecuriteTab";
 import { NotificationsTab } from "./components/NotificationsTab";
@@ -14,7 +15,7 @@ type TabType = "profil" | "securite" | "notifications" | "sap" | "paiement";
 
 export default function ParametresPage() {
   const { user } = useAuth();
-  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const token = getAuthToken();
 
   const [activeTab, setActiveTab] = useState<TabType>("profil");
 

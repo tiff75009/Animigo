@@ -54,24 +54,18 @@ export default function DashboardPage() {
 
   const displayName = user?.firstName || "Annonceur";
   const extrasLoading = extras === undefined && token !== null;
+  const statsLoading = dashboardStats === undefined && token !== null;
 
-  // ── Loading principal ──
-  if (!dashboardStats) {
-    return <DashboardSkeleton />;
-  }
-
-  const {
-    pendingAcceptance,
-    upcoming,
-    inProgress,
-    completed,
-    upcomingRevenue,
-    completedRevenue,
-    activeMissions,
-    kpis,
-    monthlySparkline,
-    nextPayout,
-  } = dashboardStats;
+  const pendingAcceptance = dashboardStats?.pendingAcceptance ?? 0;
+  const upcoming = dashboardStats?.upcoming ?? 0;
+  const inProgress = dashboardStats?.inProgress ?? 0;
+  const completed = dashboardStats?.completed ?? 0;
+  const upcomingRevenue = dashboardStats?.upcomingRevenue ?? 0;
+  const completedRevenue = dashboardStats?.completedRevenue ?? 0;
+  const activeMissions = dashboardStats?.activeMissions ?? [];
+  const kpis = dashboardStats?.kpis;
+  const monthlySparkline = dashboardStats?.monthlySparkline;
+  const nextPayout = dashboardStats?.nextPayout;
 
   const showProfileBanner = extras?.profileCompletion?.percentage !== undefined && extras.profileCompletion.percentage < 100;
   const showContextBanner = showProfileBanner || nextPayout;
@@ -110,18 +104,24 @@ export default function DashboardPage() {
       )}
 
       {/* ── Cartes revenus — 3 colonnes ── */}
-      <RevenueCards
-        upcomingRevenue={upcomingRevenue}
-        completedRevenue={completedRevenue}
-      />
+      {statsLoading ? (
+        <DashboardSkeleton />
+      ) : (
+        <>
+          <RevenueCards
+            upcomingRevenue={upcomingRevenue}
+            completedRevenue={completedRevenue}
+          />
 
-      {/* ── Compteurs par statut — 4 colonnes ── */}
-      <StatCards
-        pendingAcceptance={pendingAcceptance}
-        inProgress={inProgress}
-        upcoming={upcoming}
-        completed={completed}
-      />
+          {/* ── Compteurs par statut — 4 colonnes ── */}
+          <StatCards
+            pendingAcceptance={pendingAcceptance}
+            inProgress={inProgress}
+            upcoming={upcoming}
+            completed={completed}
+          />
+        </>
+      )}
 
       {/* ── Section principale — grille 7/5 ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">

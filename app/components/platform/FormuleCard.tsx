@@ -797,9 +797,15 @@ export interface AnnouncerGroup {
 function FormuleChip({
   formule,
   isAnnouncer,
+  isFavorite = false,
+  onToggleFavorite,
+  isTogglingFavorite = false,
 }: {
   formule: FormuleResult;
   isAnnouncer: boolean;
+  isFavorite?: boolean;
+  onToggleFavorite?: (formuleId: string) => void;
+  isTogglingFavorite?: boolean;
 }) {
   const announcerBaseUrl = `/annonceur/${formule.announcerSlug || formule.announcerId}`;
   const announcerBookingUrl = `${announcerBaseUrl}?formule=${formule.formuleId}`;
@@ -810,10 +816,26 @@ function FormuleChip({
 
   return (
     <div className="flex-shrink-0 w-[180px] bg-white border border-gray-100 rounded-2xl p-3 hover:shadow-lg hover:border-primary/20 transition-all duration-300 flex flex-col">
-      {/* Catégorie */}
-      <div className="flex items-center gap-1.5 mb-2">
-        {formule.categoryIcon && <span className="text-sm">{formule.categoryIcon}</span>}
-        <span className="text-[11px] font-semibold text-primary truncate">{formule.categoryName}</span>
+      {/* Catégorie + Favori */}
+      <div className="flex items-center justify-between gap-1 mb-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          {formule.categoryIcon && <span className="text-sm">{formule.categoryIcon}</span>}
+          <span className="text-[11px] font-semibold text-primary truncate">{formule.categoryName}</span>
+        </div>
+        {onToggleFavorite && (
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(formule.formuleId); }}
+            disabled={isTogglingFavorite}
+            aria-label={isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
+            className={cn(
+              "flex-shrink-0 p-1 rounded-full transition-colors",
+              isFavorite ? "text-red-500" : "text-gray-300 hover:text-red-400",
+              isTogglingFavorite && "opacity-50"
+            )}
+          >
+            <Heart className={cn("w-3.5 h-3.5", isFavorite && "fill-current")} />
+          </button>
+        )}
       </div>
 
       {/* Nom formule */}
@@ -895,10 +917,16 @@ export function AnnouncerCarouselCard({
   group,
   index,
   isAnnouncer = false,
+  favoriteFormuleIds,
+  onToggleFavorite,
+  togglingFavoriteId,
 }: {
   group: AnnouncerGroup;
   index: number;
   isAnnouncer: boolean;
+  favoriteFormuleIds?: string[];
+  onToggleFavorite?: (formuleId: string) => void;
+  togglingFavoriteId?: string | null;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -1069,6 +1097,9 @@ export function AnnouncerCarouselCard({
                   key={formule.formuleId}
                   formule={formule}
                   isAnnouncer={isAnnouncer}
+                  isFavorite={favoriteFormuleIds?.includes(formule.formuleId) ?? false}
+                  onToggleFavorite={onToggleFavorite}
+                  isTogglingFavorite={togglingFavoriteId === formule.formuleId}
                 />
               ))}
             </div>

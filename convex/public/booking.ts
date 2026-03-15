@@ -12,6 +12,7 @@ import {
   calculateAcceptanceDeadline,
   isBookingAdvanceValid,
 } from "../planning/acceptanceDeadline";
+import { checkRateLimit } from "../lib/rateLimit";
 
 // Générer toutes les dates entre deux dates (YYYY-MM-DD)
 // Utilise une approche sans conversion UTC pour éviter les décalages de fuseau horaire
@@ -564,6 +565,15 @@ export const finalizeBooking = mutation({
       .query("sessions")
       .withIndex("by_token", (q) => q.eq("token", args.token))
       .first();
+
+    // Rate limit : 10 finalisations par minute par utilisateur
+    if (session) {
+      try {
+        await checkRateLimit(ctx, `booking:${session.userId}`, 10, 60 * 1000);
+      } catch {
+        throw new ConvexError("Trop de tentatives de réservation. Veuillez réessayer dans une minute.");
+      }
+    }
 
     if (!session || session.expiresAt < Date.now()) {
       throw new ConvexError("Vous devez être connecté pour finaliser la réservation");

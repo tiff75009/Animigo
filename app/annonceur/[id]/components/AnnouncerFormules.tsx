@@ -7,6 +7,7 @@ import { api } from "@/convex/_generated/api";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/app/lib/utils";
+import { setAuthToken as storeAuthToken } from "@/app/lib/authToken";
 
 // Types pour les étapes desktop
 type DesktopStep = "formule" | "dog" | "animals" | "dates" | "location" | "options";
@@ -244,7 +245,7 @@ export default function AnnouncerFormules({
 
       if (result.success && result.token) {
         // Stocker le token
-        localStorage.setItem("auth_token", result.token);
+        await storeAuthToken(result.token);
         // Notifier le parent
         onLoginSuccess?.(result.token);
         // Réinitialiser le formulaire

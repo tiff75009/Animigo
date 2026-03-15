@@ -3,6 +3,7 @@ import { mutation, query } from "../_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { hashPassword, verifyPassword } from "./utils";
+import { checkRateLimit } from "../lib/rateLimit";
 
 // Vérifier une session et retourner l'utilisateur
 export const getSession = query({
@@ -158,6 +159,13 @@ export const changePassword = mutation({
 
     if (!session || session.expiresAt < Date.now()) {
       throw new ConvexError("Session invalide ou expirée");
+    }
+
+    // Rate limit : 3 changements de mot de passe par 15 minutes
+    try {
+      await checkRateLimit(ctx, `change_pwd:${session.userId}`, 3, 15 * 60 * 1000);
+    } catch {
+      throw new ConvexError("Trop de tentatives. Veuillez réessayer dans quelques minutes.");
     }
 
     // Récupérer l'utilisateur

@@ -25,6 +25,7 @@ import {
 import Link from "next/link";
 import BreedAutocomplete from "@/app/components/ui/BreedAutocomplete";
 import CatBreedAutocomplete from "@/app/components/ui/CatBreedAutocomplete";
+import { getAuthToken } from "@/app/lib/authToken";
 
 // Types d'animaux
 const ANIMAL_TYPES = [
@@ -95,7 +96,7 @@ interface FormData {
 export default function NewAnimalPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const token = getAuthToken();
   const { isConfigured, uploadState, uploadImage, uploadImages } = useCloudinary();
   const createAnimal = useMutation(api.animals.createAnimal);
 

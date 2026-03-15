@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useToast } from "@/app/components/ui/toast";
 import { parseError } from "@/app/lib/errors";
+import { setAuthToken } from "@/app/lib/authToken";
 
 import { ShieldCheck, Eye, CalendarCheck, Zap, ArrowLeft, Search, Star, Lock, MessageCircle, Wallet, Calendar } from "lucide-react";
 import { StepIndicator } from "./components/step-indicator";
@@ -244,7 +245,7 @@ export default function InscriptionPage() {
       // Succès — nettoyer le sessionStorage
       sessionStorage.removeItem(STORAGE_KEY);
       toast.success("Compte créé", "Vérifiez votre email pour activer votre compte !");
-      localStorage.setItem("auth_token", result.token);
+      await setAuthToken(result.token);
 
       // Rediriger vers la page de confirmation email
       const emailParam = encodeURIComponent(data.email);

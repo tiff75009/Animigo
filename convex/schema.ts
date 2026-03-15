@@ -1771,6 +1771,63 @@ export default defineSchema({
     .index("by_service", ["servicePageId"])
     .index("by_active", ["isActive"]),
 
+  // Configurations SEO par page (gestion dynamique depuis l'admin)
+  seoPageConfigs: defineTable({
+    // Identifiant unique de la page (ex: "home", "recherche", "annonceur_profile", "service_page")
+    pageKey: v.string(),
+
+    // Meta tags
+    metaTitle: v.optional(v.string()),       // Template avec variables {{siteName}}, {{pageName}}
+    metaDescription: v.optional(v.string()),
+    metaKeywords: v.optional(v.string()),
+
+    // Open Graph (réseaux sociaux)
+    ogTitle: v.optional(v.string()),
+    ogDescription: v.optional(v.string()),
+    ogImageUrl: v.optional(v.string()),
+    ogType: v.optional(v.string()),          // "website", "article", "profile"
+
+    // Twitter Card
+    twitterCard: v.optional(v.string()),     // "summary", "summary_large_image"
+    twitterTitle: v.optional(v.string()),
+    twitterDescription: v.optional(v.string()),
+
+    // Structured Data (JSON-LD)
+    structuredDataType: v.optional(v.string()),  // "Organization", "LocalBusiness", "Service"
+    structuredDataJson: v.optional(v.string()),  // JSON string
+
+    // Canonical
+    canonicalUrl: v.optional(v.string()),
+
+    // Indexation
+    noIndex: v.optional(v.boolean()),
+    noFollow: v.optional(v.boolean()),
+
+    // Variables disponibles pour cette page (pour l'aide admin)
+    availableVariables: v.optional(v.array(v.string())),
+
+    // Label affiché dans l'admin
+    label: v.string(),
+    category: v.string(),  // "general", "services", "annonceurs", "legal"
+
+    updatedAt: v.number(),
+    updatedBy: v.optional(v.id("users")),
+  })
+    .index("by_page_key", ["pageKey"])
+    .index("by_category", ["category"]),
+
+  // ============================================
+  // Rate Limiting
+  // ============================================
+
+  rateLimits: defineTable({
+    key: v.string(),                    // ex: "login:email@test.com"
+    timestamps: v.array(v.number()),    // timestamps des requêtes dans la fenêtre
+    updatedAt: v.number(),
+  })
+    .index("by_key", ["key"])
+    .index("by_updated", ["updatedAt"]),
+
   // ============================================
   // Messagerie
   // ============================================

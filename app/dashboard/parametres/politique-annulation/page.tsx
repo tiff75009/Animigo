@@ -6,10 +6,10 @@ import { ArrowLeft, Ban, Save, Loader2, Check, Info } from "lucide-react";
 import Link from "next/link";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { getAuthToken } from "@/app/lib/authToken";
 
 export default function PolitiqueAnnulationPage() {
-  const token =
-    typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const token = getAuthToken();
 
   const [commissionPercent, setCommissionPercent] = useState(0);
   const [refundMode, setRefundMode] = useState<"per_session" | "percentage_remaining">("per_session");

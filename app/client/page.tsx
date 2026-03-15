@@ -45,20 +45,14 @@ export default function ClientDashboard() {
   const confirmMission = useMutation(api.planning.missions.confirmMissionCompletion);
 
   const displayName = user?.firstName || "Client";
+  const statsLoading = dashboardStats === undefined && token !== null;
 
-  // ── Loading principal ──
-  if (!dashboardStats) {
-    return <DashboardSkeleton />;
-  }
-
-  const {
-    reservations,
-    upcomingMissions,
-    pendingValidation,
-    finances,
-    topAnimals,
-    animalsCount,
-  } = dashboardStats;
+  const reservations = dashboardStats?.reservations ?? { pendingAcceptance: 0, upcoming: 0, inProgress: 0, completed: 0 };
+  const upcomingMissions = dashboardStats?.upcomingMissions ?? [];
+  const pendingValidation = dashboardStats?.pendingValidation ?? [];
+  const finances = dashboardStats?.finances ?? { totalSpent: 0, monthSpent: 0, invoicesCount: 0 };
+  const topAnimals = dashboardStats?.topAnimals ?? [];
+  const animalsCount = dashboardStats?.animalsCount ?? 0;
 
   const handleConfirmMission = async (missionId: Id<"missions">) => {
     if (!token) return;
@@ -88,12 +82,16 @@ export default function ClientDashboard() {
       />
 
       {/* ── Compteurs par statut — 4 colonnes ── */}
-      <StatsCards
-        pendingAcceptance={reservations.pendingAcceptance}
-        upcoming={reservations.upcoming}
-        inProgress={reservations.inProgress}
-        completed={reservations.completed}
-      />
+      {statsLoading ? (
+        <DashboardSkeleton />
+      ) : (
+        <StatsCards
+          pendingAcceptance={reservations.pendingAcceptance}
+          upcoming={reservations.upcoming}
+          inProgress={reservations.inProgress}
+          completed={reservations.completed}
+        />
+      )}
 
       {/* ── Timeline horizontale réservations ── */}
       {upcomingMissions.length > 0 && (

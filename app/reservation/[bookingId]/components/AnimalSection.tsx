@@ -83,6 +83,7 @@ export default function AnimalSection({
                     setSelectedAnimalIds(ids);
                     setSelectedAnimalId(ids.length > 0 ? ids[0] : null);
                   }}
+                  acceptedAnimalTypes={acceptedAnimalTypes}
                 />
                 {fieldErrors.animal && (
                   <p className="mt-3 text-sm text-red-500 flex items-center gap-1">
@@ -98,6 +99,7 @@ export default function AnimalSection({
                   selectedAnimalId={selectedAnimalId}
                   onSelect={setSelectedAnimalId}
                   compact
+                  acceptedAnimalTypes={acceptedAnimalTypes}
                 />
                 {fieldErrors.animal && (
                   <p className="mt-3 text-sm text-red-500 flex items-center gap-1">

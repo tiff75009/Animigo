@@ -966,6 +966,9 @@ export default function RecherchePage() {
                   group={group}
                   index={index}
                   isAnnouncer={isAnnouncer}
+                  favoriteFormuleIds={favoriteIds as string[] | undefined}
+                  onToggleFavorite={handleToggleFavorite}
+                  togglingFavoriteId={togglingFavoriteId}
                 />
               ))}
             </motion.div>

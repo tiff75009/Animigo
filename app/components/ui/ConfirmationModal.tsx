@@ -84,7 +84,7 @@ export default function ConfirmationModal({
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
           >
-            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div role="dialog" aria-modal="true" aria-label="Confirmer votre réservation" className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
               {/* Header */}
               <div className="bg-gradient-to-r from-primary to-primary/80 px-6 py-4 flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-white flex items-center gap-2">
@@ -94,6 +94,7 @@ export default function ConfirmationModal({
                 <button
                   onClick={onClose}
                   disabled={isSubmitting}
+                  aria-label="Fermer la fenêtre"
                   className="text-white/80 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10"
                 >
                   <X className="w-5 h-5" />

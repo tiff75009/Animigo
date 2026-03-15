@@ -8,6 +8,7 @@ import Link from "next/link";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { Mail, Lock, Eye, EyeOff, ShieldCheck, Star, CreditCard, ArrowLeft } from "lucide-react";
+import { setAuthToken, setAdminToken } from "@/app/lib/authToken";
 import { useConvexAction } from "@/app/hooks/useConvexAction";
 import { useToast } from "@/app/components/ui/toast";
 
@@ -91,13 +92,11 @@ export default function ConnexionPage() {
     const result = await login({ email, password });
 
     if (result?.success) {
-      localStorage.setItem("auth_token", result.token);
-
       if (result.user.role === "admin") {
-        localStorage.setItem("admin_token", result.token);
+        await setAdminToken(result.token);
+      } else {
+        await setAuthToken(result.token);
       }
-
-      localStorage.setItem("user", JSON.stringify(result.user));
       router.push(result.redirectPath);
     }
   };

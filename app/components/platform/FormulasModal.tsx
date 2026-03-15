@@ -18,6 +18,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
+import { getAuthToken } from "@/app/lib/authToken";
 import { type AnnouncerResult } from "@/app/hooks/useSearch";
 import { formatPrice, priceUnitLabels } from "./helpers";
 import { bookingTimeSlots, monthNames, weekDays } from "./constants";
@@ -167,7 +168,7 @@ export function FormulasModal({ isOpen, onClose, announcer, searchFilters }: For
     setBookingError(null);
 
     try {
-      const token = localStorage.getItem("auth_token") || undefined;
+      const token = getAuthToken() || undefined;
       const result = await createPendingBooking({
         announcerId: announcer.id as Id<"users">,
         serviceId: selection.serviceId as Id<"services">,

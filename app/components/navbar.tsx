@@ -39,6 +39,7 @@ import Image from "next/image";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useActiveConversation } from "@/app/contexts/MessagingContext";
+import { getAuthToken } from "@/app/lib/authToken";
 
 // Services/Categories pour la navigation
 const serviceCategories = [
@@ -134,7 +135,7 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
   // Token pour les queries
   const [authToken, setAuthToken] = useState<string | null>(null);
   useEffect(() => {
-    const t = localStorage.getItem("auth_token");
+    const t = getAuthToken();
     setAuthToken(t);
   }, []);
 
@@ -372,6 +373,7 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                         "flex items-center gap-2 p-1.5 rounded-full transition-all",
                         isProfileOpen ? "bg-gray-100" : "hover:bg-gray-100"
                       )}
+                      aria-label="Menu utilisateur"
                     >
                       <div className="relative w-8 h-8 rounded-xl overflow-hidden bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white text-xs font-bold">
                         {avatarUrl ? (
@@ -492,6 +494,7 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                   isMobileMenuOpen ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-700"
                 )}
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                aria-label="Ouvrir le menu de navigation"
               >
                 {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>

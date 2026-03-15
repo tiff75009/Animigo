@@ -579,6 +579,87 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.28.0 - Securite, SEO, Performance et Corrections UX
+
+- **Securite : Migration tokens httpOnly cookies (anti-XSS)**
+  - Nouvelle API route `/api/auth/token` (GET/POST/DELETE) pour gerer les cookies httpOnly
+  - Module centralise `app/lib/authToken.ts` avec cache memoire (remplace localStorage)
+  - Migration de 30+ fichiers : toutes les references `localStorage.getItem("auth_token")` supprimees
+  - Les tokens ne sont plus accessibles via la console navigateur (protection XSS)
+  - Fallback localStorage temporaire pour migration progressive des sessions existantes
+  - Hooks `useAuth` et `useAdminAuth` migres vers `initAuthTokens()` / `clearAuthTokens()`
+
+- **Securite : Rate limiting sur mutations critiques**
+  - Nouveau helper `convex/lib/rateLimit.ts` avec fenetre glissante
+  - Table `rateLimits` dans le schema Convex (cle + timestamps + index)
+  - Login : 5 tentatives / 15 min par email
+  - Register (3 mutations) : 3 inscriptions / 1h par email
+  - Changement mot de passe : 3 tentatives / 15 min par utilisateur
+  - Finalisation reservation : 10 requetes / 1 min par utilisateur
+
+- **SEO : Dashboard admin complet**
+  - Nouvelle page `/admin/seo/dashboard` (~700 lignes)
+  - Score SEO /100 avec cercle colore (vert >= 80, ambre >= 50, rouge < 50)
+  - 17 checks SEO groupes par priorite (critique/haute/moyenne/basse) avec code couleur
+  - Les checks passes sont barres avec icone verte
+  - Gestion des meta tags par page (titre, description, compteur de caracteres)
+  - Gestion Open Graph (titre, description, image, type)
+  - Gestion Twitter Card (titre, description, type de carte)
+  - Editeur JSON-LD pour donnees structurees
+  - Toggles noIndex / noFollow par page
+  - Variables dynamiques disponibles par page (`{{announcerName}}`, `{{ville}}`, etc.)
+  - 8 configs par defaut (accueil, recherche, profil annonceur, services, FAQ, etc.)
+  - Backend CRUD complet `convex/admin/seo.ts` avec queries publiques pour le frontend
+
+- **SEO : Infrastructure technique**
+  - `app/robots.ts` : bloque /admin/, /api/, /client/, /dashboard/, /reservation/, /paiement/
+  - `app/sitemap.ts` : pages statiques + dynamiques (services, villes) depuis Convex
+  - `convex/seo/sitemapQueries.ts` : queries publiques pour la generation du sitemap
+  - `app/layout.tsx` : metadonnees enrichies (title template, OpenGraph, Twitter, canonical)
+  - `app/annonceur/[id]/layout.tsx` : metadata dynamique par annonceur (OG profile, Twitter)
+
+- **Performance : Chargement progressif des dashboards**
+  - Dashboard annonceur (`/dashboard`) : header et badges s'affichent immediatement, skeleton uniquement pour les stats
+  - Dashboard client (`/client`) : meme approche, les sections secondaires chargent independamment
+  - Suppression du blocage total `if (!data) return <Skeleton />` sur les deux dashboards
+
+- **Images optimisees**
+  - Ajout de `sizes` responsive sur toutes les images `fill` dans `AnnouncerCard.tsx`
+  - Grid : `(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw`
+  - Liste : `(max-width: 640px) 100vw, 224px`
+  - Hero section : deja optimise (priority + sizes)
+
+- **Bouton favori connecte au backend**
+  - `AnnouncerCard.tsx` : remplacement du `useState(false)` local par props `isFavorite` / `onToggleFavorite`
+  - `FormuleChip` (dans `AnnouncerCarouselCard`) : ajout du bouton coeur avec toggle favori
+  - `AnnouncerCarouselCard` : nouvelles props `favoriteFormuleIds`, `onToggleFavorite`, `togglingFavoriteId`
+  - Page recherche : favoris passes au `AnnouncerCarouselCard` (etait deja branche pour `FormuleCardGrid/List`)
+
+- **Pages d'erreur**
+  - `app/not-found.tsx` : page 404 avec icone PawPrint et lien retour
+  - `app/error.tsx` : error boundary global avec bouton retry
+  - `app/client/error.tsx`, `app/dashboard/error.tsx`, `app/admin/error.tsx` : error boundaries par section
+
+- **Barre de chargement**
+  - `app/components/ui/PageLoadingBar.tsx` : barre animee (gradient primary → secondary) en haut de page
+  - Se declenche automatiquement sur changement de pathname/searchParams
+
+- **Accessibilite**
+  - `aria-label` sur les boutons hamburger, menu utilisateur, notifications, fermeture modale
+  - `role="dialog"` et `aria-modal="true"` sur les modales de confirmation
+
+- **Correction bug reservation**
+  - Flash "Page introuvable" apres finalisation corrige (etat `isFinalized` + loader avant redirect)
+
+- **Correction bug type d'animal**
+  - `AnimalSelector` : nouveau prop `acceptedAnimalTypes` pour filtrer par types acceptes
+  - Applique dans la page de finalisation pour respecter le type selectionne en tant qu'invite
+
+- **Correction politique d'annulation**
+  - Reservations de derniere minute (< 24h avant debut) : non remboursables
+  - L'annonceur conserve 100% de ses gains, la plateforme conserve les commissions
+  - Modal politique d'annulation mis a jour avec la regle en rouge
+
 ### v0.27.0 - Admin Stripe Connect, Refonte Finances et Correction TVA
 
 - **Nouvelle page Comptes Stripe Connect** (`/admin/stripe-connect`)

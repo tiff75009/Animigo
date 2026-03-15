@@ -24,6 +24,7 @@ import {
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import { getAuthToken } from "@/app/lib/authToken";
 
 // Types d'animaux
 const ANIMAL_TYPES = [
@@ -70,7 +71,7 @@ interface Animal {
 
 export default function MesAnimauxPage() {
   const searchParams = useSearchParams();
-  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const token = getAuthToken();
   const [showSuccess, setShowSuccess] = useState<string | null>(null);
 
   const animals = useQuery(
