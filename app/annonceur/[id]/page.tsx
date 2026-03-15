@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQueryState, parseAsString, parseAsArrayOf, parseAsBoolean, parseAsInteger, parseAsJson } from "nuqs";
 import { useQuery } from "convex/react";
@@ -84,7 +84,7 @@ function extractCityDisplay(location: string | null | undefined): string | undef
 export default function AnnouncerProfilePage() {
   const params = useParams();
   const router = useRouter();
-  const { token, user: authUser, refreshToken } = useAuth();
+  const { token, user: authUser, refreshToken, isLoading: isAuthLoading } = useAuth();
   const isAnnouncer = authUser?.accountType === "annonceur_pro" || authUser?.accountType === "annonceur_particulier";
   const [isFavorite, setIsFavorite] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("formules");
@@ -141,6 +141,11 @@ export default function AnnouncerProfilePage() {
       selectedAnimalType: urlAnimalType || prev.selectedAnimalType,
       selectedAnimalIds: parsedAnimalIds.length > 0 ? parsedAnimalIds : prev.selectedAnimalIds,
     }));
+
+    // Synchroniser le state selectedAnimalIds séparé avec les IDs de l'URL
+    if (parsedAnimalIds.length > 0) {
+      setSelectedAnimalIds(parsedAnimalIds);
+    }
 
     setHasInitializedFromUrl(true);
 
@@ -548,17 +553,32 @@ export default function AnnouncerProfilePage() {
     setGuestAnimalError(error);
   }, []);
 
+  // Ref pour stocker les animalIds de l'URL initiale (nuqs peut nettoyer l'URL après le montage)
+  // On utilise le même state initial que selectedAnimalIds pour garantir la cohérence
+  const initialUrlAnimalIdsRef = useRef<string[]>(selectedAnimalIds);
+  const hasAppliedUrlAnimalsRef = useRef(false);
+
   // Booking handlers (doivent être avant les early returns)
   const handleVariantSelect = useCallback((serviceId: string, variantId: string) => {
+    // Préserver les animaux pré-sélectionnés depuis l'URL uniquement à la première sélection
+    let urlIds: string[] = [];
+    if (!hasAppliedUrlAnimalsRef.current) {
+      urlIds = initialUrlAnimalIdsRef.current;
+      if (urlIds.length > 0) {
+        hasAppliedUrlAnimalsRef.current = true;
+      }
+    }
+    const preserveAnimals = urlIds.length > 0;
+
     setBookingSelection((prev) => ({
       ...prev,
       selectedServiceId: serviceId,
       selectedVariantId: variantId,
       selectedOptionIds: [],
-      selectedAnimalIds: [], // Reset animals when changing variant
-      animalCount: 1,
+      selectedAnimalIds: preserveAnimals ? urlIds : [],
+      animalCount: preserveAnimals ? urlIds.length : 1,
     }));
-    setSelectedAnimalIds([]); // Reset selected animals state
+    setSelectedAnimalIds(preserveAnimals ? urlIds : []);
     // Réinitialiser la vérification de l'animal quand on change de formule
     setGuestAnimalData(null);
     setGuestAnimalValid(false);
@@ -579,10 +599,8 @@ export default function AnnouncerProfilePage() {
     for (const service of announcer.services) {
       const formule = service.formules?.find((f: { id: string }) => f.id === formuleQueryParam);
       if (formule) {
-        // Lire les animalIds depuis l'URL pour les préserver lors de la pré-sélection
-        const urlIds = typeof window !== "undefined"
-          ? new URLSearchParams(window.location.search).get("animalIds")?.split(",").filter(Boolean) || []
-          : [];
+        // Utiliser les animalIds sauvegardés au montage (nuqs peut nettoyer l'URL)
+        const urlIds = initialUrlAnimalIdsRef.current;
 
         // Sélectionner le service et la formule en préservant les animaux de l'URL
         setBookingSelection((prev) => ({
@@ -1200,6 +1218,7 @@ export default function AnnouncerProfilePage() {
         onSessionsChange={handleSessionsChange}
         // Props pour sélection d'animaux (garde)
         isLoggedIn={!!token}
+        isAuthLoading={isAuthLoading}
         userAnimals={userAnimals}
         selectedAnimalIds={selectedAnimalIds}
         onAnimalToggle={handleAnimalToggle}

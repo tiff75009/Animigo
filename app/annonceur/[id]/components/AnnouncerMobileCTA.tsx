@@ -86,6 +86,7 @@ interface AnnouncerMobileCTAProps {
   onSessionsChange?: (sessions: SelectedSession[]) => void;
   // Props pour sélection d'animaux (garde)
   isLoggedIn?: boolean;
+  isAuthLoading?: boolean;
   userAnimals?: UserAnimal[];
   selectedAnimalIds?: string[];
   onAnimalToggle?: (animalId: string, animalType: string) => void;
@@ -247,6 +248,7 @@ export default function AnnouncerMobileCTA({
   onSessionsChange,
   // Props pour sélection d'animaux (garde)
   isLoggedIn = false,
+  isAuthLoading = false,
   userAnimals = [],
   selectedAnimalIds = [],
   onAnimalToggle,
@@ -522,8 +524,9 @@ export default function AnnouncerMobileCTA({
   // Déterminer l'étape actuelle pour le flux garde mobile
   const getCurrentGardeStep = (): MobileBookingStep => {
     if (!hasVariantSelected) return "formule";
-    // Étape vérification de l'animal pour les invités (après formule, avant dates)
-    if (requiresAnimalVerification && !guestAnimalValid) return "dog";
+    // Étape vérification de l'animal pour les invités uniquement (pas les connectés)
+    if (!isLoggedIn && requiresAnimalVerification && !guestAnimalValid) return "dog";
+    // Étape sélection des animaux pour les connectés
     if (isLoggedIn && compatibleUserAnimals.length > 0 && !hasAnimalsSelected) return "animals";
     // Afficher l'étape location si besoin de choisir ou de saisir l'adresse
     if (needsLocationStep) {
@@ -544,6 +547,8 @@ export default function AnnouncerMobileCTA({
 
   // Auto-open step sheet when a variant is selected for the first time (garde mode ou formule à domicile)
   useEffect(() => {
+    // Attendre que l'auth soit résolue pour déterminer correctement les étapes
+    if (isAuthLoading) return;
     if (bookingVariant && bookingVariant.id.toString() !== prevVariantId) {
       setPrevVariantId(bookingVariant.id.toString());
       // Réinitialiser l'état de confirmation du lieu quand on change de formule
@@ -562,7 +567,8 @@ export default function AnnouncerMobileCTA({
       const needsStepFlow = isRangeMode ||
         newFormuleLocation === "client_home" ||
         newFormuleLocation === "both" ||
-        requiresAnimalVerification ||
+        (!isLoggedIn && requiresAnimalVerification) ||
+        (isLoggedIn && compatibleUserAnimals.length > 0) ||
         isCollective; // Les collectives passent toujours par le flux (pour afficher le lieu)
 
       // Pour les services garde ou formules nécessitant un flux par étapes
@@ -582,7 +588,7 @@ export default function AnnouncerMobileCTA({
         }
       }
     }
-  }, [bookingVariant, prevVariantId, bookingSelection?.startDate, isRangeMode, bookingService?.serviceLocation, requiresAnimalVerification]);
+  }, [bookingVariant, prevVariantId, bookingSelection?.startDate, isRangeMode, bookingService?.serviceLocation, requiresAnimalVerification, isAuthLoading, isLoggedIn, compatibleUserAnimals.length]);
 
   // Pour les formules collectives, la réservation est complète quand tous les créneaux sont sélectionnés
   // Pour les formules multi-séances individuelles, quand toutes les séances sont sélectionnées
@@ -601,9 +607,8 @@ export default function AnnouncerMobileCTA({
 
   // Handle direct booking
   const handleBookClick = () => {
-    // Vérification du chien requise pour les invités (tous types de services)
-    // Si le chien n'est pas encore vérifié, ouvrir le sheet de vérification
-    if (requiresAnimalVerification && hasVariantSelected) {
+    // Vérification du chien requise pour les invités uniquement (pas les connectés)
+    if (!isLoggedIn && requiresAnimalVerification && hasVariantSelected) {
       // Déterminer l'étape : si chien déjà vérifié, passer aux dates, sinon vérification
       const stepToShow = guestAnimalValid ? "dates" : "dog";
       setMobileStep(stepToShow);
@@ -622,7 +627,7 @@ export default function AnnouncerMobileCTA({
     // Cas spécial pour les formules collectives - flux step-by-step
     if (isCollectiveFormule && hasVariantSelected) {
       // Vérifier si on doit passer par le flux step-by-step (vérification chien, animaux, location)
-      if (requiresAnimalVerification && !guestAnimalValid) {
+      if (!isLoggedIn && requiresAnimalVerification && !guestAnimalValid) {
         setMobileStep("dog");
         setIsStepSheetOpen(true);
         return;
@@ -2002,7 +2007,8 @@ export default function AnnouncerMobileCTA({
                     {(() => {
                       // Construire la liste des étapes : Formule (1) est toujours complétée
                       const steps: MobileBookingStep[] = ["formule"];
-                      if (requiresAnimalVerification) steps.push("dog");
+                      if (!isLoggedIn && requiresAnimalVerification) steps.push("dog");
+                      if (isLoggedIn && compatibleUserAnimals.length > 0) steps.push("animals");
                       steps.push("dates");
                       if (hasOptionsStep) steps.push("options");
                       steps.push("summary");
