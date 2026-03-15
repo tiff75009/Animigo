@@ -21,6 +21,8 @@ import {
   Plus,
   PawPrint,
   ChevronRight,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { DatePickerDropdown } from "./components/DatePickerDropdown";
@@ -109,7 +111,7 @@ function SearchSummary({ results, searchDates }: { results: FormuleResult[]; sea
     <motion.div
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="mb-4 p-3 bg-gradient-to-r from-primary/5 to-secondary/5 rounded-2xl border border-primary/10"
+      className="mb-3 sm:mb-4 p-2.5 sm:p-3 bg-gradient-to-r from-primary/5 to-secondary/5 rounded-2xl border border-primary/10"
     >
       <div className="flex items-center gap-3">
         <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10">
@@ -281,7 +283,19 @@ export default function RecherchePage() {
 
   // URL setters
   const setSearchMode = useCallback((mode: "garde" | "services") => {
-    setUrlParams({ mode, category: null }); // Reset category when changing mode
+    setUrlParams({
+      mode,
+      category: null,
+      // Reset les filtres garde quand on passe en mode services
+      ...(mode === "services" ? {
+        startDate: null,
+        endDate: null,
+        startTime: null,
+        endTime: null,
+        date: null,
+        animals: 1,
+      } : {}),
+    });
   }, [setUrlParams]);
 
   const setAnimalType = useCallback((animal: string | null) => {
@@ -596,7 +610,7 @@ export default function RecherchePage() {
       <Navbar />
 
       {/* Hero Section with Mode Toggle */}
-      <section className="pt-4 pb-6 bg-gradient-to-b from-primary/5 via-background to-background relative">
+      <section className="pt-3 sm:pt-4 pb-4 sm:pb-6 bg-gradient-to-b from-primary/5 via-background to-background relative">
         {/* Decorative elements */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           {/* Gradient orbs */}
@@ -610,7 +624,7 @@ export default function RecherchePage() {
           <span className="hidden lg:block absolute bottom-8 left-[20%] text-2xl opacity-10">🐾</span>
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 relative">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -698,11 +712,11 @@ export default function RecherchePage() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.15 }}
-              className="mt-4 sm:mt-6 max-w-4xl mx-auto px-4 sm:px-0 relative z-40"
+              className="mt-3 sm:mt-6 max-w-4xl mx-auto px-0 sm:px-0 relative z-40"
             >
-              <div className="bg-white rounded-2xl shadow-lg shadow-gray-200/50 border border-gray-100 p-2 sm:p-3">
+              <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg shadow-gray-200/50 border border-gray-100 p-1.5 sm:p-3">
                 {/* Ligne 1 : Ville + Géolocalisation + Rayon */}
-                <div className="mb-2">
+                <div className="mb-1.5 sm:mb-2">
                   <LocationBar
                     location={filters.location}
                     onLocationChange={setLocation}
@@ -720,242 +734,468 @@ export default function RecherchePage() {
 
                 {/* Ligne 2 (mode garde) : Dates + Heures début/fin + Nombre d'animaux */}
                 {filters.searchMode === "garde" && (
-                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr_auto_auto_auto] gap-2 pt-3 border-t border-gray-100">
-                    {/* Bloc Début */}
-                    <div className="min-w-0">
-                      <label className="flex items-center gap-1 text-[10px] font-bold text-primary uppercase tracking-wider mb-1 px-1">
-                        <Calendar className="w-3 h-3" />
-                        Début de garde
-                      </label>
-                      <div className="flex gap-1.5">
-                        <div className="relative flex-1">
+                  <div className="pt-2 sm:pt-3 border-t border-gray-100">
+                    {/* Mobile layout */}
+                    <div className="sm:hidden space-y-1.5">
+                      {/* Bloc Début : date + heure sur une ligne */}
+                      <div>
+                        <label className="flex items-center gap-1 text-[10px] font-bold text-primary uppercase tracking-wider mb-1 px-0.5">
+                          <Calendar className="w-2.5 h-2.5" />
+                          Début de garde
+                        </label>
+                        <div className="flex gap-1.5">
                           <input
                             type="date"
                             value={urlParams.startDate || ""}
                             min={new Date().toISOString().split("T")[0]}
                             onChange={(e) => setDateRange(e.target.value || null, urlParams.endDate)}
                             className={cn(
-                              "w-full px-3 py-2 rounded-xl text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-primary/30",
+                              "flex-1 min-w-0 px-2 py-2 rounded-lg text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-primary/30",
                               urlParams.startDate
                                 ? "bg-primary/5 border-2 border-primary/30 text-gray-900"
                                 : "bg-gray-50 border border-gray-200 text-gray-500"
                             )}
                           />
+                          <select
+                            value={urlParams.startTime || ""}
+                            onChange={(e) => setUrlParams({ startTime: e.target.value || null })}
+                            className={cn(
+                              "w-[80px] px-1.5 py-2 rounded-lg text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 appearance-none cursor-pointer",
+                              urlParams.startTime
+                                ? "bg-primary/5 border-2 border-primary/30 text-gray-900"
+                                : "bg-gray-50 border border-gray-200 text-gray-400"
+                            )}
+                          >
+                            <option value="">Heure</option>
+                            {TIME_SLOTS.map((t) => (
+                              <option key={t} value={t}>{t}</option>
+                            ))}
+                          </select>
                         </div>
-                        <select
-                          value={urlParams.startTime || ""}
-                          onChange={(e) => setUrlParams({ startTime: e.target.value || null })}
-                          className={cn(
-                            "w-[85px] px-2 py-2 rounded-xl text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 appearance-none cursor-pointer",
-                            urlParams.startTime
-                              ? "bg-primary/5 border-2 border-primary/30 text-gray-900"
-                              : "bg-gray-50 border border-gray-200 text-gray-500"
-                          )}
-                        >
-                          <option value="">Heure</option>
-                          {TIME_SLOTS.map((t) => (
-                            <option key={t} value={t}>{t}</option>
-                          ))}
-                        </select>
                       </div>
-                    </div>
 
-                    {/* Flèche séparateur */}
-                    <div className="hidden sm:flex items-end pb-2.5">
-                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                        <ChevronRight className="w-4 h-4 text-primary" />
-                      </div>
-                    </div>
-
-                    {/* Bloc Fin */}
-                    <div className="min-w-0">
-                      <label className="flex items-center gap-1 text-[10px] font-bold text-secondary uppercase tracking-wider mb-1 px-1">
-                        <Calendar className="w-3 h-3" />
-                        Fin de garde
-                      </label>
-                      <div className="flex gap-1.5">
-                        <div className="relative flex-1">
+                      {/* Bloc Fin : date + heure sur une ligne */}
+                      <div>
+                        <label className="flex items-center gap-1 text-[10px] font-bold text-secondary uppercase tracking-wider mb-1 px-0.5">
+                          <Calendar className="w-2.5 h-2.5" />
+                          Fin de garde
+                        </label>
+                        <div className="flex gap-1.5">
                           <input
                             type="date"
                             value={urlParams.endDate || ""}
                             min={urlParams.startDate || new Date().toISOString().split("T")[0]}
                             onChange={(e) => setDateRange(urlParams.startDate, e.target.value || null)}
                             className={cn(
-                              "w-full px-3 py-2 rounded-xl text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-secondary/30",
+                              "flex-1 min-w-0 px-2 py-2 rounded-lg text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-secondary/30",
                               urlParams.endDate
                                 ? "bg-secondary/5 border-2 border-secondary/30 text-gray-900"
                                 : "bg-gray-50 border border-gray-200 text-gray-500"
                             )}
                           />
+                          <select
+                            value={urlParams.endTime || ""}
+                            onChange={(e) => setUrlParams({ endTime: e.target.value || null })}
+                            className={cn(
+                              "w-[80px] px-1.5 py-2 rounded-lg text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-secondary/30 appearance-none cursor-pointer",
+                              urlParams.endTime
+                                ? "bg-secondary/5 border-2 border-secondary/30 text-gray-900"
+                                : "bg-gray-50 border border-gray-200 text-gray-400"
+                            )}
+                          >
+                            <option value="">Heure</option>
+                            {TIME_SLOTS.map((t) => (
+                              <option key={t} value={t}>{t}</option>
+                            ))}
+                          </select>
                         </div>
-                        <select
-                          value={urlParams.endTime || ""}
-                          onChange={(e) => setUrlParams({ endTime: e.target.value || null })}
-                          className={cn(
-                            "w-[85px] px-2 py-2 rounded-xl text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-secondary/30 appearance-none cursor-pointer",
-                            urlParams.endTime
-                              ? "bg-secondary/5 border-2 border-secondary/30 text-gray-900"
-                              : "bg-gray-50 border border-gray-200 text-gray-500"
+                      </div>
+
+                      {/* Animaux + Effacer — même style que les blocs date */}
+                      <div>
+                        <label className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 px-0.5">
+                          <PawPrint className="w-2.5 h-2.5" />
+                          Animaux
+                        </label>
+                        <div className="flex gap-1.5">
+                          <div className="relative flex-1 min-w-0">
+                            {token && userAnimals && userAnimals.length > 0 ? (
+                              <>
+                                <button
+                                  onClick={() => setOpenDropdown(openDropdown === "animals" ? null : "animals")}
+                                  className={cn(
+                                    "w-full flex items-center gap-2 px-2 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap",
+                                    selectedAnimalIds.length > 0
+                                      ? "bg-primary/5 border-2 border-primary/30 text-gray-900"
+                                      : "bg-gray-50 border border-gray-200 text-gray-500"
+                                  )}
+                                >
+                                  {selectedAnimalIds.length > 0 ? (
+                                    <>
+                                      <span className="flex -space-x-1">
+                                        {userAnimals
+                                          .filter((a) => selectedAnimalIds.includes(a.id))
+                                          .slice(0, 3)
+                                          .map((a) => (
+                                            <span key={a.id} className="text-sm">{a.emoji || "🐾"}</span>
+                                          ))}
+                                      </span>
+                                      <span className="font-bold text-primary">{selectedAnimalIds.length} animal{selectedAnimalIds.length > 1 ? "x" : ""}</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <PawPrint className="w-3.5 h-3.5 text-gray-400" />
+                                      <span>Choisir mes animaux</span>
+                                    </>
+                                  )}
+                                  <ChevronDown className={cn("w-3 h-3 text-gray-400 transition-transform ml-auto", openDropdown === "animals" && "rotate-180")} />
+                                </button>
+                                <AnimatePresence>
+                                  {openDropdown === "animals" && (
+                                    <motion.div
+                                      initial={{ opacity: 0, y: 4 }}
+                                      animate={{ opacity: 1, y: 0 }}
+                                      exit={{ opacity: 0, y: 4 }}
+                                      transition={{ duration: 0.15 }}
+                                      className="absolute top-full left-0 right-0 mt-2 py-2 bg-white rounded-xl shadow-xl border border-gray-200 z-[100]"
+                                    >
+                                      <div className="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                        Mes animaux
+                                      </div>
+                                      {userAnimals.map((animal) => {
+                                        const isSelected = selectedAnimalIds.includes(animal.id);
+                                        return (
+                                          <button
+                                            key={animal.id}
+                                            onClick={() => {
+                                              const newIds = isSelected
+                                                ? selectedAnimalIds.filter((id) => id !== animal.id)
+                                                : [...selectedAnimalIds, animal.id];
+                                              setSelectedAnimalIds(newIds);
+                                              setNumberOfAnimals(Math.max(1, newIds.length));
+                                            }}
+                                            className={cn(
+                                              "w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors",
+                                              isSelected && "bg-primary/5"
+                                            )}
+                                          >
+                                            <span className="text-lg">{animal.emoji || "🐾"}</span>
+                                            <div className="flex-1 min-w-0">
+                                              <span className={cn(
+                                                "block text-sm font-medium truncate",
+                                                isSelected ? "text-primary" : "text-gray-700"
+                                              )}>
+                                                {animal.name}
+                                              </span>
+                                              <span className="block text-[11px] text-gray-400 capitalize">{animal.type}</span>
+                                            </div>
+                                            <div className={cn(
+                                              "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors",
+                                              isSelected
+                                                ? "bg-primary border-primary text-white"
+                                                : "border-gray-300"
+                                            )}>
+                                              {isSelected && (
+                                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                              )}
+                                            </div>
+                                          </button>
+                                        );
+                                      })}
+                                      {selectedAnimalIds.length > 0 && (
+                                        <div className="border-t border-gray-100 mt-1 pt-1 px-3">
+                                          <button
+                                            onClick={() => {
+                                              setSelectedAnimalIds([]);
+                                              setNumberOfAnimals(1);
+                                            }}
+                                            className="w-full py-1.5 text-xs text-gray-400 hover:text-primary transition-colors text-center"
+                                          >
+                                            Tout désélectionner
+                                          </button>
+                                        </div>
+                                      )}
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </>
+                            ) : (
+                              <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 border border-gray-200 rounded-lg">
+                                <button
+                                  onClick={() => setNumberOfAnimals(Math.max(1, urlParams.animals - 1))}
+                                  disabled={urlParams.animals <= 1}
+                                  className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 hover:border-primary hover:text-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                  aria-label="Moins d'animaux"
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </button>
+                                <span className="text-sm font-bold text-gray-800 min-w-[1.5rem] text-center">
+                                  {urlParams.animals}
+                                </span>
+                                <button
+                                  onClick={() => setNumberOfAnimals(Math.min(10, urlParams.animals + 1))}
+                                  disabled={urlParams.animals >= 10}
+                                  className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 hover:border-primary hover:text-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                  aria-label="Plus d'animaux"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          {(urlParams.startDate || urlParams.endDate) && (
+                            <button
+                              onClick={resetDateFilters}
+                              className="self-center p-2 text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors rounded-lg"
+                              title="Effacer les dates"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
                           )}
-                        >
-                          <option value="">Heure</option>
-                          {TIME_SLOTS.map((t) => (
-                            <option key={t} value={t}>{t}</option>
-                          ))}
-                        </select>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Séparateur vertical */}
-                    <div className="hidden sm:flex items-end pb-2">
-                      <div className="h-9 w-px bg-gray-200" />
-                    </div>
-
-                    {/* Animaux — dropdown avec sélection */}
-                    <div className="flex-shrink-0 relative">
-                      <label className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 px-1">
-                        <PawPrint className="w-3 h-3" />
-                        Animaux
-                      </label>
-                      {token && userAnimals && userAnimals.length > 0 ? (
-                        <>
-                          <button
-                            onClick={() => setOpenDropdown(openDropdown === "animals" ? null : "animals")}
+                    {/* Desktop layout */}
+                    <div className="hidden sm:grid sm:grid-cols-[1fr_auto_1fr_auto_auto_auto] gap-2">
+                      {/* Bloc Début */}
+                      <div className="min-w-0">
+                        <label className="flex items-center gap-1 text-[10px] font-bold text-primary uppercase tracking-wider mb-1 px-1">
+                          <Calendar className="w-3 h-3" />
+                          Début de garde
+                        </label>
+                        <div className="flex gap-1.5">
+                          <div className="relative flex-1">
+                            <input
+                              type="date"
+                              value={urlParams.startDate || ""}
+                              min={new Date().toISOString().split("T")[0]}
+                              onChange={(e) => setDateRange(e.target.value || null, urlParams.endDate)}
+                              className={cn(
+                                "w-full px-3 py-2 rounded-xl text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-primary/30",
+                                urlParams.startDate
+                                  ? "bg-primary/5 border-2 border-primary/30 text-gray-900"
+                                  : "bg-gray-50 border border-gray-200 text-gray-500"
+                              )}
+                            />
+                          </div>
+                          <select
+                            value={urlParams.startTime || ""}
+                            onChange={(e) => setUrlParams({ startTime: e.target.value || null })}
                             className={cn(
-                              "flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all h-[38px] whitespace-nowrap",
-                              selectedAnimalIds.length > 0
+                              "w-[85px] px-2 py-2 rounded-xl text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 appearance-none cursor-pointer",
+                              urlParams.startTime
                                 ? "bg-primary/5 border-2 border-primary/30 text-gray-900"
-                                : "bg-gray-50 border border-gray-200 text-gray-500 hover:border-gray-300"
+                                : "bg-gray-50 border border-gray-200 text-gray-500"
                             )}
                           >
-                            {selectedAnimalIds.length > 0 ? (
-                              <>
-                                <span className="flex -space-x-1">
-                                  {userAnimals
-                                    .filter((a) => selectedAnimalIds.includes(a.id))
-                                    .slice(0, 3)
-                                    .map((a) => (
-                                      <span key={a.id} className="text-sm">{a.emoji || "🐾"}</span>
-                                    ))}
-                                </span>
-                                <span className="font-bold text-primary">{selectedAnimalIds.length}</span>
-                              </>
-                            ) : (
-                              <>
-                                <PawPrint className="w-4 h-4 text-gray-400" />
-                                <span>Choisir</span>
-                              </>
+                            <option value="">Heure</option>
+                            {TIME_SLOTS.map((t) => (
+                              <option key={t} value={t}>{t}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Flèche séparateur */}
+                      <div className="flex items-end pb-2.5">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                          <ChevronRight className="w-4 h-4 text-primary" />
+                        </div>
+                      </div>
+
+                      {/* Bloc Fin */}
+                      <div className="min-w-0">
+                        <label className="flex items-center gap-1 text-[10px] font-bold text-secondary uppercase tracking-wider mb-1 px-1">
+                          <Calendar className="w-3 h-3" />
+                          Fin de garde
+                        </label>
+                        <div className="flex gap-1.5">
+                          <div className="relative flex-1">
+                            <input
+                              type="date"
+                              value={urlParams.endDate || ""}
+                              min={urlParams.startDate || new Date().toISOString().split("T")[0]}
+                              onChange={(e) => setDateRange(urlParams.startDate, e.target.value || null)}
+                              className={cn(
+                                "w-full px-3 py-2 rounded-xl text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-secondary/30",
+                                urlParams.endDate
+                                  ? "bg-secondary/5 border-2 border-secondary/30 text-gray-900"
+                                  : "bg-gray-50 border border-gray-200 text-gray-500"
+                              )}
+                            />
+                          </div>
+                          <select
+                            value={urlParams.endTime || ""}
+                            onChange={(e) => setUrlParams({ endTime: e.target.value || null })}
+                            className={cn(
+                              "w-[85px] px-2 py-2 rounded-xl text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-secondary/30 appearance-none cursor-pointer",
+                              urlParams.endTime
+                                ? "bg-secondary/5 border-2 border-secondary/30 text-gray-900"
+                                : "bg-gray-50 border border-gray-200 text-gray-500"
                             )}
-                            <ChevronDown className={cn("w-3 h-3 text-gray-400 transition-transform", openDropdown === "animals" && "rotate-180")} />
-                          </button>
-                          <AnimatePresence>
-                            {openDropdown === "animals" && (
-                              <motion.div
-                                initial={{ opacity: 0, y: 4 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: 4 }}
-                                transition={{ duration: 0.15 }}
-                                className="absolute top-full right-0 mt-2 py-2 bg-white rounded-xl shadow-xl border border-gray-200 z-[100] min-w-[220px]"
-                              >
-                                <div className="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                                  Mes animaux
-                                </div>
-                                {userAnimals.map((animal) => {
-                                  const isSelected = selectedAnimalIds.includes(animal.id);
-                                  return (
-                                    <button
-                                      key={animal.id}
-                                      onClick={() => {
-                                        const newIds = isSelected
-                                          ? selectedAnimalIds.filter((id) => id !== animal.id)
-                                          : [...selectedAnimalIds, animal.id];
-                                        setSelectedAnimalIds(newIds);
-                                        setNumberOfAnimals(Math.max(1, newIds.length));
-                                      }}
-                                      className={cn(
-                                        "w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors",
-                                        isSelected && "bg-primary/5"
-                                      )}
-                                    >
-                                      <span className="text-lg">{animal.emoji || "🐾"}</span>
-                                      <div className="flex-1 min-w-0">
-                                        <span className={cn(
-                                          "block text-sm font-medium truncate",
-                                          isSelected ? "text-primary" : "text-gray-700"
-                                        )}>
-                                          {animal.name}
-                                        </span>
-                                        <span className="block text-[11px] text-gray-400 capitalize">{animal.type}</span>
-                                      </div>
-                                      <div className={cn(
-                                        "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors",
-                                        isSelected
-                                          ? "bg-primary border-primary text-white"
-                                          : "border-gray-300"
-                                      )}>
-                                        {isSelected && (
-                                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                          </svg>
-                                        )}
-                                      </div>
-                                    </button>
-                                  );
-                                })}
-                                {selectedAnimalIds.length > 0 && (
-                                  <div className="border-t border-gray-100 mt-1 pt-1 px-3">
-                                    <button
-                                      onClick={() => {
-                                        setSelectedAnimalIds([]);
-                                        setNumberOfAnimals(1);
-                                      }}
-                                      className="w-full py-1.5 text-xs text-gray-400 hover:text-primary transition-colors text-center"
-                                    >
-                                      Tout désélectionner
-                                    </button>
+                          >
+                            <option value="">Heure</option>
+                            {TIME_SLOTS.map((t) => (
+                              <option key={t} value={t}>{t}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Séparateur vertical */}
+                      <div className="flex items-end pb-2">
+                        <div className="h-9 w-px bg-gray-200" />
+                      </div>
+
+                      {/* Animaux — dropdown avec sélection */}
+                      <div className="flex-shrink-0 relative">
+                        <label className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 px-1">
+                          <PawPrint className="w-3 h-3" />
+                          Animaux
+                        </label>
+                        {token && userAnimals && userAnimals.length > 0 ? (
+                          <>
+                            <button
+                              onClick={() => setOpenDropdown(openDropdown === "animals" ? null : "animals")}
+                              className={cn(
+                                "flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all h-[38px] whitespace-nowrap",
+                                selectedAnimalIds.length > 0
+                                  ? "bg-primary/5 border-2 border-primary/30 text-gray-900"
+                                  : "bg-gray-50 border border-gray-200 text-gray-500 hover:border-gray-300"
+                              )}
+                            >
+                              {selectedAnimalIds.length > 0 ? (
+                                <>
+                                  <span className="flex -space-x-1">
+                                    {userAnimals
+                                      .filter((a) => selectedAnimalIds.includes(a.id))
+                                      .slice(0, 3)
+                                      .map((a) => (
+                                        <span key={a.id} className="text-sm">{a.emoji || "🐾"}</span>
+                                      ))}
+                                  </span>
+                                  <span className="font-bold text-primary">{selectedAnimalIds.length}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <PawPrint className="w-4 h-4 text-gray-400" />
+                                  <span>Choisir</span>
+                                </>
+                              )}
+                              <ChevronDown className={cn("w-3 h-3 text-gray-400 transition-transform", openDropdown === "animals" && "rotate-180")} />
+                            </button>
+                            <AnimatePresence>
+                              {openDropdown === "animals" && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: 4 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  exit={{ opacity: 0, y: 4 }}
+                                  transition={{ duration: 0.15 }}
+                                  className="absolute top-full right-0 mt-2 py-2 bg-white rounded-xl shadow-xl border border-gray-200 z-[100] min-w-[220px]"
+                                >
+                                  <div className="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                    Mes animaux
                                   </div>
-                                )}
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </>
-                      ) : (
-                        <div className="flex items-center gap-1 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl h-[38px]">
+                                  {userAnimals.map((animal) => {
+                                    const isSelected = selectedAnimalIds.includes(animal.id);
+                                    return (
+                                      <button
+                                        key={animal.id}
+                                        onClick={() => {
+                                          const newIds = isSelected
+                                            ? selectedAnimalIds.filter((id) => id !== animal.id)
+                                            : [...selectedAnimalIds, animal.id];
+                                          setSelectedAnimalIds(newIds);
+                                          setNumberOfAnimals(Math.max(1, newIds.length));
+                                        }}
+                                        className={cn(
+                                          "w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors",
+                                          isSelected && "bg-primary/5"
+                                        )}
+                                      >
+                                        <span className="text-lg">{animal.emoji || "🐾"}</span>
+                                        <div className="flex-1 min-w-0">
+                                          <span className={cn(
+                                            "block text-sm font-medium truncate",
+                                            isSelected ? "text-primary" : "text-gray-700"
+                                          )}>
+                                            {animal.name}
+                                          </span>
+                                          <span className="block text-[11px] text-gray-400 capitalize">{animal.type}</span>
+                                        </div>
+                                        <div className={cn(
+                                          "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors",
+                                          isSelected
+                                            ? "bg-primary border-primary text-white"
+                                            : "border-gray-300"
+                                        )}>
+                                          {isSelected && (
+                                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                          )}
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
+                                  {selectedAnimalIds.length > 0 && (
+                                    <div className="border-t border-gray-100 mt-1 pt-1 px-3">
+                                      <button
+                                        onClick={() => {
+                                          setSelectedAnimalIds([]);
+                                          setNumberOfAnimals(1);
+                                        }}
+                                        className="w-full py-1.5 text-xs text-gray-400 hover:text-primary transition-colors text-center"
+                                      >
+                                        Tout désélectionner
+                                      </button>
+                                    </div>
+                                  )}
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </>
+                        ) : (
+                          <div className="flex items-center gap-1 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl h-[38px]">
+                            <button
+                              onClick={() => setNumberOfAnimals(Math.max(1, urlParams.animals - 1))}
+                              disabled={urlParams.animals <= 1}
+                              className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 hover:border-primary hover:text-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                              aria-label="Moins d'animaux"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="text-base font-bold text-gray-800 min-w-[1.5rem] text-center">
+                              {urlParams.animals}
+                            </span>
+                            <button
+                              onClick={() => setNumberOfAnimals(Math.min(10, urlParams.animals + 1))}
+                              disabled={urlParams.animals >= 10}
+                              className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 hover:border-primary hover:text-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                              aria-label="Plus d'animaux"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Bouton effacer */}
+                      {(urlParams.startDate || urlParams.endDate) && (
+                        <div className="flex items-end pb-1.5">
                           <button
-                            onClick={() => setNumberOfAnimals(Math.max(1, urlParams.animals - 1))}
-                            disabled={urlParams.animals <= 1}
-                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 hover:border-primary hover:text-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                            aria-label="Moins d'animaux"
+                            onClick={resetDateFilters}
+                            className="p-2 text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors rounded-xl"
+                            title="Effacer les dates"
                           >
-                            <Minus className="w-3 h-3" />
-                          </button>
-                          <span className="text-base font-bold text-gray-800 min-w-[1.5rem] text-center">
-                            {urlParams.animals}
-                          </span>
-                          <button
-                            onClick={() => setNumberOfAnimals(Math.min(10, urlParams.animals + 1))}
-                            disabled={urlParams.animals >= 10}
-                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 hover:border-primary hover:text-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                            aria-label="Plus d'animaux"
-                          >
-                            <Plus className="w-3 h-3" />
+                            <X className="w-4 h-4" />
                           </button>
                         </div>
                       )}
                     </div>
-
-                    {/* Bouton effacer */}
-                    {(urlParams.startDate || urlParams.endDate) && (
-                      <div className="flex items-end pb-1.5">
-                        <button
-                          onClick={resetDateFilters}
-                          className="p-2 text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors rounded-xl"
-                          title="Effacer les dates"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -993,7 +1233,7 @@ export default function RecherchePage() {
         </div>
 
         {/* Ligne animaux + catégorie + reset */}
-        <div className="flex items-center gap-1 p-2 sm:p-3">
+        <div className="flex items-center gap-1 px-2 py-1.5 sm:p-3">
           {/* Pilules animaux - scrollable */}
           <div className="overflow-x-auto scrollbar-hide flex-1">
             <div className="flex items-center gap-1 min-w-max sm:min-w-0 sm:justify-center">
@@ -1088,10 +1328,10 @@ export default function RecherchePage() {
       </section>
 
       {/* Results Section */}
-      <section className="py-4 sm:py-8 px-4 sm:px-6 lg:px-8">
+      <section className="py-3 sm:py-8 px-3 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           {/* Results Header avec filtres Date + Filtres avancés */}
-          <div className="flex flex-col gap-3 mb-4 sm:mb-6">
+          <div className="flex flex-col gap-2 sm:gap-3 mb-3 sm:mb-6">
             {/* Ligne 1 : compteur + vue */}
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -1127,77 +1367,117 @@ export default function RecherchePage() {
                 </div>
               </div>
 
-              {/* View toggle + Group toggle - Hidden on mobile */}
-              <div className="hidden sm:flex items-center gap-2">
-                <ViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
+              {/* View toggle + Group toggle */}
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                {/* Mobile: compact icons only */}
+                <div className="flex sm:hidden items-center gap-1 p-1 bg-gray-100/80 rounded-lg border border-gray-200/50">
+                  <button
+                    onClick={() => setViewMode("grid")}
+                    className={cn(
+                      "p-1.5 rounded-md transition-all",
+                      viewMode === "grid" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
+                    )}
+                    aria-label="Vue grille"
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setViewMode("list")}
+                    className={cn(
+                      "p-1.5 rounded-md transition-all",
+                      viewMode === "list" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
+                    )}
+                    aria-label="Vue liste"
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
+                </div>
                 <button
                   onClick={() => setIsGrouped(!isGrouped)}
                   className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all border",
+                    "sm:hidden p-1.5 rounded-lg transition-all border",
                     isGrouped
-                      ? "bg-primary/10 text-primary border-primary/30 shadow-sm"
-                      : "bg-gray-100/80 text-gray-600 border-gray-200/50 hover:bg-gray-200/80 hover:text-gray-800"
+                      ? "bg-primary/10 text-primary border-primary/30"
+                      : "bg-gray-100/80 text-gray-500 border-gray-200/50"
                   )}
+                  aria-label="Regrouper"
                 >
                   <Layers className="w-4 h-4" />
-                  <span>Regrouper</span>
                 </button>
+                {/* Desktop: full buttons */}
+                <div className="hidden sm:flex items-center gap-2">
+                  <ViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
+                  <button
+                    onClick={() => setIsGrouped(!isGrouped)}
+                    className={cn(
+                      "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all border",
+                      isGrouped
+                        ? "bg-primary/10 text-primary border-primary/30 shadow-sm"
+                        : "bg-gray-100/80 text-gray-600 border-gray-200/50 hover:bg-gray-200/80 hover:text-gray-800"
+                    )}
+                  >
+                    <Layers className="w-4 h-4" />
+                    <span>Regrouper</span>
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Ligne 2 : Date + Filtres avancés */}
+            {/* Ligne 2 : Date (garde uniquement) + Filtres avancés */}
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Date Filter */}
-              <div className="relative" ref={datePickerRef}>
-                <button
-                  onClick={() => setShowDatePicker(!showDatePicker)}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all",
-                    filters.date || filters.startDate
-                      ? filters.searchMode === "garde" ? "bg-primary text-white" : "bg-secondary text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  )}
-                >
-                  <Calendar className="w-3.5 h-3.5" />
-                  <span>
-                    {filters.date
-                      ? new Date(filters.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
-                      : filters.startDate && filters.endDate
-                      ? `${new Date(filters.startDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} - ${new Date(filters.endDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}`
-                      : "Dates"}
-                  </span>
-                  {(filters.date || filters.startDate) && (
-                    <span
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        resetDateFilters();
-                      }}
-                      className="ml-1 p-0.5 hover:bg-white/20 rounded-full cursor-pointer"
-                    >
-                      <X className="w-3 h-3" />
+              {/* Date Filter — uniquement en mode garde */}
+              {filters.searchMode === "garde" && (
+                <div className="relative" ref={datePickerRef}>
+                  <button
+                    onClick={() => setShowDatePicker(!showDatePicker)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all",
+                      filters.date || filters.startDate
+                        ? "bg-primary text-white"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    )}
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>
+                      {filters.date
+                        ? new Date(filters.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
+                        : filters.startDate && filters.endDate
+                        ? `${new Date(filters.startDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} - ${new Date(filters.endDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}`
+                        : "Dates"}
                     </span>
-                  )}
-                  <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", showDatePicker && "rotate-180")} />
-                </button>
+                    {(filters.date || filters.startDate) && (
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          resetDateFilters();
+                        }}
+                        className="ml-1 p-0.5 hover:bg-white/20 rounded-full cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </span>
+                    )}
+                    <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", showDatePicker && "rotate-180")} />
+                  </button>
 
-                <DatePickerDropdown
-                  isOpen={showDatePicker}
-                  mode={filters.searchMode === "garde" ? "range" : "single"}
-                  selectedDate={filters.date}
-                  startDate={filters.startDate}
-                  endDate={filters.endDate}
-                  onDateSelect={(date) => {
-                    setDate(date);
-                    setShowDatePicker(false);
-                  }}
-                  onRangeSelect={(start, end) => {
-                    setDateRange(start, end);
-                    setShowDatePicker(false);
-                  }}
-                  onClose={() => setShowDatePicker(false)}
-                  accentColor={filters.searchMode === "garde" ? "primary" : "secondary"}
-                />
-              </div>
+                  <DatePickerDropdown
+                    isOpen={showDatePicker}
+                    mode="range"
+                    selectedDate={filters.date}
+                    startDate={filters.startDate}
+                    endDate={filters.endDate}
+                    onDateSelect={(date) => {
+                      setDate(date);
+                      setShowDatePicker(false);
+                    }}
+                    onRangeSelect={(start, end) => {
+                      setDateRange(start, end);
+                      setShowDatePicker(false);
+                    }}
+                    onClose={() => setShowDatePicker(false)}
+                    accentColor="primary"
+                  />
+                </div>
+              )}
 
               {/* Main Filters Button */}
               <button
@@ -1249,6 +1529,8 @@ export default function RecherchePage() {
                   favoriteFormuleIds={favoriteIds as string[] | undefined}
                   onToggleFavorite={handleToggleFavorite}
                   togglingFavoriteId={togglingFavoriteId}
+                  searchDates={searchDates}
+                  selectedAnimalIds={selectedAnimalIds}
                 />
               ))}
             </motion.div>
@@ -1257,7 +1539,7 @@ export default function RecherchePage() {
               initial={hasLoadedRef.current ? false : { opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6"
             >
               {sortedResults.map((formule: FormuleResult, index: number) => (
                 <FormuleCardGrid
@@ -1269,6 +1551,7 @@ export default function RecherchePage() {
                   isTogglingFavorite={togglingFavoriteId === formule.formuleId}
                   isAnnouncer={isAnnouncer}
                   searchDates={searchDates}
+                  selectedAnimalIds={selectedAnimalIds}
                 />
               ))}
             </motion.div>
@@ -1277,7 +1560,7 @@ export default function RecherchePage() {
               initial={hasLoadedRef.current ? false : { opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
-              className="space-y-4"
+              className="space-y-3 sm:space-y-4"
             >
               {sortedResults.map((formule: FormuleResult, index: number) => (
                 <FormuleCardList
@@ -1289,6 +1572,7 @@ export default function RecherchePage() {
                   isTogglingFavorite={togglingFavoriteId === formule.formuleId}
                   isAnnouncer={isAnnouncer}
                   searchDates={searchDates}
+                  selectedAnimalIds={selectedAnimalIds}
                 />
               ))}
             </motion.div>

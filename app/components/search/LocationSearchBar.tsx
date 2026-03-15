@@ -25,6 +25,8 @@ interface LocationSearchBarProps {
   placeholder?: string;
   className?: string;
   showGeolocationButton?: boolean; // Afficher le bouton de géolocalisation
+  /** Contenu personnalisé affiché à droite dans le champ (avant le bouton clear) */
+  rightSlot?: React.ReactNode;
 }
 
 export default function LocationSearchBar({
@@ -34,6 +36,7 @@ export default function LocationSearchBar({
   placeholder = "Ville, code postal...",
   className,
   showGeolocationButton = true,
+  rightSlot,
 }: LocationSearchBarProps) {
   const [inputValue, setInputValue] = useState(value.text);
   const [isOpen, setIsOpen] = useState(false);
@@ -199,22 +202,26 @@ export default function LocationSearchBar({
             onFocus={() => predictions.length > 0 && setIsOpen(true)}
             placeholder={placeholder}
             className={cn(
-              "w-full px-4 py-3 pl-12 pr-10 rounded-xl border-2 bg-white",
+              "w-full px-4 py-3 pl-12 rounded-xl border-2 bg-white",
               "border-foreground/10 focus:border-primary focus:ring-2 focus:ring-primary/10",
               "text-foreground placeholder:text-text-light/60",
-              "focus:outline-none transition-all"
+              "focus:outline-none transition-all",
+              rightSlot ? "pr-20" : "pr-10"
             )}
           />
 
-          {inputValue && (
-            <button
-              type="button"
-              onClick={handleClear}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-text-light hover:text-foreground transition-colors rounded-full hover:bg-foreground/5"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            {inputValue && (
+              <button
+                type="button"
+                onClick={handleClear}
+                className="p-1 text-text-light hover:text-foreground transition-colors rounded-full hover:bg-foreground/5"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+            {rightSlot}
+          </div>
         </div>
 
         {/* Geolocation button */}

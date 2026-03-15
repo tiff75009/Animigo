@@ -201,6 +201,15 @@ export interface FormuleResult {
     maxCapacity: number;
     minRemainingCapacity: number;
   };
+  gardeInfo?: {
+    housingType?: "house" | "apartment";
+    hasGarden?: boolean;
+    gardenSize?: string;
+    hasOwnAnimals?: boolean;
+    ownAnimalTypes?: string[];
+    providesFood?: boolean;
+    allowOvernightStay?: boolean;
+  };
   nextSlot?: NextSlot;
   collectiveSlots?: CollectiveSlotInfo[];
   spotsLeft?: number;
@@ -290,16 +299,16 @@ export function useSearch() {
       args.radiusKm = filters.radius;
     }
 
-    // Date unique (hourly)
-    if (filters.date) {
+    // Date unique (hourly) — uniquement en mode garde
+    if (filters.searchMode === "garde" && filters.date) {
       args.date = filters.date;
       if (filters.time) {
         args.time = filters.time;
       }
     }
 
-    // Plage de dates (daily)
-    if (filters.startDate && filters.endDate) {
+    // Plage de dates (daily) — uniquement en mode garde
+    if (filters.searchMode === "garde" && filters.startDate && filters.endDate) {
       args.startDate = filters.startDate;
       args.endDate = filters.endDate;
     }
@@ -597,14 +606,15 @@ export function useServiceSearch(token?: string | null) {
       args.radiusKm = filters.radius;
     }
 
-    if (filters.date) {
+    // Dates — uniquement en mode garde
+    if (filters.searchMode === "garde" && filters.date) {
       args.date = filters.date;
       if (filters.time) {
         args.time = filters.time;
       }
     }
 
-    if (filters.startDate && filters.endDate) {
+    if (filters.searchMode === "garde" && filters.startDate && filters.endDate) {
       args.startDate = filters.startDate;
       args.endDate = filters.endDate;
     }
@@ -972,11 +982,12 @@ export function useServiceSearchWithParams(token: string | null | undefined, url
       args.radiusKm = urlParams.radius;
     }
 
-    if (urlParams.date) {
+    // Dates — uniquement en mode garde
+    if (urlParams.searchMode === "garde" && urlParams.date) {
       args.date = urlParams.date;
     }
 
-    if (urlParams.startDate && urlParams.endDate) {
+    if (urlParams.searchMode === "garde" && urlParams.startDate && urlParams.endDate) {
       args.startDate = urlParams.startDate;
       args.endDate = urlParams.endDate;
     }
@@ -1191,7 +1202,8 @@ export function useFormuleSearch() {
       args.radiusKm = filters.radius;
     }
 
-    if (filters.date) {
+    // Dates — uniquement en mode garde
+    if (filters.searchMode === "garde" && filters.date) {
       args.date = filters.date;
       if (filters.time) {
         args.time = filters.time;
@@ -1199,21 +1211,21 @@ export function useFormuleSearch() {
     }
 
     // Plage de dates (garde)
-    if (filters.startDate && filters.endDate) {
+    if (filters.searchMode === "garde" && filters.startDate && filters.endDate) {
       args.startDate = filters.startDate;
       args.endDate = filters.endDate;
     }
 
-    // Heures de début/fin (garde)
-    if (filters.gardeStartTime) {
+    // Heures de début/fin — uniquement en mode garde
+    if (filters.searchMode === "garde" && filters.gardeStartTime) {
       args.startTime = filters.gardeStartTime;
     }
-    if (filters.gardeEndTime) {
+    if (filters.searchMode === "garde" && filters.gardeEndTime) {
       args.endTime = filters.gardeEndTime;
     }
 
-    // Nombre d'animaux
-    if (filters.numberOfAnimals > 1) {
+    // Nombre d'animaux — uniquement en mode garde
+    if (filters.searchMode === "garde" && filters.numberOfAnimals > 1) {
       args.numberOfAnimals = filters.numberOfAnimals;
     }
 

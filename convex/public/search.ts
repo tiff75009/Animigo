@@ -1203,6 +1203,16 @@ interface FormuleResult {
     maxCapacity: number;
     minRemainingCapacity: number;
   };
+  // Infos garde enrichies
+  gardeInfo?: {
+    housingType?: "house" | "apartment";
+    hasGarden?: boolean;
+    gardenSize?: string;
+    hasOwnAnimals?: boolean;
+    ownAnimalTypes?: string[];
+    providesFood?: boolean;
+    allowOvernightStay?: boolean;
+  };
 }
 
 // Arguments communs pour la recherche de formules
@@ -1696,13 +1706,22 @@ export const searchFormules = query({
           } : undefined,
           workdayHours: service.workdayHours,
           dayStartTime: service.dayStartTime || "08:00",
-          dayEndTime: service.dayEndTime || "19:00",
+          dayEndTime: service.dayEndTime || "20:00",
           includeOvernightStay: service.allowOvernightStay || false,
           clientBillingMode: categoryDoc?.clientBillingMode as string | undefined,
           nextSlot,
           collectiveSlots: collectiveSlots.length > 0 ? collectiveSlots : undefined,
           spotsLeft,
           capacityInfo,
+          gardeInfo: isCapBased ? {
+            housingType: profile.housingType as "house" | "apartment" | undefined,
+            hasGarden: profile.hasGarden,
+            gardenSize: profile.gardenSize,
+            hasOwnAnimals: !!(profile.ownedAnimals && profile.ownedAnimals.length > 0),
+            ownAnimalTypes: profile.ownedAnimals?.map((a: { type: string }) => a.type),
+            providesFood: profile.providesFood,
+            allowOvernightStay: service.allowOvernightStay,
+          } : undefined,
         });
       }
     }
@@ -2310,13 +2329,22 @@ export const searchFormulesInternal = query({
           } : undefined,
           workdayHours: service.workdayHours,
           dayStartTime: service.dayStartTime || "08:00",
-          dayEndTime: service.dayEndTime || "19:00",
+          dayEndTime: service.dayEndTime || "20:00",
           includeOvernightStay: service.allowOvernightStay || false,
           clientBillingMode: categoryDoc?.clientBillingMode as string | undefined,
           nextSlot,
           collectiveSlots: collectiveSlots.length > 0 ? collectiveSlots : undefined,
           spotsLeft,
           capacityInfo,
+          gardeInfo: isCapBased ? {
+            housingType: profile.housingType as "house" | "apartment" | undefined,
+            hasGarden: profile.hasGarden,
+            gardenSize: profile.gardenSize,
+            hasOwnAnimals: !!(profile.ownedAnimals && profile.ownedAnimals.length > 0),
+            ownAnimalTypes: profile.ownedAnimals?.map((a: { type: string }) => a.type),
+            providesFood: profile.providesFood,
+            allowOvernightStay: service.allowOvernightStay,
+          } : undefined,
         });
       }
     }

@@ -24,6 +24,10 @@ import {
   Briefcase,
   MapPin,
   ExternalLink,
+  TreePine,
+  Moon,
+  Utensils,
+  PawPrint,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { formatPrice, formatDistance } from "./helpers";
@@ -191,6 +195,15 @@ export interface FormuleResult {
     maxCapacity: number;
     minRemainingCapacity: number;
   };
+  gardeInfo?: {
+    housingType?: "house" | "apartment";
+    hasGarden?: boolean;
+    gardenSize?: string;
+    hasOwnAnimals?: boolean;
+    ownAnimalTypes?: string[];
+    providesFood?: boolean;
+    allowOvernightStay?: boolean;
+  };
 }
 
 export interface SearchDates {
@@ -209,6 +222,31 @@ interface FormuleCardProps {
   isTogglingFavorite?: boolean;
   isAnnouncer?: boolean;
   searchDates?: SearchDates;
+  selectedAnimalIds?: string[];
+}
+
+// Construit l'URL de réservation avec les params de recherche pré-remplis
+function buildBookingUrl(
+  baseUrl: string,
+  formuleId: string,
+  searchDates?: SearchDates,
+  selectedAnimalIds?: string[],
+): string {
+  const params = new URLSearchParams();
+  params.set("formule", formuleId);
+
+  if (searchDates?.startDate) params.set("date", searchDates.startDate);
+  if (searchDates?.endDate) params.set("endDate", searchDates.endDate);
+  if (searchDates?.startTime) params.set("startTime", searchDates.startTime);
+  if (searchDates?.endTime) params.set("endTime", searchDates.endTime);
+
+  if (selectedAnimalIds && selectedAnimalIds.length > 0) {
+    params.set("animalIds", selectedAnimalIds.join(","));
+  } else if (searchDates?.numberOfAnimals && searchDates.numberOfAnimals > 1) {
+    params.set("animalCount", String(searchDates.numberOfAnimals));
+  }
+
+  return `${baseUrl}?${params.toString()}`;
 }
 
 // Helper pour formater la date du prochain créneau
@@ -268,6 +306,9 @@ const COMMISSION_RATES = {
   professionnel: 0.10,
 };
 
+// Frais Stripe (même défaut que BookingSummary)
+const DEFAULT_STRIPE_FEE_RATE = 0.03; // 3%
+
 const statusTypeConfig = {
   professionnel: {
     label: "Pro",
@@ -292,10 +333,12 @@ const statusTypeConfig = {
   },
 } as const;
 
-// Calcule le prix avec commission
+// Calcule le prix client complet : base + commission + frais Stripe
 export function getPriceWithCommission(price: number, statusType: "particulier" | "micro_entrepreneur" | "professionnel"): number {
-  const rate = COMMISSION_RATES[statusType] || 0.15;
-  return Math.round(price * (1 + rate));
+  const commissionRate = COMMISSION_RATES[statusType] || 0.15;
+  const commission = Math.round(price * commissionRate);
+  const stripeFee = Math.round(price * DEFAULT_STRIPE_FEE_RATE);
+  return price + commission + stripeFee;
 }
 
 // Calcule le nombre de jours et nuits entre deux dates
@@ -332,7 +375,7 @@ export function computeTotalPrice(
   const pricing = formule.pricing;
   const workdayHours = formule.workdayHours || 8;
   const dayStartTime = formule.dayStartTime || "08:00";
-  const dayEndTime = formule.dayEndTime || "19:00";
+  const dayEndTime = formule.dayEndTime || "20:00";
   const includeOvernight = formule.includeOvernightStay || false;
   const billingMode = formule.clientBillingMode;
 
@@ -441,8 +484,10 @@ export function computeTotalPrice(
     label += ` × ${animals} animaux`;
   }
 
-  // Appliquer la commission pour obtenir le prix client
-  const total = Math.round(serviceTotal * (1 + commissionRate));
+  // Appliquer commission + frais Stripe (aligné avec BookingSummary)
+  const commission = Math.round(serviceTotal * commissionRate);
+  const stripeFee = Math.round(serviceTotal * DEFAULT_STRIPE_FEE_RATE);
+  const total = serviceTotal + commission + stripeFee;
 
   return { total, label };
 }
@@ -456,13 +501,15 @@ export function FormuleCardGrid({
   isTogglingFavorite = false,
   isAnnouncer = false,
   searchDates,
+  selectedAnimalIds,
 }: FormuleCardProps) {
   const [isHovered, setIsHovered] = useState(false);
 
   const isCollective = formule.sessionType === "collective";
+  const isGarde = !!formule.capacityInfo?.isCapacityBased;
 
   const announcerBaseUrl = `/annonceur/${formule.announcerSlug || formule.announcerId}`;
-  const announcerBookingUrl = `${announcerBaseUrl}?formule=${formule.formuleId}`;
+  const announcerBookingUrl = buildBookingUrl(announcerBaseUrl, formule.formuleId, searchDates, selectedAnimalIds);
   const announcerPublicProfileUrl = `/profil/${formule.announcerSlug || formule.announcerId}`;
 
   const finalPrice = getPriceWithCommission(formule.price, formule.announcerStatusType);
@@ -525,8 +572,8 @@ export function FormuleCardGrid({
         )}
 
         {/* Header : Avatar + Nom + Favoris */}
-        <div className={cn("px-4 pt-4 pb-3", formule.nextSlot ? "pt-7" : "")}>
-          <div className="flex items-center gap-3">
+        <div className={cn("px-3 sm:px-4 pt-3 sm:pt-4 pb-2.5 sm:pb-3", formule.nextSlot ? "pt-7" : "")}>
+          <div className="flex items-center gap-2.5 sm:gap-3">
             <Link href={announcerPublicProfileUrl} className="relative flex-shrink-0 group/avatar">
               <div className="absolute -inset-0.5 bg-gradient-to-tr from-primary via-secondary to-primary rounded-xl opacity-60 blur-sm group-hover/avatar:opacity-100 transition-opacity" />
               <div className="relative w-11 h-11 rounded-lg overflow-hidden bg-white ring-2 ring-white">
@@ -578,10 +625,10 @@ export function FormuleCardGrid({
         </div>
 
         {/* Séparateur */}
-        <div className="mx-4 border-t border-gray-100" />
+        <div className="mx-3 sm:mx-4 border-t border-gray-100" />
 
         {/* Contenu principal */}
-        <div className="px-4 py-3 flex-1 flex flex-col">
+        <div className="px-3 sm:px-4 py-2.5 sm:py-3 flex-1 flex flex-col">
           {/* Nom de la formule */}
           <h3 className="text-base font-bold text-gray-900 mb-2.5 line-clamp-2 leading-snug group-hover:text-primary transition-colors">
             {formule.formuleName}
@@ -595,16 +642,18 @@ export function FormuleCardGrid({
               <span className="font-medium text-primary truncate">{formule.categoryName}</span>
             </div>
 
-            {/* Type de séance */}
-            <div className="flex items-center gap-1.5 justify-end">
-              {isCollective ? <Users className="w-3.5 h-3.5 text-blue-500" /> : <User className="w-3.5 h-3.5 text-gray-400" />}
-              <span className={cn("font-medium", isCollective ? "text-blue-600" : "text-gray-500")}>
-                {isCollective ? "Collectif" : "Individuel"}
-              </span>
-            </div>
+            {/* Type de séance — masqué pour garde individuelle */}
+            {(isCollective || !isGarde) && (
+              <div className="flex items-center gap-1.5 justify-end">
+                {isCollective ? <Users className="w-3.5 h-3.5 text-blue-500" /> : <User className="w-3.5 h-3.5 text-gray-400" />}
+                <span className={cn("font-medium", isCollective ? "text-blue-600" : "text-gray-500")}>
+                  {isCollective ? "Collectif" : "Individuel"}
+                </span>
+              </div>
+            )}
 
-            {/* Durée */}
-            {formule.duration && (
+            {/* Durée — masquée pour garde */}
+            {formule.duration && !isGarde && (
               <div className="flex items-center gap-1.5">
                 <Timer className="w-3.5 h-3.5 text-gray-400" />
                 <span>{formatDuration(formule.duration)}</span>
@@ -643,6 +692,53 @@ export function FormuleCardGrid({
                 <Sparkles className="w-3.5 h-3.5 text-purple-500" />
                 <span className="font-medium text-purple-600">{formule.numberOfSessions} séances</span>
               </div>
+            )}
+
+            {/* === Infos spécifiques Garde === */}
+            {isGarde && formule.gardeInfo && (
+              <>
+                {/* Logement */}
+                <div className="flex items-center gap-1.5">
+                  <Home className="w-3.5 h-3.5 text-gray-400" />
+                  <span>{formule.gardeInfo.housingType === "house" ? "Maison" : formule.gardeInfo.housingType === "apartment" ? "Appartement" : "Non précisé"}</span>
+                </div>
+
+                {/* Jardin */}
+                <div className="flex items-center gap-1.5 justify-end">
+                  <TreePine className={cn("w-3.5 h-3.5", formule.gardeInfo.hasGarden ? "text-emerald-500" : "text-gray-300")} />
+                  <span className={formule.gardeInfo.hasGarden ? "text-emerald-600 font-medium" : "text-gray-400"}>
+                    {formule.gardeInfo.hasGarden
+                      ? formule.gardeInfo.gardenSize === "grand" ? "Grand jardin" : formule.gardeInfo.gardenSize === "moyen" ? "Jardin moyen" : "Jardin"
+                      : "Pas de jardin"}
+                  </span>
+                </div>
+
+                {/* Garde de nuit */}
+                {formule.gardeInfo.allowOvernightStay && (
+                  <div className="flex items-center gap-1.5">
+                    <Moon className="w-3.5 h-3.5 text-indigo-500" />
+                    <span className="text-indigo-600 font-medium">Nuit incluse</span>
+                  </div>
+                )}
+
+                {/* Nourriture fournie */}
+                {formule.gardeInfo.providesFood && (
+                  <div className="flex items-center gap-1.5 justify-end">
+                    <Utensils className="w-3.5 h-3.5 text-amber-500" />
+                    <span className="text-amber-600 font-medium">Repas fournis</span>
+                  </div>
+                )}
+
+                {/* Animaux du gardien */}
+                {formule.gardeInfo.hasOwnAnimals && formule.gardeInfo.ownAnimalTypes && (
+                  <div className="flex items-center gap-1.5 col-span-2">
+                    <PawPrint className="w-3.5 h-3.5 text-gray-400" />
+                    <span className="text-gray-500">
+                      A {formule.gardeInfo.ownAnimalTypes.map((t) => animalEmojiMap.get(t) || "🐾").join(" ")} au foyer
+                    </span>
+                  </div>
+                )}
+              </>
             )}
 
             {/* Places disponibles (garde) */}
@@ -684,7 +780,7 @@ export function FormuleCardGrid({
         </div>
 
         {/* Footer - Prix & CTA */}
-        <div className="px-4 pb-4">
+        <div className="px-3 sm:px-4 pb-3 sm:pb-4">
           <div className="flex items-center justify-between gap-3 p-3 bg-gradient-to-r from-gray-50 to-gray-50/50 rounded-xl">
             <div>
               {totalEstimate ? (
@@ -749,13 +845,15 @@ export function FormuleCardList({
   isTogglingFavorite = false,
   isAnnouncer = false,
   searchDates,
+  selectedAnimalIds,
 }: FormuleCardProps) {
   const [isHovered, setIsHovered] = useState(false);
 
   const isCollective = formule.sessionType === "collective";
+  const isGarde = !!formule.capacityInfo?.isCapacityBased;
 
   const announcerBaseUrl = `/annonceur/${formule.announcerSlug || formule.announcerId}`;
-  const announcerBookingUrl = `${announcerBaseUrl}?formule=${formule.formuleId}`;
+  const announcerBookingUrl = buildBookingUrl(announcerBaseUrl, formule.formuleId, searchDates, selectedAnimalIds);
   const announcerPublicProfileUrl = `/profil/${formule.announcerSlug || formule.announcerId}`;
 
   const finalPrice = getPriceWithCommission(formule.price, formule.announcerStatusType);
@@ -788,7 +886,7 @@ export function FormuleCardList({
       <div className="relative bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden">
         <div className="flex flex-col sm:flex-row">
           {/* Colonne gauche : Annonceur */}
-          <div className="relative sm:w-36 p-4 bg-gradient-to-br from-gray-50/80 to-white flex flex-row sm:flex-col items-center gap-3 sm:gap-2 sm:justify-center border-b sm:border-b-0 sm:border-r border-gray-100">
+          <div className="relative sm:w-36 p-3 sm:p-4 bg-gradient-to-br from-gray-50/80 to-white flex flex-row sm:flex-col items-center gap-2.5 sm:gap-2 sm:justify-center border-b sm:border-b-0 sm:border-r border-gray-100">
             <Link href={announcerPublicProfileUrl} className="relative group/avatar flex-shrink-0">
               <div className="absolute -inset-1 bg-gradient-to-tr from-primary via-secondary to-primary rounded-xl opacity-60 blur-sm group-hover/avatar:opacity-100 transition-opacity" />
               <div className="relative w-14 h-14 rounded-lg overflow-hidden bg-white ring-2 ring-white shadow-md">
@@ -857,13 +955,15 @@ export function FormuleCardList({
                     {formule.categoryIcon && <span className="text-xs">{formule.categoryIcon}</span>}
                     <span className="text-[11px] font-semibold text-primary">{formule.categoryName}</span>
                   </span>
-                  <span className={cn(
-                    "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium",
-                    isCollective ? "bg-blue-50 text-blue-600" : "bg-gray-100 text-gray-500"
-                  )}>
-                    {isCollective ? <Users className="w-3 h-3" /> : <User className="w-3 h-3" />}
-                    {isCollective ? "Collectif" : "Individuel"}
-                  </span>
+                  {(isCollective || !isGarde) && (
+                    <span className={cn(
+                      "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium",
+                      isCollective ? "bg-blue-50 text-blue-600" : "bg-gray-100 text-gray-500"
+                    )}>
+                      {isCollective ? <Users className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                      {isCollective ? "Collectif" : "Individuel"}
+                    </span>
+                  )}
                   {formule.isSapEligible && formule.announcerSapApproved && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-[11px] font-medium">
                       <FileCheck className="w-3 h-3" />
@@ -880,9 +980,10 @@ export function FormuleCardList({
               />
             </div>
 
-            {/* Grille détails 2-3 colonnes */}
+            {/* Grille détails */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-gray-500 mb-3">
-              {formule.duration && (
+              {/* Durée — masquée pour garde */}
+              {formule.duration && !isGarde && (
                 <span className="flex items-center gap-1">
                   <Timer className="w-3.5 h-3.5 text-gray-400" />
                   {formatDuration(formule.duration)}
@@ -903,6 +1004,37 @@ export function FormuleCardList({
                   <Sparkles className="w-3.5 h-3.5 text-purple-500" />
                   {formule.numberOfSessions} séances
                 </span>
+              )}
+              {/* Infos garde */}
+              {isGarde && formule.gardeInfo && (
+                <>
+                  <span className="flex items-center gap-1">
+                    <Home className="w-3.5 h-3.5 text-gray-400" />
+                    {formule.gardeInfo.housingType === "house" ? "Maison" : formule.gardeInfo.housingType === "apartment" ? "Appart." : "—"}
+                  </span>
+                  <span className={cn("flex items-center gap-1", formule.gardeInfo.hasGarden ? "text-emerald-600" : "text-gray-400")}>
+                    <TreePine className="w-3.5 h-3.5" />
+                    {formule.gardeInfo.hasGarden ? "Jardin" : "Sans jardin"}
+                  </span>
+                  {formule.gardeInfo.allowOvernightStay && (
+                    <span className="flex items-center gap-1 text-indigo-600">
+                      <Moon className="w-3.5 h-3.5" />
+                      Nuit
+                    </span>
+                  )}
+                  {formule.gardeInfo.providesFood && (
+                    <span className="flex items-center gap-1 text-amber-600">
+                      <Utensils className="w-3.5 h-3.5" />
+                      Repas
+                    </span>
+                  )}
+                  {formule.gardeInfo.hasOwnAnimals && formule.gardeInfo.ownAnimalTypes && (
+                    <span className="flex items-center gap-1">
+                      <PawPrint className="w-3.5 h-3.5 text-gray-400" />
+                      {formule.gardeInfo.ownAnimalTypes.map((t) => animalEmojiMap.get(t) || "🐾").join("")}
+                    </span>
+                  )}
+                </>
               )}
               {formule.capacityInfo && formule.capacityInfo.isCapacityBased && (
                 <span className={cn(
@@ -1010,10 +1142,10 @@ export function FormuleCardList({
                     <motion.button
                       whileHover={{ scale: 1.03 }}
                       whileTap={{ scale: 0.97 }}
-                      className="relative px-5 py-2.5 bg-gradient-to-r from-primary to-primary/90 text-white font-bold text-sm rounded-xl shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all duration-300 flex items-center gap-1.5 overflow-hidden group/btn"
+                      className="relative px-3 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-primary to-primary/90 text-white font-bold text-xs sm:text-sm rounded-xl shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all duration-300 flex items-center gap-1 sm:gap-1.5 overflow-hidden group/btn"
                     >
                       <span className="relative z-10">Réserver</span>
-                      <ChevronRight className="w-4 h-4 relative z-10 group-hover/btn:translate-x-0.5 transition-transform" />
+                      <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 relative z-10 group-hover/btn:translate-x-0.5 transition-transform" />
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/btn:translate-x-full transition-transform duration-700" />
                     </motion.button>
                   </Link>
@@ -1054,15 +1186,19 @@ function FormuleChip({
   isFavorite = false,
   onToggleFavorite,
   isTogglingFavorite = false,
+  searchDates,
+  selectedAnimalIds,
 }: {
   formule: FormuleResult;
   isAnnouncer: boolean;
   isFavorite?: boolean;
   onToggleFavorite?: (formuleId: string) => void;
   isTogglingFavorite?: boolean;
+  searchDates?: SearchDates;
+  selectedAnimalIds?: string[];
 }) {
   const announcerBaseUrl = `/annonceur/${formule.announcerSlug || formule.announcerId}`;
-  const announcerBookingUrl = `${announcerBaseUrl}?formule=${formule.formuleId}`;
+  const announcerBookingUrl = buildBookingUrl(announcerBaseUrl, formule.formuleId, searchDates, selectedAnimalIds);
 
   const finalPrice = getPriceWithCommission(formule.price, formule.announcerStatusType);
   const priceLabel = priceUnitLabels[formule.priceUnit] || formule.priceUnit;
@@ -1174,6 +1310,8 @@ export function AnnouncerCarouselCard({
   favoriteFormuleIds,
   onToggleFavorite,
   togglingFavoriteId,
+  searchDates,
+  selectedAnimalIds,
 }: {
   group: AnnouncerGroup;
   index: number;
@@ -1181,6 +1319,8 @@ export function AnnouncerCarouselCard({
   favoriteFormuleIds?: string[];
   onToggleFavorite?: (formuleId: string) => void;
   togglingFavoriteId?: string | null;
+  searchDates?: SearchDates;
+  selectedAnimalIds?: string[];
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -1354,6 +1494,8 @@ export function AnnouncerCarouselCard({
                   isFavorite={favoriteFormuleIds?.includes(formule.formuleId) ?? false}
                   onToggleFavorite={onToggleFavorite}
                   isTogglingFavorite={togglingFavoriteId === formule.formuleId}
+                  searchDates={searchDates}
+                  selectedAnimalIds={selectedAnimalIds}
                 />
               ))}
             </div>
