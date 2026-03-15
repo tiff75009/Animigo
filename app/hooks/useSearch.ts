@@ -1366,7 +1366,13 @@ export function useFormuleSearch() {
   }, []);
 
   const setDateRange = useCallback((startDate: string | null, endDate: string | null) => {
-    setFilters((prev) => ({ ...prev, startDate, endDate, date: null }));
+    setFilters((prev) => ({
+      ...prev,
+      startDate,
+      endDate,
+      // Ne reset date que si on définit une vraie plage (pas quand on clear)
+      ...(startDate && endDate ? { date: null } : {}),
+    }));
   }, []);
 
   const setGardeTimes = useCallback((gardeStartTime: string | null, gardeEndTime: string | null) => {

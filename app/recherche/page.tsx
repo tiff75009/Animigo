@@ -257,9 +257,7 @@ export default function RecherchePage() {
     setHookAnimalType(urlParams.animal);
     setHookRadius(urlParams.radius);
     setHookDate(urlParams.date);
-    if (urlParams.startDate && urlParams.endDate) {
-      setHookDateRange(urlParams.startDate, urlParams.endDate);
-    }
+    setHookDateRange(urlParams.startDate, urlParams.endDate);
     setHookGardeTimes(urlParams.startTime, urlParams.endTime);
     setHookNumberOfAnimals(urlParams.animals);
   }, [urlParams.mode, urlParams.animal, urlParams.radius, urlParams.date, urlParams.startDate, urlParams.endDate, urlParams.startTime, urlParams.endTime, urlParams.animals, setHookSearchMode, setHookAnimalType, setHookRadius, setHookDate, setHookDateRange, setHookGardeTimes, setHookNumberOfAnimals]);
