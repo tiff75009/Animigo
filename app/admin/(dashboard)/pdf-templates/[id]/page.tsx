@@ -8,7 +8,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Id } from "@/convex/_generated/dataModel";
 import {
   ArrowLeft, Save, Eye, FileText, Tag, Info, Table2, Type,
-  Trash2, MoveDown, Layers, ClipboardPaste, ChevronRight,
+  Trash2, MoveDown, Layers, ClipboardPaste, ChevronRight, ImageIcon, Hash, Copy, Check, Search,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -23,11 +23,17 @@ const TEXT_FIELDS = [
   { key: "clientName", label: "Nom client", example: "Jean Dupont" },
   { key: "clientEmail", label: "Email client", example: "jean@example.com" },
   { key: "clientPhone", label: "Tél. client", example: "06 12 34 56 78" },
-  { key: "clientAddress", label: "Adresse client", example: "12 rue des Lilas, 75015 Paris" },
+  { key: "clientAddress", label: "Adresse complète client", example: "12 rue des Lilas, 75015 Paris" },
+  { key: "clientStreet", label: "Rue client", example: "12 rue des Lilas" },
+  { key: "clientPostalCode", label: "Code postal client", example: "75015" },
+  { key: "clientCity", label: "Ville client", example: "Paris" },
   { key: "announcerName", label: "Nom prestataire", example: "Marie Martin" },
   { key: "announcerEmail", label: "Email prestataire", example: "marie@example.com" },
   { key: "announcerPhone", label: "Tél. prestataire", example: "06 98 76 54 32" },
-  { key: "announcerAddress", label: "Adresse prestataire", example: "5 avenue des Champs, 75008 Paris" },
+  { key: "announcerAddress", label: "Adresse complète prestataire", example: "5 avenue des Champs, 75008 Paris" },
+  { key: "announcerStreet", label: "Rue prestataire", example: "5 avenue des Champs" },
+  { key: "announcerPostalCode", label: "Code postal prestataire", example: "75008" },
+  { key: "announcerCity", label: "Ville prestataire", example: "Paris" },
   { key: "companyName", label: "Raison sociale", example: "Pet Care SARL" },
   { key: "siret", label: "SIRET", example: "SIRET : 123 456 789 00012" },
   { key: "serviceName", label: "Nom service", example: "Garde de chien" },
@@ -43,6 +49,10 @@ const TEXT_FIELDS = [
   { key: "amountHT", label: "Total HT (texte)", example: "Total HT : 75,00 €" },
   { key: "tva", label: "TVA (texte)", example: "TVA (20%) : 15,00 €" },
   { key: "amountTTC", label: "Total TTC (texte)", example: "Total TTC : 90,00 €" },
+];
+
+const IMAGE_FIELDS = [
+  { key: "companyLogo", label: "Logo entreprise", description: "Logo de l'annonceur (défini dans Paramètres > Informations)" },
 ];
 
 const ITEMS_TABLE = {
@@ -73,6 +83,86 @@ const TOTALS_TABLE = {
   defaultHead: ["Libellé", "Montant"],
   defaultWidths: [60, 40],
 };
+
+// ============================================
+// NUMÉROTATION DE PAGES
+// ============================================
+
+interface PageNumberConfig {
+  enabled: boolean;
+  position: "header" | "footer";
+  alignment: "left" | "center" | "right";
+  format: "page_x_of_y" | "x_of_y" | "x_slash_y" | "page_x";
+  fontSize: number;
+  marginY: number;
+}
+
+const DEFAULT_PAGE_NUMBER_CONFIG: PageNumberConfig = {
+  enabled: false,
+  position: "footer",
+  alignment: "center",
+  format: "page_x_of_y",
+  fontSize: 8,
+  marginY: 10,
+};
+
+const PAGE_NUMBER_FORMATS: { value: PageNumberConfig["format"]; label: string; example: string }[] = [
+  { value: "page_x_of_y", label: "Page X sur Y", example: "Page 1 sur 3" },
+  { value: "x_of_y", label: "X sur Y", example: "1 sur 3" },
+  { value: "x_slash_y", label: "X / Y", example: "1 / 3" },
+  { value: "page_x", label: "Page X", example: "Page 1" },
+];
+
+function formatPageNumber(format: PageNumberConfig["format"], page: number, total: number): string {
+  switch (format) {
+    case "page_x_of_y": return `Page ${page} sur ${total}`;
+    case "x_of_y": return `${page} sur ${total}`;
+    case "x_slash_y": return `${page} / ${total}`;
+    case "page_x": return `Page ${page}`;
+  }
+}
+
+// ============================================
+// EN-TÊTE / PIED DE PAGE
+// ============================================
+
+type RepeatRule = "all_pages" | "first_page_only" | "all_except_first" | "even_pages" | "odd_pages";
+
+interface ZoneConfig {
+  enabled: boolean;
+  height: number; // mm
+  repeat: RepeatRule;
+  showLine: boolean;
+}
+
+interface HeaderFooterConfig {
+  header: ZoneConfig;
+  footer: ZoneConfig;
+}
+
+const DEFAULT_HEADER_FOOTER_CONFIG: HeaderFooterConfig = {
+  header: { enabled: false, height: 30, repeat: "all_pages", showLine: false },
+  footer: { enabled: false, height: 20, repeat: "all_pages", showLine: false },
+};
+
+const REPEAT_OPTIONS: { value: RepeatRule; label: string }[] = [
+  { value: "all_pages", label: "Toutes les pages" },
+  { value: "first_page_only", label: "Première page uniquement" },
+  { value: "all_except_first", label: "Toutes sauf la première" },
+  { value: "even_pages", label: "Pages paires (2, 4, 6…)" },
+  { value: "odd_pages", label: "Pages impaires (1, 3, 5…)" },
+];
+
+function shouldApplyToPage(repeat: RepeatRule, pageIndex: number): boolean {
+  const pageNum = pageIndex + 1;
+  switch (repeat) {
+    case "all_pages": return true;
+    case "first_page_only": return pageIndex === 0;
+    case "all_except_first": return pageIndex > 0;
+    case "even_pages": return pageNum % 2 === 0;
+    case "odd_pages": return pageNum % 2 === 1;
+  }
+}
 
 // ============================================
 // TEMPLATE PAR DÉFAUT
@@ -167,6 +257,17 @@ function getDefaultTemplate() {
           height: 5,
           fontSize: 8,
           fontColor: "#94a3b8",
+        },
+
+        // ── Logo entreprise ──
+        {
+          name: "companyLogo",
+          type: "image",
+          content: "",
+          position: { x: 0, y: 0 },
+          width: 25,
+          height: 25,
+          readOnly: true,
         },
 
         // ── Destinataire ──
@@ -327,7 +428,7 @@ function getDefaultTemplate() {
         {
           name: "sapMention",
           type: "text",
-          content: "",
+          content: "Service à la personne - TVA réduite 10%",
           position: { x: 0, y: 122 },
           width: 90,
           height: 5,
@@ -337,7 +438,7 @@ function getDefaultTemplate() {
         {
           name: "mentionTVA",
           type: "text",
-          content: "",
+          content: "TVA non applicable, art. 293 B du CGI",
           position: { x: 0, y: 155 },
           width: 170,
           height: 6,
@@ -393,6 +494,12 @@ export default function PdfTemplateEditorPage() {
   const [sidebarTab, setSidebarTab] = useState<"info" | "fields">("info");
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({ x: 0, y: 0, visible: false });
   const [showFieldsSubmenu, setShowFieldsSubmenu] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [fieldSearch, setFieldSearch] = useState("");
+  const [ctxFieldSearch, setCtxFieldSearch] = useState("");
+  const [pageNumberConfig, setPageNumberConfig] = useState<PageNumberConfig>(DEFAULT_PAGE_NUMBER_CONFIG);
+  const [headerFooterConfig, setHeaderFooterConfig] = useState<HeaderFooterConfig>(DEFAULT_HEADER_FOOTER_CONFIG);
+  const [margins, setMargins] = useState<[number, number, number, number]>([20, 20, 20, 20]); // [top, right, bottom, left]
 
   const setDesignerContainer = useCallback((node: HTMLDivElement | null) => {
     designerRef.current = node;
@@ -407,6 +514,22 @@ export default function PdfTemplateEditorPage() {
       setDocumentType(existingTemplate.documentType);
       setTargetCompanyType(existingTemplate.targetCompanyType || "all");
       setIsDefault(existingTemplate.isDefault);
+      // Charger les configs de mise en page
+      try {
+        const parsed = JSON.parse(existingTemplate.templateJson);
+        if (parsed._pageNumberConfig) {
+          setPageNumberConfig({ ...DEFAULT_PAGE_NUMBER_CONFIG, ...parsed._pageNumberConfig });
+        }
+        if (parsed._headerFooterConfig) {
+          setHeaderFooterConfig({
+            header: { ...DEFAULT_HEADER_FOOTER_CONFIG.header, ...parsed._headerFooterConfig.header },
+            footer: { ...DEFAULT_HEADER_FOOTER_CONFIG.footer, ...parsed._headerFooterConfig.footer },
+          });
+        }
+        if (parsed.basePdf?.padding && Array.isArray(parsed.basePdf.padding)) {
+          setMargins(parsed.basePdf.padding as [number, number, number, number]);
+        }
+      } catch { /* ignore */ }
     }
   }, [existingTemplate]);
 
@@ -440,6 +563,17 @@ export default function PdfTemplateEditorPage() {
           templateData = getDefaultTemplate();
         }
 
+        // Pré-remplir les champs dynamiques vides avec leurs exemples
+        // pour que l'admin puisse les voir, les positionner et les styler dans l'éditeur
+        const fieldExamples = new Map(TEXT_FIELDS.map(f => [f.key, f.example]));
+        for (const page of templateData.schemas) {
+          for (const schema of page) {
+            if (schema.type === "text" && !schema.content && fieldExamples.has(schema.name)) {
+              schema.content = fieldExamples.get(schema.name);
+            }
+          }
+        }
+
         console.log("[pdfme] Template:", templateData.schemas?.[0]?.length, "champs, basePdf:", typeof templateData.basePdf);
 
         const plugins = { text, image, table, line, rectangle };
@@ -449,6 +583,11 @@ export default function PdfTemplateEditorPage() {
           template: templateData,
           plugins,
         });
+
+        // Sync margins state depuis le template chargé
+        if (templateData.basePdf?.padding && Array.isArray(templateData.basePdf.padding)) {
+          setMargins(templateData.basePdf.padding as [number, number, number, number]);
+        }
 
         console.log("[pdfme] Designer OK");
         setDesignerLoaded(true);
@@ -462,6 +601,19 @@ export default function PdfTemplateEditorPage() {
     return () => clearTimeout(timer);
   }, [existingTemplate, designerLoaded, isNew, containerReady]);
 
+  // Appliquer les marges au designer quand elles changent
+  const prevMarginsRef = useRef<string>(JSON.stringify([20, 20, 20, 20]));
+  useEffect(() => {
+    if (!designerInstance.current || !designerLoaded) return;
+    const key = JSON.stringify(margins);
+    if (key === prevMarginsRef.current) return;
+    prevMarginsRef.current = key;
+
+    const template = designerInstance.current.getTemplate();
+    template.basePdf = { ...template.basePdf, padding: margins };
+    designerInstance.current.updateTemplate(template);
+  }, [margins, designerLoaded]);
+
   // Cleanup
   useEffect(() => {
     return () => {
@@ -470,6 +622,89 @@ export default function PdfTemplateEditorPage() {
       }
     };
   }, []);
+
+  // Overlay guides en-tête/pied de page directement sur le DOM du designer
+  const overlayRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!designerLoaded || !designerRef.current || !overlayRef.current) return;
+    const hasZones = headerFooterConfig.header.enabled || headerFooterConfig.footer.enabled;
+    if (!hasZones) {
+      overlayRef.current.innerHTML = "";
+      return;
+    }
+
+    // Cherche l'élément page dans le DOM du designer
+    // pdfme rend la page dans un div avec data-schema-page ou un div dont le ratio ≈ A4
+    const findPageElement = (): HTMLElement | null => {
+      const container = designerRef.current;
+      if (!container) return null;
+      // pdfme crée un div avec position relative qui contient la page
+      // On cherche un élément dont le ratio est ≈ 210/297 (A4)
+      const candidates = container.querySelectorAll<HTMLElement>("div[style]");
+      for (const el of candidates) {
+        const w = el.offsetWidth;
+        const h = el.offsetHeight;
+        if (w > 100 && h > 100) {
+          const ratio = w / h;
+          const a4Ratio = 210 / 297;
+          if (Math.abs(ratio - a4Ratio) < 0.05) {
+            return el;
+          }
+        }
+      }
+      return null;
+    };
+
+    const updateOverlays = () => {
+      const pageEl = findPageElement();
+      const overlay = overlayRef.current;
+      if (!pageEl || !overlay) return;
+
+      const containerRect = designerRef.current!.getBoundingClientRect();
+      const pageRect = pageEl.getBoundingClientRect();
+      const pagePixelHeight = pageRect.height;
+      const scale = pagePixelHeight / DYNAMIC_BASE_PDF.height; // px per mm
+
+      overlay.innerHTML = "";
+
+      // Position de la page relative au container du designer
+      const offsetLeft = pageRect.left - containerRect.left;
+      const offsetTop = pageRect.top - containerRect.top;
+      const pageW = pageRect.width;
+
+      if (headerFooterConfig.header.enabled) {
+        const hPx = headerFooterConfig.header.height * scale;
+        // Zone teintée
+        const zone = document.createElement("div");
+        zone.style.cssText = `position:absolute;left:${offsetLeft}px;top:${offsetTop}px;width:${pageW}px;height:${hPx}px;background:rgba(34,211,238,0.08);border-bottom:2px dashed #22d3ee;pointer-events:none;z-index:5;`;
+        overlay.appendChild(zone);
+        // Label
+        const lbl = document.createElement("div");
+        lbl.style.cssText = `position:absolute;left:${offsetLeft}px;top:${offsetTop + hPx + 2}px;width:${pageW}px;text-align:center;pointer-events:none;z-index:5;`;
+        lbl.innerHTML = `<span style="font-size:9px;color:#22d3ee;background:rgba(15,23,42,0.8);padding:1px 6px;border-radius:4px;font-weight:600;">EN-TÊTE ${headerFooterConfig.header.height}mm</span>`;
+        overlay.appendChild(lbl);
+      }
+
+      if (headerFooterConfig.footer.enabled) {
+        const fPx = headerFooterConfig.footer.height * scale;
+        // Zone teintée
+        const zone = document.createElement("div");
+        zone.style.cssText = `position:absolute;left:${offsetLeft}px;top:${offsetTop + pagePixelHeight - fPx}px;width:${pageW}px;height:${fPx}px;background:rgba(34,211,238,0.08);border-top:2px dashed #22d3ee;pointer-events:none;z-index:5;`;
+        overlay.appendChild(zone);
+        // Label
+        const lbl = document.createElement("div");
+        lbl.style.cssText = `position:absolute;left:${offsetLeft}px;top:${offsetTop + pagePixelHeight - fPx - 16}px;width:${pageW}px;text-align:center;pointer-events:none;z-index:5;`;
+        lbl.innerHTML = `<span style="font-size:9px;color:#22d3ee;background:rgba(15,23,42,0.8);padding:1px 6px;border-radius:4px;font-weight:600;">PIED DE PAGE ${headerFooterConfig.footer.height}mm</span>`;
+        overlay.appendChild(lbl);
+      }
+    };
+
+    // Update initial + polling pour suivre le zoom/scroll du designer
+    const interval = setInterval(updateOverlays, 500);
+    updateOverlays();
+
+    return () => clearInterval(interval);
+  }, [headerFooterConfig, designerLoaded]);
 
   // Fermer le menu contextuel au clic ailleurs
   useEffect(() => {
@@ -486,7 +721,26 @@ export default function PdfTemplateEditorPage() {
     if (!designerInstance.current) return;
     e.preventDefault();
     setShowFieldsSubmenu(false);
-    setContextMenu({ x: e.clientX, y: e.clientY, visible: true });
+
+    // Calculer la position en évitant que le menu sorte de l'écran
+    const menuHeight = 420; // hauteur estimée du menu contextuel
+    const menuWidth = 220;
+    const viewportH = window.innerHeight;
+    const viewportW = window.innerWidth;
+
+    let x = e.clientX;
+    let y = e.clientY;
+
+    // Si le menu dépasse en bas, le remonter
+    if (y + menuHeight > viewportH) {
+      y = Math.max(8, viewportH - menuHeight - 8);
+    }
+    // Si le menu dépasse à droite
+    if (x + menuWidth > viewportW) {
+      x = Math.max(8, viewportW - menuWidth - 8);
+    }
+
+    setContextMenu({ x, y, visible: true });
   }, []);
 
   const ctxAddField = useCallback((type: "text" | "itemsTable" | "totalsTable" | "line" | "rectangle") => {
@@ -587,30 +841,66 @@ export default function PdfTemplateEditorPage() {
     }
   }, []);
 
-  const ctxPasteField = useCallback((fieldKey: string, fieldLabel: string) => {
+  const ctxCopyField = useCallback((fieldKey: string) => {
+    navigator.clipboard.writeText(fieldKey).then(() => {
+      setCopiedField(fieldKey);
+      setTimeout(() => setCopiedField(null), 1500);
+    });
+  }, []);
+
+  const [pastedField, setPastedField] = useState<string | null>(null);
+  const ctxPasteField = useCallback(async () => {
     if (!designerInstance.current) return;
     setContextMenu((prev) => ({ ...prev, visible: false }));
-    setShowFieldsSubmenu(false);
 
-    const template = designerInstance.current.getTemplate();
-    const currentPage = template.schemas[0] || [];
+    try {
+      const clipText = await navigator.clipboard.readText();
+      if (!clipText) return;
 
-    // Trouver l'exemple correspondant
-    const textField = TEXT_FIELDS.find((f) => f.key === fieldKey);
-    const example = textField?.example || "";
+      // Vérifier si c'est une balise connue
+      const allKeys = [...TEXT_FIELDS.map(f => f.key), ...IMAGE_FIELDS.map(f => f.key), ITEMS_TABLE.key, TOTALS_TABLE.key];
+      const isKnownField = allKeys.includes(clipText);
 
-    const newSchema = {
-      name: fieldKey,
-      type: "text",
-      content: example,
-      position: { x: 20, y: 20 },
-      width: 70,
-      height: 7,
-      fontSize: 10,
-    };
+      const template = designerInstance.current.getTemplate();
+      const currentPage = template.schemas[0] || [];
 
-    template.schemas[0] = [...currentPage, newSchema];
-    designerInstance.current.updateTemplate(template);
+      // Trouver l'exemple pour le contenu
+      const textField = TEXT_FIELDS.find(f => f.key === clipText);
+      const isImage = IMAGE_FIELDS.some(f => f.key === clipText);
+
+      if (isImage) {
+        // Ajouter comme champ image
+        const newSchema = {
+          name: clipText,
+          type: "image",
+          content: "",
+          position: { x: 20, y: 20 },
+          width: 25,
+          height: 25,
+        };
+        template.schemas[0] = [...currentPage, newSchema];
+      } else {
+        // Ajouter comme champ texte
+        const newSchema = {
+          name: isKnownField ? clipText : `text_${Date.now()}`,
+          type: "text",
+          content: textField?.example || clipText,
+          position: { x: 20, y: 20 },
+          width: 70,
+          height: 7,
+          fontSize: 10,
+        };
+        template.schemas[0] = [...currentPage, newSchema];
+      }
+
+      designerInstance.current.updateTemplate(template);
+
+      // Feedback visuel
+      setPastedField(clipText);
+      setTimeout(() => setPastedField(null), 1500);
+    } catch {
+      // Clipboard non accessible
+    }
   }, []);
 
   const ctxResetTemplate = useCallback(() => {
@@ -633,6 +923,17 @@ export default function PdfTemplateEditorPage() {
 
       if (designerInstance.current) {
         const currentTemplate = designerInstance.current.getTemplate();
+        // Inclure les configs de mise en page dans le JSON template
+        if (pageNumberConfig.enabled) {
+          (currentTemplate as any)._pageNumberConfig = pageNumberConfig;
+        } else {
+          delete (currentTemplate as any)._pageNumberConfig;
+        }
+        if (headerFooterConfig.header.enabled || headerFooterConfig.footer.enabled) {
+          (currentTemplate as any)._headerFooterConfig = headerFooterConfig;
+        } else {
+          delete (currentTemplate as any)._headerFooterConfig;
+        }
         templateJson = JSON.stringify(currentTemplate);
       } else {
         templateJson = existingTemplate?.templateJson || "{}";
@@ -673,7 +974,7 @@ export default function PdfTemplateEditorPage() {
       if (line) plugins.line = line;
       if (rectangle) plugins.rectangle = rectangle;
 
-      // Données fictives
+      // Données fictives pour les balises dynamiques
       const inputs: Record<string, any> = {};
       for (const field of TEXT_FIELDS) {
         inputs[field.key] = field.example;
@@ -682,11 +983,197 @@ export default function PdfTemplateEditorPage() {
       inputs[ITEMS_TABLE.key] = JSON.stringify(ITEMS_TABLE.exampleData);
       inputs[TOTALS_TABLE.key] = JSON.stringify(TOTALS_TABLE.exampleData);
 
+      // Images dynamiques : générer un placeholder PNG pour l'aperçu
+      const knownImageKeys = new Set(IMAGE_FIELDS.map(f => f.key));
+      for (const page of template.schemas) {
+        for (const schema of page) {
+          if (schema.type === "image" && knownImageKeys.has(schema.name)) {
+            const w = Math.max(80, Math.round(schema.width * 3));
+            const h = Math.max(80, Math.round(schema.height * 3));
+            const canvas = document.createElement("canvas");
+            canvas.width = w;
+            canvas.height = h;
+            const c = canvas.getContext("2d")!;
+            c.fillStyle = "#e2e8f0";
+            c.fillRect(0, 0, w, h);
+            c.fillStyle = "#94a3b8";
+            c.font = "bold 12px sans-serif";
+            c.textAlign = "center";
+            c.textBaseline = "middle";
+            c.fillText("LOGO", w / 2, h / 2);
+            inputs[schema.name] = canvas.toDataURL("image/png");
+          }
+        }
+      }
+
+      // Textes libres : utiliser leur contenu tel quel dans les inputs
+      const knownKeys = new Set([...TEXT_FIELDS.map(f => f.key), ITEMS_TABLE.key, TOTALS_TABLE.key, ...IMAGE_FIELDS.map(f => f.key)]);
+      for (const page of template.schemas) {
+        for (const schema of page) {
+          if (schema.type === "text" && !knownKeys.has(schema.name) && schema.content) {
+            inputs[schema.name] = schema.content;
+          }
+        }
+      }
+
       console.log("[preview] Génération avec", Object.keys(plugins).length, "plugins,", Object.keys(inputs).length, "champs");
 
-      const pdf = await generate({ template, inputs: [inputs], plugins });
+      // ── Préparer le template pour la génération ──
+      // Si le footer est activé, retirer les éléments de la zone footer du template principal
+      // (ils seront rendus via un PDF séparé en post-traitement pour éviter le positionnement dynamique)
+      const genTemplate = JSON.parse(JSON.stringify(template));
+      const paddingTop = template.basePdf?.padding?.[0] ?? 20;
+      let footerThresholdY = Infinity;
+      if (headerFooterConfig.footer.enabled) {
+        footerThresholdY = 297 - headerFooterConfig.footer.height - paddingTop;
+        for (let p = 0; p < genTemplate.schemas.length; p++) {
+          genTemplate.schemas[p] = genTemplate.schemas[p].filter(
+            (s: any) => s.type === "table" || (s.position?.y || 0) < footerThresholdY
+          );
+        }
+      }
 
-      const blob = new Blob([pdf], { type: "application/pdf" });
+      let pdfBytes = await generate({ template: genTemplate, inputs: [inputs], plugins });
+
+      // Post-traitement : en-tête / pied de page (AVANT la numérotation pour ne pas masquer les numéros)
+      if (headerFooterConfig.header.enabled || headerFooterConfig.footer.enabled) {
+        const pdfLib = await import("pdf-lib");
+        const pdfDoc = await pdfLib.PDFDocument.load(pdfBytes);
+        const pages = pdfDoc.getPages();
+        const mainPageCount = pages.length;
+
+        if (mainPageCount > 0) {
+          const firstPage = pages[0];
+          const { width: pageW, height: pageH } = firstPage.getSize();
+          const mmToPt = 2.835;
+
+          // ── HEADER : embarquer depuis page 1 du PDF principal ──
+          let headerEmbed: any = null;
+          if (headerFooterConfig.header.enabled) {
+            const hH = headerFooterConfig.header.height * mmToPt;
+            [headerEmbed] = await pdfDoc.embedPages([firstPage], [
+              { left: 0, bottom: pageH - hH, right: pageW, top: pageH },
+            ]);
+          }
+
+          // ── FOOTER : générer un PDF séparé avec uniquement les éléments footer ──
+          let footerEmbed: any = null;
+          if (headerFooterConfig.footer.enabled) {
+            const fH = headerFooterConfig.footer.height * mmToPt;
+
+            // Cloner le template ORIGINAL, garder uniquement les éléments dans la zone footer
+            const footerTemplate = JSON.parse(JSON.stringify(template));
+            let hasFooterElements = false;
+            for (let p = 0; p < footerTemplate.schemas.length; p++) {
+              footerTemplate.schemas[p] = footerTemplate.schemas[p].filter(
+                (s: any) => s.position?.y >= footerThresholdY
+              );
+              if (footerTemplate.schemas[p].length > 0) hasFooterElements = true;
+            }
+            delete footerTemplate._pageNumberConfig;
+            delete footerTemplate._headerFooterConfig;
+
+            // Générer seulement s'il y a des éléments footer
+            if (hasFooterElements) {
+              const footerPdfBytes = await generate({ template: footerTemplate, inputs: [inputs], plugins });
+              const footerDoc = await pdfLib.PDFDocument.load(footerPdfBytes);
+              const [copiedFooterPage] = await pdfDoc.copyPages(footerDoc, [0]);
+              pdfDoc.addPage(copiedFooterPage);
+              const tempPage = pdfDoc.getPage(pdfDoc.getPageCount() - 1);
+              [footerEmbed] = await pdfDoc.embedPages([tempPage], [
+                { left: 0, bottom: 0, right: pageW, top: fH },
+              ]);
+              pdfDoc.removePage(pdfDoc.getPageCount() - 1);
+            }
+          }
+
+          // ── Appliquer header ──
+          if (headerEmbed && headerFooterConfig.header.enabled) {
+            const hH = headerFooterConfig.header.height * mmToPt;
+            const repeat = headerFooterConfig.header.repeat;
+            for (let i = 0; i < mainPageCount; i++) {
+              const apply = shouldApplyToPage(repeat, i);
+              if (i > 0 && apply) {
+                pages[i].drawRectangle({ x: 0, y: pageH - hH, width: pageW, height: hH, color: pdfLib.rgb(1, 1, 1) });
+                pages[i].drawPage(headerEmbed, { x: 0, y: pageH - hH });
+              }
+              if (i === 0 && !apply) {
+                pages[0].drawRectangle({ x: 0, y: pageH - hH, width: pageW, height: hH, color: pdfLib.rgb(1, 1, 1) });
+              }
+            }
+            if (headerFooterConfig.header.showLine) {
+              const lineY = pageH - hH;
+              for (let i = 0; i < mainPageCount; i++) {
+                if (shouldApplyToPage(repeat, i)) {
+                  pages[i].drawLine({ start: { x: 20, y: lineY }, end: { x: pageW - 20, y: lineY }, thickness: 0.5, color: pdfLib.rgb(0.85, 0.87, 0.89) });
+                }
+              }
+            }
+          }
+
+          // ── Appliquer footer (sur TOUTES les pages, y compris page 1) ──
+          if (footerEmbed && headerFooterConfig.footer.enabled) {
+            const fH = headerFooterConfig.footer.height * mmToPt;
+            const repeat = headerFooterConfig.footer.repeat;
+            for (let i = 0; i < mainPageCount; i++) {
+              const apply = shouldApplyToPage(repeat, i);
+              if (apply) {
+                // Fond blanc pour masquer tout contenu existant dans la zone footer
+                pages[i].drawRectangle({ x: 0, y: 0, width: pageW, height: fH, color: pdfLib.rgb(1, 1, 1) });
+                pages[i].drawPage(footerEmbed, { x: 0, y: 0 });
+              }
+            }
+            if (headerFooterConfig.footer.showLine) {
+              const lineY = fH;
+              for (let i = 0; i < mainPageCount; i++) {
+                if (shouldApplyToPage(repeat, i)) {
+                  pages[i].drawLine({ start: { x: 20, y: lineY }, end: { x: pageW - 20, y: lineY }, thickness: 0.5, color: pdfLib.rgb(0.85, 0.87, 0.89) });
+                }
+              }
+            }
+          }
+
+          pdfBytes = await pdfDoc.save();
+        }
+      }
+
+      // Post-traitement : numérotation de pages (APRÈS header/footer pour ne pas être masquée)
+      if (pageNumberConfig.enabled) {
+        const pdfLib2 = await import("pdf-lib");
+        const pdfDoc = await pdfLib2.PDFDocument.load(pdfBytes);
+        const font = await pdfDoc.embedFont(pdfLib2.StandardFonts.Helvetica);
+        const pages = pdfDoc.getPages();
+        const totalPages = pages.length;
+
+        for (let i = 0; i < totalPages; i++) {
+          const page = pages[i];
+          const { width, height } = page.getSize();
+          const text = formatPageNumber(pageNumberConfig.format, i + 1, totalPages);
+          const textWidth = font.widthOfTextAtSize(text, pageNumberConfig.fontSize);
+
+          let x: number;
+          const marginX = 20;
+          if (pageNumberConfig.alignment === "left") x = marginX;
+          else if (pageNumberConfig.alignment === "right") x = width - textWidth - marginX;
+          else x = (width - textWidth) / 2;
+
+          const mmToPt = 2.835;
+          const y = pageNumberConfig.position === "footer"
+            ? pageNumberConfig.marginY * mmToPt
+            : height - pageNumberConfig.marginY * mmToPt - pageNumberConfig.fontSize;
+
+          page.drawText(text, {
+            x, y,
+            size: pageNumberConfig.fontSize,
+            font,
+            color: pdfLib2.rgb(0.58, 0.64, 0.69),
+          });
+        }
+
+        pdfBytes = await pdfDoc.save();
+      }
+
+      const blob = new Blob([pdfBytes], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank");
       setTimeout(() => URL.revokeObjectURL(url), 60000);
@@ -694,7 +1181,7 @@ export default function PdfTemplateEditorPage() {
       console.error("Erreur prévisualisation:", error);
       alert("Erreur lors de la génération. Voir la console (F12).");
     }
-  }, []);
+  }, [pageNumberConfig, headerFooterConfig]);
 
   // ============================================
   // RENDER
@@ -814,6 +1301,58 @@ export default function PdfTemplateEditorPage() {
                   <span className="text-sm text-slate-300">Template par défaut</span>
                 </label>
 
+                {/* Marges de page */}
+                <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700">
+                  <h4 className="text-xs font-semibold text-slate-300 mb-2.5">Marges de page (mm)</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { idx: 0, label: "Haut" },
+                      { idx: 2, label: "Bas" },
+                      { idx: 3, label: "Gauche" },
+                      { idx: 1, label: "Droite" },
+                    ] as const).map(({ idx, label }) => (
+                      <div key={idx}>
+                        <label className="block text-[10px] text-slate-500 mb-0.5">{label}</label>
+                        <input
+                          type="number"
+                          min={5}
+                          max={50}
+                          value={margins[idx]}
+                          onChange={(e) => {
+                            const raw = Number(e.target.value);
+                            setMargins((m) => {
+                              const next = [...m] as [number, number, number, number];
+                              next[idx] = raw;
+                              return next;
+                            });
+                          }}
+                          onBlur={(e) => {
+                            const val = Math.max(5, Math.min(50, Number(e.target.value) || 5));
+                            setMargins((m) => {
+                              const next = [...m] as [number, number, number, number];
+                              next[idx] = val;
+                              return next;
+                            });
+                          }}
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-[11px] focus:outline-none focus:border-rose-500/50"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setMargins([10, 10, 10, 10])}
+                    className="mt-2 w-full py-1 text-[10px] text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors"
+                  >
+                    Marges réduites (10mm)
+                  </button>
+                  <button
+                    onClick={() => setMargins([20, 20, 20, 20])}
+                    className="mt-1 w-full py-1 text-[10px] text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors"
+                  >
+                    Marges par défaut (20mm)
+                  </button>
+                </div>
+
                 {/* Info positionnement dynamique */}
                 <div className="mt-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
                   <h4 className="text-xs font-semibold text-emerald-400 mb-1.5 flex items-center gap-1.5">
@@ -839,29 +1378,287 @@ export default function PdfTemplateEditorPage() {
                     ou réinitialiser le template.
                   </p>
                 </div>
+
+                {/* Numérotation de pages */}
+                <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700">
+                  <label className="flex items-center justify-between cursor-pointer mb-2">
+                    <h4 className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                      <Hash className="w-3.5 h-3.5 text-amber-400" />
+                      Numérotation de pages
+                    </h4>
+                    <div className="relative">
+                      <input
+                        type="checkbox"
+                        checked={pageNumberConfig.enabled}
+                        onChange={(e) => setPageNumberConfig((c) => ({ ...c, enabled: e.target.checked }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-8 h-4 bg-slate-700 peer-checked:bg-amber-500 rounded-full transition-colors" />
+                      <div className="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full peer-checked:translate-x-4 transition-transform" />
+                    </div>
+                  </label>
+
+                  {pageNumberConfig.enabled && (
+                    <div className="space-y-2.5 mt-3">
+                      <div>
+                        <label className="block text-[10px] text-slate-500 mb-1">Position</label>
+                        <div className="flex gap-1.5">
+                          {(["header", "footer"] as const).map((pos) => (
+                            <button
+                              key={pos}
+                              onClick={() => setPageNumberConfig((c) => ({ ...c, position: pos }))}
+                              className={`flex-1 py-1.5 text-[11px] rounded-lg font-medium transition-colors ${
+                                pageNumberConfig.position === pos
+                                  ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                                  : "bg-slate-800 text-slate-400 border border-slate-700 hover:text-slate-300"
+                              }`}
+                            >
+                              {pos === "header" ? "Haut" : "Bas"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-slate-500 mb-1">Alignement</label>
+                        <div className="flex gap-1.5">
+                          {(["left", "center", "right"] as const).map((align) => (
+                            <button
+                              key={align}
+                              onClick={() => setPageNumberConfig((c) => ({ ...c, alignment: align }))}
+                              className={`flex-1 py-1.5 text-[11px] rounded-lg font-medium transition-colors ${
+                                pageNumberConfig.alignment === align
+                                  ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                                  : "bg-slate-800 text-slate-400 border border-slate-700 hover:text-slate-300"
+                              }`}
+                            >
+                              {align === "left" ? "Gauche" : align === "center" ? "Centre" : "Droite"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-slate-500 mb-1">Format</label>
+                        <select
+                          value={pageNumberConfig.format}
+                          onChange={(e) => setPageNumberConfig((c) => ({ ...c, format: e.target.value as PageNumberConfig["format"] }))}
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-[11px] focus:outline-none focus:border-amber-500/50"
+                        >
+                          {PAGE_NUMBER_FORMATS.map((f) => (
+                            <option key={f.value} value={f.value}>{f.label} — {f.example}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <label className="block text-[10px] text-slate-500 mb-1">Taille police</label>
+                          <input
+                            type="number"
+                            min={6}
+                            max={14}
+                            value={pageNumberConfig.fontSize}
+                            onChange={(e) => setPageNumberConfig((c) => ({ ...c, fontSize: Number(e.target.value) }))}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-[11px] focus:outline-none focus:border-amber-500/50"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-[10px] text-slate-500 mb-1">Marge (mm)</label>
+                          <input
+                            type="number"
+                            min={5}
+                            max={30}
+                            value={pageNumberConfig.marginY}
+                            onChange={(e) => setPageNumberConfig((c) => ({ ...c, marginY: Number(e.target.value) }))}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-[11px] focus:outline-none focus:border-amber-500/50"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Aperçu du résultat */}
+                      <div className="mt-1 p-2 rounded-lg bg-slate-900 border border-slate-700/50 text-center">
+                        <p className="text-[10px] text-slate-500 mb-1">Aperçu :</p>
+                        <p className="text-[11px] text-amber-400 font-mono">
+                          {formatPageNumber(pageNumberConfig.format, 1, 3)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* En-tête / Pied de page */}
+                {(["header", "footer"] as const).map((zone) => {
+                  const config = headerFooterConfig[zone];
+                  const label = zone === "header" ? "En-tête" : "Pied de page";
+                  const updateZone = (partial: Partial<ZoneConfig>) =>
+                    setHeaderFooterConfig((c) => ({ ...c, [zone]: { ...c[zone], ...partial } }));
+
+                  return (
+                    <div key={zone} className="p-3 rounded-xl bg-slate-800/80 border border-slate-700">
+                      <label className="flex items-center justify-between cursor-pointer mb-1">
+                        <h4 className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                          <FileText className="w-3.5 h-3.5 text-cyan-400" />
+                          {label}
+                        </h4>
+                        <div className="relative">
+                          <input
+                            type="checkbox"
+                            checked={config.enabled}
+                            onChange={(e) => updateZone({ enabled: e.target.checked })}
+                            className="sr-only peer"
+                          />
+                          <div className="w-8 h-4 bg-slate-700 peer-checked:bg-cyan-500 rounded-full transition-colors" />
+                          <div className="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full peer-checked:translate-x-4 transition-transform" />
+                        </div>
+                      </label>
+
+                      {config.enabled && (
+                        <div className="space-y-2.5 mt-3">
+                          <div>
+                            <label className="block text-[10px] text-slate-500 mb-1">Hauteur de la zone (mm)</label>
+                            <input
+                              type="number"
+                              min={10}
+                              max={80}
+                              value={config.height}
+                              onChange={(e) => updateZone({ height: Number(e.target.value) })}
+                              className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-[11px] focus:outline-none focus:border-cyan-500/50"
+                            />
+                            <p className="text-[10px] text-slate-500 mt-0.5">
+                              Les éléments dans les {config.height} premiers mm {zone === "header" ? "du haut" : "du bas"} seront considérés comme {label.toLowerCase()}.
+                            </p>
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] text-slate-500 mb-1">Répétition</label>
+                            <select
+                              value={config.repeat}
+                              onChange={(e) => updateZone({ repeat: e.target.value as RepeatRule })}
+                              className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-[11px] focus:outline-none focus:border-cyan-500/50"
+                            >
+                              {REPEAT_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={config.showLine}
+                              onChange={(e) => updateZone({ showLine: e.target.checked })}
+                              className="rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500/50 w-3.5 h-3.5"
+                            />
+                            <span className="text-[11px] text-slate-300">Ligne séparatrice</span>
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Mini-schéma visuel de la page */}
+                {(headerFooterConfig.header.enabled || headerFooterConfig.footer.enabled) && (
+                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-700/50">
+                    <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mb-2">Aperçu zones</p>
+                    <div className="relative bg-white rounded border border-slate-600 mx-auto" style={{ width: 120, height: 170 }}>
+                      {/* Header zone */}
+                      {headerFooterConfig.header.enabled && (() => {
+                        const hPct = Math.min(40, (headerFooterConfig.header.height / 297) * 100);
+                        return (
+                          <div
+                            className="absolute top-0 left-0 right-0 bg-cyan-400/20 border-b-2 border-cyan-400 border-dashed flex items-center justify-center"
+                            style={{ height: `${hPct}%` }}
+                          >
+                            <span className="text-[8px] font-bold text-cyan-600">EN-TÊTE {headerFooterConfig.header.height}mm</span>
+                          </div>
+                        );
+                      })()}
+                      {/* Footer zone */}
+                      {headerFooterConfig.footer.enabled && (() => {
+                        const fPct = Math.min(40, (headerFooterConfig.footer.height / 297) * 100);
+                        return (
+                          <div
+                            className="absolute bottom-0 left-0 right-0 bg-cyan-400/20 border-t-2 border-cyan-400 border-dashed flex items-center justify-center"
+                            style={{ height: `${fPct}%` }}
+                          >
+                            <span className="text-[8px] font-bold text-cyan-600">PIED DE PAGE {headerFooterConfig.footer.height}mm</span>
+                          </div>
+                        );
+                      })()}
+                      {/* Content zone label */}
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-[8px] text-slate-400">Contenu</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-3">
+                {/* Recherche balises */}
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                  <input
+                    type="text"
+                    value={fieldSearch}
+                    onChange={(e) => setFieldSearch(e.target.value)}
+                    placeholder="Rechercher une balise..."
+                    className="w-full pl-8 pr-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30"
+                  />
+                  {fieldSearch && (
+                    <button
+                      onClick={() => setFieldSearch("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs"
+                    >
+                      &times;
+                    </button>
+                  )}
+                </div>
+
                 {/* Champs texte */}
                 <h4 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                   <Type className="w-3 h-3" />
                   Champs texte
                 </h4>
                 <div className="space-y-1">
-                  {TEXT_FIELDS.map((field) => (
-                    <div
-                      key={field.key}
-                      className="flex items-start gap-2 p-2 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors cursor-pointer group"
-                      onClick={() => navigator.clipboard.writeText(field.key)}
-                      title={`Copier : ${field.key}`}
-                    >
-                      <Info className="w-3 h-3 text-slate-600 mt-0.5 flex-shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-slate-300 group-hover:text-white">{field.label}</p>
-                        <p className="text-[10px] text-slate-600 font-mono truncate">{field.key}</p>
+                  {TEXT_FIELDS
+                    .filter((f) => {
+                      if (!fieldSearch) return true;
+                      const q = fieldSearch.toLowerCase();
+                      return f.label.toLowerCase().includes(q) || f.key.toLowerCase().includes(q);
+                    })
+                    .map((field) => {
+                    const isCopied = copiedField === field.key;
+                    return (
+                      <div
+                        key={field.key}
+                        className="flex items-center gap-2 p-2 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors group"
+                      >
+                        <Info className="w-3 h-3 text-slate-600 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-slate-300 group-hover:text-white">{field.label}</p>
+                          <p className="text-[10px] text-slate-600 font-mono truncate">{field.key}</p>
+                        </div>
+                        <button
+                          onClick={() => ctxCopyField(field.key)}
+                          className={`flex-shrink-0 p-1.5 rounded-md transition-all duration-300 ${
+                            isCopied
+                              ? "bg-emerald-500/20 text-emerald-400 scale-110"
+                              : "text-slate-600 hover:text-cyan-400 hover:bg-slate-700"
+                          }`}
+                          title={`Copier "${field.key}"`}
+                        >
+                          {isCopied ? (
+                            <Check className="w-3.5 h-3.5" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {/* Tableau des prestations */}
@@ -912,6 +1709,22 @@ export default function PdfTemplateEditorPage() {
                     </ul>
                   </div>
                 </div>
+
+                {/* Champs image */}
+                <h4 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 pt-2">
+                  <ImageIcon className="w-3 h-3" />
+                  Images dynamiques
+                </h4>
+                {IMAGE_FIELDS.map((field) => (
+                  <div
+                    key={field.key}
+                    className="p-3 rounded-xl bg-orange-500/10 border border-orange-500/20"
+                  >
+                    <p className="text-xs font-semibold text-orange-400">{field.label}</p>
+                    <p className="text-[10px] text-slate-400 mt-1">{field.description}</p>
+                    <p className="text-[10px] text-slate-500 mt-1.5 font-mono">Clé : {field.key}</p>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -926,6 +1739,12 @@ export default function PdfTemplateEditorPage() {
           <div
             ref={setDesignerContainer}
             style={{ width: "100%", height: "100%", position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+          />
+
+          {/* Overlay guides en-tête / pied de page */}
+          <div
+            ref={overlayRef}
+            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, pointerEvents: "none", zIndex: 5 }}
           />
 
           {/* Spinner / Erreur */}
@@ -994,35 +1813,120 @@ export default function PdfTemplateEditorPage() {
                 Rectangle
               </button>
               <div className="mx-2 my-1 h-px bg-slate-800" />
+              <p className="px-3 py-1 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Images dynamiques</p>
+              {IMAGE_FIELDS.map((field) => (
+                <button
+                  key={field.key}
+                  onClick={() => {
+                    if (!designerInstance.current) return;
+                    setContextMenu((prev) => ({ ...prev, visible: false }));
+                    const tmpl = designerInstance.current.getTemplate();
+                    const currentPage = tmpl.schemas[0] || [];
+                    const newSchema = {
+                      name: field.key,
+                      type: "image",
+                      content: "",
+                      position: { x: 10, y: 10 },
+                      width: 25,
+                      height: 25,
+                    };
+                    tmpl.schemas[0] = [...currentPage, newSchema];
+                    designerInstance.current.updateTemplate(tmpl);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                >
+                  <ImageIcon className="w-4 h-4 text-orange-400" />
+                  {field.label}
+                </button>
+              ))}
+              <div className="mx-2 my-1 h-px bg-slate-800" />
               <p className="px-3 py-1 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Balises</p>
               <div className="relative">
                 <button
-                  onClick={() => setShowFieldsSubmenu((v) => !v)}
+                  onClick={() => { setShowFieldsSubmenu((v) => !v); setCtxFieldSearch(""); }}
                   className="w-full flex items-center justify-between px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
                 >
                   <span className="flex items-center gap-2.5">
                     <ClipboardPaste className="w-4 h-4 text-cyan-400" />
-                    Coller la balise
+                    Copier la balise
                   </span>
                   <ChevronRight className={`w-3.5 h-3.5 text-slate-500 transition-transform ${showFieldsSubmenu ? "rotate-90" : ""}`} />
                 </button>
                 {showFieldsSubmenu && (
-                  <div className="fixed z-[110] bg-slate-900 border border-slate-700 rounded-xl shadow-2xl shadow-black/50 py-1.5 w-56 max-h-[320px] overflow-y-auto"
-                    style={{ left: (contextMenu.x + 220), top: contextMenu.y }}
+                  <div className="fixed z-[110] bg-slate-900 border border-slate-700 rounded-xl shadow-2xl shadow-black/50 py-1.5 w-64 max-h-[360px] flex flex-col"
+                    style={{
+                      left: Math.min(contextMenu.x + 220, window.innerWidth - 270),
+                      top: Math.min(contextMenu.y, window.innerHeight - 370),
+                    }}
                   >
-                    {TEXT_FIELDS.map((field) => (
-                      <button
-                        key={field.key}
-                        onClick={() => ctxPasteField(field.key, field.label)}
-                        className="w-full flex items-start gap-2 px-3 py-1.5 text-left hover:bg-slate-800 transition-colors group"
-                      >
-                        <span className="text-xs text-slate-300 group-hover:text-white leading-tight">{field.label}</span>
-                        <span className="text-[10px] text-slate-600 font-mono ml-auto flex-shrink-0">{field.key}</span>
-                      </button>
-                    ))}
+                    <div className="px-2 pt-1 pb-1.5 flex-shrink-0">
+                      <div className="relative">
+                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                        <input
+                          type="text"
+                          placeholder="Rechercher une balise..."
+                          value={ctxFieldSearch}
+                          onChange={(e) => setCtxFieldSearch(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full pl-7 pr-2 py-1.5 text-xs bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-slate-600"
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+                    <div className="overflow-y-auto flex-1">
+                    {TEXT_FIELDS.filter((field) => {
+                      if (!ctxFieldSearch) return true;
+                      const q = ctxFieldSearch.toLowerCase();
+                      return field.label.toLowerCase().includes(q) || field.key.toLowerCase().includes(q);
+                    }).map((field) => {
+                      const isCopied = copiedField === field.key;
+                      return (
+                        <div
+                          key={field.key}
+                          className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-slate-800 transition-colors group"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <span className="text-xs text-slate-300 group-hover:text-white leading-tight block truncate">{field.label}</span>
+                            <span className="text-[10px] text-slate-600 font-mono block truncate">{field.key}</span>
+                          </div>
+                          <button
+                            onClick={() => ctxCopyField(field.key)}
+                            className={`flex-shrink-0 p-1 rounded transition-all duration-300 ${
+                              isCopied
+                                ? "bg-emerald-500/20 text-emerald-400 scale-110"
+                                : "text-slate-500 hover:text-cyan-400 hover:bg-slate-700"
+                            }`}
+                            title={`Copier "${field.key}"`}
+                          >
+                            {isCopied ? (
+                              <Check className="w-3.5 h-3.5" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      );
+                    })}
+                    </div>
                   </div>
                 )}
               </div>
+              <button
+                onClick={ctxPasteField}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+              >
+                {pastedField ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span className="text-emerald-400">Collé : {pastedField}</span>
+                  </>
+                ) : (
+                  <>
+                    <ClipboardPaste className="w-4 h-4 text-emerald-400" />
+                    Coller la balise
+                  </>
+                )}
+              </button>
               <div className="mx-2 my-1 h-px bg-slate-800" />
               <button
                 onClick={ctxResetTemplate}
