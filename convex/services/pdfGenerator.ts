@@ -75,8 +75,22 @@ export const generatePdfFromTemplate = internalAction({
         ? ""
         : "TVA non applicable, art. 293 B du CGI";
 
-      // 6. Construire le tableau des items enrichi
-      // Colonnes : Description | Qté | Unité | P.U. HT | TVA % | Montant TVA | Total TTC
+      // 6. Construire le tableau des items enrichi (colonnes configurables)
+      const templateData_parsed = JSON.parse(template.templateJson);
+      const colsConfig = templateData_parsed._tableColumnsConfig;
+
+      // Colonnes items : utiliser la config du template ou les colonnes par défaut
+      const defaultItemsCols = [
+        { dataField: "description", enabled: true },
+        { dataField: "quantity", enabled: true },
+        { dataField: "unit", enabled: true },
+        { dataField: "unitPriceHT", enabled: true },
+        { dataField: "vatRate", enabled: true },
+        { dataField: "vatAmount", enabled: true },
+        { dataField: "totalTTC", enabled: true },
+      ];
+      const itemsCols = (colsConfig?.itemsTable || defaultItemsCols).filter((c: any) => c.enabled);
+
       const itemsTable = data.items.map((item: any, index: number) => {
         let desc = item.description;
         if (index === 0 && data.descriptionDetails) {
@@ -92,24 +106,51 @@ export const generatePdfFromTemplate = internalAction({
           ? Math.round(item.unitPrice / (1 + vatRate / 100))
           : item.unitPrice;
 
-        return [
-          desc,
-          String(item.quantity),
-          item.unit || "",
-          formatPrice(unitPriceHT),
-          isVatSubject ? `${vatRate}%` : "0%",
-          formatPrice(itemTVA),
-          formatPrice(itemTTC),
-        ];
+        // Données per-row pour résolution des {{balise}} dans les templates
+        const rowData: Record<string, string> = {
+          description: desc,
+          quantity: String(item.quantity),
+          unit: item.unit || "",
+          unitPriceHT: formatPrice(unitPriceHT),
+          unitPriceTTC: formatPrice(item.unitPrice),
+          vatRate: isVatSubject ? `${vatRate}%` : "0%",
+          vatAmount: formatPrice(itemTVA),
+          totalHT: formatPrice(itemHT),
+          totalTTC: formatPrice(itemTTC),
+        };
+
+        return itemsCols.map((col: any) => {
+          // Si un contentTemplate est défini, l'utiliser avec remplacement des {{balise}}
+          if (col.contentTemplate) {
+            return col.contentTemplate.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) => rowData[key] ?? key);
+          }
+          // Sinon, valeur par défaut du dataField
+          return rowData[col.dataField] ?? "";
+        });
       });
 
-      // 7. Construire le tableau des totaux
-      const totalsRows: string[][] = [];
+      // 7. Construire le tableau des totaux (colonnes configurables)
+      const defaultTotalsCols = [
+        { dataField: "label", enabled: true },
+        { dataField: "amount", enabled: true },
+      ];
+      const totalsCols = (colsConfig?.totalsTable || defaultTotalsCols).filter((c: any) => c.enabled);
+
+      const totalsData: Record<string, string>[] = [];
       if (isVatSubject) {
-        totalsRows.push(["Total HT", formatPrice(invoice.amountHT || invoice.amount)]);
-        totalsRows.push([`TVA (${vatRate}%)`, formatPrice(invoice.tva!)]);
+        totalsData.push({ label: "Total HT", amount: formatPrice(invoice.amountHT || invoice.amount) });
+        totalsData.push({ label: `TVA (${vatRate}%)`, amount: formatPrice(invoice.tva!) });
       }
-      totalsRows.push(["Total TTC", formatPrice(invoice.amount)]);
+      totalsData.push({ label: "Total TTC", amount: formatPrice(invoice.amount) });
+
+      const totalsRows = totalsData.map(row =>
+        totalsCols.map((col: any) => {
+          if (col.contentTemplate) {
+            return col.contentTemplate.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) => row[key] ?? key);
+          }
+          return row[col.dataField] ?? "";
+        })
+      );
 
       // 8. Logo entreprise (fetch + base64)
       let companyLogoBase64 = "";
@@ -149,6 +190,7 @@ export const generatePdfFromTemplate = internalAction({
           announcerCity: data.announcerCity || "",
           companyName: data.companyName || "",
           siret: data.siret ? `SIRET : ${data.siret}` : "",
+          capital: data.capital ? `Capital : ${data.capital.toLocaleString("fr-FR").replace(/\s/g, " ")} €` : "",
           serviceName: data.serviceName || "",
           missionDate: data.missionDateRange || "",
           sessionType: data.sessionTypeLabel || "",
@@ -163,13 +205,21 @@ export const generatePdfFromTemplate = internalAction({
           amountTTC: `Total TTC : ${formatPrice(invoice.amount)}`,
           vatRate: `${vatRate} %`,
           mentionTVA,
-          itemsTable: JSON.stringify(itemsTable),
-          totalsTable: JSON.stringify(totalsRows),
+          itemsTable: "__PLACEHOLDER__",
+          totalsTable: "__PLACEHOLDER__",
           ...(companyLogoBase64 ? { companyLogo: companyLogoBase64 } : {}),
         },
       ];
 
-      // 10. Générer le PDF avec pdfme
+      // 10. Remplacer les {{balise}} dans les cellules freeText des tableaux
+      const inputData0 = inputs[0] as Record<string, string>;
+      const replaceTags = (text: string) => text.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) => inputData0[key] ?? key);
+      const resolvedItemsTable = itemsTable.map((row: string[]) => row.map(replaceTags));
+      const resolvedTotalsRows = totalsRows.map((row: string[]) => row.map(replaceTags));
+      inputData0.itemsTable = JSON.stringify(resolvedItemsTable);
+      inputData0.totalsTable = JSON.stringify(resolvedTotalsRows);
+
+      // 11. Générer le PDF avec pdfme
       const { generate } = await import("@pdfme/generator");
       const { text, image, table, line, rectangle } = await import("@pdfme/schemas");
 
@@ -183,6 +233,16 @@ export const generatePdfFromTemplate = internalAction({
           if (!(schema.name in inputData) && schema.content) {
             inputData[schema.name] = schema.content;
           }
+        }
+      }
+
+      // Remplacer les balises {{key}} dans tous les inputs texte
+      for (const key of Object.keys(inputData)) {
+        const val = inputData[key];
+        if (typeof val === "string" && val.includes("{{")) {
+          inputData[key] = val.replace(/\{\{(\w+)\}\}/g, (_match: string, fieldKey: string) => {
+            return inputData[fieldKey] ?? fieldKey;
+          });
         }
       }
 
@@ -201,11 +261,28 @@ export const generatePdfFromTemplate = internalAction({
         }
       }
 
-      let pdfBytes = await generate({
-        template: genTemplate,
-        inputs,
-        plugins,
-      });
+      // Charger les polices pour la génération
+      const fontUrls: Record<string, { url: string; fallback?: boolean }> = {
+        "Montserrat":           { url: "https://github.com/JulietaUla/Montserrat/raw/master/fonts/ttf/Montserrat-Regular.ttf", fallback: true },
+        "Montserrat Bold":      { url: "https://github.com/JulietaUla/Montserrat/raw/master/fonts/ttf/Montserrat-Bold.ttf" },
+        "Montserrat SemiBold":  { url: "https://github.com/JulietaUla/Montserrat/raw/master/fonts/ttf/Montserrat-SemiBold.ttf" },
+        "Montserrat Italic":    { url: "https://github.com/JulietaUla/Montserrat/raw/master/fonts/ttf/Montserrat-Italic.ttf" },
+        "Montserrat Bold Italic": { url: "https://github.com/JulietaUla/Montserrat/raw/master/fonts/ttf/Montserrat-BoldItalic.ttf" },
+        "Montserrat Light":     { url: "https://github.com/JulietaUla/Montserrat/raw/master/fonts/ttf/Montserrat-Light.ttf" },
+      };
+      const pdfFont: Record<string, { data: ArrayBuffer; fallback?: boolean }> = {};
+      await Promise.all(
+        Object.entries(fontUrls).map(async ([key, def]) => {
+          try {
+            const res = await fetch(def.url);
+            if (res.ok) pdfFont[key] = { data: await res.arrayBuffer(), ...(def.fallback ? { fallback: true } : {}) };
+          } catch { /* skip */ }
+        })
+      );
+
+      const genOpts: any = { template: genTemplate, inputs, plugins };
+      if (Object.keys(pdfFont).length > 0) genOpts.options = { font: pdfFont };
+      let pdfBytes = await generate(genOpts);
 
       // 11. Post-traitement : en-tête / pied de page (AVANT numérotation)
       if (hfConfig?.header?.enabled || hfConfig?.footer?.enabled) {
@@ -245,7 +322,9 @@ export const generatePdfFromTemplate = internalAction({
             delete footerTemplate._headerFooterConfig;
 
             if (hasFooterElements) {
-              const footerPdfBytes = await generate({ template: footerTemplate, inputs, plugins });
+              const footerGenOpts: any = { template: footerTemplate, inputs, plugins };
+              if (Object.keys(pdfFont).length > 0) footerGenOpts.options = { font: pdfFont };
+              const footerPdfBytes = await generate(footerGenOpts);
               const footerDoc = await pdfLib.PDFDocument.load(footerPdfBytes);
               const [copiedFooterPage] = await pdfDoc.copyPages(footerDoc, [0]);
               pdfDoc.addPage(copiedFooterPage);

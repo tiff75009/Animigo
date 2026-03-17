@@ -176,6 +176,7 @@ export const getInvoiceFullData = internalQuery({
       announcerCity: emitterProfile?.city || "",
       companyName: emitter?.companyName || "",
       siret: emitter?.siret || "",
+      capital: emitter?.capital || 0,
       serviceName: mission?.serviceName || "",
       variantName: mission?.variantName || "",
       missionDateRange,
@@ -322,6 +323,21 @@ export const getInvoicePdfBundle = query({
     const vatRate = invoice.vatRate || 20;
     const mentionTVA = isVatSubject ? "" : "TVA non applicable, art. 293 B du CGI";
 
+    // Colonnes configurables depuis le template
+    const templateParsed = JSON.parse(template.templateJson);
+    const colsConfig = templateParsed._tableColumnsConfig;
+
+    const defaultItemsCols = [
+      { dataField: "description", enabled: true },
+      { dataField: "quantity", enabled: true },
+      { dataField: "unit", enabled: true },
+      { dataField: "unitPriceHT", enabled: true },
+      { dataField: "vatRate", enabled: true },
+      { dataField: "vatAmount", enabled: true },
+      { dataField: "totalTTC", enabled: true },
+    ];
+    const itemsCols = (colsConfig?.itemsTable || defaultItemsCols).filter((c: any) => c.enabled);
+
     const itemsTable = invoice.items.map((item: any, index: number) => {
       let desc = item.description;
       if (index === 0 && descriptionDetails) {
@@ -331,23 +347,48 @@ export const getInvoicePdfBundle = query({
       const itemHT = isVatSubject ? Math.round(itemTTC / (1 + vatRate / 100)) : itemTTC;
       const itemTVA = itemTTC - itemHT;
       const unitPriceHT = isVatSubject ? Math.round(item.unitPrice / (1 + vatRate / 100)) : item.unitPrice;
-      return [
-        desc,
-        String(item.quantity),
-        item.unit || "",
-        formatPrice(unitPriceHT),
-        isVatSubject ? `${vatRate}%` : "0%",
-        formatPrice(itemTVA),
-        formatPrice(itemTTC),
-      ];
+
+      const rowData: Record<string, string> = {
+        description: desc,
+        quantity: String(item.quantity),
+        unit: item.unit || "",
+        unitPriceHT: formatPrice(unitPriceHT),
+        unitPriceTTC: formatPrice(item.unitPrice),
+        vatRate: isVatSubject ? `${vatRate}%` : "0%",
+        vatAmount: formatPrice(itemTVA),
+        totalHT: formatPrice(itemHT),
+        totalTTC: formatPrice(itemTTC),
+      };
+
+      return itemsCols.map((col: any) => {
+        if (col.contentTemplate) {
+          return col.contentTemplate.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) => rowData[key] ?? key);
+        }
+        return rowData[col.dataField] ?? "";
+      });
     });
 
-    const totalsRows: string[][] = [];
+    const defaultTotalsCols = [
+      { dataField: "label", enabled: true },
+      { dataField: "amount", enabled: true },
+    ];
+    const totalsCols = (colsConfig?.totalsTable || defaultTotalsCols).filter((c: any) => c.enabled);
+
+    const totalsData: { label: string; amount: string }[] = [];
     if (isVatSubject) {
-      totalsRows.push(["Total HT", formatPrice(invoice.amountHT || invoice.amount)]);
-      totalsRows.push([`TVA (${vatRate}%)`, formatPrice(invoice.tva!)]);
+      totalsData.push({ label: "Total HT", amount: formatPrice(invoice.amountHT || invoice.amount) });
+      totalsData.push({ label: `TVA (${vatRate}%)`, amount: formatPrice(invoice.tva!) });
     }
-    totalsRows.push(["Total TTC", formatPrice(invoice.amount)]);
+    totalsData.push({ label: "Total TTC", amount: formatPrice(invoice.amount) });
+
+    const totalsRows = totalsData.map(row =>
+      totalsCols.map((col: any) => {
+        if (col.contentTemplate) {
+          return col.contentTemplate.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) => (row as any)[key] ?? key);
+        }
+        return (row as any)[col.dataField] ?? "";
+      })
+    );
 
     const inputs = {
       invoiceNumber: invoice.invoiceNumber,
@@ -369,6 +410,7 @@ export const getInvoicePdfBundle = query({
       announcerCity: emitterProfile?.city || "",
       companyName: emitter?.companyName || "",
       siret: emitter?.siret ? `SIRET : ${emitter.siret}` : "",
+      capital: emitter?.capital ? `Capital : ${emitter.capital.toLocaleString("fr-FR").replace(/\s/g, " ")} €` : "",
       serviceName: mission?.serviceName || "",
       missionDate: missionDateRange,
       sessionType: sessionTypeLabel,
@@ -381,10 +423,15 @@ export const getInvoicePdfBundle = query({
       amountTTC: `Total TTC : ${formatPrice(invoice.amount)}`,
       vatRate: `${vatRate} %`,
       mentionTVA,
-      itemsTable: JSON.stringify(itemsTable),
-      totalsTable: JSON.stringify(totalsRows),
+      itemsTable: "__PLACEHOLDER__",
+      totalsTable: "__PLACEHOLDER__",
       companyLogo: emitterProfile?.companyLogoUrl || "",
     };
+
+    // Remplacer les {{balise}} dans les cellules freeText des tableaux
+    const replaceTags = (text: string) => text.replace(/\{\{(\w+)\}\}/g, (_, key) => (inputs as any)[key] ?? key);
+    (inputs as any).itemsTable = JSON.stringify(itemsTable.map((row: string[]) => row.map(replaceTags)));
+    (inputs as any).totalsTable = JSON.stringify(totalsRows.map((row: string[]) => row.map(replaceTags)));
 
     return {
       templateJson: template.templateJson,

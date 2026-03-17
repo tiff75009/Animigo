@@ -11,6 +11,7 @@ import {
   Trash2, MoveDown, Layers, ClipboardPaste, ChevronRight, ImageIcon, Hash, Copy, Check, Search,
 } from "lucide-react";
 import Link from "next/link";
+import TableColumnsPanel from "./TableColumnsPanel";
 
 // ============================================
 // BALISES DYNAMIQUES
@@ -36,6 +37,7 @@ const TEXT_FIELDS = [
   { key: "announcerCity", label: "Ville prestataire", example: "Paris" },
   { key: "companyName", label: "Raison sociale", example: "Pet Care SARL" },
   { key: "siret", label: "SIRET", example: "SIRET : 123 456 789 00012" },
+  { key: "capital", label: "Capital social", example: "Capital : 10 000 €" },
   { key: "serviceName", label: "Nom service", example: "Garde de chien" },
   { key: "missionDate", label: "Date prestation", example: "10/03/2026 - 12/03/2026" },
   { key: "sessionType", label: "Type séance", example: "Individuel" },
@@ -54,6 +56,104 @@ const TEXT_FIELDS = [
 const IMAGE_FIELDS = [
   { key: "companyLogo", label: "Logo entreprise", description: "Logo de l'annonceur (défini dans Paramètres > Informations)" },
 ];
+
+// ============================================
+// CONFIGURATION COLONNES TABLEAU
+// ============================================
+
+export interface TableColumnDef {
+  id: string;
+  dataField: string; // "description" | "quantity" | ... | "freeText"
+  headerText: string;
+  widthPercent: number;
+  enabled: boolean;
+  contentTemplate?: string; // template personnalisé : texte libre + {{balises}} (si vide → valeur par défaut du dataField)
+}
+
+export interface TableColumnsConfig {
+  itemsTable?: TableColumnDef[];
+  totalsTable?: TableColumnDef[];
+}
+
+const ITEMS_COLUMN_FIELDS = [
+  { field: "description", label: "Description du service", defaultHeader: "Description", defaultWidth: 34 },
+  { field: "quantity", label: "Quantité", defaultHeader: "Qté", defaultWidth: 7 },
+  { field: "unit", label: "Unité", defaultHeader: "Unité", defaultWidth: 8 },
+  { field: "unitPriceHT", label: "Prix unitaire HT", defaultHeader: "P.U. HT", defaultWidth: 13 },
+  { field: "unitPriceTTC", label: "Prix unitaire TTC", defaultHeader: "P.U. TTC", defaultWidth: 13 },
+  { field: "vatRate", label: "Taux TVA", defaultHeader: "TVA %", defaultWidth: 9 },
+  { field: "vatAmount", label: "Montant TVA", defaultHeader: "Montant TVA", defaultWidth: 14 },
+  { field: "totalHT", label: "Total HT ligne", defaultHeader: "Total HT", defaultWidth: 15 },
+  { field: "totalTTC", label: "Total TTC ligne", defaultHeader: "Total TTC", defaultWidth: 15 },
+] as const;
+
+const TOTALS_COLUMN_FIELDS = [
+  { field: "label", label: "Libellé", defaultHeader: "Libellé", defaultWidth: 60 },
+  { field: "amount", label: "Montant", defaultHeader: "Montant", defaultWidth: 40 },
+] as const;
+
+function getDefaultItemsColumns(): TableColumnDef[] {
+  // Correspond aux 7 colonnes actuelles par défaut
+  const defaults = ["description", "quantity", "unit", "unitPriceHT", "vatRate", "vatAmount", "totalTTC"];
+  return defaults.map((field, i) => {
+    const def = ITEMS_COLUMN_FIELDS.find(f => f.field === field)!;
+    return {
+      id: `items_col_${i}`,
+      dataField: field,
+      headerText: def.defaultHeader,
+      widthPercent: ITEMS_TABLE_CONST.defaultWidths[i],
+      enabled: true,
+    };
+  });
+}
+
+function getDefaultTotalsColumns(): TableColumnDef[] {
+  return TOTALS_COLUMN_FIELDS.map((def, i) => ({
+    id: `totals_col_${i}`,
+    dataField: def.field,
+    headerText: def.defaultHeader,
+    widthPercent: def.defaultWidth,
+    enabled: true,
+  }));
+}
+
+// Résoudre le contenu d'une cellule selon la config de la colonne
+function resolveColumnCell(col: TableColumnDef, rowData: Record<string, string>, globalData?: Record<string, string>): string {
+  // Si un contentTemplate est défini, l'utiliser (texte libre + {{balises}})
+  if (col.contentTemplate) {
+    return col.contentTemplate.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+      // D'abord chercher dans les données de la ligne (per-row), puis dans les globales
+      return rowData[key] ?? globalData?.[key] ?? key;
+    });
+  }
+  // Sinon, valeur par défaut du dataField
+  if (col.dataField === "freeText") return "";
+  return rowData[col.dataField] || "";
+}
+
+// Générer des données d'exemple selon les colonnes actives
+function generateExampleData(tableKey: "itemsTable" | "totalsTable", columns: TableColumnDef[], globalInputs?: Record<string, string>): string[][] {
+  const active = columns.filter(c => c.enabled);
+  if (tableKey === "totalsTable") {
+    const rows = [
+      { label: "Total HT", amount: "75,00 €" },
+      { label: "TVA (20%)", amount: "15,00 €" },
+      { label: "Total TTC", amount: "90,00 €" },
+    ];
+    return rows.map(row => active.map(col => resolveColumnCell(col, row, globalInputs)));
+  }
+  // itemsTable
+  const exampleItems = [
+    { description: "Garde de chien - Formule Premium\nMax (Chien), Luna (Chat)\n10/03/2026 - 12/03/2026\n2 jours\nIndividuel", quantity: "2", unit: "jour", unitPriceHT: "25,00 €", unitPriceTTC: "30,00 €", vatRate: "20%", vatAmount: "10,00 €", totalHT: "50,00 €", totalTTC: "60,00 €" },
+    { description: "Options : Promenade, Toilettage", quantity: "1", unit: "forfait", unitPriceHT: "15,00 €", unitPriceTTC: "18,00 €", vatRate: "20%", vatAmount: "3,00 €", totalHT: "15,00 €", totalTTC: "18,00 €" },
+    { description: "Garde de nuit", quantity: "1", unit: "nuit", unitPriceHT: "10,00 €", unitPriceTTC: "12,00 €", vatRate: "20%", vatAmount: "2,00 €", totalHT: "10,00 €", totalTTC: "12,00 €" },
+  ];
+  return exampleItems.map(item => active.map(col => resolveColumnCell(col, item, globalInputs)));
+}
+
+const ITEMS_TABLE_CONST = {
+  defaultWidths: [34, 7, 8, 13, 9, 14, 15],
+};
 
 const ITEMS_TABLE = {
   key: "itemsTable",
@@ -471,6 +571,7 @@ export default function PdfTemplateEditorPage() {
   const designerRef = useRef<HTMLDivElement>(null);
   const designerInstance = useRef<any>(null);
   const pdfmeModules = useRef<any>(null);
+  const loadedFonts = useRef<Record<string, { data: ArrayBuffer; fallback?: boolean }>>({});
 
   const isNew = params.id === "new";
   const templateId = isNew ? undefined : (params.id as Id<"pdfTemplates">);
@@ -500,6 +601,10 @@ export default function PdfTemplateEditorPage() {
   const [pageNumberConfig, setPageNumberConfig] = useState<PageNumberConfig>(DEFAULT_PAGE_NUMBER_CONFIG);
   const [headerFooterConfig, setHeaderFooterConfig] = useState<HeaderFooterConfig>(DEFAULT_HEADER_FOOTER_CONFIG);
   const [margins, setMargins] = useState<[number, number, number, number]>([20, 20, 20, 20]); // [top, right, bottom, left]
+  const [tableColumnsConfig, setTableColumnsConfig] = useState<TableColumnsConfig>({
+    itemsTable: getDefaultItemsColumns(),
+    totalsTable: getDefaultTotalsColumns(),
+  });
 
   const setDesignerContainer = useCallback((node: HTMLDivElement | null) => {
     designerRef.current = node;
@@ -528,6 +633,12 @@ export default function PdfTemplateEditorPage() {
         }
         if (parsed.basePdf?.padding && Array.isArray(parsed.basePdf.padding)) {
           setMargins(parsed.basePdf.padding as [number, number, number, number]);
+        }
+        if (parsed._tableColumnsConfig) {
+          setTableColumnsConfig({
+            itemsTable: parsed._tableColumnsConfig.itemsTable || getDefaultItemsColumns(),
+            totalsTable: parsed._tableColumnsConfig.totalsTable || getDefaultTotalsColumns(),
+          });
         }
       } catch { /* ignore */ }
     }
@@ -578,10 +689,46 @@ export default function PdfTemplateEditorPage() {
 
         const plugins = { text, image, table, line, rectangle };
 
+        // Charger les polices pour le Designer
+        const fontDefs: Record<string, { label: string; url: string; fallback?: boolean }> = {
+          "Montserrat":           { label: "Montserrat",           url: "/fonts/Montserrat-Regular.ttf", fallback: true },
+          "Montserrat Bold":      { label: "Montserrat Bold",      url: "/fonts/Montserrat-Bold.ttf" },
+          "Montserrat SemiBold":  { label: "Montserrat SemiBold",  url: "/fonts/Montserrat-SemiBold.ttf" },
+          "Montserrat Italic":    { label: "Montserrat Italic",    url: "/fonts/Montserrat-Italic.ttf" },
+          "Montserrat Bold Italic": { label: "Montserrat Bold Italic", url: "/fonts/Montserrat-BoldItalic.ttf" },
+          "Montserrat Light":     { label: "Montserrat Light",     url: "/fonts/Montserrat-Light.ttf" },
+          "Open Sans":            { label: "Open Sans",            url: "/fonts/OpenSans-Regular.ttf" },
+          "Roboto":               { label: "Roboto",               url: "/fonts/Roboto-Regular.ttf" },
+          "Lato":                 { label: "Lato",                 url: "/fonts/Lato-Regular.ttf" },
+          "Lato Bold":            { label: "Lato Bold",            url: "/fonts/Lato-Bold.ttf" },
+          "Lato Italic":          { label: "Lato Italic",          url: "/fonts/Lato-Italic.ttf" },
+          "Love Taking":          { label: "Love Taking",          url: "/fonts/LoveTaking.ttf" },
+        };
+
+        const font: Record<string, { data: ArrayBuffer; fallback?: boolean }> = {};
+        await Promise.all(
+          Object.entries(fontDefs).map(async ([key, def]) => {
+            try {
+              const res = await fetch(def.url);
+              if (res.ok) {
+                font[key] = { data: await res.arrayBuffer(), ...(def.fallback ? { fallback: true } : {}) };
+              }
+            } catch {
+              console.warn(`[pdfme] Police ${key} non chargée`);
+            }
+          })
+        );
+
+        loadedFonts.current = font;
+        console.log("[pdfme] Polices chargées:", Object.keys(font).length);
+
         designerInstance.current = new Designer({
           domContainer: designerRef.current!,
           template: templateData,
           plugins,
+          options: {
+            font: Object.keys(font).length > 0 ? font : undefined,
+          },
         });
 
         // Sync margins state depuis le template chargé
@@ -842,7 +989,8 @@ export default function PdfTemplateEditorPage() {
   }, []);
 
   const ctxCopyField = useCallback((fieldKey: string) => {
-    navigator.clipboard.writeText(fieldKey).then(() => {
+    const tag = `{{${fieldKey}}}`;
+    navigator.clipboard.writeText(tag).then(() => {
       setCopiedField(fieldKey);
       setTimeout(() => setCopiedField(null), 1500);
     });
@@ -857,34 +1005,33 @@ export default function PdfTemplateEditorPage() {
       const clipText = await navigator.clipboard.readText();
       if (!clipText) return;
 
-      // Vérifier si c'est une balise connue
-      const allKeys = [...TEXT_FIELDS.map(f => f.key), ...IMAGE_FIELDS.map(f => f.key), ITEMS_TABLE.key, TOTALS_TABLE.key];
-      const isKnownField = allKeys.includes(clipText);
+      // Vérifier si c'est une balise au format {{key}}
+      const tagMatch = clipText.match(/^\{\{(\w+)\}\}$/);
+      const tagKey = tagMatch ? tagMatch[1] : null;
 
       const template = designerInstance.current.getTemplate();
       const currentPage = template.schemas[0] || [];
 
-      // Trouver l'exemple pour le contenu
-      const textField = TEXT_FIELDS.find(f => f.key === clipText);
-      const isImage = IMAGE_FIELDS.some(f => f.key === clipText);
-
-      if (isImage) {
-        // Ajouter comme champ image
+      if (tagKey) {
+        // C'est une balise {{...}} — insérer dans l'élément sélectionné si c'est un texte
+        // Trouver l'élément actuellement sélectionné (on cherche via l'API pdfme)
+        // Sinon créer un nouveau champ texte avec la balise
         const newSchema = {
-          name: clipText,
-          type: "image",
-          content: "",
+          name: `mixed_${Date.now()}`,
+          type: "text",
+          content: clipText,
           position: { x: 20, y: 20 },
-          width: 25,
-          height: 25,
+          width: 80,
+          height: 7,
+          fontSize: 10,
         };
         template.schemas[0] = [...currentPage, newSchema];
       } else {
-        // Ajouter comme champ texte
+        // Texte libre — créer un nouveau champ texte
         const newSchema = {
-          name: isKnownField ? clipText : `text_${Date.now()}`,
+          name: `text_${Date.now()}`,
           type: "text",
-          content: textField?.example || clipText,
+          content: clipText,
           position: { x: 20, y: 20 },
           width: 70,
           height: 7,
@@ -896,7 +1043,8 @@ export default function PdfTemplateEditorPage() {
       designerInstance.current.updateTemplate(template);
 
       // Feedback visuel
-      setPastedField(clipText);
+      const displayName = tagKey || clipText;
+      setPastedField(displayName);
       setTimeout(() => setPastedField(null), 1500);
     } catch {
       // Clipboard non accessible
@@ -934,6 +1082,7 @@ export default function PdfTemplateEditorPage() {
         } else {
           delete (currentTemplate as any)._headerFooterConfig;
         }
+        (currentTemplate as any)._tableColumnsConfig = tableColumnsConfig;
         templateJson = JSON.stringify(currentTemplate);
       } else {
         templateJson = existingTemplate?.templateJson || "{}";
@@ -956,7 +1105,7 @@ export default function PdfTemplateEditorPage() {
     } finally {
       setSaving(false);
     }
-  }, [token, name, slug, documentType, targetCompanyType, isDefault, templateId, isNew, existingTemplate, saveTemplate, router]);
+  }, [token, name, slug, documentType, targetCompanyType, isDefault, templateId, isNew, existingTemplate, saveTemplate, router, pageNumberConfig, headerFooterConfig, tableColumnsConfig]);
 
   const handlePreview = useCallback(async () => {
     if (!designerInstance.current || !pdfmeModules.current) return;
@@ -979,9 +1128,12 @@ export default function PdfTemplateEditorPage() {
       for (const field of TEXT_FIELDS) {
         inputs[field.key] = field.example;
       }
-      // Tableaux (JSON stringifié pour generate)
-      inputs[ITEMS_TABLE.key] = JSON.stringify(ITEMS_TABLE.exampleData);
-      inputs[TOTALS_TABLE.key] = JSON.stringify(TOTALS_TABLE.exampleData);
+      // Tableaux (JSON stringifié pour generate) - utiliser la config de colonnes
+      // Les balises globales (inputs) sont passées pour résoudre les {{balise}} dans les contentTemplate
+      const itemsCols = tableColumnsConfig.itemsTable || getDefaultItemsColumns();
+      const totalsCols = tableColumnsConfig.totalsTable || getDefaultTotalsColumns();
+      inputs[ITEMS_TABLE.key] = JSON.stringify(generateExampleData("itemsTable", itemsCols, inputs));
+      inputs[TOTALS_TABLE.key] = JSON.stringify(generateExampleData("totalsTable", totalsCols, inputs));
 
       // Images dynamiques : générer un placeholder PNG pour l'aperçu
       const knownImageKeys = new Set(IMAGE_FIELDS.map(f => f.key));
@@ -1016,6 +1168,16 @@ export default function PdfTemplateEditorPage() {
         }
       }
 
+      // Remplacer les balises {{key}} dans tous les inputs texte
+      for (const key of Object.keys(inputs)) {
+        const val = inputs[key];
+        if (typeof val === "string" && val.includes("{{")) {
+          inputs[key] = val.replace(/\{\{(\w+)\}\}/g, (_match, fieldKey) => {
+            return inputs[fieldKey] ?? fieldKey;
+          });
+        }
+      }
+
       console.log("[preview] Génération avec", Object.keys(plugins).length, "plugins,", Object.keys(inputs).length, "champs");
 
       // ── Préparer le template pour la génération ──
@@ -1033,7 +1195,11 @@ export default function PdfTemplateEditorPage() {
         }
       }
 
-      let pdfBytes = await generate({ template: genTemplate, inputs: [inputs], plugins });
+      const genOptions: any = { template: genTemplate, inputs: [inputs], plugins };
+      if (Object.keys(loadedFonts.current).length > 0) {
+        genOptions.options = { font: loadedFonts.current };
+      }
+      let pdfBytes = await generate(genOptions);
 
       // Post-traitement : en-tête / pied de page (AVANT la numérotation pour ne pas masquer les numéros)
       if (headerFooterConfig.header.enabled || headerFooterConfig.footer.enabled) {
@@ -1075,7 +1241,11 @@ export default function PdfTemplateEditorPage() {
 
             // Générer seulement s'il y a des éléments footer
             if (hasFooterElements) {
-              const footerPdfBytes = await generate({ template: footerTemplate, inputs: [inputs], plugins });
+              const footerGenOptions: any = { template: footerTemplate, inputs: [inputs], plugins };
+              if (Object.keys(loadedFonts.current).length > 0) {
+                footerGenOptions.options = { font: loadedFonts.current };
+              }
+              const footerPdfBytes = await generate(footerGenOptions);
               const footerDoc = await pdfLib.PDFDocument.load(footerPdfBytes);
               const [copiedFooterPage] = await pdfDoc.copyPages(footerDoc, [0]);
               pdfDoc.addPage(copiedFooterPage);
@@ -1181,7 +1351,7 @@ export default function PdfTemplateEditorPage() {
       console.error("Erreur prévisualisation:", error);
       alert("Erreur lors de la génération. Voir la console (F12).");
     }
-  }, [pageNumberConfig, headerFooterConfig]);
+  }, [pageNumberConfig, headerFooterConfig, tableColumnsConfig]);
 
   // ============================================
   // RENDER
@@ -1617,6 +1787,12 @@ export default function PdfTemplateEditorPage() {
                   )}
                 </div>
 
+                {/* Info balises inline */}
+                <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-lg px-3 py-2 text-[11px] text-cyan-300/80 leading-relaxed">
+                  Copiez une balise puis collez-la dans un champ texte. Vous pouvez combiner texte libre et balises :
+                  <span className="font-mono text-cyan-400 ml-1">{`Facture {{invoiceNumber}}`}</span>
+                </div>
+
                 {/* Champs texte */}
                 <h4 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                   <Type className="w-3 h-3" />
@@ -1661,54 +1837,50 @@ export default function PdfTemplateEditorPage() {
                   })}
                 </div>
 
-                {/* Tableau des prestations */}
-                <h4 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 pt-2">
-                  <Table2 className="w-3 h-3" />
-                  Tableau prestations
-                </h4>
-                <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20">
-                  <p className="text-xs font-semibold text-blue-400">{ITEMS_TABLE.label}</p>
-                  <p className="text-[10px] text-slate-400 mt-1">{ITEMS_TABLE.description}</p>
-                  <div className="mt-2">
-                    <p className="text-[10px] text-slate-500 font-semibold mb-1">Colonnes :</p>
-                    <div className="flex flex-wrap gap-1">
-                      {ITEMS_TABLE.defaultHead.map((h, i) => (
-                        <span key={i} className="text-[9px] px-1.5 py-0.5 bg-slate-800 text-slate-300 rounded">
-                          {h} ({ITEMS_TABLE.defaultWidths[i]}%)
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="mt-2">
-                    <p className="text-[10px] text-slate-500 font-semibold mb-1">Description enrichie :</p>
-                    <ul className="text-[10px] text-slate-400 space-y-0.5 list-disc pl-3">
-                      <li>Nom service + formule</li>
-                      <li>Animaux (nom + type : chien, chat...)</li>
-                      <li>Dates et horaires</li>
-                      <li>Durée (jours, nuits)</li>
-                      <li>Individuel / Collectif</li>
-                      <li>Mention SAP si applicable</li>
-                    </ul>
-                  </div>
-                </div>
+                {/* Tableau des prestations - Configuration colonnes */}
+                <TableColumnsPanel
+                  tableKey="itemsTable"
+                  config={tableColumnsConfig}
+                  onChange={(newConfig) => {
+                    setTableColumnsConfig(newConfig);
+                    // Synchroniser le designer en temps réel
+                    if (designerInstance.current) {
+                      const template = designerInstance.current.getTemplate();
+                      const activeCols = (newConfig.itemsTable || []).filter(c => c.enabled);
+                      for (const page of template.schemas) {
+                        const tableSchema = page.find((s: any) => s.name === "itemsTable");
+                        if (tableSchema) {
+                          tableSchema.head = activeCols.map((c: TableColumnDef) => c.headerText);
+                          tableSchema.headWidthPercentages = activeCols.map((c: TableColumnDef) => c.widthPercent);
+                          tableSchema.content = JSON.stringify(generateExampleData("itemsTable", newConfig.itemsTable!));
+                        }
+                      }
+                      designerInstance.current.updateTemplate(template);
+                    }
+                  }}
+                />
 
-                {/* Tableau des totaux */}
-                <h4 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 pt-2">
-                  <Table2 className="w-3 h-3" />
-                  Tableau totaux
-                </h4>
-                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                  <p className="text-xs font-semibold text-emerald-400">{TOTALS_TABLE.label}</p>
-                  <p className="text-[10px] text-slate-400 mt-1">{TOTALS_TABLE.description}</p>
-                  <div className="mt-2">
-                    <p className="text-[10px] text-slate-500 font-semibold mb-1">Lignes générées :</p>
-                    <ul className="text-[10px] text-slate-400 space-y-0.5 list-disc pl-3">
-                      <li>Total HT (si assujetti TVA)</li>
-                      <li>TVA (taux%) (si assujetti TVA)</li>
-                      <li>Total TTC (toujours)</li>
-                    </ul>
-                  </div>
-                </div>
+                {/* Tableau des totaux - Configuration colonnes */}
+                <TableColumnsPanel
+                  tableKey="totalsTable"
+                  config={tableColumnsConfig}
+                  onChange={(newConfig) => {
+                    setTableColumnsConfig(newConfig);
+                    if (designerInstance.current) {
+                      const template = designerInstance.current.getTemplate();
+                      const activeCols = (newConfig.totalsTable || []).filter(c => c.enabled);
+                      for (const page of template.schemas) {
+                        const tableSchema = page.find((s: any) => s.name === "totalsTable");
+                        if (tableSchema) {
+                          tableSchema.head = activeCols.map((c: TableColumnDef) => c.headerText);
+                          tableSchema.headWidthPercentages = activeCols.map((c: TableColumnDef) => c.widthPercent);
+                          tableSchema.content = JSON.stringify(generateExampleData("totalsTable", newConfig.totalsTable!));
+                        }
+                      }
+                      designerInstance.current.updateTemplate(template);
+                    }
+                  }}
+                />
 
                 {/* Champs image */}
                 <h4 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 pt-2">

@@ -51,6 +51,16 @@ export async function generatePdfFromTemplate(
     }
   }
 
+  // Remplacer les balises {{key}} dans tous les inputs texte
+  for (const key of Object.keys(inputs)) {
+    const val = inputs[key];
+    if (typeof val === "string" && val.includes("{{")) {
+      inputs[key] = val.replace(/\{\{(\w+)\}\}/g, (_match, fieldKey) => {
+        return inputs[fieldKey] ?? fieldKey;
+      });
+    }
+  }
+
   // Filtrer les plugins définis
   const allPlugins: Record<string, any> = { text, image, table, line, rectangle };
   const plugins: Record<string, any> = {};
@@ -73,15 +83,38 @@ export async function generatePdfFromTemplate(
     }
   }
 
-  let pdfBytes = await generate({
-    template: genTemplate,
-    inputs: [inputs],
-    plugins,
-  });
+  // Charger les polices personnalisées
+  const fontUrls: Record<string, { url: string; fallback?: boolean }> = {
+    "Montserrat":           { url: "/fonts/Montserrat-Regular.ttf", fallback: true },
+    "Montserrat Bold":      { url: "/fonts/Montserrat-Bold.ttf" },
+    "Montserrat SemiBold":  { url: "/fonts/Montserrat-SemiBold.ttf" },
+    "Montserrat Italic":    { url: "/fonts/Montserrat-Italic.ttf" },
+    "Montserrat Bold Italic": { url: "/fonts/Montserrat-BoldItalic.ttf" },
+    "Montserrat Light":     { url: "/fonts/Montserrat-Light.ttf" },
+    "Open Sans":            { url: "/fonts/OpenSans-Regular.ttf" },
+    "Roboto":               { url: "/fonts/Roboto-Regular.ttf" },
+    "Lato":                 { url: "/fonts/Lato-Regular.ttf" },
+    "Lato Bold":            { url: "/fonts/Lato-Bold.ttf" },
+    "Lato Italic":          { url: "/fonts/Lato-Italic.ttf" },
+    "Love Taking":          { url: "/fonts/LoveTaking.ttf" },
+  };
+  const font: Record<string, { data: ArrayBuffer; fallback?: boolean }> = {};
+  await Promise.all(
+    Object.entries(fontUrls).map(async ([key, def]) => {
+      try {
+        const res = await fetch(def.url);
+        if (res.ok) font[key] = { data: await res.arrayBuffer(), ...(def.fallback ? { fallback: true } : {}) };
+      } catch { /* skip */ }
+    })
+  );
+
+  const genOpts: any = { template: genTemplate, inputs: [inputs], plugins };
+  if (Object.keys(font).length > 0) genOpts.options = { font };
+  let pdfBytes = await generate(genOpts);
 
   // Post-traitement : en-tête / pied de page (AVANT numérotation)
   if (hfConfig?.header?.enabled || hfConfig?.footer?.enabled) {
-    pdfBytes = await applyHeaderFooter(pdfBytes, hfConfig, templateData, inputs, plugins, generate, footerThresholdY);
+    pdfBytes = await applyHeaderFooter(pdfBytes, hfConfig, templateData, inputs, plugins, generate, footerThresholdY, font);
   }
 
   // Post-traitement : numérotation de pages (APRÈS header/footer pour ne pas être masquée)
@@ -139,6 +172,7 @@ async function applyHeaderFooter(
   plugins: Record<string, any>,
   generate: any,
   footerThresholdY: number,
+  font?: Record<string, { data: ArrayBuffer; fallback?: boolean }>,
 ): Promise<Uint8Array> {
   const { PDFDocument, rgb } = await import("pdf-lib");
   const pdfDoc = await PDFDocument.load(pdfBytesInput);
@@ -178,7 +212,9 @@ async function applyHeaderFooter(
 
     // Générer seulement s'il y a des éléments footer
     if (hasFooterElements) {
-      const footerPdfBytes = await generate({ template: footerTemplate, inputs: [inputs], plugins });
+      const footerGenOpts: any = { template: footerTemplate, inputs: [inputs], plugins };
+      if (font && Object.keys(font).length > 0) footerGenOpts.options = { font };
+      const footerPdfBytes = await generate(footerGenOpts);
       const footerDoc = await PDFDocument.load(footerPdfBytes);
       const [copiedFooterPage] = await pdfDoc.copyPages(footerDoc, [0]);
       pdfDoc.addPage(copiedFooterPage);
