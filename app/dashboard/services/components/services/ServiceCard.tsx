@@ -46,6 +46,7 @@ import CollectiveSlotsManager from "../CollectiveSlotsManager";
 import { cn } from "@/app/lib/utils";
 import { Tooltip } from "@/app/components/ui/tooltip";
 import { useAuth } from "@/app/hooks/useAuth";
+import { ServicePhotosUploader } from "./ServicePhotosUploader";
 
 interface ServiceCategory {
   slug: string;
@@ -102,6 +103,7 @@ interface Variant {
   needsSlotConfiguration?: boolean; // true si service collective sans créneaux
   slotsCount?: number; // Nombre de créneaux futurs configurés
   isSapEligible?: boolean;
+  photos?: Array<{ url: string; order: number }>;
 }
 
 interface Option {
@@ -1677,6 +1679,7 @@ function VariantEditForm({
     includedFeatures?: string[];
     isActive?: boolean;
     isSapEligible?: boolean;
+    photos?: string[];
   }) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -1692,6 +1695,9 @@ function VariantEditForm({
   const [selectedAnimalTypes, setSelectedAnimalTypes] = useState<string[]>(variant.animalTypes || serviceAnimalTypes);
   const [duration, setDuration] = useState(variant.duration || 60);
   const [isActive, setIsActive] = useState(variant.isActive);
+  const [photoUrls, setPhotoUrls] = useState<string[]>(
+    (variant.photos || []).sort((a, b) => a.order - b.order).map((p) => p.url)
+  );
   const [sapEligible, setSapEligible] = useState(variant.isSapEligible || false);
   const [pricing, setPricing] = useState<Pricing>(variant.pricing || {});
   const [includedFeatures, setIncludedFeatures] = useState<string[]>(variant.includedFeatures || []);
@@ -1835,6 +1841,7 @@ function VariantEditForm({
         includedFeatures: includedFeatures.length > 0 ? includedFeatures : undefined,
         isActive,
         isSapEligible: sapEligible || undefined,
+        photos: photoUrls,
       });
     } finally {
       setIsSaving(false);
@@ -1894,6 +1901,14 @@ function VariantEditForm({
           onChange={(e) => setDescription(e.target.value)}
           rows={2}
           className="w-full px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none resize-none"
+        />
+      </div>
+
+      {/* Photos de la formule — affichées dans les résultats de recherche */}
+      <div className="pt-3 border-t border-primary/10">
+        <ServicePhotosUploader
+          photos={photoUrls.map((url, i) => ({ url, order: i }))}
+          onChange={(urls) => setPhotoUrls(urls)}
         />
       </div>
 
@@ -2591,6 +2606,7 @@ function VariantAddForm({
     duration?: number;
     includedFeatures?: string[];
     isSapEligible?: boolean;
+    photos?: string[];
   }) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -2606,6 +2622,7 @@ function VariantAddForm({
   const [sapEligible, setSapEligible] = useState(false);
   const [selectedAnimalTypes, setSelectedAnimalTypes] = useState<string[]>(serviceAnimalTypes);
   const [duration, setDuration] = useState(60);
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
 
   // TVA
   const { user: authUser } = useAuth();
@@ -2745,6 +2762,7 @@ function VariantAddForm({
         duration,
         includedFeatures: includedFeatures.length > 0 ? includedFeatures : undefined,
         isSapEligible: sapEligible || undefined,
+        photos: photoUrls.length > 0 ? photoUrls : undefined,
       });
     } finally {
       setIsSaving(false);
@@ -2793,6 +2811,14 @@ function VariantAddForm({
           onChange={(e) => setDescription(e.target.value)}
           rows={2}
           className="w-full px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none resize-none"
+        />
+      </div>
+
+      {/* Photos de la formule — affichées dans les résultats de recherche */}
+      <div className="pt-3 border-t border-secondary/10">
+        <ServicePhotosUploader
+          photos={photoUrls.map((url, i) => ({ url, order: i }))}
+          onChange={(urls) => setPhotoUrls(urls)}
         />
       </div>
 

@@ -1722,6 +1722,13 @@ export const searchFormules = query({
             providesFood: profile.providesFood,
             allowOvernightStay: service.allowOvernightStay,
           } : undefined,
+          // Photos de la FORMULE (max 3) pour la mini-galerie dans la carte
+          servicePhotos: variant.photos
+            ? variant.photos
+                .slice()
+                .sort((a: { order: number }, b: { order: number }) => a.order - b.order)
+                .map((p: { url: string; order: number }) => ({ url: p.url, order: p.order }))
+            : undefined,
         });
       }
     }
@@ -2345,6 +2352,13 @@ export const searchFormulesInternal = query({
             providesFood: profile.providesFood,
             allowOvernightStay: service.allowOvernightStay,
           } : undefined,
+          // Photos de la FORMULE (max 3) pour la mini-galerie dans la carte
+          servicePhotos: variant.photos
+            ? variant.photos
+                .slice()
+                .sort((a: { order: number }, b: { order: number }) => a.order - b.order)
+                .map((p: { url: string; order: number }) => ({ url: p.url, order: p.order }))
+            : undefined,
         });
       }
     }

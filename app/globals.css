@@ -143,6 +143,13 @@ html {
   display: none;
 }
 
+/* ──────────────────────────────────────────────────────────────────
+ * Hero illustrations — les animations sont désormais gérées par
+ * framer-motion directement dans hero-illustrations.tsx, avec des
+ * variants propagés via une prop `isHovered`. Plus de conflit entre
+ * transform SVG et transform CSS = plus de dislocation.
+ * ────────────────────────────────────────────────────────────────── */
+
 /* Blob shapes */
 .blob {
   border-radius: 42% 58% 70% 30% / 45% 45% 55% 55%;

@@ -3,6 +3,7 @@
 const DEFAULT_VAT_RATE = 20;
 
 import { useState, useEffect } from "react";
+import { ServicePhotosUploader } from "./services/ServicePhotosUploader";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -78,6 +79,8 @@ export interface LocalVariant {
   duration?: number;
   includedFeatures?: string[];
   isFromDefault?: boolean;
+  /** Photos de la formule (URLs Cloudinary, jusqu'à 3). */
+  photos?: string[];
 }
 
 // Prestation par défaut définie par l'admin
@@ -562,6 +565,14 @@ function SimpleVariantCard({
                 className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 focus:bg-white text-sm transition-all"
               />
             </div>
+          </div>
+
+          {/* Photos de la formule — affichées dans les résultats de recherche */}
+          <div className="pt-4 border-t border-gray-100">
+            <ServicePhotosUploader
+              photos={(variant.photos || []).map((url, i) => ({ url, order: i }))}
+              onChange={(urls) => onUpdate({ photos: urls })}
+            />
           </div>
         </div>
 

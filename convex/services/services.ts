@@ -171,6 +171,7 @@ export const getMyServices = query({
               needsSlotConfiguration: v.needsSlotConfiguration, // Créneaux requis pour collectives
               slotsCount: v.slotsCount, // Nombre de créneaux configurés
               isSapEligible: v.isSapEligible || false,
+              photos: v.photos ?? [],
             })),
           // Options triées par ordre (avec info variantId pour affichage par formule)
           options: options
@@ -282,6 +283,8 @@ export const addService = mutation({
       duration: v.optional(v.number()),
       includedFeatures: v.optional(v.array(v.string())),
       isSapEligible: v.optional(v.boolean()),
+      // Photos de la formule (URLs Cloudinary, max 3)
+      photos: v.optional(v.array(v.string())),
     })),
     // Options additionnelles (optionnelles) - seront liées aux formules créées
     initialOptions: v.optional(v.array(v.object({
@@ -424,7 +427,10 @@ export const addService = mutation({
         duration: variant.duration,
         includedFeatures: variant.includedFeatures,
         isSapEligible: (variant.isSapEligible && announcerIsSapApproved) ? true : undefined,
-        order: existingVariantsCount + i, // Continuer l'ordre après les formules existantes
+        photos: variant.photos && variant.photos.length > 0
+          ? variant.photos.slice(0, 3).map((url, order) => ({ url, order }))
+          : undefined,
+        order: existingVariantsCount + i,
         isActive: true,
         createdAt: now,
         updatedAt: now,

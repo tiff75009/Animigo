@@ -26,6 +26,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { DatePickerDropdown } from "./components/DatePickerDropdown";
+import { SearchPillBar } from "./components/SearchPillBar";
+import { PawPatternBg } from "./components/PawPatternBg";
 import { useFormuleSearch, type FormuleResult } from "@/app/hooks/useSearch";
 import { Id } from "@/convex/_generated/dataModel";
 
@@ -364,7 +366,7 @@ export default function RecherchePage() {
       return;
     }
 
-    // Find category in subcategories
+    // 1) Match dans les sous-catégories (cas nominal pour une feuille)
     for (const parent of categoriesData.parentCategories) {
       const found = parent.subcategories.find((sub) => sub.slug === urlParams.category);
       if (found) {
@@ -379,7 +381,22 @@ export default function RecherchePage() {
       }
     }
 
-    // Check in root categories
+    // 2) Match dans les catégories parentes sans enfants (feuilles au niveau root)
+    const parentMatch = categoriesData.parentCategories.find(
+      (p) => p.slug === urlParams.category
+    );
+    if (parentMatch) {
+      setHookCategory({
+        id: parentMatch.id,
+        slug: parentMatch.slug,
+        name: parentMatch.name,
+        icon: parentMatch.icon || "📋",
+        billingType: undefined,
+      });
+      return;
+    }
+
+    // 3) Match dans les catégories orphelines
     const rootFound = categoriesData.rootCategories.find((cat) => cat.slug === urlParams.category);
     if (rootFound) {
       setHookCategory({
@@ -588,6 +605,40 @@ export default function RecherchePage() {
     await requestLocation();
   }, [requestLocation]);
 
+  // Auto-géolocalisation au chargement si l'utilisateur n'est pas connecté
+  // (les connectés reçoivent l'adresse de leur profil via userLocation ci-dessus).
+  // On ne déclenche la permission navigateur QUE si elle est déjà "granted"
+  // pour éviter un prompt intrusif ; sinon on ne fait rien (le bouton reste dispo).
+  const autoGeoTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (autoGeoTriggeredRef.current) return;
+    // Attendre que l'état d'auth soit résolu (isAuthenticated passe de undefined à bool)
+    if (isAuthenticated !== false) return;
+    if (filters.location.text) return; // l'utilisateur a déjà une localisation
+    autoGeoTriggeredRef.current = true;
+
+    const nav = navigator as Navigator & {
+      permissions?: {
+        query: (d: { name: "geolocation" }) => Promise<{ state: PermissionState }>;
+      };
+    };
+    if (nav.permissions?.query) {
+      nav.permissions
+        .query({ name: "geolocation" })
+        .then((p) => {
+          if (p.state === "granted") {
+            requestLocation();
+          } else if (p.state === "prompt") {
+            // On déclenche le prompt — l'utilisateur peut toujours refuser
+            requestLocation();
+          }
+        })
+        .catch(() => void 0);
+    } else {
+      requestLocation();
+    }
+  }, [isAuthenticated, filters.location.text, requestLocation]);
+
   // Reverse geocode quand on obtient les coordonnées GPS
   useEffect(() => {
     if (geoCoords && !geoError && !isReverseGeocoding) {
@@ -610,28 +661,26 @@ export default function RecherchePage() {
       <Navbar />
 
       {/* Hero Section with Mode Toggle */}
-      <section className="pt-3 sm:pt-4 pb-4 sm:pb-6 bg-gradient-to-b from-primary/5 via-background to-background relative">
-        {/* Decorative elements */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          {/* Gradient orbs */}
-          <div className="absolute -top-20 -left-20 w-64 h-64 bg-gradient-to-br from-primary/20 to-transparent rounded-full blur-3xl" />
-          <div className="absolute -top-10 right-0 w-96 h-96 bg-gradient-to-bl from-secondary/15 to-transparent rounded-full blur-3xl" />
-          <div className="absolute top-1/2 left-1/3 w-48 h-48 bg-gradient-to-tr from-purple/10 to-transparent rounded-full blur-2xl" />
-
-          {/* Emojis décoratifs statiques */}
-          <span className="hidden md:block absolute top-24 left-[10%] text-3xl opacity-20">🐕</span>
-          <span className="hidden md:block absolute top-32 right-[15%] text-2xl opacity-15">🐈</span>
-          <span className="hidden lg:block absolute bottom-8 left-[20%] text-2xl opacity-10">🐾</span>
-        </div>
-
+      <PawPatternBg>
+      <section className="pt-6 sm:pt-10 pb-8 sm:pb-12 relative">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 relative">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-center"
           >
+            {/* Headline principal */}
+            <motion.h1
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="font-sans font-bold text-3xl sm:text-4xl md:text-[44px] leading-[1.05] tracking-[-0.02em] text-foreground mb-6 sm:mb-8 max-w-2xl mx-auto"
+            >
+              Que cherchez-vous <span className="font-love-taking text-primary font-normal">aujourd&apos;hui ?</span>
+            </motion.h1>
+
             {/* Mode Toggle - Main choice */}
-            <div className="flex justify-center mb-4 sm:mb-6">
+            <div className="flex justify-center mb-6 sm:mb-7">
               <motion.div
                 className="inline-flex items-center p-1 sm:p-1.5 bg-white/80 backdrop-blur-md rounded-2xl shadow-lg shadow-gray-200/50 border border-white/50"
                 initial={{ scale: 0.95 }}
@@ -706,14 +755,88 @@ export default function RecherchePage() {
               </motion.div>
             </div>
 
-            {/* Barre de recherche unifiée style booking */}
+            {/* ═══ Barre de recherche unifiée Pill (Airbnb-style) ═══ */}
             <motion.div
               ref={heroSearchRef}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.15 }}
-              className="mt-3 sm:mt-6 max-w-4xl mx-auto px-0 sm:px-0 relative z-40"
+              className="mt-3 sm:mt-6 relative z-40"
             >
+              <SearchPillBar
+                searchMode={filters.searchMode ?? "garde"}
+                location={filters.location}
+                onLocationChange={setLocation}
+                radius={filters.radius}
+                onRadiusChange={setRadius}
+                onGeolocate={handleGeolocate}
+                isGeoLoading={isGeoLoading}
+                isReverseGeocoding={isReverseGeocoding}
+                startDate={urlParams.startDate}
+                endDate={urlParams.endDate}
+                onDateRangeChange={setDateRange}
+                singleDate={urlParams.date}
+                onSingleDateChange={(d) => setUrlParams({ date: d, startDate: null, endDate: null })}
+                numberOfAnimals={urlParams.animals}
+                onNumberOfAnimalsChange={(n) => setUrlParams({ animals: n })}
+                onSearch={() => {
+                  // Les filtres sont déjà synchronisés via URL/state → on peut fermer les popovers
+                  // ou scroller vers les résultats
+                  const results = document.getElementById("results-section");
+                  if (results) results.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+              />
+            </motion.div>
+
+            {/* Filtres par type d'animal */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
+              className="mt-5 sm:mt-6 flex justify-center"
+            >
+              <div className="inline-flex items-center gap-1.5 px-1.5 py-1.5 bg-white/70 backdrop-blur-md rounded-full border border-gray-200 shadow-sm overflow-x-auto scrollbar-hide max-w-full">
+                <button
+                  type="button"
+                  onClick={() => setAnimalType(null)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-full text-[13px] font-medium transition-all whitespace-nowrap",
+                    !filters.animalType
+                      ? filters.searchMode === "garde"
+                        ? "bg-primary text-white shadow"
+                        : "bg-secondary text-white shadow"
+                      : "text-text-light hover:bg-gray-100"
+                  )}
+                >
+                  <span>🐾</span>
+                  <span>Tous</span>
+                </button>
+                {ANIMAL_TYPES.slice(0, 6).map((animal) => {
+                  const active = filters.animalType === animal.id;
+                  return (
+                    <button
+                      key={animal.id}
+                      type="button"
+                      onClick={() => setAnimalType(animal.id)}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-full text-[13px] font-medium transition-all whitespace-nowrap",
+                        active
+                          ? filters.searchMode === "garde"
+                            ? "bg-primary text-white shadow"
+                            : "bg-secondary text-white shadow"
+                          : "text-text-light hover:bg-gray-100"
+                      )}
+                    >
+                      <span>{animal.emoji}</span>
+                      <span className="hidden sm:inline">{animal.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+
+            {/* Bloc legacy supprimé (remplacé par SearchPillBar) */}
+            <div style={{ display: "none" }}>
               <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg shadow-gray-200/50 border border-gray-100 p-1.5 sm:p-3">
                 {/* Ligne 1 : Ville + Géolocalisation + Rayon */}
                 <div className="mb-1.5 sm:mb-2">
@@ -1199,74 +1322,16 @@ export default function RecherchePage() {
                   </div>
                 )}
               </div>
-            </motion.div>
+            </div>
           </motion.div>
         </div>
       </section>
+      </PawPatternBg>
 
-      {/* Sticky bar : recherche compacte (au scroll) + types d'animaux + catégorie */}
+      {/* Sticky bar : catégorie + filtres avancés (animaux déplacés dans la zone de recherche) */}
       <section className="sticky top-16 z-30 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-sm">
-        {/* Barre de recherche compacte visible au scroll - transition CSS fluide */}
-        <div
-          className={cn(
-            "grid transition-all duration-200 ease-out border-b border-gray-100",
-            isScrolled ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
-          )}
-        >
-          <div className="overflow-hidden">
-            <div className="max-w-2xl mx-auto px-3 py-2">
-              <LocationBar
-                location={filters.location}
-                onLocationChange={setLocation}
-                radius={filters.radius}
-                onRadiusChange={setRadius}
-                onGeolocate={handleGeolocate}
-                isGeoLoading={isGeoLoading}
-                isReverseGeocoding={isReverseGeocoding}
-                openDropdown={openDropdown}
-                dropdownId="radius-sticky"
-                onToggleDropdown={setOpenDropdown}
-                variant="sticky"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Ligne animaux + catégorie + reset */}
-        <div className="flex items-center gap-1 px-2 py-1.5 sm:p-3">
-          {/* Pilules animaux - scrollable */}
-          <div className="overflow-x-auto scrollbar-hide flex-1">
-            <div className="flex items-center gap-1 min-w-max sm:min-w-0 sm:justify-center">
-              <button
-                onClick={() => setAnimalType(null)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap",
-                  !filters.animalType
-                    ? filters.searchMode === "garde" ? "bg-primary text-white" : "bg-secondary text-white"
-                    : "bg-gray-100 text-gray-700"
-                )}
-              >
-                <span>🐾</span>
-                <span>Tous</span>
-              </button>
-              {ANIMAL_TYPES.slice(0, 6).map((animal) => (
-                <button
-                  key={animal.id}
-                  onClick={() => setAnimalType(animal.id)}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap",
-                    filters.animalType === animal.id
-                      ? filters.searchMode === "garde" ? "bg-primary text-white" : "bg-secondary text-white"
-                      : "bg-gray-100 text-gray-700"
-                  )}
-                >
-                  <span>{animal.emoji}</span>
-                  <span className="hidden sm:inline">{animal.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
+        {/* Ligne catégorie + reset */}
+        <div className="flex items-center gap-2 px-2 py-1.5 sm:p-3 justify-end sm:justify-center">
           {/* Catégorie de service - EN DEHORS de overflow pour que le dropdown ne soit pas coupé */}
           {filters.searchMode === "services" && (
             <FilterDropdown

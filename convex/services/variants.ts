@@ -197,6 +197,8 @@ export const addVariant = mutation({
     duration: v.optional(v.number()),
     includedFeatures: v.optional(v.array(v.string())),
     isSapEligible: v.optional(v.boolean()),
+    // Photos de la formule (URLs Cloudinary, max 3)
+    photos: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const { user } = await validateSession(ctx, args.token);
@@ -251,6 +253,9 @@ export const addVariant = mutation({
       duration: args.duration,
       includedFeatures: args.includedFeatures,
       isSapEligible: sapEligible,
+      photos: args.photos && args.photos.length > 0
+        ? args.photos.slice(0, 3).map((url, order) => ({ url, order }))
+        : undefined,
       order: maxOrder + 1,
       isActive: !isCollective, // Désactivé par défaut si collective (pas de créneaux)
       needsSlotConfiguration: isCollective, // Flag pour indiquer que des créneaux sont requis
@@ -330,6 +335,9 @@ export const updateVariant = mutation({
     includedFeatures: v.optional(v.array(v.string())),
     isActive: v.optional(v.boolean()),
     isSapEligible: v.optional(v.boolean()),
+    // Photos de la formule (URLs Cloudinary, max 3). Si fourni,
+    // REMPLACE complètement les photos existantes de la formule.
+    photos: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const { user } = await validateSession(ctx, args.token);
@@ -380,6 +388,9 @@ export const updateVariant = mutation({
       } else {
         updates.isSapEligible = false;
       }
+    }
+    if (args.photos !== undefined) {
+      updates.photos = args.photos.slice(0, 3).map((url, order) => ({ url, order }));
     }
 
     await ctx.db.patch(args.variantId, updates);

@@ -219,7 +219,7 @@ const initialFilters: SearchFilters = {
   category: null,
   animalType: null,
   location: { text: "" },
-  radius: 10, // 10km par défaut
+  radius: 50, // 50 km par défaut (aligné sur le parser nuqs de /recherche)
   date: null,
   time: null,
   startDate: null,
@@ -580,8 +580,11 @@ export function useServiceSearch(token?: string | null) {
     } = {};
 
     // Appliquer le mode de recherche
+    // En mode garde : si une sous-catégorie est sélectionnée (ex. "gardiennage",
+    // "pension", "garde_nuit"), on l'utilise comme filtre précis. Sinon on
+    // retombe sur le slug parent "garde" (historique).
     if (filters.searchMode === "garde") {
-      args.categorySlug = "garde";
+      args.categorySlug = filters.category?.slug ?? "garde";
     } else if (filters.searchMode === "services") {
       if (filters.category) {
         args.categorySlug = filters.category.slug;
@@ -1181,8 +1184,11 @@ export function useFormuleSearch() {
     } = {};
 
     // Appliquer le mode de recherche
+    // En mode garde : si une sous-catégorie est sélectionnée (ex. "gardiennage",
+    // "pension", "garde_nuit"), on l'utilise comme filtre précis. Sinon on
+    // retombe sur le slug parent "garde" (historique).
     if (filters.searchMode === "garde") {
-      args.categorySlug = "garde";
+      args.categorySlug = filters.category?.slug ?? "garde";
     } else if (filters.searchMode === "services") {
       if (filters.category) {
         args.categorySlug = filters.category.slug;

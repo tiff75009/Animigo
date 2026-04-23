@@ -593,6 +593,67 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.31.0 - Page detail formule, photos par formule et SEO local
+
+- **Nouvelle page publique `/formule/[id]`** (`app/formule/[id]/page.tsx`)
+  - Hero avec badge categorie cliquable + badge ville cliquable + h1 avec sous-titre "a {Ville}"
+  - Galerie photos (1ere photo grande + 2 mini), ouverture lightbox plein ecran
+  - Sections detaillees : caracteristiques (duree, seances, type, lieu, animaux acceptes, garde de nuit), objectifs/activites, inclus, options additionnelles, eligibilite SAP
+  - Colonne droite sticky : carte annonceur (avatar + statut + bio + ville) + carte prix + CTA "Reserver"
+  - Breadcrumb semantique `<nav><ol>` : Accueil > Categorie > Ville > Formule
+
+- **SEO local renforce** (`FormuleJsonLd` dans `/formule/[id]`)
+  - JSON-LD `Service` avec `provider` typé `LocalBusiness` (nom + adresse), `areaServed` (City), `offers` (prix EUR), `aggregateRating`
+  - JSON-LD `BreadcrumbList` pour rich snippets
+  - `<title>` + `meta description` dynamiques avec ville et nom annonceur
+  - Open Graph complet (`og:title`, `og:description`, `og:image`, `og:url`, `og:type=product`, `og:locale=fr_FR`)
+  - Twitter Card `summary_large_image`
+  - `<link rel="canonical">` sans query string
+
+- **Query Convex publique** (`convex/public/formuleDetails.ts`)
+  - `getVariantDetails(variantId)` : variante + service + categorie + mini-profil annonceur + options
+  - Filtre les variantes/services inactifs et les services moderés `rejected`
+  - Compte les `siblingVariantsCount` pour CTA "Voir toutes les formules"
+
+- **Photos par formule (et non plus par service)**
+  - Schema : `serviceVariants.photos: Array<{ url: string; order: number }>` (max 3)
+  - Mutations dediees `convex/services/variantPhotos.ts` (`addVariantPhoto`, `deleteVariantPhoto`, `setVariantPhotos`, `getVariantPhotos`) avec helper `requireVariantOwner`
+  - `addVariant` et `updateVariant` acceptent `photos: string[]`, mappes vers `[{url, order}]`
+  - `getMyServices` retourne `photos` au niveau variante
+  - Recherche : `servicePhotos` desormais lue depuis `variant.photos` (page `recherche` + cards)
+
+- **Uploader photos formule** (`app/dashboard/services/components/services/ServicePhotosUploader.tsx`)
+  - Drag-drop + selection multiple, max 3 photos, 5 Mo, JPEG/PNG/WebP
+  - Upload via `useCloudinary` (contournement du bug CORS Convex Self-Hosted sur l'upload de fichiers)
+  - Deux modes : `attached` (persist immediat sur formule existante) et `staged` (file d'attente pour creation)
+  - Integre dans `VariantManager`, `VariantEditForm` et `VariantAddForm`
+
+- **Lightbox photo plein ecran** (`app/components/platform/PhotoLightbox.tsx`)
+  - Modale plein ecran avec backdrop blur, navigation clavier (gauche/droite/Esc), boutons prev/next, thumbnails, compteur
+  - Cleanup robuste du `body.overflow` au demontage (anti-blocage de scroll)
+  - Utilisee dans `FormuleCardGrid`, `FormuleCardList` et la page detail formule
+
+- **Refonte page recherche** (`app/recherche/`)
+  - Nouvelle barre `SearchPillBar` style Airbnb : popovers Where, Arrival, Departure, Animal + CTA gradient
+  - Composant `PawPatternBg` : motif de pattes en fond
+  - Boutons filtres animaux deplaces dans la section recherche (suppression de la sticky LocationBar redondante)
+  - Auto-geolocalisation au chargement pour les visiteurs non connectes (via `autoGeoTriggeredRef`)
+  - Cards Profile-first (avatar + identite annonceur en haut, formule en dessous), info pills (duree, animaux, badges)
+  - Affichage list 3 colonnes (avatar 68px + 2x2 mini-photos / contenu / prix+CTA)
+  - Correction filtre categorie : suppression du `categorySlug = "garde"` hardcode (4 occurrences) remplace par `filters.category?.slug`
+  - Lien nom de formule -> page detail dans `FormuleCardGrid`, `FormuleCardList` et `FormuleChip`
+
+- **Page d'accueil renovee** (`app/page.tsx`, `app/components/sections/`)
+  - Cover bento inspire de GoPattes adapte palette Animigo
+  - 4 categories les plus populaires (dynamique depuis DB) avec compteur de services a proximite
+  - Auto-geolocalisation au chargement pour personnaliser les compteurs
+  - Mascotte Bulldog Anglais SVG sur les illustrations (remplace l'ancienne illustration generique)
+  - Animations Framer Motion sur hover des cards (pattes + animal)
+
+- **Hook `useScrollLock` mobile-only** (`app/hooks/useScrollLock.ts`)
+  - Garde mobile-only via `MOBILE_BREAKPOINT = 1024` : ne lock plus le scroll sur desktop ou les sheets sont masques par CSS
+  - Corrige le bug "page /annonceur figee" apres clic sur "Reserver" dans les resultats de recherche
+
 ### v0.30.0 - Optimisation Responsive Page Annonceur
 
 - **Refactoring du composant MobileCTA** (2605 → 2083 lignes, -20%)

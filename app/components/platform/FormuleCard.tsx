@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
+import { PhotoLightbox } from "./PhotoLightbox";
 import {
   Star,
   Heart,
@@ -204,6 +205,8 @@ export interface FormuleResult {
     providesFood?: boolean;
     allowOvernightStay?: boolean;
   };
+  /** Photos du service (jusqu'à 3) affichées dans la mini-galerie */
+  servicePhotos?: Array<{ url: string; order: number }>;
 }
 
 export interface SearchDates {
@@ -504,6 +507,8 @@ export function FormuleCardGrid({
   selectedAnimalIds,
 }: FormuleCardProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
   const isCollective = formule.sessionType === "collective";
   const isGarde = !!formule.capacityInfo?.isCapacityBased;
@@ -532,15 +537,16 @@ export function FormuleCardGrid({
       transition={{ delay: index * 0.05, duration: 0.4, ease: "easeOut" }}
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
-      className="group relative bg-white rounded-3xl flex flex-col h-full"
+      className="group relative flex flex-col h-full"
     >
-      {/* Glow effect on hover */}
-      <motion.div
-        className="absolute -inset-0.5 bg-gradient-to-r from-primary/50 via-secondary/50 to-primary/50 rounded-3xl opacity-0 blur-lg transition-opacity duration-500 -z-10"
-        animate={{ opacity: isHovered ? 0.4 : 0 }}
-      />
-
-      <div className="relative bg-white rounded-3xl border border-gray-100 shadow-sm hover:shadow-2xl transition-all duration-500 flex flex-col h-full overflow-visible">
+      <div
+        className="relative bg-white flex flex-col h-full overflow-visible transition-shadow duration-300"
+        style={{
+          borderRadius: 14,
+          border: "1px solid #ece9e1",
+          boxShadow: isHovered ? "0 10px 30px rgba(30,30,28,0.08)" : "none",
+        }}
+      >
 
         {/* Badge prochain créneau - flottant */}
         {formule.nextSlot && (
@@ -571,268 +577,316 @@ export function FormuleCardGrid({
           </div>
         )}
 
-        {/* Header : Avatar + Nom + Favoris */}
-        <div className={cn("px-3 sm:px-4 pt-3 sm:pt-4 pb-2.5 sm:pb-3", formule.nextSlot ? "pt-7" : "")}>
-          <div className="flex items-center gap-2.5 sm:gap-3">
-            <Link href={announcerPublicProfileUrl} className="relative flex-shrink-0 group/avatar">
-              <div className="absolute -inset-0.5 bg-gradient-to-tr from-primary via-secondary to-primary rounded-xl opacity-60 blur-sm group-hover/avatar:opacity-100 transition-opacity" />
-              <div className="relative w-11 h-11 rounded-lg overflow-hidden bg-white ring-2 ring-white">
+        {/* Header : Avatar + Identité (style Profile-first) */}
+        <div className={cn("px-[18px] pt-[18px] pb-2", formule.nextSlot ? "pt-7" : "")}>
+          <div className="flex items-start gap-3">
+            {/* Avatar 56px avec badge vérifié */}
+            <Link href={announcerPublicProfileUrl} className="relative flex-shrink-0">
+              <div
+                className="w-14 h-14 rounded-full overflow-hidden bg-white"
+                style={{ border: "1px solid rgba(0,0,0,0.05)" }}
+              >
                 {formule.announcerProfileImage ? (
                   <Image
                     src={formule.announcerProfileImage}
                     alt={formule.announcerFirstName}
-                    width={44}
-                    height={44}
-                    className={cn("w-full h-full", formule.announcerIsDisplayingLogo ? "object-contain p-0.5" : "object-cover")}
+                    width={56}
+                    height={56}
+                    className={cn("w-full h-full", formule.announcerIsDisplayingLogo ? "object-contain p-1" : "object-cover")}
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20">
-                    <span className="text-base">👤</span>
+                  <div
+                    className="w-full h-full flex items-center justify-center text-xl font-semibold"
+                    style={{
+                      background: "linear-gradient(135deg, #e8efe9, #d4e0d2)",
+                      color: "#3a5a40",
+                    }}
+                  >
+                    {formule.announcerFirstName.charAt(0).toUpperCase()}
                   </div>
                 )}
               </div>
               {formule.announcerVerified && (
-                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-gradient-to-br from-secondary to-teal-500 rounded-md flex items-center justify-center ring-1.5 ring-white shadow-sm">
+                <div
+                  className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full flex items-center justify-center"
+                  style={{
+                    background: "#1f3a33",
+                    border: "2px solid #fff",
+                  }}
+                  title="Profil vérifié"
+                >
                   <Shield className="w-2.5 h-2.5 text-white" />
                 </div>
               )}
             </Link>
 
-            <div className="flex-1 min-w-0">
+            {/* Identité */}
+            <div className="flex-1 min-w-0 pr-6">
+              {/* Badge type */}
+              <div className="mb-1">
+                <span
+                  className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                  style={
+                    formule.announcerStatusType === "professionnel" || formule.announcerStatusType === "micro_entrepreneur"
+                      ? { background: "#eaf0ed", color: "#2f4a3f" }
+                      : { background: "#f3ecdf", color: "#6b4f25" }
+                  }
+                >
+                  {formule.announcerStatusType === "professionnel"
+                    ? "Professionnel"
+                    : formule.announcerStatusType === "micro_entrepreneur"
+                    ? "Micro-entrepreneur"
+                    : "Particulier"}
+                </span>
+              </div>
               <Link href={announcerPublicProfileUrl}>
-                <h4 className="font-bold text-sm text-gray-900 hover:text-primary transition-colors truncate">
+                <div className="text-sm font-semibold text-[#1f1f1d] hover:text-primary transition-colors truncate">
                   {formule.announcerFirstName}
-                </h4>
+                </div>
               </Link>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <div className={cn("flex items-center gap-1 px-1.5 py-0.5 rounded-full border", sc.bg, sc.border)}>
-                  <StatusIcon className={cn("w-2.5 h-2.5", sc.text)} />
-                  <span className={cn("text-[10px] font-semibold", sc.text)}>{sc.label}</span>
-                </div>
-                <div className="flex items-center gap-0.5 text-amber-500">
-                  <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                  <span className="text-[11px] font-bold">{formule.announcerRating.toFixed(1)}</span>
-                </div>
+              <div className="flex items-center gap-2 mt-0.5 text-xs text-[#6d6d68]">
+                <span className="inline-flex items-center gap-1">
+                  <Star className="w-2.5 h-2.5 fill-[#1f2937] text-[#1f2937]" />
+                  {formule.announcerRating.toFixed(1)} · {formule.announcerReviewCount} avis
+                </span>
+                {shortDistance && (
+                  <>
+                    <span className="text-[#cdc9c0]">·</span>
+                    <span className="inline-flex items-center gap-0.5 text-primary font-semibold">
+                      <MapPin className="w-2.5 h-2.5" />
+                      {shortDistance}
+                    </span>
+                  </>
+                )}
               </div>
             </div>
 
-            <AnimatedHeart
-              isFavorite={isFavorite}
-              onToggle={() => onToggleFavorite?.(formule.formuleId)}
-              isLoading={isTogglingFavorite}
-            />
+            {/* Favori (absolute top-right) */}
+            <div className="absolute top-3.5 right-3.5">
+              <AnimatedHeart
+                isFavorite={isFavorite}
+                onToggle={() => onToggleFavorite?.(formule.formuleId)}
+                isLoading={isTogglingFavorite}
+              />
+            </div>
           </div>
         </div>
 
-        {/* Séparateur */}
-        <div className="mx-3 sm:mx-4 border-t border-gray-100" />
-
         {/* Contenu principal */}
-        <div className="px-3 sm:px-4 py-2.5 sm:py-3 flex-1 flex flex-col">
+        <div className="px-[18px] py-2 flex-1 flex flex-col">
+          {/* Eyebrow "Propose" */}
+          <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mt-3.5 mb-1">
+            Propose
+          </div>
+
           {/* Nom de la formule */}
-          <h3 className="text-base font-bold text-gray-900 mb-2.5 line-clamp-2 leading-snug group-hover:text-primary transition-colors">
-            {formule.formuleName}
-          </h3>
+          <Link href={`/formule/${formule.formuleId}`} className="block">
+            <h3 className="text-base font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0 hover:text-primary transition-colors">
+              {formule.formuleName}
+            </h3>
+          </Link>
 
-          {/* Grille d'infos 2 colonnes */}
-          <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs text-gray-600 mb-3">
-            {/* Catégorie */}
-            <div className="flex items-center gap-1.5">
-              {formule.categoryIcon && <span className="text-sm">{formule.categoryIcon}</span>}
-              <span className="font-medium text-primary truncate">{formule.categoryName}</span>
+          {/* Description courte (2 lignes max) */}
+          {formule.formuleDescription && (
+            <p className="text-[13px] text-[#4a4a46] leading-[1.5] mt-1.5 line-clamp-2">
+              {formule.formuleDescription}
+            </p>
+          )}
+
+          {/* Mini galerie photos (hauteur fixe 64px comme la référence) */}
+          {formule.servicePhotos && formule.servicePhotos.length > 0 && (
+            <div
+              className="grid grid-cols-3 gap-1 mt-3 overflow-hidden"
+              style={{ borderRadius: 8 }}
+            >
+              {formule.servicePhotos.slice(0, 3).map((photo, i) => (
+                <button
+                  key={`${photo.url}-${i}`}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    setLightboxIndex(i);
+                    setLightboxOpen(true);
+                  }}
+                  className="relative bg-gray-100 overflow-hidden block focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  style={{ height: 64 }}
+                  aria-label={`Voir la photo ${i + 1} en grand`}
+                >
+                  <Image
+                    src={photo.url}
+                    alt={`${formule.formuleName} ${i + 1}`}
+                    fill
+                    sizes="(max-width: 640px) 33vw, 100px"
+                    className="object-cover group-hover:scale-105 transition-transform duration-500"
+                    unoptimized
+                  />
+                </button>
+              ))}
+              {Array.from({ length: Math.max(0, 3 - formule.servicePhotos.length) }).map((_, i) => (
+                <div
+                  key={`placeholder-${i}`}
+                  className="flex items-center justify-center text-xl opacity-40"
+                  style={{
+                    height: 64,
+                    background: "repeating-linear-gradient(45deg, #efe8dd, #efe8dd 6px, #f5eee0 6px, #f5eee0 12px)",
+                  }}
+                >
+                  {formule.categoryIcon || "📷"}
+                </div>
+              ))}
             </div>
+          )}
 
-            {/* Type de séance — masqué pour garde individuelle */}
-            {(isCollective || !isGarde) && (
-              <div className="flex items-center gap-1.5 justify-end">
-                {isCollective ? <Users className="w-3.5 h-3.5 text-blue-500" /> : <User className="w-3.5 h-3.5 text-gray-400" />}
-                <span className={cn("font-medium", isCollective ? "text-blue-600" : "text-gray-500")}>
-                  {isCollective ? "Collectif" : "Individuel"}
-                </span>
-              </div>
-            )}
-
-            {/* Durée — masquée pour garde */}
+          {/* Info pills (style outline référence) — distance déplacée près du nom */}
+          <div className="flex flex-wrap gap-1.5 mt-3.5 mb-1">
+            {/* Durée d'une séance pour les services (pas garde) — toujours visible si présente */}
             {formule.duration && !isGarde && (
-              <div className="flex items-center gap-1.5">
-                <Timer className="w-3.5 h-3.5 text-gray-400" />
-                <span>{formatDuration(formule.duration)}</span>
-              </div>
+              <InfoPill>
+                <Timer className="w-2.5 h-2.5" /> {formatDuration(formule.duration)}
+                {formule.numberOfSessions && formule.numberOfSessions > 1 && " / séance"}
+              </InfoPill>
             )}
-
-            {/* Lieu */}
-            {formule.serviceLocation && (
-              <div className="flex items-center gap-1.5 justify-end">
-                {formule.serviceLocation === "client_home" ? (
-                  <Car className="w-3.5 h-3.5 text-gray-400" />
-                ) : (
-                  <Home className="w-3.5 h-3.5 text-gray-400" />
-                )}
-                <span>{locationLabels[formule.serviceLocation]}</span>
-              </div>
-            )}
-
-            {/* Ville + Distance */}
-            {formule.announcerLocation && (
-              <div className="flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-gray-400" />
-                <span className="truncate">{formule.announcerLocation}</span>
-              </div>
-            )}
-            {shortDistance && (
-              <div className="flex items-center gap-1.5 justify-end">
-                <Navigation className="w-3.5 h-3.5 text-primary" />
-                <span className="font-medium text-primary">{shortDistance}</span>
-              </div>
-            )}
-
-            {/* Séances multiples */}
-            {formule.numberOfSessions && formule.numberOfSessions > 1 && (
-              <div className="flex items-center gap-1.5 justify-end">
-                <Sparkles className="w-3.5 h-3.5 text-purple-500" />
-                <span className="font-medium text-purple-600">{formule.numberOfSessions} séances</span>
-              </div>
-            )}
-
-            {/* === Infos spécifiques Garde === */}
-            {isGarde && formule.gardeInfo && (
-              <>
-                {/* Logement */}
-                <div className="flex items-center gap-1.5">
-                  <Home className="w-3.5 h-3.5 text-gray-400" />
-                  <span>{formule.gardeInfo.housingType === "house" ? "Maison" : formule.gardeInfo.housingType === "apartment" ? "Appartement" : "Non précisé"}</span>
-                </div>
-
-                {/* Jardin */}
-                <div className="flex items-center gap-1.5 justify-end">
-                  <TreePine className={cn("w-3.5 h-3.5", formule.gardeInfo.hasGarden ? "text-emerald-500" : "text-gray-300")} />
-                  <span className={formule.gardeInfo.hasGarden ? "text-emerald-600 font-medium" : "text-gray-400"}>
-                    {formule.gardeInfo.hasGarden
-                      ? formule.gardeInfo.gardenSize === "grand" ? "Grand jardin" : formule.gardeInfo.gardenSize === "moyen" ? "Jardin moyen" : "Jardin"
-                      : "Pas de jardin"}
-                  </span>
-                </div>
-
-                {/* Garde de nuit */}
-                {formule.gardeInfo.allowOvernightStay && (
-                  <div className="flex items-center gap-1.5">
-                    <Moon className="w-3.5 h-3.5 text-indigo-500" />
-                    <span className="text-indigo-600 font-medium">Nuit incluse</span>
-                  </div>
-                )}
-
-                {/* Nourriture fournie */}
-                {formule.gardeInfo.providesFood && (
-                  <div className="flex items-center gap-1.5 justify-end">
-                    <Utensils className="w-3.5 h-3.5 text-amber-500" />
-                    <span className="text-amber-600 font-medium">Repas fournis</span>
-                  </div>
-                )}
-
-                {/* Animaux du gardien */}
-                {formule.gardeInfo.hasOwnAnimals && formule.gardeInfo.ownAnimalTypes && (
-                  <div className="flex items-center gap-1.5 col-span-2">
-                    <PawPrint className="w-3.5 h-3.5 text-gray-400" />
-                    <span className="text-gray-500">
-                      A {formule.gardeInfo.ownAnimalTypes.map((t) => animalEmojiMap.get(t) || "🐾").join(" ")} au foyer
-                    </span>
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* Places disponibles (garde) */}
-            {formule.capacityInfo && formule.capacityInfo.isCapacityBased && (
-              <div className="flex items-center gap-1.5 col-span-2">
-                <Users className="w-3.5 h-3.5 text-secondary" />
-                <span className={cn(
-                  "font-semibold",
-                  formule.capacityInfo.minRemainingCapacity <= 2
-                    ? "text-orange-600"
-                    : "text-secondary"
-                )}>
-                  {formule.capacityInfo.minRemainingCapacity} place{formule.capacityInfo.minRemainingCapacity > 1 ? "s" : ""} dispo{formule.capacityInfo.minRemainingCapacity > 1 ? "s" : ""} sur {formule.capacityInfo.maxCapacity}
-                </span>
-              </div>
-            )}
-
-            {/* Types d'animaux acceptés */}
             {formule.animalTypes && formule.animalTypes.length > 0 && (
-              <div className="flex items-center gap-1 col-span-2">
-                {formule.animalTypes.map((type) => (
-                  <span key={type} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-50 rounded-full text-[10px] font-medium text-amber-700 border border-amber-100" title={type}>
+              <InfoPill>
+                {formule.animalTypes.slice(0, 2).map((type) => (
+                  <span key={type} className="text-[11px]">
                     {animalEmojiMap.get(type) || "🐾"}
                   </span>
                 ))}
-              </div>
+              </InfoPill>
+            )}
+            {formule.serviceLocation && (
+              <InfoPill>
+                {formule.serviceLocation === "client_home" ? (
+                  <Car className="w-2.5 h-2.5" />
+                ) : (
+                  <Home className="w-2.5 h-2.5" />
+                )}
+                {locationLabels[formule.serviceLocation]}
+              </InfoPill>
+            )}
+            {isCollective && (
+              <InfoPill>
+                <Users className="w-2.5 h-2.5" /> Collectif
+              </InfoPill>
+            )}
+            {formule.numberOfSessions && formule.numberOfSessions > 1 && (
+              <InfoPill>
+                <Sparkles className="w-2.5 h-2.5" /> {formule.numberOfSessions} séances
+              </InfoPill>
+            )}
+            {formule.gardeInfo?.allowOvernightStay && (
+              <InfoPill>
+                <Moon className="w-2.5 h-2.5" /> Nuit
+              </InfoPill>
+            )}
+            {/* Capacity (garde) */}
+            {formule.capacityInfo?.isCapacityBased && (
+              <InfoPill>
+                <Users className="w-2.5 h-2.5" /> {formule.capacityInfo.minRemainingCapacity}/{formule.capacityInfo.maxCapacity} places
+              </InfoPill>
+            )}
+            {/* Verified */}
+            {formule.announcerVerified && <VerifiedPill>Vérifié</VerifiedPill>}
+            {/* SAP */}
+            {formule.isSapEligible && formule.announcerSapApproved && (
+              <VerifiedPill>
+                <FileCheck className="w-2.5 h-2.5" /> Crédit d&apos;impôt
+              </VerifiedPill>
             )}
           </div>
-
-          {/* Badges SAP */}
-          {formule.isSapEligible && formule.announcerSapApproved && (
-            <div className="mb-3">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-[11px] font-medium border border-emerald-100">
-                <FileCheck className="w-3 h-3" />
-                Éligible crédit d&apos;impôt
-              </span>
-            </div>
-          )}
         </div>
 
-        {/* Footer - Prix & CTA */}
-        <div className="px-3 sm:px-4 pb-3 sm:pb-4">
-          <div className="flex items-center justify-between gap-3 p-3 bg-gradient-to-r from-gray-50 to-gray-50/50 rounded-xl">
-            <div>
+        {/* Footer : Disponibilité + Prix + CTA */}
+        <div
+          className="mx-[18px] mb-[18px] mt-3 pt-3.5 flex items-center justify-between"
+          style={{ borderTop: "1px solid #f1ede3" }}
+        >
+          <div>
+            {/* Disponibilité avec puce */}
+            {formule.nextSlot ? (
+              <div className="text-[11px] font-medium text-[#4a6b5a] flex items-center gap-1">
+                <span>●</span>
+                {formatNextSlotDate(formule.nextSlot.date)}
+                {!formule.nextSlot.isFullDay && ` · ${formatTime(formule.nextSlot.startTime)}`}
+              </div>
+            ) : (
+              <div className="text-[11px] font-medium text-[#4a6b5a] flex items-center gap-1">
+                <span>●</span>
+                Dispo cette semaine
+              </div>
+            )}
+            {/* Prix */}
+            <div className="mt-0.5">
               {totalEstimate ? (
                 <>
-                  <span className="text-xl font-black bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
+                  <span className="text-[17px] font-semibold text-[#1f1f1d]">
                     {formatPrice(totalEstimate.total)}
                   </span>
-                  <span className="block text-[11px] text-gray-400">
-                    {totalEstimate.label}
-                  </span>
-                  <span className="block text-[10px] text-gray-300">
-                    {formatPrice(finalPrice)}/{priceLabel || "jour"}
-                  </span>
-                </>
-              ) : formule.numberOfSessions && formule.numberOfSessions > 1 ? (
-                <>
-                  <span className="text-xl font-black bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
-                    {formatPrice(finalPrice * formule.numberOfSessions)}
-                  </span>
-                  <span className="block text-[11px] text-gray-400">
-                    {formule.numberOfSessions}× {formatPrice(finalPrice)}
-                  </span>
+                  <span className="text-[11px] text-[#6d6d68]"> {totalEstimate.label}</span>
                 </>
               ) : (
                 <>
-                  <span className="text-xl font-black bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+                  <span className="text-[17px] font-semibold text-[#1f1f1d]">
                     {formatPrice(finalPrice)}
                   </span>
                   {priceLabel && (
-                    <span className="block text-[11px] text-gray-400">par {priceLabel}</span>
+                    <span className="text-[11px] text-[#6d6d68]"> / {priceLabel}</span>
                   )}
                 </>
               )}
             </div>
-
-            {!isAnnouncer && (
-              <Link href={announcerBookingUrl}>
-                <motion.button
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  className="relative px-4 py-2.5 bg-gradient-to-r from-primary to-primary/90 text-white font-bold text-sm rounded-xl shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all duration-300 flex items-center gap-1.5 overflow-hidden group/btn"
-                >
-                  <span className="relative z-10">Réserver</span>
-                  <ChevronRight className="w-4 h-4 relative z-10 group-hover/btn:translate-x-0.5 transition-transform" />
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/btn:translate-x-full transition-transform duration-700" />
-                </motion.button>
-              </Link>
-            )}
           </div>
+
+          {!isAnnouncer && (
+            <Link href={announcerBookingUrl}>
+              <button
+                className="px-4 py-2 rounded-full text-xs font-medium transition-all hover:opacity-90 active:scale-95"
+                style={{ background: "#1f3a33", color: "#f7f5ef" }}
+              >
+                Réserver
+              </button>
+            </Link>
+          )}
         </div>
       </div>
+
+      {/* Galerie modale plein écran */}
+      {formule.servicePhotos && formule.servicePhotos.length > 0 && (
+        <PhotoLightbox
+          photos={formule.servicePhotos}
+          initialIndex={lightboxIndex}
+          isOpen={lightboxOpen}
+          onClose={() => setLightboxOpen(false)}
+          caption={formule.formuleName}
+        />
+      )}
     </motion.article>
+  );
+}
+
+/** Pill outline style référence : padding 2-7px, radius 999, fontSize 10, weight 500 */
+function InfoPill({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium text-[#3a3a38]"
+      style={{ border: "1px solid #dfdcd4" }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function VerifiedPill({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium text-[#2f4a3f]"
+      style={{ border: "1px solid #cfdbd3" }}
+    >
+      <Shield className="w-2.5 h-2.5" />
+      {children}
+    </span>
   );
 }
 
@@ -848,6 +902,8 @@ export function FormuleCardList({
   selectedAnimalIds,
 }: FormuleCardProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
   const isCollective = formule.sessionType === "collective";
   const isGarde = !!formule.capacityInfo?.isCapacityBased;
@@ -866,6 +922,19 @@ export function FormuleCardList({
       : `${Math.round(formule.announcerDistance)} km`
     : null;
 
+  const photos = formule.servicePhotos ?? [];
+  const typeLabel =
+    formule.announcerStatusType === "professionnel"
+      ? "Professionnel"
+      : formule.announcerStatusType === "micro_entrepreneur"
+      ? "Micro-entrepreneur"
+      : "Particulier";
+  const typeBadgeStyle =
+    formule.announcerStatusType === "particulier"
+      ? { background: "#f3ecdf", color: "#6b4f25" }
+      : { background: "#eaf0ed", color: "#2f4a3f" };
+
+  // Conservés pour compatibilité avec le bloc legacy caché (display:none)
   const sc = statusTypeConfig[formule.announcerStatusType];
   const StatusIcon = sc.icon;
 
@@ -878,13 +947,283 @@ export function FormuleCardList({
       onHoverEnd={() => setIsHovered(false)}
       className="group relative"
     >
-      <motion.div
-        className="absolute -inset-0.5 bg-gradient-to-r from-primary/40 via-secondary/40 to-primary/40 rounded-2xl opacity-0 blur-md transition-opacity duration-500 -z-10"
-        animate={{ opacity: isHovered ? 0.3 : 0 }}
-      />
+      <div
+        className="relative bg-white overflow-hidden transition-all duration-200"
+        style={{
+          borderRadius: 16,
+          border: "1px solid #ece9e1",
+          boxShadow: isHovered ? "0 14px 36px rgba(30,30,28,0.08)" : "none",
+          transform: isHovered ? "translateY(-1px)" : "none",
+        }}
+      >
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-5 p-4 sm:p-5">
+          {/* ═══ COLONNE GAUCHE : Avatar + mini photos ═══ */}
+          <div className="flex sm:flex-col items-start gap-3 sm:gap-3 flex-shrink-0">
+            <Link href={announcerPublicProfileUrl} className="relative flex-shrink-0">
+              <div
+                className="rounded-full overflow-hidden bg-white"
+                style={{ width: 68, height: 68, border: "1px solid rgba(0,0,0,0.05)" }}
+              >
+                {formule.announcerProfileImage ? (
+                  <Image
+                    src={formule.announcerProfileImage}
+                    alt={formule.announcerFirstName}
+                    width={68}
+                    height={68}
+                    className={cn(
+                      "w-full h-full",
+                      formule.announcerIsDisplayingLogo ? "object-contain p-1" : "object-cover"
+                    )}
+                  />
+                ) : (
+                  <div
+                    className="w-full h-full flex items-center justify-center text-2xl font-semibold"
+                    style={{
+                      background: "linear-gradient(135deg, #e8efe9, #d4e0d2)",
+                      color: "#3a5a40",
+                    }}
+                  >
+                    {formule.announcerFirstName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+              </div>
+              {formule.announcerVerified && (
+                <div
+                  className="absolute flex items-center justify-center"
+                  style={{
+                    bottom: -2,
+                    right: -2,
+                    width: 22,
+                    height: 22,
+                    borderRadius: "50%",
+                    background: "#1f3a33",
+                    border: "2px solid #fff",
+                  }}
+                  title="Profil vérifié"
+                >
+                  <Shield className="text-white" style={{ width: 11, height: 11 }} />
+                </div>
+              )}
+            </Link>
 
-      <div className="relative bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden">
-        <div className="flex flex-col sm:flex-row">
+            {/* Mini strip 2x2 ou horizontal si pas de photos disponibles */}
+            {photos.length > 0 && (
+              <div
+                className="grid grid-cols-2 gap-[3px] overflow-hidden"
+                style={{ width: 68, borderRadius: 8 }}
+              >
+                {photos.slice(0, 4).map((photo, i) => (
+                  <button
+                    key={`${photo.url}-${i}`}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setLightboxIndex(i);
+                      setLightboxOpen(true);
+                    }}
+                    className="relative bg-gray-100 overflow-hidden block focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    style={{ height: 32 }}
+                    aria-label={`Voir photo ${i + 1}`}
+                  >
+                    <Image
+                      src={photo.url}
+                      alt={`Photo ${i + 1}`}
+                      fill
+                      sizes="40px"
+                      className="object-cover"
+                      unoptimized
+                    />
+                  </button>
+                ))}
+                {Array.from({ length: Math.max(0, 4 - photos.length) }).map((_, i) => (
+                  <div
+                    key={`ph-${i}`}
+                    className="flex items-center justify-center text-sm opacity-40"
+                    style={{
+                      height: 32,
+                      background:
+                        "repeating-linear-gradient(45deg, #efe8dd, #efe8dd 4px, #f5eee0 4px, #f5eee0 8px)",
+                    }}
+                  >
+                    {formule.categoryIcon || "·"}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ═══ COLONNE MIDDLE : Contenu principal ═══ */}
+          <div className="flex-1 min-w-0">
+            {/* Row 1 : badge + name + rating + distance */}
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span
+                className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                style={typeBadgeStyle}
+              >
+                {typeLabel}
+              </span>
+              <Link href={announcerPublicProfileUrl}>
+                <span className="text-[15px] font-semibold text-[#1f1f1d] hover:text-primary transition-colors">
+                  {formule.announcerFirstName}
+                </span>
+              </Link>
+              <span className="text-[#dcd8cd] text-xs">·</span>
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-[#4a4a46]">
+                <Star className="w-[11px] h-[11px] fill-[#1f2937] text-[#1f2937]" />
+                <b className="text-[#1f1f1d]">{formule.announcerRating.toFixed(1)}</b>
+                <span className="text-[#6d6d68]">({formule.announcerReviewCount} avis)</span>
+              </span>
+              {(shortDistance || formule.announcerLocation) && (
+                <>
+                  <span className="text-[#dcd8cd] text-xs">·</span>
+                  <span className="inline-flex items-center gap-1 text-xs text-[#6d6d68]">
+                    <MapPin className="w-[11px] h-[11px]" />
+                    {[shortDistance, formule.announcerLocation].filter(Boolean).join(" · ")}
+                  </span>
+                </>
+              )}
+            </div>
+
+            {/* Row 2 : Eyebrow + service title */}
+            <div className="mt-2.5">
+              <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-0.5">
+                Propose
+              </div>
+              <Link href={`/formule/${formule.formuleId}`} className="block">
+                <h3 className="m-0 text-[17px] font-semibold text-[#1f1f1d] tracking-[-0.01em] hover:text-primary transition-colors">
+                  {formule.formuleName}
+                </h3>
+              </Link>
+            </div>
+
+            {/* Row 3 : Description (1 line clamp) */}
+            {formule.formuleDescription && (
+              <p className="mt-1.5 text-[13px] leading-[1.5] text-[#4a4a46] line-clamp-1">
+                {formule.formuleDescription}
+              </p>
+            )}
+
+            {/* Row 4 : Pills (duration, animal, badges, availability) */}
+            <div className="flex flex-wrap items-center gap-1.5 mt-3">
+              {formule.duration && !isGarde && (
+                <InfoPill>
+                  <Timer className="w-2.5 h-2.5" />
+                  {formatDuration(formule.duration)}
+                  {formule.numberOfSessions && formule.numberOfSessions > 1 && " / séance"}
+                </InfoPill>
+              )}
+              {formule.animalTypes && formule.animalTypes.length > 0 && (
+                <InfoPill>
+                  {formule.animalTypes.slice(0, 3).map((t) => (
+                    <span key={t}>{animalEmojiMap.get(t) || "🐾"}</span>
+                  ))}
+                </InfoPill>
+              )}
+              {isCollective && (
+                <InfoPill>
+                  <Users className="w-2.5 h-2.5" /> Collectif
+                </InfoPill>
+              )}
+              {formule.capacityInfo?.isCapacityBased && (
+                <InfoPill>
+                  <Users className="w-2.5 h-2.5" />
+                  {formule.capacityInfo.minRemainingCapacity}/{formule.capacityInfo.maxCapacity} places
+                </InfoPill>
+              )}
+              {formule.gardeInfo?.allowOvernightStay && (
+                <InfoPill>
+                  <Moon className="w-2.5 h-2.5" /> Nuit
+                </InfoPill>
+              )}
+              {formule.announcerVerified && <VerifiedPill>Vérifié</VerifiedPill>}
+              {formule.isSapEligible && formule.announcerSapApproved && (
+                <VerifiedPill>
+                  <FileCheck className="w-2.5 h-2.5" /> Crédit d&apos;impôt
+                </VerifiedPill>
+              )}
+              {/* Availability with green dot */}
+              {formule.nextSlot ? (
+                <span
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium text-[#3a3a38]"
+                  style={{ border: "1px solid #dfdcd4" }}
+                >
+                  <span className="text-[#4a6b5a] text-[9px]">●</span>
+                  {formatNextSlotDate(formule.nextSlot.date)}
+                </span>
+              ) : (
+                <span
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium text-[#3a3a38]"
+                  style={{ border: "1px solid #dfdcd4" }}
+                >
+                  <span className="text-[#4a6b5a] text-[9px]">●</span>
+                  Dispo cette semaine
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* ═══ COLONNE DROITE : Heart + Prix + CTA ═══ */}
+          <div
+            className="flex flex-col justify-between items-stretch sm:items-end flex-shrink-0 sm:pl-5 sm:border-l border-t sm:border-t-0 pt-3 sm:pt-0 w-full sm:w-auto"
+            style={{ minWidth: 130, borderColor: "#f1ede3" }}
+          >
+            {/* Heart */}
+            <div className="self-end">
+              <AnimatedHeart
+                isFavorite={isFavorite}
+                onToggle={() => onToggleFavorite?.(formule.formuleId)}
+                isLoading={isTogglingFavorite}
+              />
+            </div>
+
+            {/* Prix au centre-droite */}
+            <div className="text-right my-3 sm:my-0">
+              {totalEstimate ? (
+                <>
+                  <div className="flex items-baseline gap-0.5 justify-end">
+                    <span
+                      className="text-[24px] font-semibold text-[#1f1f1d]"
+                      style={{ letterSpacing: "-0.02em" }}
+                    >
+                      {formatPrice(totalEstimate.total)}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-[#6d6d68] mt-0.5">{totalEstimate.label}</div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-baseline gap-0.5 justify-end">
+                    <span
+                      className="text-[24px] font-semibold text-[#1f1f1d]"
+                      style={{ letterSpacing: "-0.02em" }}
+                    >
+                      {formatPrice(finalPrice)}
+                    </span>
+                  </div>
+                  {priceLabel && (
+                    <div className="text-[11px] text-[#6d6d68] mt-0.5">/ {priceLabel}</div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* CTA Réserver */}
+            {!isAnnouncer && (
+              <Link href={announcerBookingUrl} className="mt-2 w-full">
+                <button
+                  className="w-full px-5 py-2.5 rounded-full text-[13px] font-medium transition-all hover:opacity-90 active:scale-95"
+                  style={{ background: "#1f3a33", color: "#f7f5ef" }}
+                >
+                  Réserver
+                </button>
+              </Link>
+            )}
+          </div>
+        </div>
+
+        {/* Bloc legacy caché (évite de casser l'arbre avant nettoyage) */}
+        <div style={{ display: "none" }}>
           {/* Colonne gauche : Annonceur */}
           <div className="relative sm:w-36 p-3 sm:p-4 bg-gradient-to-br from-gray-50/80 to-white flex flex-row sm:flex-col items-center gap-2.5 sm:gap-2 sm:justify-center border-b sm:border-b-0 sm:border-r border-gray-100">
             <Link href={announcerPublicProfileUrl} className="relative group/avatar flex-shrink-0">
@@ -979,6 +1318,58 @@ export function FormuleCardList({
                 isLoading={isTogglingFavorite}
               />
             </div>
+
+            {/* Description */}
+            {formule.formuleDescription && (
+              <p className="text-[13px] text-gray-600 mb-2.5 line-clamp-2 leading-relaxed">
+                {formule.formuleDescription}
+              </p>
+            )}
+
+            {/* Mini galerie photos (hauteur fixe 80px, plus compactes en liste) */}
+            {formule.servicePhotos && formule.servicePhotos.length > 0 && (
+              <div
+                className="grid grid-cols-3 gap-1 mb-3 max-w-md overflow-hidden"
+                style={{ borderRadius: 8 }}
+              >
+                {formule.servicePhotos.slice(0, 3).map((photo, i) => (
+                  <button
+                    key={`${photo.url}-${i}`}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setLightboxIndex(i);
+                      setLightboxOpen(true);
+                    }}
+                    className="relative bg-gray-100 overflow-hidden block focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    style={{ height: 80 }}
+                    aria-label={`Voir la photo ${i + 1}`}
+                  >
+                    <Image
+                      src={photo.url}
+                      alt={`${formule.formuleName} ${i + 1}`}
+                      fill
+                      sizes="(max-width: 640px) 33vw, 130px"
+                      className="object-cover group-hover:scale-105 transition-transform duration-500"
+                      unoptimized
+                    />
+                  </button>
+                ))}
+                {Array.from({ length: Math.max(0, 3 - formule.servicePhotos.length) }).map((_, i) => (
+                  <div
+                    key={`placeholder-${i}`}
+                    className="flex items-center justify-center text-xl opacity-40"
+                    style={{
+                      height: 80,
+                      background: "repeating-linear-gradient(45deg, #efe8dd, #efe8dd 6px, #f5eee0 6px, #f5eee0 12px)",
+                    }}
+                  >
+                    {formule.categoryIcon || "📷"}
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Grille détails */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-gray-500 mb-3">
@@ -1155,6 +1546,17 @@ export function FormuleCardList({
           </div>
         </div>
       </div>
+
+      {/* Galerie modale plein écran */}
+      {formule.servicePhotos && formule.servicePhotos.length > 0 && (
+        <PhotoLightbox
+          photos={formule.servicePhotos}
+          initialIndex={lightboxIndex}
+          isOpen={lightboxOpen}
+          onClose={() => setLightboxOpen(false)}
+          caption={formule.formuleName}
+        />
+      )}
     </motion.article>
   );
 }
@@ -1229,9 +1631,11 @@ function FormuleChip({
       </div>
 
       {/* Nom formule */}
-      <h4 className="text-sm font-bold text-gray-900 line-clamp-2 leading-snug mb-2 flex-1">
-        {formule.formuleName}
-      </h4>
+      <Link href={`/formule/${formule.formuleId}`} className="block flex-1">
+        <h4 className="text-sm font-bold text-gray-900 line-clamp-2 leading-snug mb-2 hover:text-primary transition-colors">
+          {formule.formuleName}
+        </h4>
+      </Link>
 
       {/* Infos compactes */}
       <div className="flex items-center gap-2 text-[11px] text-gray-500 mb-2">

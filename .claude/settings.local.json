@@ -34,7 +34,10 @@
       "WebSearch",
       "Bash(ls -la \"C:/Users/anton/Documents/siteanimau/app/admin/\\(dashboard\\)/templates-email/\")",
       "Bash(ls -la \"C:/Users/anton/Documents/siteanimau/app/admin/\\(dashboard\\)/commissions/\")",
-      "Bash(cd C:/Users/anton/Documents/siteanimau && node -e \"\nconst fs = require\\('fs'\\);\nconst dir = 'node_modules/@pdfme/common/dist/cjs/src/';\nconst files = fs.readdirSync\\(dir\\);\nconsole.log\\('files:', files\\);\nfor \\(const f of files\\) {\n  const content = fs.readFileSync\\(dir + f, 'utf8'\\);\n  if \\(content.includes\\('processDynamicPage'\\)\\) {\n    console.log\\('FOUND in', f\\);\n    const idx = content.indexOf\\('processDynamicPage'\\);\n    console.log\\(content.substring\\(idx, idx + 1500\\)\\);\n    break;\n  }\n}\n\" 2>&1)"
+      "Bash(cd C:/Users/anton/Documents/siteanimau && node -e \"\nconst fs = require\\('fs'\\);\nconst dir = 'node_modules/@pdfme/common/dist/cjs/src/';\nconst files = fs.readdirSync\\(dir\\);\nconsole.log\\('files:', files\\);\nfor \\(const f of files\\) {\n  const content = fs.readFileSync\\(dir + f, 'utf8'\\);\n  if \\(content.includes\\('processDynamicPage'\\)\\) {\n    console.log\\('FOUND in', f\\);\n    const idx = content.indexOf\\('processDynamicPage'\\);\n    console.log\\(content.substring\\(idx, idx + 1500\\)\\);\n    break;\n  }\n}\n\" 2>&1)",
+      "Bash(find \"C:/Users/anton/Documents/siteanimau/app/components\" -type f -name \"*.tsx\" | xargs wc -l | tail -1)",
+      "Bash(awk '{print $NF}')",
+      "Bash(xargs wc *)"
     ]
   }
 }

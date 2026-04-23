@@ -120,6 +120,8 @@ interface ServiceFormProps {
       acceptedDogSizes?: ("small" | "medium" | "large")[];
       // SAP : TVA réduite par formule
       isSapEligible?: boolean;
+      // Photos de la formule (URLs Cloudinary, max 3)
+      photos?: string[];
     }>;
     initialOptions?: Array<{
       name: string;
@@ -222,6 +224,8 @@ export default function ServiceForm({
       acceptedDogSizes: v.acceptedDogSizes,
       // SAP : TVA réduite (appliquée à toutes les formules si coché en step 1)
       isSapEligible: isSapEligible || undefined,
+      // Photos de la formule (URLs Cloudinary max 3)
+      photos: v.photos && v.photos.length > 0 ? v.photos : undefined,
     }));
 
     const initialOptions = localOptions.map((o) => ({
@@ -250,7 +254,6 @@ export default function ServiceForm({
     const success = await onSubmit({
       category,
       description: description || undefined,
-      // Les animaux au niveau service sont maintenant agrégés depuis les formules
       animalTypes: allAnimalTypes.length > 0 ? allAnimalTypes : undefined,
       ...overnightData,
       initialVariants,
@@ -591,6 +594,7 @@ export default function ServiceForm({
                   />
                 </div>
               )}
+
             </motion.div>
           )}
 

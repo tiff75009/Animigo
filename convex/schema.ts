@@ -331,6 +331,14 @@ export default defineSchema({
     moderationNote: v.optional(v.string()),
     // SAP : l'annonceur déclare ce service éligible TVA réduite (10%) pour personnes dépendantes
     isSapEligible: v.optional(v.boolean()),
+    // Photos : désormais portées par chaque formule (serviceVariants.photos).
+    // Ce champ reste optionnel pour compatibilité avec les données existantes
+    // mais n'est plus utilisé.
+    photos: v.optional(v.array(v.object({
+      url: v.string(),
+      order: v.number(),
+      storageId: v.optional(v.id("_storage")),
+    }))),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -402,6 +410,12 @@ export default defineSchema({
     slotsCount: v.optional(v.number()), // Nombre de créneaux futurs configurés (cache)
     // SAP : l'annonceur déclare cette formule éligible TVA réduite (10%) pour personnes dépendantes
     isSapEligible: v.optional(v.boolean()),
+    // Photos de la formule (jusqu'à 3) affichées dans les résultats de recherche.
+    // URLs hébergées sur Cloudinary (même infra que profileImageUrl).
+    photos: v.optional(v.array(v.object({
+      url: v.string(),
+      order: v.number(),
+    }))),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
