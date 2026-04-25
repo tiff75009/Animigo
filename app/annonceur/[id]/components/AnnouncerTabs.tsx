@@ -43,35 +43,39 @@ export default function AnnouncerTabs({
   return (
     <div className="sticky top-16 z-40 bg-background/95 backdrop-blur-md">
       <div className="max-w-6xl mx-auto px-4 pt-4 pb-2">
-        {/* Tabs container - full width like header card */}
-        <div className="flex gap-1 p-1.5 bg-gray-100/80 rounded-xl">
+        <div
+          className="flex gap-1 p-1"
+          style={{
+            background: "#fff",
+            border: "1px solid #ece9e1",
+            borderRadius: 999,
+          }}
+        >
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-2 py-3 px-4 text-sm font-medium rounded-lg transition-all duration-200",
+                className="flex-1 inline-flex items-center justify-center gap-2 py-2 px-3 text-[13px] font-medium rounded-full transition-colors"
+                style={
                   isActive
-                    ? "bg-white text-primary shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
-                )}
+                    ? { background: "#1f3a33", color: "#f7f5ef" }
+                    : { color: "#6d6d68" }
+                }
               >
-                <tab.icon className={cn(
-                  "w-4 h-4 transition-colors",
-                  isActive && "text-primary"
-                )} />
+                <tab.icon className="w-3.5 h-3.5" />
                 <span>{tab.label}</span>
 
-                {/* Count badge */}
                 {tab.count !== undefined && tab.count > 0 && (
-                  <span className={cn(
-                    "min-w-[1.25rem] h-5 px-1.5 flex items-center justify-center text-xs font-semibold rounded-full transition-colors",
-                    isActive
-                      ? "bg-primary text-white"
-                      : "bg-gray-300 text-gray-600"
-                  )}>
+                  <span
+                    className="min-w-[1.1rem] h-[18px] px-1.5 inline-flex items-center justify-center text-[10px] font-bold rounded-full"
+                    style={
+                      isActive
+                        ? { background: "rgba(247,245,239,0.25)", color: "#f7f5ef" }
+                        : { background: "#f7f5ef", color: "#6d6d68" }
+                    }
+                  >
                     {tab.count > 99 ? "99+" : tab.count}
                   </span>
                 )}

@@ -302,25 +302,34 @@ export default function GuestDogVerification({
   }, [acceptedDogSizes, dogCategoryAcceptance]);
 
   return (
-    <div className={cn("bg-white rounded-2xl p-5 shadow-sm", className)}>
-      {/* En-tête */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="p-2 rounded-lg bg-amber-50">
-          <Dog className="w-5 h-5 text-amber-600" />
+    <div className={cn(className)}>
+      {/* En-tête style card */}
+      <div className="mb-4">
+        <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-1">
+          Détails du chien
         </div>
-        <div>
-          <h3 className="text-lg font-bold text-foreground">Informations sur votre chien</h3>
-          <p className="text-sm text-text-light">
-            Renseignez la race pour vérifier la compatibilité
-          </p>
-        </div>
+        <h3 className="text-base font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+          Informations sur votre chien
+        </h3>
+        <p className="text-[13px] text-[#6d6d68] leading-[1.5] mt-1">
+          Renseignez la race pour vérifier la compatibilité.
+        </p>
       </div>
 
       {/* Message d'info sur les restrictions */}
-      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+      <div
+        className="mb-4 p-3"
+        style={{
+          borderRadius: 10,
+          background: "#f7f5ef",
+          border: "1px solid #ece9e1",
+        }}
+      >
         <div className="flex items-start gap-2">
-          <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-          <p className="text-sm text-blue-800">{restrictionText}</p>
+          <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" style={{ color: "#6d6d68" }} />
+          <p className="text-[12px] leading-[1.5]" style={{ color: "#3a3a38" }}>
+            {restrictionText}
+          </p>
         </div>
       </div>
 

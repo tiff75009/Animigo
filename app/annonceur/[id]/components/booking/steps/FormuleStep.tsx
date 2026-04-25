@@ -87,95 +87,79 @@ export default function FormuleStep({
       variants={slideVariants}
       transition={{ duration: 0.3, ease: "easeInOut" }}
     >
-      {/* Titre section */}
-      <div className="mb-5">
-        <h3 className="text-xl font-bold text-gray-900 flex items-center gap-3">
-          <span className="p-2.5 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-xl">
-            <Package className="w-5 h-5 text-primary" />
-          </span>
+      {/* Titre section - eyebrow + titre fin */}
+      <div className="mb-4">
+        <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-1">
+          Étape · Formule
+        </div>
+        <h3 className="text-base font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
           Choisir une formule
         </h3>
         {!hasVariantSelected && (
-          <p className="text-sm text-gray-500 mt-2 ml-12">
-            Sélectionnez la formule qui correspond à vos besoins
+          <p className="text-[13px] text-[#6d6d68] leading-[1.5] mt-1">
+            Sélectionnez la formule qui correspond à vos besoins.
           </p>
         )}
       </div>
 
-      {/* Filtres */}
+      {/* Filtres - pills outline fines comme la card */}
       {service.formules.length > 1 && (
-        <div className="mb-5">
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+        <div className="mb-4">
+          <div className="flex flex-wrap items-center gap-1.5">
             {/* Filtre type de séance */}
-            <button
+            <FilterPill
+              active={filterSessionType === "individual"}
               onClick={() => setFilterSessionType(filterSessionType === "individual" ? "all" : "individual")}
-              className={cn(
-                "inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-full border transition-all",
-                filterSessionType === "individual"
-                  ? "bg-primary text-white border-primary"
-                  : "bg-white text-gray-600 border-gray-200 hover:border-primary/50 hover:text-primary"
-              )}
+              icon={<Users className="w-3 h-3" />}
             >
-              <Users className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
               Individuel
-            </button>
-            <button
+            </FilterPill>
+            <FilterPill
+              active={filterSessionType === "collective"}
               onClick={() => setFilterSessionType(filterSessionType === "collective" ? "all" : "collective")}
-              className={cn(
-                "inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-full border transition-all",
-                filterSessionType === "collective"
-                  ? "bg-primary text-white border-primary"
-                  : "bg-white text-gray-600 border-gray-200 hover:border-primary/50 hover:text-primary"
-              )}
+              icon={<Users className="w-3 h-3" />}
             >
-              <Users className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
               Collectif
-            </button>
+            </FilterPill>
 
-            <span className="hidden sm:block w-px h-5 bg-gray-200 mx-1" />
+            <span className="hidden sm:block w-px h-4 mx-1" style={{ background: "#ece9e1" }} />
 
             {/* Filtre lieu */}
-            <button
+            <FilterPill
+              active={filterLocation === "announcer_home"}
               onClick={() => setFilterLocation(filterLocation === "announcer_home" ? "all" : "announcer_home")}
-              className={cn(
-                "inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-full border transition-all",
-                filterLocation === "announcer_home"
-                  ? "bg-secondary text-white border-secondary"
-                  : "bg-white text-gray-600 border-gray-200 hover:border-secondary/50 hover:text-secondary"
-              )}
+              icon={<Home className="w-3 h-3" />}
             >
-              <Home className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
-              <span className="hidden xs:inline">Chez le pro</span>
-              <span className="xs:hidden">Pro</span>
-            </button>
-            <button
+              Chez le pro
+            </FilterPill>
+            <FilterPill
+              active={filterLocation === "client_home"}
               onClick={() => setFilterLocation(filterLocation === "client_home" ? "all" : "client_home")}
-              className={cn(
-                "inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-full border transition-all",
-                filterLocation === "client_home"
-                  ? "bg-secondary text-white border-secondary"
-                  : "bg-white text-gray-600 border-gray-200 hover:border-secondary/50 hover:text-secondary"
-              )}
+              icon={<MapPin className="w-3 h-3" />}
             >
-              <MapPin className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
-              <span className="hidden xs:inline">À domicile</span>
-              <span className="xs:hidden">Domicile</span>
-            </button>
+              À domicile
+            </FilterPill>
 
-            {/* Filtre animaux si disponible */}
             {allAnimalsInFormules.length > 0 && (
               <>
-                <span className="hidden sm:block w-px h-5 bg-gray-200 mx-1" />
+                <span className="hidden sm:block w-px h-4 mx-1" style={{ background: "#ece9e1" }} />
                 <select
                   value={filterAnimal}
                   onChange={(e) => setFilterAnimal(e.target.value)}
                   className={cn(
-                    "px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-full border transition-all appearance-none pr-6 sm:pr-8 cursor-pointer",
-                    filterAnimal !== "all"
-                      ? "bg-amber-500 text-white border-amber-500"
-                      : "bg-white text-gray-600 border-gray-200 hover:border-amber-500/50"
+                    "px-2.5 py-1 text-[11px] font-medium rounded-full appearance-none pr-7 cursor-pointer transition-colors"
                   )}
-                  style={{ backgroundImage: "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")", backgroundPosition: "right 0.5rem center", backgroundRepeat: "no-repeat", backgroundSize: "1.25em 1.25em" }}
+                  style={{
+                    border: filterAnimal !== "all" ? "1px solid #1f3a33" : "1px solid #dfdcd4",
+                    background: filterAnimal !== "all" ? "#1f3a33" : "#fff",
+                    color: filterAnimal !== "all" ? "#f7f5ef" : "#3a3a38",
+                    backgroundImage: filterAnimal !== "all"
+                      ? "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23f7f5ef' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")"
+                      : "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239c9484' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")",
+                    backgroundPosition: "right 0.5rem center",
+                    backgroundRepeat: "no-repeat",
+                    backgroundSize: "1em 1em",
+                  }}
                 >
                   <option value="all">Animal</option>
                   {allAnimalsInFormules.map(animal => (
@@ -185,13 +169,12 @@ export default function FormuleStep({
               </>
             )}
 
-            {/* Bouton reset */}
             {hasActiveFilters && (
               <button
                 onClick={resetFilters}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-gray-500 hover:text-primary transition-colors"
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-[#9c9484] hover:text-[#1f1f1d] transition-colors"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-3 h-3" />
                 Effacer
               </button>
             )}
@@ -201,10 +184,17 @@ export default function FormuleStep({
 
       {/* Liste des formules */}
       {filteredFormules.length === 0 ? (
-        <div className="bg-gray-50 rounded-2xl p-8 text-center">
-          <Package className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500 mb-2">Aucune formule ne correspond aux filtres</p>
-          <button onClick={resetFilters} className="text-sm text-primary hover:underline font-medium">
+        <div
+          className="p-8 text-center"
+          style={{
+            background: "#f7f5ef",
+            borderRadius: 14,
+            border: "1px solid #ece9e1",
+          }}
+        >
+          <Package className="w-9 h-9 mx-auto mb-3" style={{ color: "#cdc9c0" }} />
+          <p className="text-[13px] text-[#6d6d68] mb-2">Aucune formule ne correspond aux filtres</p>
+          <button onClick={resetFilters} className="text-[12px] font-medium text-[#1f3a33] hover:underline">
             Réinitialiser les filtres
           </button>
         </div>
@@ -230,5 +220,33 @@ export default function FormuleStep({
         </div>
       )}
     </motion.div>
+  );
+}
+
+function FilterPill({
+  active,
+  onClick,
+  icon,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors"
+      style={
+        active
+          ? { background: "#1f3a33", color: "#f7f5ef", border: "1px solid #1f3a33" }
+          : { background: "#fff", color: "#3a3a38", border: "1px solid #dfdcd4" }
+      }
+    >
+      {icon}
+      {children}
+    </button>
   );
 }

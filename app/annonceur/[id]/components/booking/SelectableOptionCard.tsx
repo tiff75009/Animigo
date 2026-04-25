@@ -34,68 +34,46 @@ export default function SelectableOptionCard({
         opacity: { duration: 0.3, delay: animationDelay },
         y: { duration: 0.3, delay: animationDelay },
       }}
-      whileHover={{ scale: 1.01 }}
-      whileTap={{ scale: 0.99 }}
+      whileHover={{ scale: 1.005 }}
+      whileTap={{ scale: 0.995 }}
       onClick={onToggle}
-      className={cn(
-        "w-full flex items-center justify-between p-4 rounded-xl transition-all text-left relative overflow-hidden",
-        "border-2",
-        isSelected
-          ? "border-secondary bg-secondary/5 ring-2 ring-secondary/20"
-          : showSuggestPulse
-            ? "border-secondary/20 bg-gradient-to-r from-gray-50 to-secondary/5 hover:bg-secondary/10 hover:border-secondary/40"
-            : "border-gray-100 bg-gray-50 hover:bg-gray-100 hover:border-gray-200"
-      )}
+      className="w-full flex items-center justify-between p-3 text-left relative overflow-hidden transition-all"
+      style={{
+        borderRadius: 12,
+        border: `1px solid ${isSelected ? "#1f3a33" : "#ece9e1"}`,
+        background: isSelected ? "#f5f9f6" : "#fff",
+      }}
     >
-      {/* Subtle shimmer effect when suggesting */}
-      {showSuggestPulse && !isSelected && (
-        <motion.div
-          className="absolute inset-0 bg-gradient-to-r from-transparent via-secondary/10 to-transparent -skew-x-12"
-          initial={{ x: "-100%" }}
-          animate={{ x: "200%" }}
-          transition={{
-            duration: 2.5,
-            repeat: Infinity,
-            delay: animationDelay + 1,
-            ease: "easeInOut",
-            repeatDelay: 4,
-          }}
-        />
-      )}
       <div className="flex items-center gap-3 flex-1 min-w-0 relative z-10">
-        <motion.div
-          animate={{
-            backgroundColor: isSelected ? "rgb(78, 205, 196)" : "rgb(243, 244, 246)",
-            borderColor: isSelected ? "rgb(78, 205, 196)" : "rgb(209, 213, 219)",
+        <div
+          className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 transition-colors"
+          style={{
+            background: isSelected ? "#1f3a33" : "#fff",
+            border: `1px solid ${isSelected ? "#1f3a33" : "#dfdcd4"}`,
           }}
-          className={cn(
-            "w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0",
-            isSelected ? "bg-secondary border-secondary" : "bg-gray-100 border-gray-300"
-          )}
         >
           {isSelected ? (
-            <Check className="w-4 h-4 text-white" />
+            <Check className="w-3.5 h-3.5 text-white" />
           ) : (
-            <Plus className="w-4 h-4 text-gray-400" />
+            <Plus className="w-3 h-3" style={{ color: "#9c9484" }} />
           )}
-        </motion.div>
+        </div>
         <div className="min-w-0">
-          <p className={cn(
-            "font-medium",
-            isSelected ? "text-secondary" : "text-gray-900"
-          )}>
+          <p
+            className="text-[13.5px] font-semibold tracking-[-0.01em]"
+            style={{ color: isSelected ? "#1f3a33" : "#1f1f1d" }}
+          >
             {option.name}
           </p>
           {option.description && (
-            <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{option.description}</p>
+            <p className="text-[12px] text-[#6d6d68] mt-0.5 line-clamp-2 leading-[1.45]">
+              {option.description}
+            </p>
           )}
         </div>
       </div>
       <div className="text-right flex-shrink-0 ml-3 relative z-10">
-        <p className={cn(
-          "font-bold",
-          isSelected ? "text-secondary" : "text-secondary"
-        )}>
+        <p className="text-[13.5px] font-semibold text-[#1f1f1d]">
           +{formatPriceWithCommission(option.price, commissionRate)}€
         </p>
       </div>

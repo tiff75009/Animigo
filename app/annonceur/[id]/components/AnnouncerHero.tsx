@@ -86,14 +86,13 @@ export default function AnnouncerHero({
     }
   };
 
-  const getStatusColor = () => {
+  const getStatusBadgeStyle = (): React.CSSProperties => {
     switch (announcer.statusType) {
       case "professionnel":
-        return "bg-gradient-to-r from-blue-500 to-blue-600 text-white";
       case "micro_entrepreneur":
-        return "bg-gradient-to-r from-purple-500 to-purple-600 text-white";
+        return { background: "#eaf0ed", color: "#2f4a3f" };
       default:
-        return "bg-gray-100 text-gray-700";
+        return { background: "#f3ecdf", color: "#6b4f25" };
     }
   };
 
@@ -122,13 +121,27 @@ export default function AnnouncerHero({
 
       {/* Profile Info Card */}
       <div className="max-w-6xl mx-auto px-4 -mt-16 sm:-mt-20 relative z-10">
-        <div className="bg-white rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1),0_8px_40px_-8px_rgba(0,0,0,0.05)] border border-gray-100/80 overflow-hidden">
+        <div
+          className="bg-white overflow-hidden"
+          style={{
+            borderRadius: 14,
+            border: "1px solid #ece9e1",
+            boxShadow: "0 10px 30px rgba(30,30,28,0.06)",
+          }}
+        >
           {/* Top section with avatar and main info */}
           <div className="p-4 sm:p-6">
             <div className="flex flex-col sm:flex-row gap-4 sm:gap-5">
-              {/* Avatar with status badge */}
+              {/* Avatar */}
               <div className="relative mx-auto sm:mx-0 flex-shrink-0">
-                <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden bg-gray-100 ring-4 ring-white shadow-xl">
+                <div
+                  className="w-24 h-24 sm:w-28 sm:h-28 overflow-hidden bg-white"
+                  style={{
+                    borderRadius: 16,
+                    border: "3px solid #fff",
+                    boxShadow: "0 6px 18px rgba(30,30,28,0.08)",
+                  }}
+                >
                   {announcer.profileImage ? (
                     <Image
                       src={announcer.profileImage}
@@ -138,16 +151,19 @@ export default function AnnouncerHero({
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10">
-                      <User className="w-10 h-10 text-gray-400" />
+                    <div
+                      className="w-full h-full flex items-center justify-center"
+                      style={{ background: "linear-gradient(135deg, #e8efe9, #d4e0d2)" }}
+                    >
+                      <User className="w-10 h-10" style={{ color: "#3a5a40" }} />
                     </div>
                   )}
                 </div>
-                {/* Status badge on avatar */}
-                <div className={cn(
-                  "absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 px-2.5 py-0.5 rounded-full text-xs font-semibold shadow-lg",
-                  getStatusColor()
-                )}>
+                {/* Status badge */}
+                <div
+                  className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 px-2 py-0.5 rounded-full text-[10px] font-medium"
+                  style={getStatusBadgeStyle()}
+                >
                   {getStatusLabel()}
                 </div>
               </div>
@@ -157,165 +173,181 @@ export default function AnnouncerHero({
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                   <div>
                     <Link href={`/profil/${announcer.username || slug}`}>
-                      <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate hover:text-primary transition-colors">
+                      <h1 className="text-lg sm:text-xl font-semibold text-[#1f1f1d] tracking-[-0.01em] truncate hover:text-primary transition-colors m-0">
                         {announcer.firstName} {announcer.lastName.charAt(0)}.
                       </h1>
                     </Link>
                     {announcer.username && (
-                      <span className="text-sm text-gray-400">@{announcer.username}</span>
+                      <span className="text-[12px] text-[#9c9484]">@{announcer.username}</span>
                     )}
                     {announcer.location && (
-                      <div className="flex items-center justify-center sm:justify-start gap-1.5 mt-0.5 text-gray-500 text-sm">
-                        <MapPin className="w-3.5 h-3.5 text-primary" />
+                      <div className="flex items-center justify-center sm:justify-start gap-1 mt-0.5 text-[12px] text-[#6d6d68]">
+                        <MapPin className="w-3 h-3 text-primary" />
                         <span className="truncate">
                           {announcer.location}
                           {formattedDistance && (
-                            <span className="text-gray-400"> · {formattedDistance}</span>
+                            <span className="text-[#9c9484]"> · {formattedDistance}</span>
                           )}
                         </span>
                       </div>
                     )}
                   </div>
 
-                  {/* Verification badges + Voir profil */}
+                  {/* Badges + Voir profil */}
                   <div className="flex flex-wrap justify-center sm:justify-end items-center gap-1.5">
                     {announcer.isIdentityVerified && (
-                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-secondary/10 text-secondary">
-                        <ShieldCheck className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Vérifié</span>
+                      <span
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                        style={{ border: "1px solid #cfdbd3", color: "#2f4a3f" }}
+                      >
+                        <ShieldCheck className="w-3 h-3" />
+                        Vérifié
                       </span>
                     )}
                     {announcer.icadRegistered && (
-                      <span className="px-2 py-1 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-600">
+                      <span
+                        className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                        style={{ border: "1px solid #cfdbd3", color: "#2f4a3f" }}
+                      >
                         I-CAD
                       </span>
                     )}
                     <Link
                       href={`/profil/${announcer.username || slug}`}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all duration-200 shadow-sm hover:shadow-md"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-opacity hover:opacity-90"
+                      style={{ background: "#1f3a33", color: "#f7f5ef" }}
                     >
-                      <UserCircle className="w-3.5 h-3.5" />
+                      <UserCircle className="w-3 h-3" />
                       Voir le profil
                     </Link>
                   </div>
                 </div>
 
                 {/* Stats row */}
-                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 sm:gap-4 mt-3">
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-3">
                   {/* Rating */}
                   {announcer.reviewCount > 0 && (
-                    <div className="flex items-center gap-1.5">
-                      <div className="flex items-center gap-1 px-2 py-1 bg-amber-50 rounded-lg">
-                        <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
-                        <span className="text-sm font-bold text-gray-900">{announcer.rating.toFixed(1)}</span>
-                      </div>
-                      <span className="text-xs text-gray-500">({announcer.reviewCount})</span>
-                    </div>
+                    <span
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                      style={{ border: "1px solid #dfdcd4", color: "#3a3a38" }}
+                    >
+                      <Star className="w-2.5 h-2.5 fill-[#1f2937] text-[#1f2937]" />
+                      {announcer.rating.toFixed(1)} · {announcer.reviewCount}
+                    </span>
                   )}
 
                   {/* Response rate */}
                   {announcer.responseRate && announcer.responseRate >= 90 && (
-                    <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 rounded-lg">
-                      <Zap className="w-3.5 h-3.5 text-green-600" />
-                      <span className="text-xs font-medium text-green-700">{announcer.responseRate}%</span>
-                    </div>
+                    <span
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                      style={{ border: "1px solid #cfdbd3", color: "#2f4a3f" }}
+                    >
+                      <Zap className="w-2.5 h-2.5" />
+                      {announcer.responseRate}%
+                    </span>
                   )}
 
-                  {/* Response time */}
-                  <div className="flex items-center gap-1.5 text-gray-500">
-                    <Clock className="w-3.5 h-3.5" />
-                    <span className="text-xs">{announcer.responseTime}</span>
-                  </div>
+                  <span
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                    style={{ border: "1px solid #dfdcd4", color: "#3a3a38" }}
+                  >
+                    <Clock className="w-2.5 h-2.5" />
+                    {announcer.responseTime}
+                  </span>
 
-                  {/* Member since */}
-                  <div className="hidden sm:flex items-center gap-1.5 text-gray-500">
-                    <Calendar className="w-3.5 h-3.5" />
-                    <span className="text-xs">Depuis {announcer.memberSince}</span>
-                  </div>
+                  <span
+                    className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                    style={{ border: "1px solid #dfdcd4", color: "#3a3a38" }}
+                  >
+                    <Calendar className="w-2.5 h-2.5" />
+                    Depuis {announcer.memberSince}
+                  </span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Divider */}
-          <div className="border-t border-gray-100" />
-
-          {/* Bottom section with zone, trust score, garden, animals */}
-          <div className="px-4 sm:px-6 py-3 sm:py-4 bg-gray-50/50">
-            {/* Row 1: Zone d'intervention, Score de confiance, Jardin */}
-            <div className="flex flex-wrap items-center gap-2 mb-3">
-              {/* Zone d'intervention */}
+          {/* Bottom section */}
+          <div
+            className="px-4 sm:px-6 py-3"
+            style={{ borderTop: "1px solid #f1ede3", background: "#fcfaf4" }}
+          >
+            {/* Row 1: pills */}
+            <div className="flex flex-wrap items-center gap-1.5 mb-2.5">
               {announcer.radius && (
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 border border-blue-200 rounded-full">
-                  <Target className="w-3.5 h-3.5 text-blue-600" />
-                  <span className="text-xs font-medium text-blue-700">
-                    Zone : {announcer.radius} km
-                  </span>
-                </div>
+                <span
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                  style={{ border: "1px solid #dfdcd4", color: "#3a3a38" }}
+                >
+                  <Target className="w-2.5 h-2.5" />
+                  Zone : {announcer.radius} km
+                </span>
               )}
 
-              {/* Score de confiance */}
-              <div className={cn(
-                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border",
-                getTrustScoreColor(trustScore),
-                trustScore >= 90 ? "border-green-200" : trustScore >= 70 ? "border-amber-200" : "border-red-200"
-              )}>
-                <Award className="w-3.5 h-3.5" />
-                <span className="text-xs font-medium">
-                  Confiance : {trustScore}%
-                </span>
-                <span className="text-xs opacity-70">
+              <span
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                style={
+                  trustScore >= 90
+                    ? { border: "1px solid #cfdbd3", color: "#2f4a3f" }
+                    : trustScore >= 70
+                      ? { border: "1px solid #f4e6c1", color: "#7a5b1a" }
+                      : { border: "1px solid #f1cdcd", color: "#8a3a3a" }
+                }
+              >
+                <Award className="w-2.5 h-2.5" />
+                Confiance {trustScore}%
+                <span className="opacity-70">
                   {missionStats.total === 0
                     ? "(Nouveau)"
-                    : `(${missionStats.completed} mission${missionStats.completed > 1 ? "s" : ""})`
-                  }
+                    : `(${missionStats.completed} mission${missionStats.completed > 1 ? "s" : ""})`}
                 </span>
-              </div>
+              </span>
 
-              {/* Jardin */}
               {announcer.equipment.hasGarden && (
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-50 border border-green-200 rounded-full">
-                  <TreePine className="w-3.5 h-3.5 text-green-600" />
-                  <span className="text-xs font-medium text-green-700">
-                    Jardin{announcer.equipment.gardenSize ? ` (${announcer.equipment.gardenSize})` : ""}
-                  </span>
-                </div>
+                <span
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                  style={{ border: "1px solid #cfdbd3", color: "#2f4a3f" }}
+                >
+                  <TreePine className="w-2.5 h-2.5" />
+                  Jardin{announcer.equipment.gardenSize ? ` (${announcer.equipment.gardenSize})` : ""}
+                </span>
               )}
             </div>
 
-            {/* Row 2: Stats missions détaillées (si missions existantes) */}
+            {/* Row 2: stats missions */}
             {missionStats.total > 0 && (
-              <div className="flex flex-wrap items-center gap-3 mb-3 text-xs">
-                <div className="flex items-center gap-1 text-green-600">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>{missionStats.completed} terminée{missionStats.completed > 1 ? "s" : ""}</span>
-                </div>
+              <div className="flex flex-wrap items-center gap-2.5 mb-2 text-[11px]">
+                <span className="inline-flex items-center gap-1" style={{ color: "#2f4a3f" }}>
+                  <CheckCircle2 className="w-3 h-3" />
+                  {missionStats.completed} terminée{missionStats.completed > 1 ? "s" : ""}
+                </span>
                 {missionStats.cancelled > 0 && (
-                  <div className="flex items-center gap-1 text-amber-600">
-                    <XCircle className="w-3.5 h-3.5" />
-                    <span>{missionStats.cancelled} annulée{missionStats.cancelled > 1 ? "s" : ""}</span>
-                  </div>
+                  <span className="inline-flex items-center gap-1" style={{ color: "#7a5b1a" }}>
+                    <XCircle className="w-3 h-3" />
+                    {missionStats.cancelled} annulée{missionStats.cancelled > 1 ? "s" : ""}
+                  </span>
                 )}
                 {missionStats.refused > 0 && (
-                  <div className="flex items-center gap-1 text-red-600">
-                    <XCircle className="w-3.5 h-3.5" />
-                    <span>{missionStats.refused} refusée{missionStats.refused > 1 ? "s" : ""}</span>
-                  </div>
+                  <span className="inline-flex items-center gap-1" style={{ color: "#8a3a3a" }}>
+                    <XCircle className="w-3 h-3" />
+                    {missionStats.refused} refusée{missionStats.refused > 1 ? "s" : ""}
+                  </span>
                 )}
               </div>
             )}
 
-            {/* Row 3: Animaux de l'annonceur */}
+            {/* Row 3: Animaux */}
             {announcer.ownAnimals.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5 mb-3">
-                <span className="text-xs font-medium text-gray-500 mr-1 flex items-center gap-1">
-                  <PawPrint className="w-3 h-3" />
-                  Ses animaux :
+              <div className="flex flex-wrap items-center gap-1 mb-2.5">
+                <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mr-1 inline-flex items-center gap-1">
+                  <PawPrint className="w-2.5 h-2.5" />
+                  Ses animaux
                 </span>
                 {announcer.ownAnimals.map((animal, index) => (
                   <span
                     key={animal.id || index}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-gray-200 rounded-full text-xs font-medium text-gray-700"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                    style={{ background: "#fff", border: "1px solid #dfdcd4", color: "#3a3a38" }}
                   >
                     <span>{animalEmojis[animal.type.toLowerCase()] || "🐾"}</span>
                     <span>{animal.name}</span>
@@ -324,28 +356,29 @@ export default function AnnouncerHero({
               </div>
             )}
 
-            {/* Bio / Description */}
+            {/* Bio */}
             {announcer.bio && (
               <div>
-                <p className={cn(
-                  "text-gray-600 text-sm leading-relaxed",
-                  !isBioExpanded && "line-clamp-2"
-                )}>
+                <p
+                  className={cn(
+                    "text-[12.5px] leading-[1.55] text-[#4a4a46]",
+                    !isBioExpanded && "line-clamp-2"
+                  )}
+                >
                   {announcer.bio}
                 </p>
 
-                {/* Bouton "Voir plus" si bio longue */}
                 {announcer.bio.length > 120 && (
                   <button
                     onClick={() => setIsBioExpanded(!isBioExpanded)}
-                    className="mt-1.5 text-xs font-medium text-primary flex items-center gap-0.5 hover:underline"
+                    className="mt-1 text-[11px] font-medium text-[#1f3a33] inline-flex items-center gap-0.5 hover:underline"
                   >
                     <span>{isBioExpanded ? "Voir moins" : "Voir plus"}</span>
                     <motion.div
                       animate={{ rotate: isBioExpanded ? 180 : 0 }}
                       transition={{ duration: 0.2 }}
                     >
-                      <ChevronDown className="w-3.5 h-3.5" />
+                      <ChevronDown className="w-3 h-3" />
                     </motion.div>
                   </button>
                 )}

@@ -593,6 +593,64 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.32.0 - Refonte UX/UI page annonceur : wizard reservation, calendrier hotel et systeme de design unifie
+
+- **Systeme de design coherent** aligne sur les cards de resultats de recherche
+  - Palette : dark green `#1f3a33` (CTA), pastel green `#f5f9f6`/`#cfdbd3`, cream `#fcfaf4`/`#f7f5ef`, bordures fines `#ece9e1`/`#f1ede3`
+  - Typographie : eyebrow `text-[10px] uppercase tracking-[0.1em] #9c9484`, titres `font-semibold tracking-[-0.01em]`
+  - Composants `StepCard`, `StepHeader`, `StepNav` factorises (`app/annonceur/[id]/components/booking/steps/`)
+
+- **Wizard de reservation refondu** (`AnnouncerFormules.tsx`)
+  - Header service compact : icone `rounded-2xl` cream + eyebrow "Reservation" + titre fin
+  - Indicateur d'etapes horizontal en pill bar `rounded-full` avec etape active `#1f3a33`, completees vert pastel, separateurs fins
+  - Barre verticale (`BookingStepBar`) : etapes `formule -> dog -> animals -> location -> dates -> options` (sync horizontal)
+  - Hook `useBookingSteps` enrichi : ajout etape "Votre animal" (verification chien/chat invites) + etape "Lieu" toujours visible apres formule
+
+- **Calendrier de reservation style hotel** (`BookingCalendar.tsx`)
+  - **Mode Garde (range picker)** : un seul calendrier avec selection arrivee/depart en cercles noirs pleins, jours intermediaires en `rgba(31,31,29,0.10)`, bandeaux de connexion (effet pill continu)
+  - **Hover preview du range** : survoler une date apres click sur arrivee montre la plage potentielle en temps reel
+  - **2 mois cote-a-cote sur desktop** (`lg+`), 1 mois sur mobile, navigation commune
+  - **Vue date + horaires unifiee** : pavés Arrivee/Depart en haut, calendrier au milieu, deux blocs horaires (arrivee/depart) cote-a-cote en bas
+  - **Mode services** : single page avec calendrier + bloc horaires visibles ensemble (suppression des transitions calendrier->heure)
+  - **Composant `TimeGrid`** : sectionnement automatique Matin / Apres-midi / Soir avec eyebrow et separateur fin
+
+- **Refonte vues Collectif et Multi-seances** (`CollectiveSlotPicker`, `MultiSessionCalendar`)
+  - Cellules style hotel `rounded-full` noir plein quand selectionne avec heure choisie affichee a l'interieur
+  - Vue heure : pills outline avec section auto-fill ("memes creneaux ?") en pastel green
+  - Vue repliee : avatar Check dark green + pills sessions confirmees
+
+- **Sidebar droite (`AnnouncerBookingCard` + `BookingSummary`)**
+  - Card principale : `radius 14`, prix `text-[22px] semibold tracking-[-0.02em]`
+  - Quick stats (taux/temps reponse) en cards cream
+  - Card formule selectionnee en pastel green dark green
+  - CTA "Verifier" pill outline `#1f3a33` (secondaire) + "Finaliser" pill plein dark green (principal)
+  - Trust badge "Reservation securisee" : avatar rond pastel green + Shield dark green
+
+- **Composants page annonceur refondus** (cards de recherche style)
+  - `AnnouncerHero` : avatar carre shadow douce, badges status pastel, stats en pills outline, footer cream
+  - `AnnouncerTabs` : pill bar `rounded-full` avec onglet actif dark green
+  - `AnnouncerProfile` : headers eyebrow + bordures fines (A propos / Compagnons / Galerie)
+  - `AnnouncerReviews` : eyebrow + bordures `#ece9e1`, avatars pastel vert, etoiles fines, CTA dark green
+  - `AddressSelector` : header eyebrow + cards d'adresse bordure fine
+
+- **Cards et inputs du wizard**
+  - `SelectableFormuleCard` : titre fin, prix sobre, pills outline, CTA dark green
+  - `SelectableOptionCard` : bordure fine, checkbox dark green, palette neutre
+  - `ServiceLocationSelector` : 2 cards 1ligne avec icone en wrapper carre
+  - `GuestAnimalVerification` : selecteur Chien/Chat horizontal dark green
+  - `GuestDogVerification` / `GuestCatVerification` : header eyebrow + info pill cream
+
+- **Boutons CTA Options step**
+  - "Verifier la reservation" pill outline `#1f3a33`
+  - "Finaliser la reservation" pill plein dark green (CTA principal)
+  - Grille 2 colonnes responsive avec separateur fin `#f1ede3`
+
+- **Corrections legendes calendrier**
+  - Suppression de l'entree "Selectionne" (la cellule selectionnee est un rond noir explicite, pas un dot)
+  - Ajout du composant `LegendCellSample` : reproduit le rendu reel d'une cellule pour le mode Garde non-capacity (echantillons mini avec chiffre + line-through)
+  - `MultiSessionCalendar` : ajout conditionnel "Intervalle non respecte" (gris) si `sessionInterval > 0`
+  - `CollectiveSlotPicker` : suppression du dot blanc invisible sur cellules selectionnees, legende limitee a "Disponible" + "Intervalle non respecte" conditionnel
+
 ### v0.31.0 - Page detail formule, photos par formule et SEO local
 
 - **Nouvelle page publique `/formule/[id]`** (`app/formule/[id]/page.tsx`)

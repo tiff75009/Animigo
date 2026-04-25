@@ -154,15 +154,25 @@ export default function AnnouncerBookingCard({
           onFinalize={onFinalize}
         />
 
-        {/* Trust badges */}
-        <div className="p-4 bg-white rounded-xl border border-gray-100">
+        {/* Trust badge */}
+        <div
+          className="p-3 bg-white"
+          style={{ borderRadius: 14, border: "1px solid #ece9e1" }}
+        >
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-secondary/10 rounded-lg">
-              <Shield className="w-5 h-5 text-secondary" />
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ background: "#f5f9f6", border: "1px solid #cfdbd3" }}
+            >
+              <Shield className="w-4 h-4" style={{ color: "#1f3a33" }} />
             </div>
-            <div>
-              <p className="font-medium text-gray-900">Réservation sécurisée</p>
-              <p className="text-xs text-gray-500">Paiement protégé, assurance incluse</p>
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold text-[#1f1f1d] tracking-[-0.01em]">
+                Réservation sécurisée
+              </p>
+              <p className="text-[11px] text-[#6d6d68]">
+                Paiement protégé, assurance incluse
+              </p>
             </div>
           </div>
         </div>
@@ -196,75 +206,94 @@ export default function AnnouncerBookingCard({
 
   return (
     <div className="sticky top-36">
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-        {/* Header */}
-        <div className="p-5 bg-gradient-to-r from-primary/5 via-secondary/5 to-purple/5 border-b border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">
+      <div
+        className="bg-white overflow-hidden"
+        style={{ borderRadius: 14, border: "1px solid #ece9e1" }}
+      >
+        {/* Header — eyebrow + prix */}
+        <div className="p-5" style={{ borderBottom: "1px solid #f1ede3" }}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-1">
                 {selectedService ? selectedService.categoryName : "À partir de"}
-              </p>
+              </div>
               {hasPrice ? (
-                <p className="text-2xl font-bold text-gray-900">
+                <p className="text-[22px] font-semibold text-[#1f1f1d] tracking-[-0.02em]">
                   {formatPrice(calculatePriceWithCommission(displayPrice, commissionRate))}€
-                  <span className="text-sm font-normal text-gray-500">{displayUnit}</span>
+                  <span className="text-[11px] font-normal text-[#6d6d68] ml-1">{displayUnit}</span>
                 </p>
               ) : (
-                <p className="text-lg font-medium text-gray-500">
+                <p className="text-[14px] font-semibold text-[#9c9484] tracking-[-0.01em]">
                   Prix sur demande
                 </p>
               )}
             </div>
-            <div className="flex items-center gap-1 px-2.5 py-1 bg-emerald-50 rounded-full">
-              <span className="w-2 h-2 bg-emerald-500 rounded-full" />
-              <span className="text-xs font-medium text-emerald-700">
-                Dispo. {nextAvailable}
-              </span>
-            </div>
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium flex-shrink-0 mt-1"
+              style={{ border: "1px solid #cfdbd3", color: "#2f4a3f", background: "#fff" }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#2f4a3f" }} />
+              Dispo. {nextAvailable}
+            </span>
           </div>
         </div>
 
         {/* Content */}
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-3">
           {/* Quick stats */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 bg-gray-50 rounded-xl text-center">
-              <p className="text-2xl font-bold text-primary">{responseRate}%</p>
-              <p className="text-xs text-gray-500">Taux de réponse</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div
+              className="p-3 text-center"
+              style={{ borderRadius: 12, background: "#fcfaf4", border: "1px solid #f1ede3" }}
+            >
+              <p className="text-[18px] font-semibold text-[#1f1f1d] tracking-[-0.01em]">
+                {responseRate}%
+              </p>
+              <p className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mt-0.5">
+                Taux de réponse
+              </p>
             </div>
-            <div className="p-3 bg-gray-50 rounded-xl text-center">
-              <p className="text-2xl font-bold text-secondary">{responseTime}</p>
-              <p className="text-xs text-gray-500">Temps de réponse</p>
+            <div
+              className="p-3 text-center"
+              style={{ borderRadius: 12, background: "#fcfaf4", border: "1px solid #f1ede3" }}
+            >
+              <p className="text-[18px] font-semibold text-[#1f1f1d] tracking-[-0.01em]">
+                {responseTime}
+              </p>
+              <p className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mt-0.5">
+                Temps de réponse
+              </p>
             </div>
           </div>
 
           {/* Services Selection */}
-          <div className={cn(
-            "border rounded-xl overflow-hidden transition-colors",
-            selectedServiceId ? "border-primary/50 ring-2 ring-primary/20" : "border-gray-200"
-          )}>
+          <div
+            className="overflow-hidden transition-colors"
+            style={{
+              borderRadius: 12,
+              border: `1px solid ${selectedServiceId ? "#1f3a33" : "#ece9e1"}`,
+            }}
+          >
             <button
               onClick={() => setIsServicesExpanded(!isServicesExpanded)}
-              className={cn(
-                "w-full p-3 flex items-center justify-between transition-colors",
-                selectedServiceId ? "bg-primary/5 hover:bg-primary/10" : "bg-gray-50 hover:bg-gray-100"
-              )}
+              className="w-full p-3 flex items-center justify-between transition-colors hover:bg-[#f7f5ef]"
+              style={{ background: selectedServiceId ? "#f5f9f6" : "#fff" }}
             >
               <div className="flex items-center gap-2">
                 {selectedService && (
-                  <span className="text-lg">{selectedService.categoryIcon}</span>
+                  <span className="text-[16px]">{selectedService.categoryIcon}</span>
                 )}
-                <span className={cn(
-                  "font-medium",
-                  selectedServiceId ? "text-primary" : "text-gray-900"
-                )}>
+                <span
+                  className="text-[13.5px] font-semibold tracking-[-0.01em]"
+                  style={{ color: selectedServiceId ? "#1f3a33" : "#1f1f1d" }}
+                >
                   {selectedService ? selectedService.categoryName : "Choisir une prestation"}
                 </span>
               </div>
               {isServicesExpanded ? (
-                <ChevronUp className="w-5 h-5 text-gray-500" />
+                <ChevronUp className="w-4 h-4" style={{ color: "#9c9484" }} />
               ) : (
-                <ChevronDown className="w-5 h-5 text-gray-500" />
+                <ChevronDown className="w-4 h-4" style={{ color: "#9c9484" }} />
               )}
             </button>
 
@@ -276,7 +305,10 @@ export default function AnnouncerBookingCard({
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <div className="max-h-[300px] overflow-y-auto">
+                  <div
+                    className="max-h-[300px] overflow-y-auto"
+                    style={{ borderTop: "1px solid #f1ede3" }}
+                  >
                     {services.map((service, index) => {
                       const isSelected = service.id === selectedServiceId;
                       const { price: serviceMinPrice, unit: serviceUnit } = getServiceBestPrice(service, commissionRate);
@@ -288,39 +320,40 @@ export default function AnnouncerBookingCard({
                             onServiceChange?.(service.id.toString());
                             setIsServicesExpanded(false);
                           }}
-                          className={cn(
-                            "w-full p-3 text-left transition-colors",
-                            index > 0 && "border-t border-gray-100",
-                            isSelected
-                              ? "bg-primary/10"
-                              : "hover:bg-gray-50"
-                          )}
+                          className="w-full p-3 text-left transition-colors hover:bg-[#fafafa]"
+                          style={{
+                            background: isSelected ? "#f5f9f6" : "transparent",
+                            borderTop: index > 0 ? "1px solid #f1ede3" : "none",
+                          }}
                         >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-lg">{service.categoryIcon}</span>
-                              <div>
-                                <p className={cn(
-                                  "text-sm font-semibold",
-                                  isSelected ? "text-primary" : "text-gray-900"
-                                )}>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-[16px] flex-shrink-0">{service.categoryIcon}</span>
+                              <div className="min-w-0">
+                                <p
+                                  className="text-[13px] font-semibold tracking-[-0.01em] truncate"
+                                  style={{ color: isSelected ? "#1f3a33" : "#1f1f1d" }}
+                                >
                                   {service.categoryName}
                                 </p>
-                                <p className="text-xs text-gray-500">
+                                <p className="text-[11px] text-[#6d6d68] truncate">
                                   {service.formules.length} formule{service.formules.length > 1 ? "s" : ""}
-                                  {service.options.length > 0 && ` • ${service.options.length} option${service.options.length > 1 ? "s" : ""}`}
+                                  {service.options.length > 0 && ` · ${service.options.length} option${service.options.length > 1 ? "s" : ""}`}
                                 </p>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-shrink-0">
                               {serviceMinPrice > 0 && (
-                                <span className="text-sm font-bold text-primary whitespace-nowrap">
+                                <span className="text-[13px] font-semibold text-[#1f1f1d] whitespace-nowrap">
                                   {formatPrice(calculatePriceWithCommission(serviceMinPrice, commissionRate))}€{serviceUnit}
                                 </span>
                               )}
                               {isSelected && (
-                                <div className="w-5 h-5 bg-primary rounded-full flex items-center justify-center">
-                                  <Check className="w-3 h-3 text-white" />
+                                <div
+                                  className="w-4 h-4 rounded-full flex items-center justify-center"
+                                  style={{ background: "#1f3a33" }}
+                                >
+                                  <Check className="w-2.5 h-2.5 text-white" />
                                 </div>
                               )}
                             </div>
@@ -335,39 +368,57 @@ export default function AnnouncerBookingCard({
           </div>
 
           {/* Instructions */}
-          <p className="text-sm text-gray-500 text-center">
-            Sélectionnez un service puis choisissez une formule ci-dessous
+          <p className="text-[12px] text-[#9c9484] text-center px-2">
+            Sélectionnez un service puis choisissez une formule ci-dessous.
           </p>
 
-          {/* CTA Buttons */}
+          {/* Bouton contact */}
           <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+            whileHover={{ scale: 1.005 }}
+            whileTap={{ scale: 0.995 }}
             onClick={onContact}
-            className="w-full py-3.5 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
+            className="w-full py-2.5 px-4 rounded-full text-[13px] font-medium transition-colors flex items-center justify-center gap-2"
+            style={{
+              background: "#fff",
+              border: "1px solid #1f3a33",
+              color: "#1f3a33",
+            }}
           >
-            <MessageCircle className="w-4 h-4" />
-            Contacter
+            <MessageCircle className="w-3.5 h-3.5" />
+            Contacter le prestataire
           </motion.button>
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 bg-gray-50 border-t border-gray-100">
-          <p className="text-xs text-center text-gray-500">
+        <div
+          className="px-5 py-3"
+          style={{ background: "#fcfaf4", borderTop: "1px solid #f1ede3" }}
+        >
+          <p className="text-[11px] text-center font-medium" style={{ color: "#6d6d68" }}>
             Annulation gratuite jusqu&apos;à 48h avant
           </p>
         </div>
       </div>
 
-      {/* Trust badges */}
-      <div className="mt-4 p-4 bg-white rounded-xl border border-gray-100">
+      {/* Trust badge - card cohérente */}
+      <div
+        className="mt-3 p-3 bg-white"
+        style={{ borderRadius: 14, border: "1px solid #ece9e1" }}
+      >
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-secondary/10 rounded-lg">
-            <Shield className="w-5 h-5 text-secondary" />
+          <div
+            className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{ background: "#f5f9f6", border: "1px solid #cfdbd3" }}
+          >
+            <Shield className="w-4 h-4" style={{ color: "#1f3a33" }} />
           </div>
-          <div>
-            <p className="font-medium text-gray-900">Réservation sécurisée</p>
-            <p className="text-xs text-gray-500">Paiement protégé, assurance incluse</p>
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-[#1f1f1d] tracking-[-0.01em]">
+              Réservation sécurisée
+            </p>
+            <p className="text-[11px] text-[#6d6d68]">
+              Paiement protégé, assurance incluse
+            </p>
           </div>
         </div>
       </div>

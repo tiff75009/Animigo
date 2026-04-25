@@ -179,6 +179,9 @@ export default memo(function BookingCalendar({
   // State pour le flux en étapes du mode garde
   const [rangeStep, setRangeStep] = useState<RangeStep>("start_date");
 
+  // État pour le hover preview du range (style hôtel)
+  const [hoveredDate, setHoveredDate] = useState<string | null>(null);
+
   // État pour la vue repliée en mode non-garde
   const [isNonRangeCollapsed, setIsNonRangeCollapsed] = useState(false);
 
@@ -261,35 +264,45 @@ export default memo(function BookingCalendar({
     return generateTimeSlots(Math.floor(startHour), Math.floor(endHour), 30);
   }, [acceptReservationsFrom, acceptReservationsTo]);
 
-  // Handle date click pour le flux en étapes
+  // Handle date click — logique range Airbnb (un seul calendrier)
   const handleDateClick = (dateStr: string) => {
     if (isRangeMode) {
-      if (rangeStep === "start_date") {
-        // Étape 1: sélection de la date de début
+      // Cas 1 : pas de date de début → on définit le début
+      if (!selectedDate) {
+        onDateSelect(dateStr);
+        onEndDateSelect(null);
+        return;
+      }
+
+      // Cas 2 : date de début seulement, click >= début → on définit la fin
+      if (selectedDate && !selectedEndDate && dateStr >= selectedDate) {
+        onEndDateSelect(dateStr);
+        return;
+      }
+
+      // Cas 3 : date de début seulement, click < début → on redéfinit le début
+      if (selectedDate && !selectedEndDate && dateStr < selectedDate) {
+        onDateSelect(dateStr);
+        onEndDateSelect(null);
+        return;
+      }
+
+      // Cas 4 : plage complète, on reset et on définit un nouveau début
+      if (selectedDate && selectedEndDate) {
         onDateSelect(dateStr);
         onEndDateSelect(null);
         onTimeSelect("");
         onEndTimeSelect("");
-        setRangeStep("start_time");
-      } else if (rangeStep === "end_date") {
-        // Étape 3: sélection de la date de fin
-        if (dateStr >= selectedDate!) {
-          onEndDateSelect(dateStr);
-          setRangeStep("end_time");
-        } else {
-          // Si date avant date de début, recommencer
-          onDateSelect(dateStr);
-          onEndDateSelect(null);
-          onTimeSelect("");
-          onEndTimeSelect("");
-          setRangeStep("start_time");
-        }
+        return;
       }
     } else {
+      // Mode services : changement de date → reset des heures si date différente
+      if (selectedDate !== dateStr) {
+        onTimeSelect("");
+        onEndTimeSelect("");
+      }
       onDateSelect(dateStr);
       onEndDateSelect(null);
-      // Passer à la vue créneaux horaires
-      setNonRangeView("time");
     }
   };
 
@@ -336,15 +349,16 @@ export default memo(function BookingCalendar({
   };
 
   // Generate calendar days
-  const generateCalendarDays = () => {
+  const generateCalendarDays = (monthOverride?: Date) => {
+    const month = monthOverride ?? calendarMonth;
     const firstDay = new Date(
-      calendarMonth.getFullYear(),
-      calendarMonth.getMonth(),
+      month.getFullYear(),
+      month.getMonth(),
       1
     );
     const lastDay = new Date(
-      calendarMonth.getFullYear(),
-      calendarMonth.getMonth() + 1,
+      month.getFullYear(),
+      month.getMonth() + 1,
       0
     );
     const startPadding = (firstDay.getDay() + 6) % 7;
@@ -360,8 +374,8 @@ export default memo(function BookingCalendar({
 
     // Days
     for (let d = 1; d <= lastDay.getDate(); d++) {
-      const dateStr = `${calendarMonth.getFullYear()}-${String(
-        calendarMonth.getMonth() + 1
+      const dateStr = `${month.getFullYear()}-${String(
+        month.getMonth() + 1
       ).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
       const isPast = dateStr < todayStr;
       const availability = availabilityCalendar?.find((a) => a.date === dateStr);
@@ -383,80 +397,133 @@ export default memo(function BookingCalendar({
         selectedEndDate &&
         dateStr > selectedDate &&
         dateStr < selectedEndDate;
+      // Hover preview : quand on a une date d'arrivée mais pas de départ, surligner la plage potentielle
+      const isInHoverPreview =
+        isRangeMode &&
+        selectedDate &&
+        !selectedEndDate &&
+        hoveredDate &&
+        hoveredDate > selectedDate &&
+        dateStr > selectedDate &&
+        dateStr < hoveredDate;
+      const isHoveredEnd =
+        isRangeMode &&
+        selectedDate &&
+        !selectedEndDate &&
+        hoveredDate === dateStr &&
+        dateStr > selectedDate;
 
       const isDisabled =
         status === "past" ||
         (status === "unavailable" && (!hasCapacityInfo || remainingCapacity === 0));
 
-      // Déterminer la couleur du point pour les services de garde (capacity-based)
-      const getCapacityDotColor = () => {
+      // Couleur indicateur palette sobre
+      const getCapacityDotColor = (): string | null => {
         if (!hasCapacityInfo) return null;
-        if (remainingCapacity === 0) return "bg-red-500";
-        if (remainingCapacity < (maxAnimalsPerSlot ?? 1)) return "bg-amber-500";
-        return "bg-emerald-500";
+        if (remainingCapacity === 0) return "#c45656";
+        if (remainingCapacity < (maxAnimalsPerSlot ?? 1)) return "#c9a14a";
+        return "#2f4a3f";
       };
       const capacityDotColor = getCapacityDotColor();
+      const isHighlighted = isSelected || isEndSelected;
+      const isToday = dateStr === todayStr;
+
+      // Style hôtel : noir avec opacité sur la plage, noir plein sur les extrémités
+      const RANGE_BG = "rgba(31,31,29,0.10)";
+      const ENDPOINT_BG = "#1f1f1d";
+
+      // Range visuel = plage confirmée OU hover preview (style hôtel)
+      const isRangeVisible = isInRange || isInHoverPreview;
+      // Bandeaux étendus pour la continuité visuelle
+      const showRightBandFromStart =
+        isSelected && (selectedEndDate || (hoveredDate && hoveredDate > dateStr));
+      const showLeftBandToEnd =
+        (isEndSelected && selectedDate && selectedDate !== dateStr) ||
+        (isHoveredEnd && selectedDate && selectedDate !== dateStr);
 
       elements.push(
-        <button
+        <div
           key={dateStr}
-          disabled={isDisabled}
-          onClick={() => handleDateClick(dateStr)}
-          className={cn(
-            "aspect-square flex flex-col items-center justify-center text-sm rounded-lg transition-colors relative",
-            status === "past" && "text-gray-300 cursor-not-allowed",
-            status === "unavailable" &&
-              !hasCapacityInfo &&
-              "text-gray-300 bg-gray-50 cursor-not-allowed",
-            // Mode garde: styles basés sur la capacité
-            hasCapacityInfo &&
-              remainingCapacity === 0 &&
-              "text-gray-400 cursor-not-allowed",
-            hasCapacityInfo &&
-              remainingCapacity > 0 &&
-              "hover:bg-gray-100",
-            // Mode standard
-            status === "partial" && !hasCapacityInfo && "text-amber-600 bg-amber-50",
-            status === "available" && !hasCapacityInfo && "hover:bg-gray-100",
-            (isSelected || isEndSelected) && "bg-primary text-white hover:bg-primary",
-            isInRange && "bg-primary/20"
-          )}
+          className="relative aspect-square"
+          onMouseEnter={() => !isDisabled && setHoveredDate(dateStr)}
+          onMouseLeave={() => setHoveredDate(null)}
         >
-          {/* Numéro du jour */}
-          <span className={cn(
-            status === "unavailable" && !hasCapacityInfo && "line-through",
-            hasCapacityInfo && remainingCapacity === 0 && "text-gray-400"
-          )}>
-            {d}
-          </span>
-
-          {/* Point coloré pour le mode garde (capacity-based) */}
-          {hasCapacityInfo && !isSelected && !isEndSelected && !isInRange && status !== "past" && (
-            <div className={cn(
-              "w-1.5 h-1.5 rounded-full mt-0.5",
-              capacityDotColor
-            )} />
+          {/* Plage : fond noir 10% (confirmée ou hover preview) */}
+          {isRangeVisible && (
+            <div className="absolute inset-0" style={{ background: RANGE_BG }} />
+          )}
+          {/* Bandeau partant de la date d'arrivée vers la droite */}
+          {showRightBandFromStart && (
+            <div
+              className="absolute inset-y-0 right-0 w-1/2"
+              style={{ background: RANGE_BG }}
+            />
+          )}
+          {/* Bandeau venant de la gauche jusqu'à la date de départ */}
+          {showLeftBandToEnd && (
+            <div
+              className="absolute inset-y-0 left-0 w-1/2"
+              style={{ background: RANGE_BG }}
+            />
           )}
 
-          {/* Affichage du nombre de places restantes en mode garde */}
-          {hasCapacityInfo && remainingCapacity > 0 && !isSelected && !isEndSelected && (
+          <button
+            disabled={isDisabled}
+            onClick={() => handleDateClick(dateStr)}
+            className={cn(
+              "group relative w-full h-full flex flex-col items-center justify-center rounded-full transition-all",
+              !isDisabled && !isHighlighted && !isRangeVisible && !isHoveredEnd && "hover:bg-[#1f1f1d] hover:text-white",
+              !isDisabled && isRangeVisible && "hover:bg-[rgba(31,31,29,0.20)]"
+            )}
+            style={{
+              background: isHighlighted || isHoveredEnd ? ENDPOINT_BG : "transparent",
+              color: isHighlighted || isHoveredEnd
+                ? "#fff"
+                : status === "past"
+                  ? "#cdc9c0"
+                  : (status === "unavailable" && !hasCapacityInfo) ||
+                      (hasCapacityInfo && remainingCapacity === 0)
+                    ? "#cdc9c0"
+                    : "#1f1f1d",
+              cursor: isDisabled ? "not-allowed" : "pointer",
+              textDecoration:
+                status === "unavailable" && !hasCapacityInfo && !isHighlighted
+                  ? "line-through"
+                  : "none",
+            }}
+          >
+            {isToday && !isHighlighted && (
+              <div
+                className="absolute inset-0 rounded-full pointer-events-none"
+                style={{ border: "1px solid #1f1f1d" }}
+              />
+            )}
             <span
-              className={cn(
-                "text-[9px] leading-none font-medium mt-0.5",
-                remainingCapacity < (maxAnimalsPerSlot ?? 1)
-                  ? "text-amber-600"
-                  : "text-emerald-600"
-              )}
+              className="text-[14px]"
+              style={{ fontWeight: isHighlighted ? 600 : isToday ? 600 : 400 }}
             >
-              {remainingCapacity}
+              {d}
             </span>
-          )}
 
-          {/* Mode standard: indicateur indispo */}
-          {status === "unavailable" && !hasCapacityInfo && (
-            <span className="text-[8px] leading-none text-gray-400">indispo</span>
-          )}
-        </button>
+            {hasCapacityInfo && !isHighlighted && status !== "past" && (
+              <div
+                className="w-1 h-1 rounded-full mt-0.5 transition-opacity group-hover:opacity-0"
+                style={{ background: capacityDotColor || "transparent" }}
+              />
+            )}
+
+            {hasCapacityInfo && remainingCapacity > 0 && !isHighlighted && (
+              <span
+                className="text-[9px] leading-none font-semibold transition-opacity group-hover:opacity-0"
+                style={{
+                  color: remainingCapacity < (maxAnimalsPerSlot ?? 1) ? "#c9a14a" : "#2f4a3f",
+                }}
+              >
+                {remainingCapacity}
+              </span>
+            )}
+          </button>
+        </div>
       );
     }
 
@@ -568,13 +635,13 @@ export default memo(function BookingCalendar({
       const isSelected = selectedDate === dateStr;
       const isDisabled = status === "past" || status === "unavailable";
 
-      // Déterminer la couleur du point indicateur
-      const getIndicatorColor = () => {
+      // Couleur de l'indicateur (palette sobre alignée cards)
+      const getIndicatorColor = (): string | null => {
         if (isPast) return null;
-        if (isSelected) return "bg-primary";
-        if (status === "unavailable") return "bg-red-500";
-        if (status === "partial") return "bg-amber-500";
-        return "bg-green-500";
+        if (isSelected) return null;
+        if (status === "unavailable") return "#c45656";
+        if (status === "partial") return "#c9a14a";
+        return "#2f4a3f";
       };
       const indicatorColor = getIndicatorColor();
 
@@ -584,25 +651,41 @@ export default memo(function BookingCalendar({
           disabled={isDisabled}
           onClick={() => handleDateClick(dateStr)}
           className={cn(
-            "relative aspect-square flex flex-col items-center justify-center rounded-xl transition-all",
-            isPast && "opacity-40 cursor-not-allowed",
-            isToday && "ring-2 ring-primary/50",
-            !isDisabled && "hover:bg-primary/10 cursor-pointer",
-            isSelected && "bg-primary/15",
-            status === "unavailable" && !isPast && "text-gray-400 bg-gray-50 cursor-not-allowed"
+            "group relative aspect-square flex flex-col items-center justify-center rounded-full transition-all",
+            !isDisabled && !isSelected && "hover:bg-[#1f1f1d] hover:text-white",
+            !isDisabled && "cursor-pointer"
           )}
+          style={{
+            background: isSelected ? "#1f1f1d" : "transparent",
+            color: isSelected
+              ? "#fff"
+              : isPast
+                ? "#cdc9c0"
+                : status === "unavailable"
+                  ? "#cdc9c0"
+                  : "#1f1f1d",
+            cursor: isDisabled ? "not-allowed" : "pointer",
+            textDecoration: status === "unavailable" && !isPast && !isSelected ? "line-through" : "none",
+          }}
         >
-          <span className={cn(
-            "text-sm font-medium",
-            isToday && "text-primary font-bold",
-            isSelected && "text-primary"
-          )}>
+          {isToday && !isSelected && (
+            <div
+              className="absolute inset-0 rounded-full pointer-events-none"
+              style={{ border: "1px solid #1f1f1d" }}
+            />
+          )}
+          <span
+            className="text-[14px]"
+            style={{ fontWeight: isSelected ? 600 : isToday ? 600 : 400 }}
+          >
             {d}
           </span>
 
-          {/* Indicateur de disponibilité */}
           {indicatorColor && !isPast && (
-            <div className={cn("w-2 h-2 rounded-full mt-0.5", indicatorColor)} />
+            <div
+              className="w-1 h-1 rounded-full mt-0.5 transition-opacity group-hover:opacity-0"
+              style={{ background: indicatorColor }}
+            />
           )}
         </button>
       );
@@ -612,336 +695,361 @@ export default memo(function BookingCalendar({
   };
 
   if (!isRangeMode) {
-    // Vue repliée quand la sélection est complète
-    if (isNonRangeCollapsed && isNonRangeComplete) {
-      return (
-        <div className="bg-white rounded-2xl p-5 border border-gray-100">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <Check className="w-5 h-5 text-green-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">Créneau sélectionné</h3>
-                  <p className="text-sm text-gray-500">Réservation confirmée</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsNonRangeCollapsed(false)}
-                className="px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
-              >
-                Modifier
-              </button>
-            </div>
+    // Sous-titre dynamique selon l'état
+    const headerSubtitle = (() => {
+      if (!selectedDate) return "Sélectionnez une date disponible";
+      if (!selectedTime) return `Date choisie · ${formatDateFull(selectedDate)} — sélectionnez une heure`;
+      if (!enableDurationBasedBlocking && !selectedEndTime) return `Sélectionnez une heure de fin`;
+      return `${formatDateFull(selectedDate)} — créneau complet`;
+    })();
 
-            <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-xl text-sm">
-              <Calendar className="w-4 h-4 text-green-600" />
-              <span className="font-medium text-gray-900 capitalize">
-                {formatDateFull(selectedDate!)}
-              </span>
-              <span className="text-gray-500">
-                {selectedTime} - {enableDurationBasedBlocking ? calculatedEndTime : selectedEndTime}
-              </span>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // Fonction pour revenir à la vue calendrier
-    const handleBackToCalendar = () => {
-      setNonRangeView("calendar");
+    // Réinitialiser complètement
+    const handleResetSelection = () => {
       onDateSelect("");
       onTimeSelect("");
       onEndTimeSelect("");
     };
 
     return (
-      <div className="bg-white rounded-2xl p-5 border border-gray-100">
+      <div
+        className="bg-white p-[18px]"
+        style={{ borderRadius: 14, border: "1px solid #ece9e1" }}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
-          <div>
-            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-              <span className="p-2 bg-primary/10 rounded-lg">
-                {nonRangeView === "calendar" ? (
-                  <Calendar className="w-5 h-5 text-primary" />
-                ) : (
-                  <Clock className="w-5 h-5 text-primary" />
-                )}
-              </span>
-              {nonRangeView === "calendar" ? "Choisissez une date" : "Choisissez un horaire"}
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-1">
+              Étape · Date &amp; heure
+            </div>
+            <h3 className="text-base font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+              Choisissez votre créneau
             </h3>
-            <p className="text-sm text-gray-500 mt-1">
-              {nonRangeView === "calendar"
-                ? "Sélectionnez une date disponible"
-                : `Pour le ${formatDateFull(selectedDate!)}`}
-            </p>
+            <p className="text-[12px] text-[#6d6d68] mt-1">{headerSubtitle}</p>
           </div>
-          <div
-            className={cn(
-              "px-3 py-1.5 rounded-full text-sm font-medium",
-              isNonRangeComplete
-                ? "bg-green-100 text-green-700"
-                : selectedDate
-                ? "bg-amber-100 text-amber-700"
-                : "bg-gray-100 text-gray-600"
-            )}
+          {(selectedDate || selectedTime) && (
+            <button
+              onClick={handleResetSelection}
+              className="text-[11px] font-medium hover:underline inline-flex items-center gap-1 flex-shrink-0 mt-1"
+              style={{ color: "#1f3a33" }}
+            >
+              <X className="w-3 h-3" />
+              Effacer
+            </button>
+          )}
+        </div>
+
+        {/* Pavé Date sélectionnée (style Airbnb) - cliquable pour reset */}
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={() => {
+              if (selectedDate) {
+                onDateSelect("");
+                onTimeSelect("");
+                onEndTimeSelect("");
+              }
+            }}
+            className="w-full text-left p-3 transition-all hover:bg-[#fafafa]"
+            style={{
+              borderRadius: 12,
+              border: `1px solid ${!selectedDate ? "#1f1f1d" : selectedDate ? "#dfdcd4" : "#ece9e1"}`,
+              background: "#fff",
+            }}
           >
-            {isNonRangeComplete ? "Complet" : selectedDate ? "Étape 2/2" : "Étape 1/2"}
+            <div
+              className="text-[10px] font-medium uppercase tracking-[0.1em] mb-0.5"
+              style={{ color: !selectedDate ? "#1f1f1d" : "#9c9484" }}
+            >
+              Date
+            </div>
+            <div
+              className="text-[13.5px] font-semibold tracking-[-0.01em]"
+              style={{ color: selectedDate ? "#1f1f1d" : "#cdc9c0" }}
+            >
+              {selectedDate ? formatDateFull(selectedDate) : "Choisissez une date dans le calendrier"}
+            </div>
+          </button>
+        </div>
+
+        {/* Calendrier - toujours visible */}
+        <div className="bg-white mb-4">
+          <div className="flex items-center justify-between mb-4">
+            <button
+              onClick={() => onMonthChange(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1))}
+              className="w-8 h-8 inline-flex items-center justify-center rounded-full transition-colors hover:bg-[#f7f5ef]"
+              aria-label="Mois précédent"
+            >
+              <ArrowLeft className="w-4 h-4" style={{ color: "#1f1f1d" }} />
+            </button>
+            <span className="text-[15px] font-semibold capitalize tracking-[-0.01em] text-[#1f1f1d]">
+              {calendarMonth.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
+            </span>
+            <button
+              onClick={() => onMonthChange(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1))}
+              className="w-8 h-8 inline-flex items-center justify-center rounded-full transition-colors hover:bg-[#f7f5ef]"
+              aria-label="Mois suivant"
+            >
+              <ArrowRight className="w-4 h-4" style={{ color: "#1f1f1d" }} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-7 mb-2">
+            {["L", "M", "M", "J", "V", "S", "D"].map((d, i) => (
+              <div
+                key={`${d}-${i}`}
+                className="py-2 text-center text-[11px]"
+                style={{ color: "#6d6d68", fontWeight: 500 }}
+              >
+                {d}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7">{generateCalendarDaysEnhanced()}</div>
+
+          {/* Légende */}
+          <div
+            className="flex flex-wrap items-center justify-center gap-3 pt-4 mt-2"
+            style={{ borderTop: "1px solid #f1ede3" }}
+          >
+            <LegendItem color="#2f4a3f" label="Libre" />
+            <LegendItem color="#c9a14a" label="Partiel" />
+            <LegendItem color="#c45656" label="Complet" />
           </div>
         </div>
 
-        {/* Contenu avec transition */}
-        <AnimatePresence mode="wait">
-          {nonRangeView === "calendar" ? (
-            <motion.div
-              key="calendar"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.2 }}
-            >
-              {/* Calendar in gray background */}
-              <div className="bg-gray-50 rounded-2xl p-4">
-                {/* Navigation */}
-                <div className="flex items-center justify-between mb-4">
-                  <button
-                    onClick={() => onMonthChange(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1))}
-                    className="p-2 hover:bg-white rounded-lg transition-colors"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                  </button>
-                  <span className="font-semibold text-gray-900 capitalize">
-                    {calendarMonth.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
-                  </span>
-                  <button
-                    onClick={() => onMonthChange(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1))}
-                    className="p-2 hover:bg-white rounded-lg transition-colors"
-                  >
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* Days header */}
-                <div className="grid grid-cols-7 gap-1 text-center text-xs mb-2">
-                  {["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"].map((d) => (
-                    <div key={d} className="py-2 text-gray-500 font-medium">{d}</div>
-                  ))}
-                </div>
-
-                {/* Days grid */}
-                <div className="grid grid-cols-7 gap-1">{generateCalendarDaysEnhanced()}</div>
-
-                {/* Légende */}
-                <div className="flex flex-wrap items-center justify-center gap-3 pt-3 mt-3 border-t border-gray-200 text-xs text-gray-500">
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
-                    <span>Libre</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                    <span>Partiel</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
-                    <span>Complet</span>
-                  </div>
-                </div>
+        {/* SECTION HORAIRES — visible uniquement si date sélectionnée */}
+        {selectedDate && (
+          <div
+            className="mt-5 pt-5 space-y-3"
+            style={{ borderTop: "1px solid #f1ede3" }}
+          >
+            <div className="mb-1">
+              <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-1">
+                Horaires
               </div>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="time"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.2 }}
-              className="space-y-4"
-            >
-              {/* Bouton retour + date sélectionnée */}
-              <div className="flex items-center gap-3 p-3 bg-primary/5 rounded-xl">
-                <button
-                  onClick={handleBackToCalendar}
-                  className="p-2 hover:bg-primary/10 rounded-lg transition-colors"
-                >
-                  <ArrowLeft className="w-4 h-4 text-primary" />
-                </button>
-                <div className="flex items-center gap-2 flex-1">
-                  <Calendar className="w-4 h-4 text-primary" />
-                  <span className="text-sm font-medium text-gray-900 capitalize">{formatDateFull(selectedDate!)}</span>
-                </div>
-                <button
-                  onClick={handleBackToCalendar}
-                  className="text-xs text-primary hover:underline font-medium"
-                >
-                  Changer
-                </button>
-              </div>
+              <h4 className="text-[14px] font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+                {enableDurationBasedBlocking
+                  ? "Heure de début"
+                  : "Heures de début et de fin"}
+              </h4>
+            </div>
 
-              {bookedSlots.length > 0 && (
-                <div className="p-3 bg-gray-50 rounded-xl text-sm text-gray-600">
-                  <span className="font-medium">Créneaux réservés : </span>
-                  {bookedSlots.map((slot, i) => (
-                    <span key={i} className="text-red-500 font-medium">
-                      {slot.startTime}-{slot.endTime}{i < bookedSlots.length - 1 ? ", " : ""}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Duration info */}
-              {enableDurationBasedBlocking && variantDuration && (
-                <div className="p-3 bg-blue-50 rounded-xl text-sm text-blue-700 flex items-center gap-2">
-                  <Clock className="w-4 h-4" />
-                  <span>Durée de la séance : {variantDuration >= 60
-                    ? `${Math.floor(variantDuration / 60)}h${variantDuration % 60 > 0 ? variantDuration % 60 : ""}`
-                    : `${variantDuration}min`}
+            {bookedSlots.length > 0 && (
+              <div
+                className="p-2.5 text-[12px]"
+                style={{
+                  borderRadius: 10,
+                  background: "#f7f5ef",
+                  border: "1px solid #ece9e1",
+                  color: "#3a3a38",
+                }}
+              >
+                <span className="font-medium text-[#1f1f1d]">Créneaux réservés : </span>
+                {bookedSlots.map((slot, i) => (
+                  <span key={i} className="font-medium" style={{ color: "#c45656" }}>
+                    {slot.startTime}-{slot.endTime}{i < bookedSlots.length - 1 ? ", " : ""}
                   </span>
-                </div>
-              )}
+                ))}
+              </div>
+            )}
 
+            {enableDurationBasedBlocking && variantDuration && (
+              <div
+                className="p-2.5 text-[12px] flex items-center gap-2"
+                style={{
+                  borderRadius: 10,
+                  background: "#f7f5ef",
+                  border: "1px solid #ece9e1",
+                  color: "#3a3a38",
+                }}
+              >
+                <Clock className="w-3.5 h-3.5" style={{ color: "#6d6d68" }} />
+                <span>
+                  Durée de la séance :{" "}
+                  <span className="font-semibold text-[#1f1f1d]">
+                    {variantDuration >= 60
+                      ? `${Math.floor(variantDuration / 60)}h${variantDuration % 60 > 0 ? variantDuration % 60 : ""}`
+                      : `${variantDuration}min`}
+                  </span>
+                </span>
+              </div>
+            )}
+
+            {/* Heure de début + (heure de fin si non duration-based) */}
+            {enableDurationBasedBlocking ? (
               <div>
-                <p className="text-sm font-medium text-gray-900 mb-3">Heure de début</p>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "#9c9484" }}>
+                    Début
+                  </div>
+                  {selectedTime && (
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
+                      style={{ background: "#1f1f1d", color: "#fff" }}
+                    >
+                      {selectedTime}
+                    </span>
+                  )}
+                </div>
 
                 {/* Mobile button */}
                 <button
                   onClick={() => setShowStartTimePicker(true)}
-                  className={cn(
-                    "w-full p-4 rounded-xl border-2 transition-colors flex items-center justify-between sm:hidden",
-                    selectedTime ? "border-primary bg-primary/5" : "border-gray-200 bg-white"
-                  )}
+                  className="w-full p-3 transition-colors flex items-center justify-between sm:hidden hover:bg-[#fafafa]"
+                  style={{
+                    borderRadius: 12,
+                    border: `1px solid ${selectedTime ? "#1f1f1d" : "#dfdcd4"}`,
+                    background: "#fff",
+                  }}
                 >
                   <div className="flex items-center gap-3">
-                    <div className={cn("p-2 rounded-lg", selectedTime ? "bg-primary/10" : "bg-gray-100")}>
-                      <Clock className={cn("w-5 h-5", selectedTime ? "text-primary" : "text-gray-400")} />
-                    </div>
-                    <div className="text-left">
-                      <p className="text-xs text-gray-500">Heure de début</p>
-                      <p className={cn("text-lg font-semibold", selectedTime ? "text-primary" : "text-gray-400")}>
-                        {selectedTime || "Sélectionner"}
-                      </p>
-                    </div>
+                    <Clock className="w-4 h-4" style={{ color: selectedTime ? "#1f1f1d" : "#9c9484" }} />
+                    <span
+                      className="text-[14px] font-semibold tracking-[-0.01em]"
+                      style={{ color: selectedTime ? "#1f1f1d" : "#9c9484" }}
+                    >
+                      {selectedTime || "Sélectionner une heure"}
+                    </span>
                   </div>
-                  <ChevronRight className="w-5 h-5 text-gray-400" />
+                  <ChevronRight className="w-4 h-4" style={{ color: "#9c9484" }} />
                 </button>
 
-                {/* Desktop grid */}
-                <div className="hidden sm:grid grid-cols-4 sm:grid-cols-6 gap-2">
-                  {timeSlots.map((time) => {
-                    const isAvailable = isTimeSlotAvailable(time);
-                    const isSelected = selectedTime === time;
-                    return (
-                      <button
-                        key={time}
-                        disabled={!isAvailable}
-                        onClick={() => handleTimeSelect(time)}
-                        className={cn(
-                          "py-3 text-sm rounded-xl border-2 transition-all font-medium",
-                          !isAvailable && "opacity-40 cursor-not-allowed bg-gray-100 text-gray-400 border-gray-100",
-                          isAvailable && isSelected
-                            ? "border-primary bg-primary text-white"
-                            : isAvailable && "border-gray-200 hover:border-primary hover:bg-primary/5"
-                        )}
-                      >
-                        {time}
-                      </button>
-                    );
-                  })}
+                <div className="hidden sm:block">
+                  <TimeGrid
+                    times={timeSlots}
+                    isAvailable={isTimeSlotAvailable}
+                    selectedTime={selectedTime}
+                    onSelect={handleTimeSelect}
+                  />
                 </div>
               </div>
-
-              {selectedTime && enableDurationBasedBlocking && variantDuration ? (
-                <div className="p-4 bg-green-50 rounded-xl border border-green-200">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <Check className="w-5 h-5 text-green-600" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-green-800">Créneau confirmé</p>
-                      <p className="text-sm text-green-600">{selectedTime} → {calculatedEndTime}</p>
-                    </div>
-                  </div>
-                </div>
-              ) : selectedTime ? (
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Heure de début */}
                 <div>
-                  <p className="text-sm font-medium text-gray-900 mb-3">Heure de fin</p>
-
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "#9c9484" }}>
+                      Début
+                    </div>
+                    {selectedTime && (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
+                        style={{ background: "#1f1f1d", color: "#fff" }}
+                      >
+                        {selectedTime}
+                      </span>
+                    )}
+                  </div>
                   {/* Mobile button */}
                   <button
-                    onClick={() => setShowEndTimePicker(true)}
-                    className={cn(
-                      "w-full p-4 rounded-xl border-2 transition-colors flex items-center justify-between sm:hidden",
-                      selectedEndTime ? "border-secondary bg-secondary/5" : "border-gray-200 bg-white"
-                    )}
+                    onClick={() => setShowStartTimePicker(true)}
+                    className="w-full p-3 transition-colors flex items-center justify-between sm:hidden hover:bg-[#fafafa]"
+                    style={{
+                      borderRadius: 12,
+                      border: `1px solid ${selectedTime ? "#1f1f1d" : "#dfdcd4"}`,
+                      background: "#fff",
+                    }}
                   >
                     <div className="flex items-center gap-3">
-                      <div className={cn("p-2 rounded-lg", selectedEndTime ? "bg-secondary/10" : "bg-gray-100")}>
-                        <Clock className={cn("w-5 h-5", selectedEndTime ? "text-secondary" : "text-gray-400")} />
-                      </div>
-                      <div className="text-left">
-                        <p className="text-xs text-gray-500">Heure de fin</p>
-                        <p className={cn("text-lg font-semibold", selectedEndTime ? "text-secondary" : "text-gray-400")}>
-                          {selectedEndTime || "Sélectionner"}
-                        </p>
-                      </div>
+                      <Clock className="w-4 h-4" style={{ color: selectedTime ? "#1f1f1d" : "#9c9484" }} />
+                      <span
+                        className="text-[14px] font-semibold tracking-[-0.01em]"
+                        style={{ color: selectedTime ? "#1f1f1d" : "#9c9484" }}
+                      >
+                        {selectedTime || "Sélectionner"}
+                      </span>
                     </div>
-                    <ChevronRight className="w-5 h-5 text-gray-400" />
+                    <ChevronRight className="w-4 h-4" style={{ color: "#9c9484" }} />
                   </button>
-
-                  {/* Desktop grid */}
-                  <div className="hidden sm:grid grid-cols-4 sm:grid-cols-6 gap-2">
-                    {getEndTimeSlots().map((time) => {
-                      const startMinutes = parseTimeToMinutes(selectedTime);
-                      const endMinutes = parseTimeToMinutes(time);
-                      const effectiveStart = enableDurationBasedBlocking ? startMinutes - bufferBefore : startMinutes;
-                      const effectiveEnd = enableDurationBasedBlocking ? endMinutes + bufferAfter : endMinutes;
-                      const hasConflict = bookedSlots.some((slot) => {
-                        const bookedStart = parseTimeToMinutes(slot.startTime);
-                        const bookedEnd = parseTimeToMinutes(slot.endTime);
-                        return effectiveStart < bookedEnd && effectiveEnd > bookedStart;
-                      });
-                      const isEndTimeAvailable = !hasConflict;
-                      const isSelected = selectedEndTime === time;
-                      return (
-                        <button
-                          key={time}
-                          disabled={!isEndTimeAvailable}
-                          onClick={() => onEndTimeSelect(time)}
-                          className={cn(
-                            "py-3 text-sm rounded-xl border-2 transition-all font-medium",
-                            !isEndTimeAvailable && "opacity-40 cursor-not-allowed bg-gray-100 text-gray-400 border-gray-100",
-                            isEndTimeAvailable && isSelected
-                              ? "border-secondary bg-secondary text-white"
-                              : isEndTimeAvailable && "border-gray-200 hover:border-secondary hover:bg-secondary/5"
-                          )}
-                        >
-                          {time}
-                        </button>
-                      );
-                    })}
+                  <div className="hidden sm:block">
+                    <TimeGrid
+                      times={timeSlots}
+                      isAvailable={isTimeSlotAvailable}
+                      selectedTime={selectedTime}
+                      onSelect={handleTimeSelect}
+                    />
                   </div>
                 </div>
-              ) : null}
 
-              {selectedTime && selectedEndTime && !enableDurationBasedBlocking && (
-                <div className="p-4 bg-green-50 rounded-xl border border-green-200">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <Check className="w-5 h-5 text-green-600" />
+                {/* Heure de fin */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "#9c9484" }}>
+                      Fin
                     </div>
-                    <div>
-                      <p className="font-medium text-green-800">Créneau confirmé</p>
-                      <p className="text-sm text-green-600">
-                        {selectedTime} → {selectedEndTime} ({calculateDuration(selectedTime, selectedEndTime)})
+                    {selectedEndTime && (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
+                        style={{ background: "#1f1f1d", color: "#fff" }}
+                      >
+                        {selectedEndTime}
+                      </span>
+                    )}
+                  </div>
+                  {/* Mobile button */}
+                  <button
+                    onClick={() => selectedTime && setShowEndTimePicker(true)}
+                    disabled={!selectedTime}
+                    className="w-full p-3 transition-colors flex items-center justify-between sm:hidden hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:opacity-50"
+                    style={{
+                      borderRadius: 12,
+                      border: `1px solid ${selectedEndTime ? "#1f1f1d" : "#dfdcd4"}`,
+                      background: "#fff",
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Clock className="w-4 h-4" style={{ color: selectedEndTime ? "#1f1f1d" : "#9c9484" }} />
+                      <span
+                        className="text-[14px] font-semibold tracking-[-0.01em]"
+                        style={{ color: selectedEndTime ? "#1f1f1d" : "#9c9484" }}
+                      >
+                        {selectedEndTime || (selectedTime ? "Sélectionner" : "Choisir début d'abord")}
+                      </span>
+                    </div>
+                    <ChevronRight className="w-4 h-4" style={{ color: "#9c9484" }} />
+                  </button>
+                  <div className="hidden sm:block">
+                    {selectedTime ? (
+                      <TimeGrid
+                        times={getEndTimeSlots()}
+                        isAvailable={(time) => {
+                          const startMinutes = parseTimeToMinutes(selectedTime);
+                          const endMinutes = parseTimeToMinutes(time);
+                          const effectiveStart = enableDurationBasedBlocking ? startMinutes - bufferBefore : startMinutes;
+                          const effectiveEnd = enableDurationBasedBlocking ? endMinutes + bufferAfter : endMinutes;
+                          const hasConflict = bookedSlots.some((slot) => {
+                            const bookedStart = parseTimeToMinutes(slot.startTime);
+                            const bookedEnd = parseTimeToMinutes(slot.endTime);
+                            return effectiveStart < bookedEnd && effectiveEnd > bookedStart;
+                          });
+                          return !hasConflict;
+                        }}
+                        selectedTime={selectedEndTime}
+                        onSelect={onEndTimeSelect}
+                      />
+                    ) : (
+                      <p className="text-[12px] text-[#9c9484] py-3 text-center">
+                        Choisissez une heure de début pour voir les heures de fin disponibles
                       </p>
-                    </div>
+                    )}
                   </div>
                 </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+              </div>
+            )}
+
+            {/* Confirmation finale */}
+            {selectedTime && enableDurationBasedBlocking && variantDuration && (
+              <ConfirmedSlot label="Créneau confirmé" value={`${selectedTime} → ${calculatedEndTime}`} />
+            )}
+            {selectedTime && selectedEndTime && !enableDurationBasedBlocking && (
+              <ConfirmedSlot
+                label="Créneau confirmé"
+                value={`${selectedTime} → ${selectedEndTime} (${calculateDuration(selectedTime, selectedEndTime)})`}
+              />
+            )}
+          </div>
+        )}
 
         {/* Mobile Time Pickers */}
         {typeof document !== "undefined" && createPortal(
@@ -979,262 +1087,292 @@ export default memo(function BookingCalendar({
   // RENDU POUR MODE GARDE - FLUX EN ÉTAPES
   // ============================================
 
-  // Helper pour le titre de l'étape
-  const getStepTitle = () => {
-    switch (rangeStep) {
-      case "start_date": return "Date de début";
-      case "start_time": return "Heure de début";
-      case "end_date": return "Date de fin";
-      case "end_time": return "Heure de fin";
-      case "complete": return "Récapitulatif";
-    }
-  };
+  // Sous-titre dynamique selon l'état
+  const headerSubtitle = (() => {
+    if (!selectedDate) return "Sélectionnez votre date d'arrivée";
+    if (selectedDate && !selectedEndDate) return "Sélectionnez votre date de départ";
+    return "Définissez vos horaires d'arrivée et de départ";
+  })();
 
-  // Helper pour le numéro d'étape
-  const getStepNumber = () => {
-    switch (rangeStep) {
-      case "start_date": return 1;
-      case "start_time": return 2;
-      case "end_date": return 3;
-      case "end_time": return 4;
-      case "complete": return 5;
-    }
+  // Réinitialiser entièrement la sélection plage
+  const resetRange = () => {
+    onDateSelect("");
+    onEndDateSelect(null);
+    onTimeSelect("");
+    onEndTimeSelect("");
   };
 
   return (
-    <div className="bg-white rounded-2xl p-5 border border-gray-100">
-      {/* Header avec indicateur d'étapes */}
-      <div className="mb-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-            {rangeStep === "start_date" || rangeStep === "end_date" ? (
-              <Calendar className="w-5 h-5 text-primary" />
-            ) : (
-              <Clock className="w-5 h-5 text-primary" />
-            )}
-            {getStepTitle()}
+    <div
+      className="bg-white p-[18px]"
+      style={{ borderRadius: 14, border: "1px solid #ece9e1" }}
+    >
+      {/* Header */}
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-1">
+            Étape · Garde
+          </div>
+          <h3 className="text-base font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+            Dates &amp; horaires
           </h3>
-          <span className="text-xs text-gray-400">Étape {getStepNumber()}/4</span>
+          <p className="text-[12px] text-[#6d6d68] mt-1">{headerSubtitle}</p>
         </div>
+        {(selectedDate || selectedEndDate) && (
+          <button
+            onClick={resetRange}
+            className="text-[11px] font-medium hover:underline inline-flex items-center gap-1 flex-shrink-0 mt-1"
+            style={{ color: "#1f3a33" }}
+          >
+            <X className="w-3 h-3" />
+            Effacer
+          </button>
+        )}
+      </div>
 
-        {/* Progress bar */}
-        <div className="flex gap-1">
-          {[1, 2, 3, 4].map((step) => (
-            <div
-              key={step}
-              className={cn(
-                "h-1 flex-1 rounded-full transition-colors",
-                step <= getStepNumber() ? "bg-primary" : "bg-gray-200"
-              )}
-            />
-          ))}
-        </div>
+      {/* Récap dates style Airbnb : deux pavés Arrivée / Départ */}
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <DateSummaryPill
+          label="Arrivée"
+          date={selectedDate ? formatDateDisplay(selectedDate) : null}
+          time={selectedTime || null}
+          isActive={!selectedDate}
+          onClick={() => {
+            // Reset pour permettre de re-sélectionner
+            onDateSelect("");
+            onEndDateSelect(null);
+          }}
+        />
+        <DateSummaryPill
+          label="Départ"
+          date={selectedEndDate ? formatDateDisplay(selectedEndDate) : null}
+          time={selectedEndTime || null}
+          isActive={Boolean(selectedDate) && !selectedEndDate}
+          onClick={() => {
+            if (selectedDate) onEndDateSelect(null);
+          }}
+        />
       </div>
 
       {/* Capacity info */}
-      {isCapacityBased && maxAnimalsPerSlot && (rangeStep === "start_date" || rangeStep === "end_date") && (
-        <div className="mb-3 px-3 py-2 bg-emerald-50/50 rounded-lg border border-emerald-100 flex items-center gap-2">
-          <Users className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-          <p className="text-xs text-emerald-700">
-            Jusqu'à <span className="font-semibold">{maxAnimalsPerSlot}</span> animaux par jour
+      {isCapacityBased && maxAnimalsPerSlot && (
+        <div
+          className="mb-3 px-3 py-2 flex items-center gap-2"
+          style={{ borderRadius: 10, background: "#eaf0ed", border: "1px solid #cfdbd3" }}
+        >
+          <Users className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#2f4a3f" }} />
+          <p className="text-[12px]" style={{ color: "#2f4a3f" }}>
+            Jusqu&apos;à <span className="font-semibold">{maxAnimalsPerSlot}</span> animaux par jour
           </p>
         </div>
       )}
 
-      {/* Résumé des sélections précédentes (cliquable pour modifier) */}
-      {rangeStep !== "start_date" && (
-        <div className="mb-4 space-y-2">
-          {/* Date de début */}
+      {/* CALENDRIER unifié (range picker style hôtel) */}
+      <div className="bg-white mb-4">
+        {/* Navigation entre mois (commune aux 2 calendriers) */}
+        <div className="flex items-center justify-between mb-4 relative">
           <button
-            onClick={() => goBackToStep("start_date")}
-            className="w-full flex items-center gap-2 p-2 bg-gray-50 rounded-lg text-left hover:bg-gray-100 transition-colors"
+            onClick={() => onMonthChange(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1))}
+            className="w-8 h-8 inline-flex items-center justify-center rounded-full hover:bg-[#f7f5ef] transition-colors"
+            aria-label="Mois précédent"
           >
-            <Check className="w-4 h-4 text-emerald-500" />
-            <span className="text-sm text-gray-600">Début :</span>
-            <span className="text-sm font-medium text-gray-900">{formatDateDisplay(selectedDate!)}</span>
-            {selectedTime && rangeStep !== "start_time" && (
-              <span className="text-sm text-gray-900">à {selectedTime}</span>
-            )}
+            <ArrowLeft className="w-4 h-4" style={{ color: "#1f1f1d" }} />
           </button>
-
-          {/* Date de fin (si sélectionnée) */}
-          {selectedEndDate && rangeStep !== "end_date" && rangeStep !== "start_time" && (
-            <button
-              onClick={() => goBackToStep("end_date")}
-              className="w-full flex items-center gap-2 p-2 bg-gray-50 rounded-lg text-left hover:bg-gray-100 transition-colors"
-            >
-              <Check className="w-4 h-4 text-emerald-500" />
-              <span className="text-sm text-gray-600">Fin :</span>
-              <span className="text-sm font-medium text-gray-900">{formatDateDisplay(selectedEndDate)}</span>
-              {selectedEndTime && rangeStep === "complete" && (
-                <span className="text-sm text-gray-900">à {selectedEndTime}</span>
-              )}
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* VUE CALENDRIER (étapes 1 et 3) */}
-      {(rangeStep === "start_date" || rangeStep === "end_date") && (
-        <div className="mb-4">
-          {/* Légende compacte avec points colorés pour mode garde */}
-          <div className="flex items-center justify-end gap-3 text-[10px] mb-3">
-            {isCapacityBased ? (
-              <>
-                <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span className="text-gray-500">Libre</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 rounded-full bg-amber-500" />
-                  <span className="text-gray-500">Partiel</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 rounded-full bg-red-500" />
-                  <span className="text-gray-500">Complet</span>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="flex items-center gap-1">
-                  <div className="w-2.5 h-2.5 rounded-sm bg-gray-200" />
-                  <span className="text-gray-400">Indispo</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-2.5 h-2.5 rounded-sm bg-white border border-gray-300" />
-                  <span className="text-gray-400">Dispo</span>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Month Navigation */}
-          <div className="flex items-center justify-between mb-4">
-            <button
-              onClick={() => onMonthChange(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1))}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-            <span className="font-semibold text-gray-900 capitalize">
+          {/* Titres mois (1 sur mobile, 2 sur desktop) */}
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <span className="text-[15px] font-semibold capitalize tracking-[-0.01em] text-[#1f1f1d] text-center">
               {calendarMonth.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
             </span>
-            <button
-              onClick={() => onMonthChange(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1))}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            <span className="hidden lg:block text-[15px] font-semibold capitalize tracking-[-0.01em] text-[#1f1f1d] text-center">
+              {new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
+            </span>
           </div>
-
-          {/* Days Header */}
-          <div className="grid grid-cols-7 gap-1 text-center text-xs mb-2">
-            {["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"].map((d) => (
-              <div key={d} className="py-2 text-gray-500 font-medium">{d}</div>
-            ))}
-          </div>
-
-          {/* Days Grid */}
-          <div className="grid grid-cols-7 gap-1">{generateCalendarDays()}</div>
+          <button
+            onClick={() => onMonthChange(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1))}
+            className="w-8 h-8 inline-flex items-center justify-center rounded-full hover:bg-[#f7f5ef] transition-colors"
+            aria-label="Mois suivant"
+          >
+            <ArrowRight className="w-4 h-4" style={{ color: "#1f1f1d" }} />
+          </button>
         </div>
-      )}
 
-      {/* VUE SÉLECTION HEURE (étapes 2 et 4) */}
-      {(rangeStep === "start_time" || rangeStep === "end_time") && (
-        <div className="space-y-4">
-          {/* Info créneaux réservés */}
+        {/* 2 calendriers côte-à-côte sur desktop, 1 seul sur mobile */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Mois courant */}
+          <div>
+            <div className="grid grid-cols-7 mb-2">
+              {["L", "M", "M", "J", "V", "S", "D"].map((d, i) => (
+                <div
+                  key={`${d}-${i}-1`}
+                  className="py-2 text-center text-[11px]"
+                  style={{ color: "#6d6d68", fontWeight: 500 }}
+                >
+                  {d}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7">{generateCalendarDays()}</div>
+          </div>
+
+          {/* Mois suivant (desktop uniquement) */}
+          <div className="hidden lg:block">
+            <div className="grid grid-cols-7 mb-2">
+              {["L", "M", "M", "J", "V", "S", "D"].map((d, i) => (
+                <div
+                  key={`${d}-${i}-2`}
+                  className="py-2 text-center text-[11px]"
+                  style={{ color: "#6d6d68", fontWeight: 500 }}
+                >
+                  {d}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7">
+              {generateCalendarDays(
+                new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1)
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Légende */}
+        <div
+          className="flex flex-wrap items-center justify-center gap-3 pt-4 mt-4"
+          style={{ borderTop: "1px solid #f1ede3" }}
+        >
+          {isCapacityBased ? (
+            <>
+              <LegendItem color="#2f4a3f" label="Libre" />
+              <LegendItem color="#c9a14a" label="Partiel" />
+              <LegendItem color="#c45656" label="Complet" />
+            </>
+          ) : (
+            <>
+              <LegendCellSample variant="available" label="Disponible" />
+              <LegendCellSample variant="unavailable" label="Indisponible" />
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* SECTION HORAIRES — visible uniquement si plage sélectionnée */}
+      {selectedDate && selectedEndDate && (
+        <div
+          className="mt-5 pt-5"
+          style={{ borderTop: "1px solid #f1ede3" }}
+        >
+          <div className="mb-3">
+            <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-1">
+              Horaires
+            </div>
+            <h4 className="text-[14px] font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+              Heures d&apos;arrivée et de départ
+            </h4>
+          </div>
+
+          {/* Bandeau créneaux réservés */}
           {bookedSlots.length > 0 && (
-            <div className="p-2 bg-gray-50 rounded-lg text-xs text-gray-600">
-              <span className="font-medium">Créneaux réservés : </span>
+            <div
+              className="p-2.5 text-[12px] mb-3"
+              style={{
+                borderRadius: 10,
+                background: "#f7f5ef",
+                border: "1px solid #ece9e1",
+                color: "#3a3a38",
+              }}
+            >
+              <span className="font-medium text-[#1f1f1d]">Créneaux réservés : </span>
               {bookedSlots.map((slot, i) => (
-                <span key={i} className="text-red-500">
+                <span key={i} style={{ color: "#c45656" }} className="font-medium">
                   {slot.startTime}-{slot.endTime}{i < bookedSlots.length - 1 ? ", " : ""}
                 </span>
               ))}
             </div>
           )}
 
-          {/* Grille d'heures */}
-          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-            {timeSlots.map((time) => {
-              const isAvailable = isTimeSlotAvailable(time);
-              const isSelected = rangeStep === "start_time"
-                ? selectedTime === time
-                : selectedEndTime === time;
+          {/* Deux blocs heure côte-à-côte */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Heure d'arrivée */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "#9c9484" }}>
+                  Arrivée
+                </div>
+                {selectedTime && (
+                  <span
+                    className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium"
+                    style={{ background: "#1f1f1d", color: "#fff" }}
+                  >
+                    {selectedTime}
+                  </span>
+                )}
+              </div>
+              <TimeGrid
+                times={timeSlots}
+                isAvailable={isTimeSlotAvailable}
+                selectedTime={selectedTime}
+                onSelect={handleRangeStartTimeSelect}
+              />
+            </div>
 
-              return (
-                <button
-                  key={time}
-                  disabled={!isAvailable}
-                  onClick={() => {
-                    if (rangeStep === "start_time") {
-                      handleRangeStartTimeSelect(time);
-                    } else {
-                      handleRangeEndTimeSelect(time);
-                    }
-                  }}
-                  className={cn(
-                    "py-3 text-sm rounded-xl border-2 transition-all font-medium",
-                    !isAvailable && "opacity-40 cursor-not-allowed bg-gray-100 text-gray-400 border-gray-100",
-                    isAvailable && isSelected
-                      ? "border-primary bg-primary text-white"
-                      : isAvailable && "border-gray-200 hover:border-primary hover:bg-primary/5"
-                  )}
-                >
-                  {time}
-                </button>
-              );
-            })}
+            {/* Heure de départ */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "#9c9484" }}>
+                  Départ
+                </div>
+                {selectedEndTime && (
+                  <span
+                    className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium"
+                    style={{ background: "#1f1f1d", color: "#fff" }}
+                  >
+                    {selectedEndTime}
+                  </span>
+                )}
+              </div>
+              <TimeGrid
+                times={timeSlots}
+                isAvailable={isTimeSlotAvailable}
+                selectedTime={selectedEndTime}
+                onSelect={handleRangeEndTimeSelect}
+              />
+            </div>
           </div>
-
-          {/* Bouton passer (optionnel) */}
-          <button
-            onClick={() => {
-              if (rangeStep === "start_time") {
-                setRangeStep("end_date");
-              } else {
-                setRangeStep("complete");
-              }
-            }}
-            className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
-          >
-            Passer cette étape →
-          </button>
         </div>
       )}
 
-      {/* VUE RÉCAPITULATIF (étape 5) */}
-      {rangeStep === "complete" && (
-        <div className="space-y-4">
-          {/* Résumé final */}
-          <div className="p-4 bg-primary/5 rounded-xl border border-primary/20">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <Calendar className="w-5 h-5 text-primary" />
+      {/* RÉCAPITULATIF — visible quand tout est sélectionné */}
+      {selectedDate && selectedEndDate && selectedTime && selectedEndTime && (
+        <div className="space-y-3 mt-5 pt-5" style={{ borderTop: "1px solid #f1ede3" }}>
+          <div
+            className="p-4"
+            style={{ borderRadius: 12, background: "#f5f9f6", border: "1px solid #cfdbd3" }}
+          >
+            <div className="flex items-start gap-3 mb-3">
+              <div
+                className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{ background: "#fff", border: "1px solid #cfdbd3" }}
+              >
+                <Calendar className="w-4 h-4" style={{ color: "#1f3a33" }} />
               </div>
-              <div className="flex-1">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-gray-600">Période sélectionnée</p>
-                  <button
-                    onClick={() => goBackToStep("start_date")}
-                    className="text-xs text-primary hover:text-primary/80 font-medium transition-colors flex items-center gap-1"
-                  >
-                    <Pencil className="w-3 h-3" />
-                    Modifier
-                  </button>
+              <div className="flex-1 min-w-0">
+                <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484]">
+                  Période sélectionnée
                 </div>
-                <p className="font-semibold text-gray-900">
-                  {formatDateDisplay(selectedDate!)} {selectedTime && `à ${selectedTime}`}
-                  <ArrowRight className="w-4 h-4 inline mx-2 text-gray-400" />
-                  {formatDateDisplay(selectedEndDate!)} {selectedEndTime && `à ${selectedEndTime}`}
+                <p className="text-[13.5px] font-semibold text-[#1f1f1d] mt-0.5 tracking-[-0.01em]">
+                  {formatDateDisplay(selectedDate)} à {selectedTime}
+                  <ArrowRight className="w-3.5 h-3.5 inline mx-2" style={{ color: "#9c9484" }} />
+                  {formatDateDisplay(selectedEndDate)} à {selectedEndTime}
                 </p>
               </div>
             </div>
             {days >= 1 && (
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-1 text-xs bg-primary/10 text-primary rounded-full font-medium">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span
+                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium"
+                  style={{ border: "1px solid #cfdbd3", color: "#2f4a3f", background: "#fff" }}
+                >
                   {(() => {
-                    // Si on a des infos de facturation avec demi-journées
                     const isHalfDayBilling = billingInfo?.billingUnit === "half_day" || billingInfo?.billingUnit === "day" ||
                       billingInfo?.firstDayIsHalfDay || billingInfo?.lastDayIsHalfDay ||
                       clientBillingMode === "round_half_day";
@@ -1242,24 +1380,20 @@ export default memo(function BookingCalendar({
                     if (isHalfDayBilling && billingInfo) {
                       const fullDays = billingInfo.fullDays ?? 0;
                       const halfDays = billingInfo.halfDays ?? 0;
-
                       const parts: string[] = [];
-                      if (fullDays > 0) {
-                        parts.push(`${fullDays} journée${fullDays > 1 ? "s" : ""}`);
-                      }
-                      if (halfDays > 0) {
-                        parts.push(`${halfDays} demi-journée${halfDays > 1 ? "s" : ""}`);
-                      }
-
+                      if (fullDays > 0) parts.push(`${fullDays} journée${fullDays > 1 ? "s" : ""}`);
+                      if (halfDays > 0) parts.push(`${halfDays} demi-journée${halfDays > 1 ? "s" : ""}`);
                       return parts.length > 0 ? parts.join(" + ") : `${days} jour${days > 1 ? "s" : ""}`;
                     }
-
-                    // Affichage par défaut en jours
                     return `${days} jour${days > 1 ? "s" : ""}`;
                   })()}
                 </span>
                 {nights > 0 && includeOvernightStay && (
-                  <span className="px-2 py-1 text-xs bg-indigo-100 text-indigo-700 rounded-full font-medium">
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
+                    style={{ border: "1px solid #dfdcd4", color: "#3a3a38", background: "#fff" }}
+                  >
+                    <Moon className="w-2.5 h-2.5" />
                     {nights} nuit{nights > 1 ? "s" : ""}
                   </span>
                 )}
@@ -1269,23 +1403,28 @@ export default memo(function BookingCalendar({
 
           {/* Option garde de nuit */}
           {days > 1 && allowOvernightStay && overnightPrice && (
-            <label className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100 transition-colors">
+            <label
+              className="flex items-center gap-3 p-3 cursor-pointer transition-colors hover:bg-[#f7f5ef]"
+              style={{ borderRadius: 12, background: "#fff", border: "1px solid #ece9e1" }}
+            >
               <input
                 type="checkbox"
                 checked={includeOvernightStay}
                 onChange={(e) => onOvernightChange(e.target.checked)}
-                className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
+                className="w-4 h-4 rounded border-[#dfdcd4]"
+                style={{ accentColor: "#1f3a33" }}
               />
-              <Moon className="w-4 h-4 text-indigo-500" />
+              <Moon className="w-4 h-4" style={{ color: "#6d6d68" }} />
               <div className="flex-1">
-                <span className="text-sm font-medium text-gray-900">Garde de nuit</span>
-                <span className="ml-2 text-xs text-gray-500">
+                <span className="text-[13.5px] font-semibold text-[#1f1f1d] tracking-[-0.01em]">
+                  Garde de nuit
+                </span>
+                <span className="ml-2 text-[11px] text-[#6d6d68]">
                   {nights} nuit{nights > 1 ? "s" : ""} · {formatPrice(overnightPrice)}/nuit
                 </span>
               </div>
             </label>
           )}
-
         </div>
       )}
 
@@ -1320,3 +1459,225 @@ export default memo(function BookingCalendar({
     </div>
   );
 });
+
+// ──────────────────────────────────────────────────────────────────
+// Sous-composants UI raffinés (palette cards de recherche)
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * Pavé "Arrivée" / "Départ" en haut du calendrier (style Airbnb).
+ * Affiche label, date et heure si disponibles. Sinon placeholder.
+ * Cliquable pour repositionner le focus.
+ */
+function DateSummaryPill({
+  label,
+  date,
+  time,
+  isActive,
+  onClick,
+}: {
+  label: string;
+  date: string | null;
+  time: string | null;
+  isActive: boolean;
+  onClick: () => void;
+}) {
+  const filled = Boolean(date);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-left p-3 transition-all hover:bg-[#fafafa]"
+      style={{
+        borderRadius: 12,
+        border: `1px solid ${isActive ? "#1f1f1d" : filled ? "#dfdcd4" : "#ece9e1"}`,
+        background: "#fff",
+      }}
+    >
+      <div
+        className="text-[10px] font-medium uppercase tracking-[0.1em] mb-0.5"
+        style={{ color: isActive ? "#1f1f1d" : "#9c9484" }}
+      >
+        {label}
+      </div>
+      <div
+        className="text-[13.5px] font-semibold tracking-[-0.01em] truncate"
+        style={{ color: filled ? "#1f1f1d" : "#cdc9c0" }}
+      >
+        {date || "Ajouter une date"}
+      </div>
+      {time && (
+        <div className="text-[11px] mt-0.5" style={{ color: "#6d6d68" }}>
+          à {time}
+        </div>
+      )}
+    </button>
+  );
+}
+
+function LegendItem({ color, label }: { color: string; label: string }) {
+  return (
+    <div className="flex items-center gap-1">
+      <div className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
+      <span className="text-[10px] font-medium" style={{ color: "#9c9484" }}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Échantillon de cellule pour la légende — reproduit fidèlement le rendu d'une case du calendrier.
+ * Utilisé pour les modes sans dots (calendrier non-capacity).
+ */
+function LegendCellSample({
+  variant,
+  label,
+}: {
+  variant: "available" | "unavailable";
+  label: string;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <div
+        className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-medium"
+        style={{
+          background: "transparent",
+          color: variant === "available" ? "#1f1f1d" : "#cdc9c0",
+          textDecoration: variant === "unavailable" ? "line-through" : "none",
+        }}
+      >
+        15
+      </div>
+      <span className="text-[10px] font-medium" style={{ color: "#9c9484" }}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Grille horaire sectionnée (Matin · Après-midi · Soir) — cohérence avec la vue jours.
+ * Chaque section a son eyebrow et un mini séparateur, comme une "ligne" du calendrier.
+ */
+function TimeGrid({
+  times,
+  isAvailable,
+  selectedTime,
+  onSelect,
+}: {
+  times: string[];
+  isAvailable: (time: string) => boolean;
+  selectedTime: string | null;
+  onSelect: (time: string) => void;
+}) {
+  // Sectionner par tranche horaire
+  const sections: Array<{ label: string; times: string[] }> = [
+    { label: "Matin", times: [] },
+    { label: "Après-midi", times: [] },
+    { label: "Soir", times: [] },
+  ];
+
+  for (const t of times) {
+    const h = parseInt(t.split(":")[0] ?? "0", 10);
+    if (h < 12) sections[0].times.push(t);
+    else if (h < 18) sections[1].times.push(t);
+    else sections[2].times.push(t);
+  }
+
+  return (
+    <div className="space-y-3">
+      {sections.map((section) => {
+        if (section.times.length === 0) return null;
+        return (
+          <div key={section.label}>
+            <div
+              className="flex items-center gap-2 mb-2"
+              aria-label={section.label}
+            >
+              <span
+                className="text-[10px] font-medium uppercase tracking-[0.1em]"
+                style={{ color: "#9c9484" }}
+              >
+                {section.label}
+              </span>
+              <div className="flex-1 h-px" style={{ background: "#f1ede3" }} />
+            </div>
+            <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
+              {section.times.map((time) => (
+                <TimeSlotButton
+                  key={time}
+                  time={time}
+                  isAvailable={isAvailable(time)}
+                  isSelected={selectedTime === time}
+                  onSelect={() => onSelect(time)}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TimeSlotButton({
+  time,
+  isAvailable,
+  isSelected,
+  onSelect,
+}: {
+  time: string;
+  isAvailable: boolean;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={!isAvailable}
+      onClick={onSelect}
+      className={cn(
+        "py-2.5 text-[13px] rounded-full transition-all",
+        isAvailable && !isSelected && "hover:border-[#1f1f1d] hover:bg-[#fafafa]"
+      )}
+      style={{
+        border: `1px solid ${
+          isSelected ? "#1f1f1d" : !isAvailable ? "#f1ede3" : "#dfdcd4"
+        }`,
+        background: isSelected ? "#1f1f1d" : "#fff",
+        color: isSelected ? "#fff" : !isAvailable ? "#cdc9c0" : "#1f1f1d",
+        fontWeight: isSelected ? 600 : 500,
+        cursor: !isAvailable ? "not-allowed" : "pointer",
+        textDecoration: !isAvailable ? "line-through" : "none",
+        opacity: !isAvailable ? 0.5 : 1,
+      }}
+    >
+      {time}
+    </button>
+  );
+}
+
+function ConfirmedSlot({ label, value }: { label: string; value: string }) {
+  return (
+    <div
+      className="p-3 flex items-center gap-3"
+      style={{ borderRadius: 12, background: "#f5f9f6", border: "1px solid #cfdbd3" }}
+    >
+      <div
+        className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+        style={{ background: "#1f3a33" }}
+      >
+        <Check className="w-4 h-4 text-white" />
+      </div>
+      <div>
+        <p className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "#9c9484" }}>
+          {label}
+        </p>
+        <p className="text-[13.5px] font-semibold text-[#1f1f1d] tracking-[-0.01em]">
+          {value}
+        </p>
+      </div>
+    </div>
+  );
+}

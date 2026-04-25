@@ -104,24 +104,28 @@ export default function AddressSelector({
   // If no addresses, show add button
   if (addresses.length === 0) {
     return (
-      <div className={cn("bg-white rounded-2xl p-5 border border-gray-100", className)}>
-        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-          <span className="p-2 bg-blue-100 rounded-lg">
-            <MapPin className="w-5 h-5 text-blue-600" />
-          </span>
+      <div className={cn(className)}>
+        <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-1.5">
+          Adresse
+        </div>
+        <h4 className="text-[14px] font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0 mb-3">
           Adresse de prestation
-        </h3>
+        </h4>
 
-        <div className="text-center py-6 bg-gray-50 rounded-xl">
-          <MapPin className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-          <p className="text-sm text-gray-500 mb-3">
+        <div
+          className="text-center py-5"
+          style={{ background: "#f7f5ef", borderRadius: 12, border: "1px solid #ece9e1" }}
+        >
+          <MapPin className="w-7 h-7 mx-auto mb-2" style={{ color: "#cdc9c0" }} />
+          <p className="text-[12px] text-[#6d6d68] mb-3">
             Aucune adresse enregistrée
           </p>
           <button
             onClick={onAddNew}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-opacity hover:opacity-90"
+            style={{ background: "#1f3a33", color: "#f7f5ef" }}
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
             Ajouter une adresse
           </button>
         </div>
@@ -130,54 +134,66 @@ export default function AddressSelector({
   }
 
   return (
-    <div className={cn("bg-white rounded-2xl p-5 border border-gray-100", className)}>
-      <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-        <span className="p-2 bg-blue-100 rounded-lg">
-          <MapPin className="w-5 h-5 text-blue-600" />
-        </span>
+    <div className={cn(className)}>
+      <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-1.5">
+        Adresse
+      </div>
+      <h4 className="text-[14px] font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0 mb-3">
         Adresse de prestation
-      </h3>
+      </h4>
 
       {/* Selected Address Display */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full p-4 bg-gray-50 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors text-left"
+        className="w-full p-3 text-left transition-colors"
+        style={{
+          borderRadius: 12,
+          background: "#fff",
+          border: "1px solid #ece9e1",
+        }}
       >
         <div className="flex items-start gap-3">
-          <div className="p-2 bg-white rounded-lg shadow-sm text-primary">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: "#f7f5ef", color: "#1f3a33" }}
+          >
             {selectedAddress ? getAddressIcon(selectedAddress.label) : <MapPin className="w-4 h-4" />}
           </div>
           <div className="flex-1 min-w-0">
             {selectedAddress ? (
               <>
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-900">
+                  <span className="text-[13.5px] font-semibold text-[#1f1f1d] tracking-[-0.01em]">
                     {selectedAddress.label}
                   </span>
                   {selectedAddress.isDefault && (
-                    <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-medium rounded-full">
-                      Par defaut
+                    <span
+                      className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                      style={{ background: "#eaf0ed", color: "#2f4a3f" }}
+                    >
+                      Par défaut
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-gray-600 mt-0.5 truncate">
+                <p className="text-[12px] text-[#6d6d68] mt-0.5 truncate">
                   {selectedAddress.address}
                 </p>
                 {selectedAddress.additionalInfo && (
-                  <p className="text-xs text-gray-400 mt-0.5 truncate">
+                  <p className="text-[11px] text-[#9c9484] mt-0.5 truncate">
                     {selectedAddress.additionalInfo}
                   </p>
                 )}
               </>
             ) : (
-              <span className="text-gray-500">Selectionner une adresse</span>
+              <span className="text-[12.5px] text-[#9c9484]">Sélectionner une adresse</span>
             )}
           </div>
           <ChevronDown
             className={cn(
-              "w-5 h-5 text-gray-400 transition-transform",
+              "w-4 h-4 transition-transform flex-shrink-0",
               isOpen && "rotate-180"
             )}
+            style={{ color: "#9c9484" }}
           />
         </div>
       </button>

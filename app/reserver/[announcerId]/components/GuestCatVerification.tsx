@@ -275,18 +275,18 @@ export default function GuestCatVerification({
   }, [isManualEntry, isMixedBreed, selectedBreed, breedSearch, selectedPrimaryBreed, primaryBreedSearch, manualBreedEntry, weight, catSize]);
 
   return (
-    <div className={cn("bg-white rounded-2xl p-5 shadow-sm", className)}>
-      {/* En-tête */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="p-2 rounded-lg bg-purple-50">
-          <Cat className="w-5 h-5 text-purple-600" />
+    <div className={cn(className)}>
+      {/* En-tête style card */}
+      <div className="mb-4">
+        <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-1">
+          Détails du chat
         </div>
-        <div>
-          <h3 className="text-lg font-bold text-foreground">Informations sur votre chat</h3>
-          <p className="text-sm text-text-light">
-            Ces informations seront pré-remplies lors de la finalisation
-          </p>
-        </div>
+        <h3 className="text-base font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+          Informations sur votre chat
+        </h3>
+        <p className="text-[13px] text-[#6d6d68] leading-[1.5] mt-1">
+          Ces informations seront pré-remplies lors de la finalisation.
+        </p>
       </div>
 
       {/* Sélection du mode */}

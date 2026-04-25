@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { MapPin, ChevronLeft, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
-import { cn } from "@/app/lib/utils";
 import ServiceLocationSelector from "../ServiceLocationSelector";
 import AddressSelector from "../AddressSelector";
 import GuestAddressSelector from "../GuestAddressSelector";
+import StepNav from "./StepNav";
+import StepCard, { StepHeader } from "./StepCard";
 import type { ClientAddress, GuestAddress, BookingSelection } from "../types";
 
 interface LocationStepProps {
@@ -87,13 +87,12 @@ export default function LocationStep({
       variants={slideVariants}
       transition={{ duration: 0.3, ease: "easeInOut" }}
     >
-      <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100">
-        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
-          <span className="p-2 bg-blue-100 rounded-lg">
-            <MapPin className="w-5 h-5 text-blue-600" />
-          </span>
-          Lieu de prestation
-        </h3>
+      <StepCard>
+        <StepHeader
+          eyebrow="Étape · Lieu"
+          title="Lieu de prestation"
+          description="Choisissez où la prestation aura lieu."
+        />
 
         {onLocationSelect && (
           <ServiceLocationSelector
@@ -107,7 +106,10 @@ export default function LocationStep({
 
         {/* Sélecteur d'adresse si "à domicile" */}
         {bookingSelection?.serviceLocation === "client_home" && (
-          <div className="mt-4 pt-4 border-t border-gray-100">
+          <div
+            className="mt-4 pt-4"
+            style={{ borderTop: "1px solid #f1ede3" }}
+          >
             {isLoggedIn ? (
               onAddressSelect && onAddNewAddress && (
                 <AddressSelector
@@ -134,33 +136,14 @@ export default function LocationStep({
             )}
           </div>
         )}
-      </div>
+      </StepCard>
 
-      {/* Boutons de navigation */}
-      <div className="flex items-center justify-between mt-6">
-        <button
-          onClick={onPrevStep}
-          className="flex items-center gap-2 px-4 py-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors"
-        >
-          <ChevronLeft className="w-5 h-5" />
-          Précédent
-        </button>
-        {!isLastStep && (
-          <button
-            onClick={onNextStep}
-            disabled={!canProceed}
-            className={cn(
-              "flex items-center gap-2 px-6 py-2.5 rounded-xl font-medium transition-colors",
-              canProceed
-                ? "bg-primary text-white hover:bg-primary/90"
-                : "bg-gray-100 text-gray-400 cursor-not-allowed"
-            )}
-          >
-            Continuer
-            <ArrowRight className="w-5 h-5" />
-          </button>
-        )}
-      </div>
+      <StepNav
+        onPrevStep={onPrevStep}
+        onNextStep={onNextStep}
+        canProceed={canProceed}
+        showNext={!isLastStep}
+      />
     </motion.div>
   );
 }

@@ -63,6 +63,7 @@ import {
   DatesStep,
   LocationStep,
   OptionsStep,
+  StepNav,
   slideVariants as importedSlideVariants,
 } from "./booking/steps";
 
@@ -396,6 +397,9 @@ export default function AnnouncerFormules({
     hasAnimalsSelected: hasAnimalsSelected || !isLoggedIn, // Pas d'animal requis pour les invités
     selectedAnimalsCount: selectedAnimalIds.length,
     maxAnimals: maxSelectableAnimals,
+    // Vérification animal pour invités (chien/chat)
+    requiresAnimalVerification,
+    guestAnimalValid,
     // Paramètre pour l'étape Lieu
     serviceLocation: formuleServiceLocation,
   });
@@ -552,55 +556,110 @@ export default function AnnouncerFormules({
 
           {/* Contenu principal - une seule étape à la fois */}
           <div className="flex-1 min-w-0">
-            {/* En-tête du service - toujours visible */}
-            <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 mb-6">
-              <div className="flex items-start gap-4">
-                <span className="text-3xl">{service.categoryIcon}</span>
-                <div className="flex-1">
-                  <h2 className="text-xl font-bold text-gray-900">{service.categoryName}</h2>
-                  {service.description && (
-                    <p className="text-gray-600 mt-1">{service.description}</p>
-                  )}
+            {/* En-tête du service - style card de recherche */}
+            <div
+              className="bg-white px-[18px] py-[14px] mb-5"
+              style={{
+                borderRadius: 14,
+                border: "1px solid #ece9e1",
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className="flex-shrink-0 w-10 h-10 flex items-center justify-center text-xl"
+                  style={{
+                    borderRadius: 10,
+                    background: "#f7f5ef",
+                  }}
+                >
+                  {service.categoryIcon}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-0.5">
+                    Réservation
+                  </div>
+                  <h2 className="text-[15px] font-semibold text-[#1f1f1d] tracking-[-0.01em] truncate m-0">
+                    {service.categoryName}
+                  </h2>
                 </div>
               </div>
             </div>
 
-            {/* Indicateur d'étapes horizontal */}
+            {/* Indicateur d'étapes horizontal - style pill fin */}
             {hasVariantSelected && (
-              <div className="flex items-center gap-2 mb-6 px-2">
-                {availableDesktopSteps.map((step, index) => {
-                  const isActive = desktopStep === step;
-                  const isPast = index < currentStepIndex;
-                  const stepNumber = index + 1;
+              <div
+                className="bg-white p-1.5 mb-5 overflow-x-auto"
+                style={{
+                  borderRadius: 999,
+                  border: "1px solid #ece9e1",
+                }}
+              >
+                <div className="flex items-center gap-1 min-w-max lg:min-w-0">
+                  {availableDesktopSteps.map((step, index) => {
+                    const isActive = desktopStep === step;
+                    const isPast = index < currentStepIndex;
+                    const stepNumber = index + 1;
+                    const isClickable = isPast || isActive;
 
-                  return (
-                    <div key={step} className="flex items-center gap-2 flex-1">
-                      <button
-                        onClick={() => {
-                          if (isPast) {
-                            setSlideDirection("left");
-                            setDesktopStep(step);
+                    const shortLabel = (() => {
+                      switch (step) {
+                        case "formule": return "Formule";
+                        case "dog": return "Animal";
+                        case "animals": return "Animaux";
+                        case "dates": return isCollectiveFormule ? "Créneaux" : isMultiSessionIndividual ? "Séances" : "Dates";
+                        case "location": return "Lieu";
+                        case "options": return "Options";
+                        default: return "";
+                      }
+                    })();
+
+                    return (
+                      <div key={step} className="flex items-center gap-1 flex-1">
+                        <button
+                          onClick={() => {
+                            if (isPast) {
+                              setSlideDirection("left");
+                              setDesktopStep(step);
+                            }
+                          }}
+                          disabled={!isClickable}
+                          className={cn(
+                            "flex-1 flex items-center justify-center gap-2 px-3 py-1.5 rounded-full text-[12px] font-medium transition-all whitespace-nowrap"
+                          )}
+                          style={
+                            isActive
+                              ? { background: "#1f3a33", color: "#f7f5ef" }
+                              : isPast
+                                ? { color: "#2f4a3f", background: "#eaf0ed" }
+                                : { color: "#9c9484" }
                           }
-                        }}
-                        disabled={!isPast && !isActive}
-                        className={cn(
-                          "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all",
-                          isActive && "bg-primary text-white scale-110",
-                          isPast && "bg-secondary/20 text-secondary cursor-pointer hover:bg-secondary/30",
-                          !isPast && !isActive && "bg-gray-100 text-gray-400"
+                        >
+                          <span
+                            className={cn(
+                              "flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold flex-shrink-0"
+                            )}
+                            style={
+                              isActive
+                                ? { background: "rgba(247,245,239,0.25)", color: "#f7f5ef" }
+                                : isPast
+                                  ? { background: "rgba(47,74,63,0.15)", color: "#2f4a3f" }
+                                  : { background: "#f7f5ef", color: "#9c9484" }
+                            }
+                          >
+                            {isPast ? <Check className="w-2.5 h-2.5" /> : stepNumber}
+                          </span>
+                          <span className="hidden lg:inline">{shortLabel}</span>
+                        </button>
+                        {index < availableDesktopSteps.length - 1 && (
+                          <div
+                            className="w-2 h-px flex-shrink-0"
+                            style={{ background: isPast ? "#cfdbd3" : "#ece9e1" }}
+                          />
                         )}
-                      >
-                        {isPast ? <Check className="w-4 h-4" /> : stepNumber}
-                      </button>
-                      {index < availableDesktopSteps.length - 1 && (
-                        <div className={cn(
-                          "flex-1 h-0.5 transition-colors",
-                          isPast ? "bg-secondary/30" : "bg-gray-200"
-                        )} />
-                      )}
-                    </div>
-                  );
-                })}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -632,10 +691,19 @@ export default function AnnouncerFormules({
                     variants={slideVariants}
                     transition={{ duration: 0.3, ease: "easeInOut" }}
                   >
-                    <div className={cn(
-                      "bg-white rounded-2xl p-5 sm:p-6 border-2 transition-colors duration-300",
-                      guestAnimalValid ? "border-green-200" : guestAnimalError ? "border-red-200" : "border-amber-200"
-                    )}>
+                    <div
+                      className="bg-white p-[18px] sm:p-5"
+                      style={{
+                        borderRadius: 14,
+                        border: `1px solid ${
+                          guestAnimalValid
+                            ? "#cfdbd3"
+                            : guestAnimalError
+                              ? "#f1cdcd"
+                              : "#ece9e1"
+                        }`,
+                      }}
+                    >
                       <GuestAnimalVerification
                         acceptedAnimalTypes={acceptedAnimalTypes}
                         dogRestrictions={dogRestrictions}
@@ -645,29 +713,11 @@ export default function AnnouncerFormules({
                       />
                     </div>
 
-                    {/* Boutons de navigation */}
-                    <div className="flex items-center justify-between mt-6">
-                      <button
-                        onClick={goToPrevStep}
-                        className="flex items-center gap-2 px-4 py-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors"
-                      >
-                        <ChevronLeft className="w-5 h-5" />
-                        Précédent
-                      </button>
-                      <button
-                        onClick={goToNextStep}
-                        disabled={!canProceedToNextStep()}
-                        className={cn(
-                          "flex items-center gap-2 px-6 py-2.5 rounded-xl font-medium transition-colors",
-                          canProceedToNextStep()
-                            ? "bg-primary text-white hover:bg-primary/90"
-                            : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                        )}
-                      >
-                        Continuer
-                        <ArrowRight className="w-5 h-5" />
-                      </button>
-                    </div>
+                    <StepNav
+                      onPrevStep={goToPrevStep}
+                      onNextStep={goToNextStep}
+                      canProceed={canProceedToNextStep()}
+                    />
                   </motion.div>
                 )}
 

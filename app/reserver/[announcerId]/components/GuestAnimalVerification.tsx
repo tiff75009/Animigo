@@ -158,46 +158,45 @@ export default function GuestAnimalVerification({
   return (
     <div className={cn("space-y-4", className)}>
       {/* Sélecteur de type d'animal */}
-      <div className="bg-white rounded-2xl p-5 shadow-sm">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <PawPrint className="w-5 h-5 text-primary" />
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-foreground">Quel animal réservez-vous ?</h3>
-            <p className="text-sm text-text-light">
-              Ce prestataire accepte les chiens et les chats
-            </p>
-          </div>
+      <div>
+        <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-1">
+          Étape · Animal
         </div>
+        <h3 className="text-base font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+          Quel animal réservez-vous ?
+        </h3>
+        <p className="text-[13px] text-[#6d6d68] leading-[1.5] mt-1 mb-4">
+          Ce prestataire accepte les chiens et les chats.
+        </p>
 
         {/* Boutons de sélection */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2.5">
           <button
             type="button"
             onClick={() => setSelectedAnimalType("chien")}
-            className={cn(
-              "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
-              selectedAnimalType === "chien"
-                ? "border-primary bg-primary/5"
-                : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-            )}
+            className="flex items-center gap-3 p-3 text-left transition-all"
+            style={{
+              borderRadius: 12,
+              border: `1px solid ${selectedAnimalType === "chien" ? "#1f3a33" : "#ece9e1"}`,
+              background: selectedAnimalType === "chien" ? "#f5f9f6" : "#fff",
+            }}
           >
-            <div className={cn(
-              "p-3 rounded-full transition-colors",
-              selectedAnimalType === "chien"
-                ? "bg-primary/10"
-                : "bg-gray-100"
-            )}>
-              <Dog className={cn(
-                "w-6 h-6",
-                selectedAnimalType === "chien" ? "text-primary" : "text-gray-500"
-              )} />
+            <div
+              className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{
+                background: selectedAnimalType === "chien" ? "#fff" : "#f7f5ef",
+                border: `1px solid ${selectedAnimalType === "chien" ? "#cfdbd3" : "#ece9e1"}`,
+              }}
+            >
+              <Dog
+                className="w-4 h-4"
+                style={{ color: selectedAnimalType === "chien" ? "#1f3a33" : "#6d6d68" }}
+              />
             </div>
-            <span className={cn(
-              "font-medium",
-              selectedAnimalType === "chien" ? "text-primary" : "text-foreground"
-            )}>
+            <span
+              className="text-[13.5px] font-semibold tracking-[-0.01em]"
+              style={{ color: selectedAnimalType === "chien" ? "#1f3a33" : "#1f1f1d" }}
+            >
               Chien
             </span>
           </button>
@@ -205,28 +204,29 @@ export default function GuestAnimalVerification({
           <button
             type="button"
             onClick={() => setSelectedAnimalType("chat")}
-            className={cn(
-              "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
-              selectedAnimalType === "chat"
-                ? "border-purple-500 bg-purple-50"
-                : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-            )}
+            className="flex items-center gap-3 p-3 text-left transition-all"
+            style={{
+              borderRadius: 12,
+              border: `1px solid ${selectedAnimalType === "chat" ? "#1f3a33" : "#ece9e1"}`,
+              background: selectedAnimalType === "chat" ? "#f5f9f6" : "#fff",
+            }}
           >
-            <div className={cn(
-              "p-3 rounded-full transition-colors",
-              selectedAnimalType === "chat"
-                ? "bg-purple-100"
-                : "bg-gray-100"
-            )}>
-              <Cat className={cn(
-                "w-6 h-6",
-                selectedAnimalType === "chat" ? "text-purple-600" : "text-gray-500"
-              )} />
+            <div
+              className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{
+                background: selectedAnimalType === "chat" ? "#fff" : "#f7f5ef",
+                border: `1px solid ${selectedAnimalType === "chat" ? "#cfdbd3" : "#ece9e1"}`,
+              }}
+            >
+              <Cat
+                className="w-4 h-4"
+                style={{ color: selectedAnimalType === "chat" ? "#1f3a33" : "#6d6d68" }}
+              />
             </div>
-            <span className={cn(
-              "font-medium",
-              selectedAnimalType === "chat" ? "text-purple-600" : "text-foreground"
-            )}>
+            <span
+              className="text-[13.5px] font-semibold tracking-[-0.01em]"
+              style={{ color: selectedAnimalType === "chat" ? "#1f3a33" : "#1f1f1d" }}
+            >
               Chat
             </span>
           </button>

@@ -1,9 +1,10 @@
 "use client";
 
-import { Plus, ChevronLeft, Eye, CreditCard, ArrowRight } from "lucide-react";
+import { Eye, CreditCard, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
-import { cn } from "@/app/lib/utils";
 import SelectableOptionCard from "../SelectableOptionCard";
+import StepNav from "./StepNav";
+import StepCard, { StepHeader } from "./StepCard";
 import type { OptionData } from "../../types";
 
 interface OptionsStepProps {
@@ -47,16 +48,15 @@ export default function OptionsStep({
       variants={slideVariants}
       transition={{ duration: 0.3, ease: "easeInOut" }}
     >
-      <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100">
-        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
-          <span className="p-2 bg-purple-100 rounded-lg">
-            <Plus className="w-5 h-5 text-purple-600" />
-          </span>
-          Options supplémentaires
-        </h3>
+      <StepCard>
+        <StepHeader
+          eyebrow="Étape · Options"
+          title="Options supplémentaires"
+          description="Personnalisez votre réservation."
+        />
 
         {options.length > 0 ? (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {options.map((option) => (
               <SelectableOptionCard
                 key={option.id.toString()}
@@ -68,46 +68,48 @@ export default function OptionsStep({
             ))}
           </div>
         ) : (
-          <p className="text-gray-500 text-center py-4">
+          <p className="text-[13px] text-[#9c9484] text-center py-4">
             Aucune option disponible pour cette prestation.
           </p>
         )}
-      </div>
+      </StepCard>
 
-      {/* Bouton Précédent */}
-      <div className="mt-6">
-        <button
-          onClick={onPrevStep}
-          className="flex items-center gap-2 px-4 py-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors"
-        >
-          <ChevronLeft className="w-5 h-5" />
-          Précédent
-        </button>
-      </div>
+      <StepNav onPrevStep={onPrevStep} showNext={false} />
 
-      {/* Boutons de finalisation */}
+      {/* Boutons de finalisation - cohérent avec les cards de recherche */}
       {(onBook || onFinalize) && (
-        <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-2">
-          {/* Bouton principal - Vérifier la réservation */}
+        <div
+          className="mt-5 pt-5 grid grid-cols-1 sm:grid-cols-2 gap-2.5"
+          style={{ borderTop: "1px solid #f1ede3" }}
+        >
+          {/* Bouton secondaire - Vérifier (outline) */}
           {onBook && (
             <button
+              type="button"
               onClick={onBook}
-              className="py-2 px-4 rounded-lg font-medium text-sm transition-colors flex items-center gap-2 bg-primary text-white hover:bg-primary/90"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-[13px] font-medium transition-colors hover:bg-[#f7f5ef]"
+              style={{
+                background: "#fff",
+                border: "1px solid #1f3a33",
+                color: "#1f3a33",
+              }}
             >
-              <Eye className="w-4 h-4" />
+              <Eye className="w-3.5 h-3.5" />
               Vérifier la réservation
             </button>
           )}
 
-          {/* Bouton secondaire - Finaliser directement */}
+          {/* Bouton principal - Finaliser (dark green plein) */}
           {onFinalize && (
             <button
+              type="button"
               onClick={onFinalize}
-              className="py-2 px-4 rounded-lg font-medium text-sm transition-colors flex items-center gap-2 border border-secondary text-secondary hover:bg-secondary/10"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-[13px] font-medium transition-opacity hover:opacity-90 active:scale-[0.98]"
+              style={{ background: "#1f3a33", color: "#f7f5ef" }}
             >
-              <CreditCard className="w-4 h-4" />
-              Finaliser
-              <ArrowRight className="w-4 h-4" />
+              <CreditCard className="w-3.5 h-3.5" />
+              Finaliser la réservation
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           )}
         </div>

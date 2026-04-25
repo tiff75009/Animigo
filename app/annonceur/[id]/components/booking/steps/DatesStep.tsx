@@ -1,9 +1,8 @@
 "use client";
 
-import { ChevronLeft, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
-import { cn } from "@/app/lib/utils";
 import BookingCalendar from "../BookingCalendar";
+import StepNav from "./StepNav";
 import CollectiveSlotPicker from "../CollectiveSlotPicker";
 import MultiSessionCalendar from "../MultiSessionCalendar";
 import type { CalendarEntry, SelectedSession, BookingSelection } from "../types";
@@ -195,31 +194,12 @@ export default function DatesStep({
         />
       )}
 
-      {/* Boutons de navigation */}
-      <div className="flex items-center justify-between mt-6">
-        <button
-          onClick={onPrevStep}
-          className="flex items-center gap-2 px-4 py-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors"
-        >
-          <ChevronLeft className="w-5 h-5" />
-          Précédent
-        </button>
-        {!isLastStep && (
-          <button
-            onClick={onNextStep}
-            disabled={!canProceed}
-            className={cn(
-              "flex items-center gap-2 px-6 py-2.5 rounded-xl font-medium transition-colors",
-              canProceed
-                ? "bg-primary text-white hover:bg-primary/90"
-                : "bg-gray-100 text-gray-400 cursor-not-allowed"
-            )}
-          >
-            Continuer
-            <ArrowRight className="w-5 h-5" />
-          </button>
-        )}
-      </div>
+      <StepNav
+        onPrevStep={onPrevStep}
+        onNextStep={onNextStep}
+        canProceed={canProceed}
+        showNext={!isLastStep}
+      />
     </motion.div>
   );
 }

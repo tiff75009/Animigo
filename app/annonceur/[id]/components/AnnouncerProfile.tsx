@@ -95,15 +95,20 @@ export default function AnnouncerProfile({ announcer, className }: AnnouncerProf
   };
 
   return (
-    <section className={cn("space-y-6", className)}>
+    <section className={cn("space-y-5", className)}>
       {/* À propos */}
-      <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100">
-        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-          <span className="p-2 bg-secondary/10 rounded-lg">
-            <Users className="w-5 h-5 text-secondary" />
-          </span>
-          À propos de {announcer.firstName}
-        </h3>
+      <div
+        className="bg-white p-5"
+        style={{ borderRadius: 14, border: "1px solid #ece9e1" }}
+      >
+        <div className="mb-4">
+          <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-1">
+            À propos
+          </div>
+          <h3 className="text-base font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+            À propos de {announcer.firstName}
+          </h3>
+        </div>
 
         {/* Equipment Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
@@ -245,16 +250,26 @@ export default function AnnouncerProfile({ announcer, className }: AnnouncerProf
 
       {/* Mes Compagnons */}
       {announcer.ownAnimals && announcer.ownAnimals.length > 0 && (
-        <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <span className="p-2 bg-amber-50 rounded-lg">
-              <Dog className="w-5 h-5 text-amber-600" />
+        <div
+          className="bg-white p-5"
+          style={{ borderRadius: 14, border: "1px solid #ece9e1" }}
+        >
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-1">
+                Compagnons
+              </div>
+              <h3 className="text-base font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+                Les compagnons de {announcer.firstName}
+              </h3>
+            </div>
+            <span
+              className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium"
+              style={{ background: "#f7f5ef", color: "#6d6d68" }}
+            >
+              {announcer.ownAnimals.length}
             </span>
-            Les compagnons de {announcer.firstName}
-            <span className="text-sm font-normal text-gray-500">
-              ({announcer.ownAnimals.length})
-            </span>
-          </h3>
+          </div>
 
           <div className="space-y-3">
             {announcer.ownAnimals.map((animal, index) => {
@@ -550,13 +565,18 @@ export default function AnnouncerProfile({ announcer, className }: AnnouncerProf
       )}
 
       {/* Galerie Photos */}
-      <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100">
-        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-          <span className="p-2 bg-primary/10 rounded-lg">
-            <PawPrint className="w-5 h-5 text-primary" />
-          </span>
-          Galerie photos
-        </h3>
+      <div
+        className="bg-white p-5"
+        style={{ borderRadius: 14, border: "1px solid #ece9e1" }}
+      >
+        <div className="mb-4">
+          <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-1">
+            Galerie
+          </div>
+          <h3 className="text-base font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+            Galerie photos
+          </h3>
+        </div>
 
         {announcer.gallery.length === 0 ? (
           <div className="bg-gray-50 rounded-xl p-6 text-center">

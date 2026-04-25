@@ -407,38 +407,51 @@ export default memo(function CollectiveSlotPicker({
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: -20 }}
-        className="space-y-4"
+        className="space-y-3"
       >
-        {/* Header avec flèche retour */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setSelectedDay(null)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+        {/* Bandeau retour - style cohérent */}
+        <button
+          onClick={() => setSelectedDay(null)}
+          className="w-full flex items-center gap-3 p-3 transition-colors hover:bg-[#f7f5ef]"
+          style={{ borderRadius: 12, background: "#fff", border: "1px solid #ece9e1" }}
+        >
+          <div
+            className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{ background: "#f7f5ef" }}
           >
-            <ArrowLeft className="w-5 h-5 text-gray-600" />
-          </button>
-          <div className="flex-1">
-            <h4 className="text-lg font-semibold text-gray-900 capitalize">
+            <ArrowLeft className="w-3.5 h-3.5" style={{ color: "#1f1f1d" }} />
+          </div>
+          <div className="flex-1 min-w-0 text-left">
+            <p className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "#9c9484" }}>
+              Retour au calendrier
+            </p>
+            <p className="text-[14px] font-semibold text-[#1f1f1d] capitalize truncate tracking-[-0.01em]">
               {formatDateFull(selectedDay)}
-            </h4>
-            <p className="text-sm text-gray-500">
-              {daySlots.length} créneau{daySlots.length > 1 ? "x" : ""} disponible{daySlots.length > 1 ? "s" : ""}
             </p>
           </div>
-        </div>
+          <span className="text-[11px] flex-shrink-0" style={{ color: "#9c9484" }}>
+            {daySlots.length} créneau{daySlots.length > 1 ? "x" : ""}
+          </span>
+        </button>
 
         {isPast ? (
-          <div className="text-center py-8 text-gray-500">
-            <Clock className="w-12 h-12 mx-auto mb-3 opacity-30" />
-            <p>Cette date est passée</p>
+          <div
+            className="text-center py-8"
+            style={{ borderRadius: 12, background: "#f7f5ef", border: "1px solid #ece9e1" }}
+          >
+            <Clock className="w-9 h-9 mx-auto mb-3" style={{ color: "#cdc9c0" }} />
+            <p className="text-[13px] text-[#6d6d68]">Cette date est passée</p>
           </div>
         ) : daySlots.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            <Clock className="w-12 h-12 mx-auto mb-3 opacity-30" />
-            <p>Aucun créneau disponible ce jour</p>
+          <div
+            className="text-center py-8"
+            style={{ borderRadius: 12, background: "#f7f5ef", border: "1px solid #ece9e1" }}
+          >
+            <Clock className="w-9 h-9 mx-auto mb-3" style={{ color: "#cdc9c0" }} />
+            <p className="text-[13px] text-[#6d6d68]">Aucun créneau disponible ce jour</p>
           </div>
         ) : (
-          <div className="grid gap-2 max-h-[280px] overflow-y-auto">
+          <div className="grid gap-2 max-h-[320px] overflow-y-auto">
             {daySlots.map((slot) => {
               const isSelected = localSelectedIds.includes(slot._id);
               const canSelect =
@@ -451,42 +464,44 @@ export default memo(function CollectiveSlotPicker({
                   key={slot._id}
                   onClick={() => canSelect && handleSlotSelect(slot._id)}
                   disabled={!canSelect}
-                  className={cn(
-                    "w-full p-4 rounded-xl border-2 transition-all text-left",
-                    isSelected
-                      ? "bg-primary/10 border-primary"
-                      : canSelect
-                      ? "bg-white border-gray-200 hover:border-primary/50 hover:bg-gray-50"
-                      : "bg-gray-50 border-gray-100 cursor-not-allowed opacity-60"
-                  )}
+                  className="w-full p-3 text-left transition-all hover:bg-[#fafafa]"
+                  style={{
+                    borderRadius: 12,
+                    border: `1px solid ${
+                      isSelected ? "#1f3a33" : !canSelect ? "#f1ede3" : "#ece9e1"
+                    }`,
+                    background: isSelected ? "#f5f9f6" : "#fff",
+                    opacity: !canSelect && !isSelected ? 0.5 : 1,
+                    cursor: !canSelect ? "not-allowed" : "pointer",
+                  }}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={cn(
-                        "p-2 rounded-lg",
-                        isSelected ? "bg-primary/20" : "bg-gray-100"
-                      )}>
-                        <Clock className={cn(
-                          "w-5 h-5",
-                          isSelected ? "text-primary" : "text-gray-500"
-                        )} />
-                      </div>
-                      <div>
-                        <p className={cn(
-                          "font-semibold text-lg",
-                          isSelected ? "text-primary" : "text-gray-900"
-                        )}>
-                          {slot.startTime} - {slot.endTime}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Clock
+                        className="w-4 h-4 flex-shrink-0"
+                        style={{ color: isSelected ? "#1f3a33" : "#6d6d68" }}
+                      />
+                      <div className="min-w-0">
+                        <p
+                          className="text-[14px] font-semibold tracking-[-0.01em]"
+                          style={{ color: isSelected ? "#1f3a33" : "#1f1f1d" }}
+                        >
+                          {slot.startTime} — {slot.endTime}
                         </p>
-                        <div className="flex items-center gap-1 text-sm text-gray-500">
-                          <Users className="w-4 h-4" />
-                          <span>{slot.availableSpots} place{slot.availableSpots > 1 ? "s" : ""} disponible{slot.availableSpots > 1 ? "s" : ""}</span>
+                        <div className="flex items-center gap-1 text-[11px] text-[#6d6d68] mt-0.5">
+                          <Users className="w-3 h-3" />
+                          <span>
+                            {slot.availableSpots} place{slot.availableSpots > 1 ? "s" : ""} disponible{slot.availableSpots > 1 ? "s" : ""}
+                          </span>
                         </div>
                       </div>
                     </div>
                     {isSelected && (
-                      <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-                        <Check className="w-5 h-5 text-white" />
+                      <div
+                        className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
+                        style={{ background: "#1f3a33" }}
+                      >
+                        <Check className="w-3 h-3 text-white" />
                       </div>
                     )}
                   </div>
@@ -501,37 +516,43 @@ export default memo(function CollectiveSlotPicker({
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="p-4 bg-gradient-to-r from-secondary/10 to-primary/10 border-2 border-secondary/30 rounded-xl"
+            className="p-4"
+            style={{ borderRadius: 12, background: "#f5f9f6", border: "1px solid #cfdbd3" }}
           >
             <div className="flex items-start gap-3">
-              <div className="p-2 bg-secondary/20 rounded-lg flex-shrink-0">
-                <Sparkles className="w-5 h-5 text-secondary" />
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{ background: "#fff", border: "1px solid #cfdbd3" }}
+              >
+                <Sparkles className="w-4 h-4" style={{ color: "#1f3a33" }} />
               </div>
-              <div className="flex-1">
-                <p className="font-semibold text-gray-900 mb-1">
+              <div className="flex-1 min-w-0">
+                <p className="text-[13.5px] font-semibold text-[#1f1f1d] tracking-[-0.01em] mb-1">
                   Réserver les mêmes créneaux ?
                 </p>
-                <p className="text-sm text-gray-600 mb-3">
-                  Voulez-vous ajouter {findMatchingSlots.length} séance{findMatchingSlots.length > 1 ? "s" : ""} tous les{" "}
+                <p className="text-[12px] text-[#3a3a38] leading-[1.5] mb-3">
+                  Ajouter {findMatchingSlots.length} séance{findMatchingSlots.length > 1 ? "s" : ""} tous les{" "}
                   <strong className="capitalize">{getDayName(firstSelectedSlot.date)}s</strong> à{" "}
                   <strong>{firstSelectedSlot.startTime}</strong> ?
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={applyAutoFill}
-                    className="flex-1 sm:flex-none px-4 py-2 bg-secondary text-white font-medium rounded-lg hover:bg-secondary/90 transition-colors flex items-center justify-center gap-2"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-medium transition-opacity hover:opacity-90"
+                    style={{ background: "#1f3a33", color: "#f7f5ef" }}
                   >
-                    <Repeat className="w-4 h-4" />
-                    Oui, réserver automatiquement
+                    <Repeat className="w-3.5 h-3.5" />
+                    Oui, automatiquement
                   </button>
                   <button
                     onClick={() => {
                       setShowAutoFillSuggestion(false);
                       setSelectedDay(null);
                     }}
-                    className="flex-1 sm:flex-none px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors"
+                    className="inline-flex items-center px-4 py-2 rounded-full text-[12px] font-medium transition-colors hover:bg-[#fafafa]"
+                    style={{ background: "#fff", border: "1px solid #ece9e1", color: "#1f1f1d" }}
                   >
-                    Non, choisir manuellement
+                    Non, manuellement
                   </button>
                 </div>
               </div>
@@ -539,21 +560,22 @@ export default memo(function CollectiveSlotPicker({
           </motion.div>
         )}
 
-        {/* Bouton pour sélectionner un autre créneau */}
+        {/* Bouton pour ajouter un autre créneau */}
         {hasSelectedThisDay && !showAutoFillSuggestion && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="pt-2"
+            className="pt-1"
           >
             <button
               onClick={() => setSelectedDay(null)}
-              className="w-full py-3 px-4 bg-primary text-white font-semibold rounded-xl hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+              className="w-full py-2.5 px-4 rounded-full text-[13px] font-medium transition-opacity hover:opacity-90 flex items-center justify-center gap-2"
+              style={{ background: "#1f3a33", color: "#f7f5ef" }}
             >
-              <Calendar className="w-5 h-5" />
+              <Calendar className="w-3.5 h-3.5" />
               Ajouter un autre créneau
             </button>
-            <p className="text-xs text-center text-gray-500 mt-2">
+            <p className="text-[11px] text-center mt-2" style={{ color: "#9c9484" }}>
               Choisissez un autre jour pour ajouter une séance
             </p>
           </motion.div>
@@ -575,45 +597,49 @@ export default memo(function CollectiveSlotPicker({
         <div className="flex items-center justify-between mb-2">
           <button
             onClick={navigatePrev}
-            className="p-2 hover:bg-white rounded-lg transition-colors"
+            className="w-8 h-8 inline-flex items-center justify-center rounded-full hover:bg-[#f7f5ef] transition-colors"
+            aria-label="Période précédente"
           >
-            <ChevronLeft className="w-5 h-5" />
+            <ChevronLeft className="w-4 h-4" style={{ color: "#1f1f1d" }} />
           </button>
           <div className="flex items-center gap-2">
-            <h4 className="text-base font-semibold text-gray-900">
+            <h4 className="text-[14px] font-semibold text-[#1f1f1d] tracking-[-0.01em] capitalize">
               {getPeriodTitle()}
             </h4>
             <button
               onClick={goToToday}
-              className="px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
+              className="px-2 py-0.5 rounded-full text-[10px] font-medium hover:bg-[#f7f5ef] transition-colors"
+              style={{ border: "1px solid #ece9e1", color: "#1f3a33" }}
             >
-              Aujourd'hui
+              Aujourd&apos;hui
             </button>
           </div>
           <button
             onClick={navigateNext}
-            className="p-2 hover:bg-white rounded-lg transition-colors"
+            className="w-8 h-8 inline-flex items-center justify-center rounded-full hover:bg-[#f7f5ef] transition-colors"
+            aria-label="Période suivante"
           >
-            <ChevronRight className="w-5 h-5" />
+            <ChevronRight className="w-4 h-4" style={{ color: "#1f1f1d" }} />
           </button>
         </div>
 
-        {/* En-têtes des jours de la semaine */}
-        <div className="grid grid-cols-7 gap-1">
-          {["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"].map((day) => (
+        {/* En-têtes jours */}
+        <div className="grid grid-cols-7">
+          {["L", "M", "M", "J", "V", "S", "D"].map((day, i) => (
             <div
-              key={day}
-              className="text-center text-xs font-medium text-gray-500 py-2"
+              key={`${day}-${i}`}
+              className="text-center py-2 text-[11px]"
+              style={{ color: "#6d6d68", fontWeight: 500 }}
             >
               {day}
             </div>
           ))}
         </div>
 
-        {/* Grille des semaines */}
-        <div className="space-y-1">
+        {/* Grille des semaines (style Airbnb) */}
+        <div>
           {weeks.map((week, weekIndex) => (
-            <div key={weekIndex} className="grid grid-cols-7 gap-1">
+            <div key={weekIndex} className="grid grid-cols-7">
               {week.map(({ dateStr }) => {
                 const isPast = dateStr < today;
                 const isToday = dateStr === today;
@@ -627,43 +653,55 @@ export default memo(function CollectiveSlotPicker({
                 );
 
                 return (
-                  <button
-                    key={dateStr}
-                    onClick={() => hasSlots && setSelectedDay(dateStr)}
-                    disabled={!hasSlots}
-                    className={cn(
-                      "relative aspect-square flex flex-col items-center justify-center rounded-xl transition-all",
-                      isPast && "opacity-40 cursor-not-allowed",
-                      isToday && "ring-2 ring-primary/50",
-                      hasSlots && !isPast && "hover:bg-primary/10 cursor-pointer",
-                      hasSelectedSlot && "bg-primary/15",
-                      !hasSlots && !isPast && "text-gray-400"
-                    )}
-                  >
-                    <span className={cn(
-                      "text-sm font-medium",
-                      isToday && "text-primary font-bold",
-                      hasSelectedSlot && "text-primary"
-                    )}>
-                      {formatDayNumber(dateStr)}
-                    </span>
+                  <div key={dateStr} className="relative aspect-square">
+                    <button
+                      onClick={() => hasSlots && setSelectedDay(dateStr)}
+                      disabled={!hasSlots}
+                      className={cn(
+                        "group relative w-full h-full flex flex-col items-center justify-center rounded-full transition-all",
+                        hasSlots && !hasSelectedSlot && "hover:bg-[#1f1f1d] hover:text-white cursor-pointer",
+                        !hasSlots && !isPast && "cursor-not-allowed"
+                      )}
+                      style={{
+                        background: hasSelectedSlot ? "#1f1f1d" : "transparent",
+                        color: hasSelectedSlot
+                          ? "#fff"
+                          : isPast
+                            ? "#cdc9c0"
+                            : !hasSlots
+                              ? "#cdc9c0"
+                              : "#1f1f1d",
+                        opacity: isPast ? 0.5 : 1,
+                      }}
+                    >
+                      {isToday && !hasSelectedSlot && (
+                        <div
+                          className="absolute inset-0 rounded-full pointer-events-none"
+                          style={{ border: "1px solid #1f1f1d" }}
+                        />
+                      )}
+                      <span
+                        className="text-[14px]"
+                        style={{ fontWeight: hasSelectedSlot || isToday ? 600 : 400 }}
+                      >
+                        {formatDayNumber(dateStr)}
+                      </span>
 
-                    {/* Indicateur de créneaux disponibles */}
-                    {hasSlots && !isPast && (
-                      <div className="flex items-center gap-0.5 mt-0.5">
-                        {hasSelectedSlot ? (
-                          <div className="w-2 h-2 rounded-full bg-primary" />
-                        ) : canSelectDay ? (
-                          <div className="w-2 h-2 rounded-full bg-green-500" />
-                        ) : (
-                          <div className="w-2 h-2 rounded-full bg-gray-300" />
-                        )}
-                        {slotsCount > 1 && (
-                          <span className="text-[10px] text-gray-500">+{slotsCount - 1}</span>
-                        )}
-                      </div>
-                    )}
-                  </button>
+                      {hasSlots && !isPast && !hasSelectedSlot && (
+                        <div className="flex items-center gap-0.5 mt-0.5 transition-opacity group-hover:opacity-0">
+                          <div
+                            className="w-1 h-1 rounded-full"
+                            style={{ background: canSelectDay ? "#2f4a3f" : "#c9a14a" }}
+                          />
+                          {slotsCount > 1 && (
+                            <span className="text-[9px]" style={{ color: "#9c9484" }}>
+                              +{slotsCount - 1}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </button>
+                  </div>
                 );
               })}
             </div>
@@ -671,19 +709,22 @@ export default memo(function CollectiveSlotPicker({
         </div>
 
         {/* Légende */}
-        <div className="flex flex-wrap items-center justify-center gap-4 pt-2 text-xs text-gray-500">
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
-            <span>Disponible</span>
+        <div
+          className="flex flex-wrap items-center justify-center gap-3 pt-3 mt-2"
+          style={{ borderTop: "1px solid #f1ede3" }}
+        >
+          <div className="flex items-center gap-1">
+            <div className="w-1.5 h-1.5 rounded-full" style={{ background: "#2f4a3f" }} />
+            <span className="text-[10px] font-medium" style={{ color: "#9c9484" }}>Disponible</span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-primary" />
-            <span>Sélectionné</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-gray-300" />
-            <span>Intervalle non respecté</span>
-          </div>
+          {sessionInterval > 1 && (
+            <div className="flex items-center gap-1">
+              <div className="w-1.5 h-1.5 rounded-full" style={{ background: "#c9a14a" }} />
+              <span className="text-[10px] font-medium" style={{ color: "#9c9484" }}>
+                Intervalle non respecté
+              </span>
+            </div>
+          )}
         </div>
       </motion.div>
     );
@@ -697,30 +738,34 @@ export default memo(function CollectiveSlotPicker({
       className="space-y-3"
     >
       {/* Header avec bouton modifier */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-2 bg-green-100 rounded-lg">
-            <Check className="w-5 h-5 text-green-600" />
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div
+            className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{ background: "#1f3a33" }}
+          >
+            <Check className="w-4 h-4 text-white" />
           </div>
-          <div>
-            <h3 className="font-semibold text-gray-900">
-              {localSelectedIds.length} séance{localSelectedIds.length > 1 ? "s" : ""} sélectionnée{localSelectedIds.length > 1 ? "s" : ""}
+          <div className="min-w-0">
+            <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-0.5">
+              Créneaux
+            </div>
+            <h3 className="text-[14px] font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+              {localSelectedIds.length} séance{localSelectedIds.length > 1 ? "s" : ""} confirmée{localSelectedIds.length > 1 ? "s" : ""}
             </h3>
-            <p className="text-sm text-gray-500">
-              Créneaux confirmés
-            </p>
           </div>
         </div>
         <button
           onClick={() => setIsCollapsed(false)}
-          className="px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
+          className="px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors hover:bg-[#f7f5ef] flex-shrink-0"
+          style={{ color: "#1f3a33", border: "1px solid #1f3a33" }}
         >
           Modifier
         </button>
       </div>
 
-      {/* Liste des séances */}
-      <div className="flex flex-wrap gap-2">
+      {/* Liste des séances en pills */}
+      <div className="flex flex-wrap gap-1.5">
         {selectedSlotsDetails.map((slot) => {
           const date = new Date(slot.date);
           const dayName = date.toLocaleDateString("fr-FR", { weekday: "short" });
@@ -729,14 +774,19 @@ export default memo(function CollectiveSlotPicker({
           return (
             <div
               key={slot._id}
-              className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-xl text-sm"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11.5px]"
+              style={{
+                borderRadius: 999,
+                background: "#f5f9f6",
+                border: "1px solid #cfdbd3",
+              }}
             >
-              <Calendar className="w-4 h-4 text-green-600" />
-              <span className="font-medium text-gray-900 capitalize">
+              <Calendar className="w-3 h-3" style={{ color: "#1f3a33" }} />
+              <span className="font-semibold text-[#1f1f1d] capitalize">
                 {dayName} {dayNum} {month}
               </span>
-              <span className="text-gray-500">
-                {slot.startTime} - {slot.endTime}
+              <span style={{ color: "#6d6d68" }}>
+                · {slot.startTime}-{slot.endTime}
               </span>
             </div>
           );
@@ -747,63 +797,78 @@ export default memo(function CollectiveSlotPicker({
 
   return (
     <div className={cn("space-y-4", className)}>
-      {/* Vue repliée si tous les créneaux sont sélectionnés */}
       {isCollapsed && isComplete ? (
         renderCollapsedView()
       ) : (
         <>
-          {/* Header */}
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div>
-              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-primary" />
+          {/* Header — eyebrow + titre */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-1">
+                Étape · Créneaux
+              </div>
+              <h3 className="text-base font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
                 Choisissez vos créneaux
               </h3>
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="text-[12px] text-[#6d6d68] mt-1">
                 Sélectionnez un ou plusieurs créneaux
                 {sessionInterval > 1 && (
-                  <> avec au moins {sessionInterval} jour{sessionInterval > 1 ? "s" : ""} d'intervalle</>
+                  <> avec au moins {sessionInterval} jour{sessionInterval > 1 ? "s" : ""} d&apos;intervalle</>
                 )}
               </p>
             </div>
-            <div
-              className={cn(
-                "px-3 py-1.5 rounded-full text-sm font-medium",
+            <span
+              className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium flex-shrink-0 mt-1"
+              style={
                 isComplete
-                  ? "bg-green-100 text-green-700"
-                  : "bg-amber-100 text-amber-700"
-              )}
+                  ? { border: "1px solid #cfdbd3", color: "#2f4a3f", background: "#fff" }
+                  : { border: "1px solid #f4e6c1", color: "#7a5b1a", background: "#fff" }
+              }
             >
-              {localSelectedIds.length} sélectionné
-              {localSelectedIds.length > 1 ? "s" : ""}
-            </div>
+              {localSelectedIds.length} sélectionné{localSelectedIds.length > 1 ? "s" : ""}
+            </span>
           </div>
 
-          {/* Message si intervalle requis */}
+          {/* Message intervalle */}
           {sessionInterval > 1 && (
-            <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-xl text-sm text-blue-700">
-              <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
-              <p>
-                Les séances doivent être espacées d'au moins{" "}
-                <strong>{sessionInterval} jours</strong>. Les créneaux trop proches
-                de vos sélections seront grisés.
+            <div
+              className="flex items-start gap-2 p-3 text-[12px]"
+              style={{
+                borderRadius: 10,
+                background: "#f7f5ef",
+                border: "1px solid #ece9e1",
+                color: "#3a3a38",
+              }}
+            >
+              <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" style={{ color: "#6d6d68" }} />
+              <p className="leading-[1.5]">
+                Les séances doivent être espacées d&apos;au moins{" "}
+                <strong className="text-[#1f1f1d]">{sessionInterval} jours</strong>. Les créneaux
+                trop proches de vos sélections seront grisés.
               </p>
             </div>
           )}
 
-          {/* Calendrier ou vue horaire */}
-          <div className="bg-gray-50 rounded-2xl p-4">
+          {/* Calendrier ou vue horaire — sans wrapper coloré */}
+          <div>
             <AnimatePresence mode="wait">
               {selectedDay ? renderTimeView() : renderCalendarView()}
             </AnimatePresence>
           </div>
 
-          {/* Message si aucun créneau disponible */}
           {availableSlots.length === 0 && (
-            <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-xl text-sm text-amber-700">
-              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-              <p>
-                Aucun créneau disponible pour le moment. Contactez l'annonceur pour plus de créneaux.
+            <div
+              className="flex items-start gap-2 p-3 text-[12px]"
+              style={{
+                borderRadius: 10,
+                background: "#fdf8ec",
+                border: "1px solid #f4e6c1",
+                color: "#7a5b1a",
+              }}
+            >
+              <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+              <p className="leading-[1.5]">
+                Aucun créneau disponible pour le moment. Contactez l&apos;annonceur pour plus de créneaux.
               </p>
             </div>
           )}

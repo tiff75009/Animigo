@@ -3,6 +3,8 @@ export { default as AnimalsStep } from "./AnimalsStep";
 export { default as DatesStep } from "./DatesStep";
 export { default as LocationStep } from "./LocationStep";
 export { default as OptionsStep } from "./OptionsStep";
+export { default as StepNav } from "./StepNav";
+export { default as StepCard, StepHeader } from "./StepCard";
 
 // Types pour les étapes
 export type DesktopStep = "formule" | "dog" | "animals" | "dates" | "location" | "options";

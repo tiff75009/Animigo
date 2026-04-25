@@ -73,19 +73,21 @@ export default function SelectableFormuleCard({
           ease: "easeInOut"
         },
       }}
-      whileHover={{ scale: isAnnouncer ? 1 : 1.02 }}
-      whileTap={{ scale: isAnnouncer ? 1 : 0.99 }}
+      whileHover={{ scale: isAnnouncer ? 1 : 1.005 }}
+      whileTap={{ scale: isAnnouncer ? 1 : 0.995 }}
       onClick={isAnnouncer ? undefined : onSelect}
-      style={isAnnouncer ? { cursor: "default" } : undefined}
-      className={cn(
-        "w-full p-4 rounded-xl transition-all text-left relative overflow-hidden",
-        "border-2",
-        isSelected
-          ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+      className="w-full p-[18px] text-left relative overflow-hidden transition-all"
+      style={{
+        borderRadius: 14,
+        border: `1px solid ${isSelected ? "#1f3a33" : "#ece9e1"}`,
+        background: isSelected ? "#f5f9f6" : "#fff",
+        boxShadow: isSelected
+          ? "0 8px 24px rgba(31,58,51,0.08)"
           : showAttentionPulse
-            ? "border-primary/30 bg-gradient-to-r from-gray-50 to-primary/5 hover:bg-primary/10 hover:border-primary/50"
-            : "border-gray-100 bg-gray-50 hover:bg-gray-100 hover:border-gray-200"
-      )}
+            ? "0 6px 18px rgba(30,30,28,0.04)"
+            : "none",
+        cursor: isAnnouncer ? "default" : "pointer",
+      }}
     >
       {/* Shimmer effect when attention pulse is active */}
       {showAttentionPulse && !isSelected && (
@@ -103,51 +105,46 @@ export default function SelectableFormuleCard({
         />
       )}
 
-      {/* En-tête: Titre + Prix - layout responsive */}
+      {/* En-tête: Titre + Prix */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 relative z-10">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <p className={cn(
-              "font-semibold text-base",
-              isSelected ? "text-primary" : "text-gray-900"
-            )}>
+            <p
+              className="text-[15px] font-semibold tracking-[-0.01em]"
+              style={{ color: isSelected ? "#1f3a33" : "#1f1f1d" }}
+            >
               {formule.name}
             </p>
             {isSelected && (
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                className="w-5 h-5 bg-primary rounded-full flex items-center justify-center flex-shrink-0"
+                className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{ background: "#1f3a33" }}
               >
-                <Check className="w-3 h-3 text-white" />
+                <Check className="w-2.5 h-2.5 text-white" />
               </motion.div>
             )}
           </div>
         </div>
 
-        {/* Prix - aligné à droite sur desktop, en dessous sur mobile */}
+        {/* Prix */}
         <div className="sm:text-right flex-shrink-0">
           {totalPrice ? (
             <div className="flex sm:flex-col items-baseline sm:items-end gap-2 sm:gap-0">
-              <p className={cn(
-                "text-lg font-bold",
-                isSelected ? "text-primary" : "text-primary"
-              )}>
+              <p className="text-[17px] font-semibold text-[#1f1f1d]">
                 {formatPriceWithCommission(totalPrice, commissionRate)}€
-                <span className="text-xs font-normal text-gray-400 ml-1">total</span>
+                <span className="text-[11px] font-normal text-[#9c9484] ml-1">total</span>
               </p>
-              <p className="text-xs text-gray-500 sm:mt-0.5">
+              <p className="text-[11px] text-[#6d6d68] sm:mt-0.5">
                 {formatPriceWithCommission(formulePrice, commissionRate)}€/{formuleUnit} × {formule.duration || 60}min
                 {formule.numberOfSessions && formule.numberOfSessions > 1 && ` × ${formule.numberOfSessions}`}
               </p>
             </div>
           ) : (
-            <p className={cn(
-              "text-lg font-bold",
-              isSelected ? "text-primary" : "text-primary"
-            )}>
+            <p className="text-[17px] font-semibold text-[#1f1f1d]">
               {formatPriceWithCommission(formulePrice, commissionRate)}€
-              {formuleUnit && <span className="text-sm font-medium text-gray-500">/{formuleUnit}</span>}
+              {formuleUnit && <span className="text-[11px] font-normal text-[#6d6d68]"> / {formuleUnit}</span>}
             </p>
           )}
         </div>
@@ -155,83 +152,73 @@ export default function SelectableFormuleCard({
 
       {/* Description */}
       {formule.description && (
-        <p className="text-sm text-gray-500 mt-2">{formule.description}</p>
+        <p className="text-[13px] text-[#4a4a46] leading-[1.5] mt-1.5 line-clamp-2">
+          {formule.description}
+        </p>
       )}
 
-      {/* Badges: Type de séance, lieu, durée, séances */}
-      <div className="flex flex-wrap items-center gap-2 mt-2">
-        {/* Type de séance */}
+      {/* Pills outline (style cards de recherche) */}
+      <div className="flex flex-wrap items-center gap-1.5 mt-3">
         {formule.sessionType === "collective" ? (
-          <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full font-medium">
-            <Users className="w-3 h-3" />
-            Collectif{formule.maxAnimalsPerSession ? ` (${formule.maxAnimalsPerSession} max)` : ""}
-          </span>
+          <FormulePill>
+            <Users className="w-2.5 h-2.5" /> Collectif{formule.maxAnimalsPerSession ? ` · ${formule.maxAnimalsPerSession} max` : ""}
+          </FormulePill>
         ) : (
-          <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-blue-100 text-blue-600 rounded-full font-medium">
-            <User className="w-3 h-3" />
-            Individuel
-          </span>
+          <FormulePill>
+            <User className="w-2.5 h-2.5" /> Individuel
+          </FormulePill>
         )}
-        {/* Lieu de prestation */}
         {formule.serviceLocation && (
-          <span className={cn(
-            "flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium",
-            formule.serviceLocation === "announcer_home" && "bg-primary/10 text-primary",
-            formule.serviceLocation === "client_home" && "bg-secondary/10 text-secondary",
-            formule.serviceLocation === "both" && "bg-purple-100 text-purple-600"
-          )}>
-            {formule.serviceLocation === "announcer_home" && <><Home className="w-3 h-3" /> Chez {announcerFirstName || "le pro"}</>}
-            {formule.serviceLocation === "client_home" && <><MapPin className="w-3 h-3" /> À domicile</>}
-            {formule.serviceLocation === "both" && <><Home className="w-2.5 h-2.5" /><MapPin className="w-2.5 h-2.5" /> Flexible</>}
-          </span>
+          <FormulePill>
+            {formule.serviceLocation === "announcer_home" && <><Home className="w-2.5 h-2.5" /> Chez {announcerFirstName || "le pro"}</>}
+            {formule.serviceLocation === "client_home" && <><MapPin className="w-2.5 h-2.5" /> À domicile</>}
+            {formule.serviceLocation === "both" && <><Home className="w-2.5 h-2.5" /> Flexible</>}
+          </FormulePill>
         )}
-        {/* Durée */}
         {formule.duration && (
-          <span className="flex items-center gap-1 text-xs text-gray-500">
-            <Clock className="w-3 h-3" />
-            {formule.duration} min
-          </span>
+          <FormulePill>
+            <Timer className="w-2.5 h-2.5" /> {formule.duration} min
+          </FormulePill>
         )}
-        {/* Nombre de séances */}
         {formule.numberOfSessions && formule.numberOfSessions > 1 && (
-          <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-purple-100 text-purple-600 rounded-full">
-            <Calendar className="w-3 h-3" />
-            {formule.numberOfSessions} séances
-          </span>
+          <FormulePill>
+            <Calendar className="w-2.5 h-2.5" /> {formule.numberOfSessions} séances
+          </FormulePill>
         )}
-        {/* Intervalle entre séances */}
         {formule.sessionInterval && formule.numberOfSessions && formule.numberOfSessions > 1 && (
-          <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
-            <Timer className="w-3 h-3" />
+          <FormulePill>
+            <Clock className="w-2.5 h-2.5" />
             {formule.sessionInterval === 7 ? "1/semaine" :
-             formule.sessionInterval === 14 ? "1/2 sem." :
-             formule.sessionInterval === 30 ? "1/mois" :
-             `${formule.sessionInterval}j min`}
-          </span>
+              formule.sessionInterval === 14 ? "1/2 sem." :
+                formule.sessionInterval === 30 ? "1/mois" :
+                  `${formule.sessionInterval}j min`}
+          </FormulePill>
         )}
-        {/* Garde de nuit acceptée */}
         {isGarde && allowOvernightStay && overnightPrice && overnightPrice > 0 && (
-          <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-indigo-100 text-indigo-600 rounded-full font-medium">
-            <Moon className="w-3 h-3" />
-            Nuit dispo +{formatPriceWithCommission(overnightPrice, commissionRate)}€
-          </span>
+          <FormulePill>
+            <Moon className="w-2.5 h-2.5" /> Nuit +{formatPriceWithCommission(overnightPrice, commissionRate)}€
+          </FormulePill>
         )}
       </div>
 
-      {/* Animaux acceptés */}
+      {/* Animaux acceptés - emoji compact */}
       {formule.animalTypes && formule.animalTypes.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mt-2">
           {formule.animalTypes.map((animal) => (
-            <span key={animal} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+            <span
+              key={animal}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium text-[#3a3a38]"
+              style={{ border: "1px solid #dfdcd4" }}
+            >
               {animal === "chien" ? "🐕 Chien" :
-               animal === "chat" ? "🐈 Chat" :
-               animal === "lapin" ? "🐰 Lapin" :
-               animal === "rongeur" ? "🐹 Rongeur" :
-               animal === "oiseau" ? "🦜 Oiseau" :
-               animal === "poisson" ? "🐠 Poisson" :
-               animal === "reptile" ? "🦎 Reptile" :
-               animal === "nac" ? "🐾 NAC" :
-               animal}
+                animal === "chat" ? "🐈 Chat" :
+                  animal === "lapin" ? "🐰 Lapin" :
+                    animal === "rongeur" ? "🐹 Rongeur" :
+                      animal === "oiseau" ? "🦜 Oiseau" :
+                        animal === "poisson" ? "🐠 Poisson" :
+                          animal === "reptile" ? "🦎 Reptile" :
+                            animal === "nac" ? "🐾 NAC" :
+                              animal}
             </span>
           ))}
         </div>
@@ -244,55 +231,39 @@ export default function SelectableFormuleCard({
         const allSizes = dogSizes.length === 3;
 
         return (
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            <span className="text-xs text-gray-500">🐕</span>
-            {/* Tailles */}
+          <div className="flex flex-wrap gap-1.5 mt-2 items-center">
+            <span className="text-[10px] text-[#9c9484]">🐕</span>
             {allSizes ? (
-              <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">
-                Toutes tailles
-              </span>
+              <FormulePill tone="success">Toutes tailles</FormulePill>
             ) : (
               <>
-                {dogSizes.includes("small") && (
-                  <span className="px-2 py-0.5 bg-green-100 text-green-600 text-xs rounded-full">Petit</span>
-                )}
-                {dogSizes.includes("medium") && (
-                  <span className="px-2 py-0.5 bg-yellow-100 text-yellow-600 text-xs rounded-full">Moyen</span>
-                )}
-                {dogSizes.includes("large") && (
-                  <span className="px-2 py-0.5 bg-orange-100 text-orange-600 text-xs rounded-full">Grand</span>
-                )}
+                {dogSizes.includes("small") && <FormulePill tone="success">Petit</FormulePill>}
+                {dogSizes.includes("medium") && <FormulePill>Moyen</FormulePill>}
+                {dogSizes.includes("large") && <FormulePill>Grand</FormulePill>}
               </>
             )}
-            {/* Catégories */}
-            <span className={cn(
-              "px-2 py-0.5 text-xs rounded-full",
-              dogCategory === "none" && "bg-gray-100 text-gray-600",
-              dogCategory === "cat1" && "bg-amber-100 text-amber-700",
-              dogCategory === "cat2" && "bg-orange-100 text-orange-700",
-              dogCategory === "both" && "bg-green-100 text-green-700"
-            )}>
+            <FormulePill tone={dogCategory === "none" ? "default" : "success"}>
               {dogCategory === "none" && "Cat. non acceptées"}
               {dogCategory === "cat1" && "✓ Cat. 1"}
               {dogCategory === "cat2" && "✓ Cat. 2"}
               {dogCategory === "both" && "✓ Cat. 1 & 2"}
-            </span>
+            </FormulePill>
           </div>
         );
       })()}
 
-      {/* Objectifs / Activités proposées */}
+      {/* Objectifs / Activités */}
       {formule.objectives && formule.objectives.length > 0 && (
-        <div className="mt-3 pt-2 border-t border-gray-200/50 relative z-10">
-          <p className="flex items-center gap-1 text-xs font-medium text-purple-700 mb-1.5">
-            <Target className="w-3 h-3" />
-            {isGarde ? "Activités proposées" : "Objectifs de la prestation"}
+        <div className="mt-3 pt-3 relative z-10" style={{ borderTop: "1px solid #f1ede3" }}>
+          <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-1.5">
+            <Target className="w-2.5 h-2.5" />
+            {isGarde ? "Activités proposées" : "Objectifs"}
           </p>
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             {formule.objectives.map((objective, idx) => (
-              <div key={idx} className="flex items-start gap-2 text-xs text-gray-600">
+              <div key={idx} className="flex items-start gap-2 text-[12px] text-[#4a4a46]">
                 <span className="flex-shrink-0 mt-0.5">{objective.icon}</span>
-                <span className="leading-relaxed">{objective.text}</span>
+                <span className="leading-[1.5]">{objective.text}</span>
               </div>
             ))}
           </div>
@@ -301,9 +272,13 @@ export default function SelectableFormuleCard({
 
       {/* Caractéristiques incluses */}
       {formule.includedFeatures && formule.includedFeatures.length > 0 && (
-        <div className="flex flex-wrap gap-2 mt-3 relative z-10">
+        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3 relative z-10">
           {formule.includedFeatures.map((feature, idx) => (
-            <span key={idx} className="flex items-center gap-1 text-xs text-green-600">
+            <span
+              key={idx}
+              className="inline-flex items-center gap-1 text-[11px]"
+              style={{ color: "#2f4a3f" }}
+            >
               <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
               <span>{feature}</span>
             </span>
@@ -311,31 +286,49 @@ export default function SelectableFormuleCard({
         </div>
       )}
 
-      {/* Bouton Réserver - caché pour les annonceurs */}
+      {/* Bouton Réserver - dark green pill */}
       {!isAnnouncer && (
-        <div className="mt-4 pt-3 border-t border-gray-200/50 relative z-10">
+        <div
+          className="mt-4 pt-3 relative z-10"
+          style={{ borderTop: "1px solid #f1ede3" }}
+        >
           <div
-            className={cn(
-              "w-full py-2.5 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all",
-              isSelected
-                ? "bg-primary text-white"
-                : "bg-gradient-to-r from-primary to-primary/90 text-white hover:from-primary/90 hover:to-primary/80"
-            )}
+            className="w-full py-2 px-4 rounded-full font-medium text-[12px] flex items-center justify-center gap-1.5 transition-opacity"
+            style={{ background: "#1f3a33", color: "#f7f5ef" }}
           >
             {isSelected ? (
               <>
-                <Check className="w-4 h-4" />
+                <Check className="w-3.5 h-3.5" />
                 Formule sélectionnée
               </>
             ) : (
-              <>
-                Réserver maintenant
-              </>
+              "Réserver maintenant"
             )}
           </div>
         </div>
       )}
 
     </motion.button>
+  );
+}
+
+function FormulePill({
+  children,
+  tone = "default",
+}: {
+  children: React.ReactNode;
+  tone?: "default" | "success";
+}) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+      style={
+        tone === "success"
+          ? { border: "1px solid #cfdbd3", color: "#2f4a3f" }
+          : { border: "1px solid #dfdcd4", color: "#3a3a38" }
+      }
+    >
+      {children}
+    </span>
   );
 }

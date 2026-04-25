@@ -1,8 +1,10 @@
 "use client";
 
-import { PawPrint, Check, AlertTriangle, ChevronLeft, ArrowRight } from "lucide-react";
+import { PawPrint, Check, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/app/lib/utils";
+import StepNav from "./StepNav";
+import StepCard, { StepHeader } from "./StepCard";
 
 interface UserAnimal {
   id: string;
@@ -46,25 +48,20 @@ export default function AnimalsStep({
       variants={slideVariants}
       transition={{ duration: 0.3, ease: "easeInOut" }}
     >
-      <div className={cn(
-        "bg-white rounded-2xl p-5 sm:p-6 border-2 transition-colors duration-300",
-        hasAnimalsSelected ? "border-gray-100" : "border-primary/30"
-      )}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-            <span className="p-2 rounded-lg bg-primary/10">
-              <PawPrint className="w-5 h-5 text-primary" />
+      <StepCard tone={hasAnimalsSelected ? "success" : "default"}>
+        <StepHeader
+          eyebrow="Étape · Animaux"
+          title="Vos animaux"
+          description="Sélectionnez le ou les animaux pour cette prestation."
+          rightSlot={
+            <span
+              className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium"
+              style={{ background: "#f7f5ef", color: "#6d6d68" }}
+            >
+              {selectedAnimalIds.length} sélectionné{selectedAnimalIds.length > 1 ? "s" : ""}
             </span>
-            Vos animaux
-          </h3>
-          <span className="text-sm text-gray-500">
-            {selectedAnimalIds.length} sélectionné{selectedAnimalIds.length > 1 ? "s" : ""}
-          </span>
-        </div>
-
-        <p className="text-sm text-gray-500 mb-4">
-          Sélectionnez le ou les animaux pour cette prestation.
-        </p>
+          }
+        />
 
         {userAnimals.length > 0 ? (
           <div className="grid gap-2">
@@ -76,72 +73,92 @@ export default function AnimalsStep({
                   <button
                     type="button"
                     onClick={() => onAnimalToggle(animal.id, animal.type)}
-                    className={cn(
-                      "w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left",
-                      isSelected ? "border-primary bg-primary/5" :
-                      hasError ? "border-red-300 bg-red-50" :
-                      "border-gray-200 hover:border-gray-300"
-                    )}
+                    className="w-full flex items-center gap-3 p-3 transition-all text-left hover:bg-[#f7f5ef]/60"
+                    style={{
+                      borderRadius: 12,
+                      border: `1px solid ${
+                        isSelected ? "#1f3a33" : hasError ? "#f1cdcd" : "#ece9e1"
+                      }`,
+                      background: isSelected
+                        ? "#eaf0ed"
+                        : hasError
+                          ? "#fdf6f6"
+                          : "#fff",
+                    }}
                   >
                     {animal.profilePhoto ? (
-                      <img src={animal.profilePhoto} alt={animal.name} className="w-12 h-12 rounded-full object-cover" />
+                      <img
+                        src={animal.profilePhoto}
+                        alt={animal.name}
+                        className="w-11 h-11 rounded-full object-cover"
+                        style={{ border: "1px solid rgba(0,0,0,0.05)" }}
+                      />
                     ) : (
-                      <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
-                        <PawPrint className="w-6 h-6 text-gray-400" />
+                      <div
+                        className="w-11 h-11 rounded-full flex items-center justify-center"
+                        style={{ background: "#f7f5ef" }}
+                      >
+                        <PawPrint className="w-5 h-5" style={{ color: "#9c9484" }} />
                       </div>
                     )}
-                    <div className="flex-1">
-                      <p className={cn("font-semibold", isSelected ? "text-primary" : hasError ? "text-red-700" : "text-gray-900")}>{animal.name}</p>
-                      <p className="text-sm text-gray-500 capitalize">{animal.type}{animal.breed && ` • ${animal.breed}`}</p>
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className="text-[14px] font-semibold tracking-[-0.01em] truncate"
+                        style={{
+                          color: isSelected ? "#1f3a33" : hasError ? "#8a3a3a" : "#1f1f1d",
+                        }}
+                      >
+                        {animal.name}
+                      </p>
+                      <p className="text-[12px] text-[#6d6d68] capitalize truncate">
+                        {animal.type}
+                        {animal.breed && ` · ${animal.breed}`}
+                      </p>
                     </div>
-                    <div className={cn(
-                      "w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all",
-                      isSelected ? "bg-primary border-primary" :
-                      hasError ? "border-red-300 bg-red-100" :
-                      "border-gray-300 bg-white"
-                    )}>
-                      {isSelected && <Check className="w-4 h-4 text-white" />}
-                      {hasError && !isSelected && <AlertTriangle className="w-3 h-3 text-red-500" />}
+                    <div
+                      className="w-5 h-5 rounded-md flex items-center justify-center transition-all flex-shrink-0"
+                      style={{
+                        background: isSelected
+                          ? "#1f3a33"
+                          : hasError
+                            ? "#fdf0f0"
+                            : "#fff",
+                        border: `1px solid ${
+                          isSelected ? "#1f3a33" : hasError ? "#f1cdcd" : "#dfdcd4"
+                        }`,
+                      }}
+                    >
+                      {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                      {hasError && !isSelected && (
+                        <AlertTriangle className="w-3 h-3" style={{ color: "#c45656" }} />
+                      )}
                     </div>
                   </button>
-                  {/* Afficher l'erreur de restriction */}
                   {hasError && (
-                    <p className="text-xs text-red-600 mt-1 ml-2">{hasError}</p>
+                    <p className="text-[11px] mt-1 ml-1" style={{ color: "#8a3a3a" }}>
+                      {hasError}
+                    </p>
                   )}
                 </div>
               );
             })}
           </div>
         ) : (
-          <div className="p-4 bg-amber-50 rounded-xl text-amber-700 text-sm">
-            Aucun de vos animaux n'est compatible avec cette formule.
+          <div
+            className="p-3 text-[13px]"
+            style={{
+              borderRadius: 10,
+              background: "#fdf8ec",
+              color: "#7a5b1a",
+              border: "1px solid #f4e6c1",
+            }}
+          >
+            Aucun de vos animaux n&apos;est compatible avec cette formule.
           </div>
         )}
-      </div>
+      </StepCard>
 
-      {/* Boutons de navigation */}
-      <div className="flex items-center justify-between mt-6">
-        <button
-          onClick={onPrevStep}
-          className="flex items-center gap-2 px-4 py-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors"
-        >
-          <ChevronLeft className="w-5 h-5" />
-          Précédent
-        </button>
-        <button
-          onClick={onNextStep}
-          disabled={!canProceed}
-          className={cn(
-            "flex items-center gap-2 px-6 py-2.5 rounded-xl font-medium transition-colors",
-            canProceed
-              ? "bg-primary text-white hover:bg-primary/90"
-              : "bg-gray-100 text-gray-400 cursor-not-allowed"
-          )}
-        >
-          Continuer
-          <ArrowRight className="w-5 h-5" />
-        </button>
-      </div>
+      <StepNav onPrevStep={onPrevStep} onNextStep={onNextStep} canProceed={canProceed} />
     </motion.div>
   );
 }
