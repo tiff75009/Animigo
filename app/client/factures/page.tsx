@@ -143,7 +143,24 @@ function ClientReceiptRow({
   });
 
   const handleDownload = () => {
-    if (data?.url) window.open(data.url, "_blank");
+    if (!data?.url) return;
+    // Si c'est un data URL (base64 fallback), créer un Blob pour téléchargement fiable
+    // (window.open d'un data URL volumineux est souvent bloqué/tronqué par les navigateurs).
+    if (data.url.startsWith("data:application/pdf;base64,")) {
+      const base64 = data.url.split(",")[1];
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: "application/pdf" });
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = data.filename || `recu-paiement-${String(receipt.missionId).slice(-6).toUpperCase()}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } else {
+      window.open(data.url, "_blank");
+    }
   };
 
   return (

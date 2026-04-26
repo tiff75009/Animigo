@@ -145,7 +145,7 @@ export const markPaymentPaid = internalMutation({
       const freshPayment = await ctx.db.get(payment._id);
       const receiptAlreadySent = freshPayment?.receiptEmailSent === true;
       if (!receiptAlreadySent) {
-        await ctx.scheduler.runAfter(0, internal.api.clientReceipt.generateClientReceipt, {
+        await ctx.scheduler.runAfter(0, internal.api.clientReceiptQueries.prepareAndDispatchClientReceipt, {
           missionId: payment.missionId,
           paymentIntentId: args.paymentIntentId,
           cardBrand: args.cardBrand,

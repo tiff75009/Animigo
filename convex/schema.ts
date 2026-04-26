@@ -785,6 +785,11 @@ export default defineSchema({
     // Reçu de paiement client (généré automatiquement après paiement Stripe)
     clientReceiptStorageId: v.optional(v.id("_storage")),
     clientReceiptGeneratedAt: v.optional(v.number()),
+    // Fallback : base64 du PDF stocké directement dans la mission (workaround
+    // self-hosted Convex où ctx.storage.store/upload échoue). Servi via data URL
+    // dans /client/factures quand clientReceiptStorageId est absent.
+    clientReceiptPdfBase64: v.optional(v.string()),
+    clientReceiptFilename: v.optional(v.string()),
 
     // Archivage (soft-delete)
     isArchived: v.optional(v.boolean()),

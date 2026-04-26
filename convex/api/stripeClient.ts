@@ -3,7 +3,6 @@ import { query, mutation } from "../_generated/server";
 import { v } from "convex/values";
 import { internal, api } from "../_generated/api";
 import { internal as internalApi } from "../_generated/api";
-import { getEmailConfigFromDb } from "./emailInternal";
 
 /**
  * Récupérer la clé publique Stripe (accessible au client)
@@ -179,6 +178,8 @@ export const confirmPaymentSuccess = mutation({
     missionId: v.id("missions"),
     paymentIntentId: v.string(),
     paymentStatus: v.optional(v.string()), // Status retourné par Stripe Elements
+    cardBrand: v.optional(v.string()), // Marque carte (visa, mastercard...) — pour le PDF reçu
+    cardLast4: v.optional(v.string()), // 4 derniers chiffres CB — pour le PDF reçu
   },
   handler: async (ctx, args) => {
     // Vérifier la session
@@ -258,49 +259,21 @@ export const confirmPaymentSuccess = mutation({
         missionId: args.missionId,
       });
 
-      // Envoyer le reçu de paiement par email au client (si pas déjà envoyé par le webhook)
+      // Générer le reçu PDF client + envoyer l'email avec PDF en pièce jointe
+      // (passe par generateClientReceipt qui orchestre PDF -> storage -> email avec PJ).
+      // Si le webhook markPaymentPaid arrive aussi, le flag receiptEmailSent évite un double envoi.
       const freshPayment = await ctx.db.get(payment._id);
       const receiptAlreadySent = freshPayment?.receiptEmailSent === true;
 
-      const announcer = await ctx.db.get(mission.announcerId);
-      const { emailConfig: scEmailConfig, appUrl: scAppUrl } = await getEmailConfigFromDb(ctx.db);
+      if (isCaptured && client?.email && !receiptAlreadySent) {
+        await ctx.scheduler.runAfter(0, internalApi.api.clientReceiptQueries.prepareAndDispatchClientReceipt, {
+          missionId: args.missionId,
+          paymentIntentId: args.paymentIntentId,
+          cardBrand: args.cardBrand,
+          cardLast4: args.cardLast4,
+        });
 
-      if (scEmailConfig && client?.email && !receiptAlreadySent) {
-        const isPro = announcer?.accountType === "annonceur_pro" && !!announcer?.siret;
-        const announcerDisplayName = announcer
-          ? `${announcer.firstName} ${announcer.lastName.charAt(0)}.`
-          : "Le prestataire";
-
-        await ctx.scheduler.runAfter(
-          0,
-          internalApi.api.email.sendPaymentReceiptEmail,
-          {
-            clientEmail: client.email,
-            clientName: clientProfile?.firstName || client.firstName || "Client",
-            serviceName: mission.serviceName || "Service",
-            announcerName: announcerDisplayName,
-            announcerStatus: isPro ? "Professionnel" : "Particulier",
-            announcerCompany: isPro && announcer?.companyName ? announcer.companyName : "",
-            announcerSiret: isPro && announcer?.siret ? announcer.siret : "",
-            startDate: mission.startDate,
-            endDate: mission.endDate,
-            announcerEarnings: mission.announcerEarnings || mission.amount || 0,
-            vatRate: mission.vatRate || 0,
-            isSapApplied: mission.isSapApplied || false,
-            platformFee: mission.platformFee || 0,
-            commissionRate: mission.commissionRate || 0,
-            stripeFee: mission.stripeFee || 0,
-            stripeFeeRate: mission.stripeFeeRate || 0,
-            totalAmount: payment.amount || mission.amount || 0,
-            paymentRef: args.paymentIntentId,
-            cardBrand: "",
-            cardLast4: "",
-            emailConfig: scEmailConfig || { apiKey: "" },
-            appUrl: scAppUrl,
-          }
-        );
-
-        // Marquer que le reçu a été planifié pour éviter un double envoi via webhook
+        // Pré-marquer comme envoyé pour éviter un double envoi via webhook
         await ctx.db.patch(payment._id, {
           receiptEmailSent: true,
         });
