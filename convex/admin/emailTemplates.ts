@@ -289,8 +289,8 @@ const DEFAULT_TEMPLATES = [
   {
     slug: "payment_receipt",
     name: "Reçu de paiement",
-    description: "Reçu envoyé au client après un paiement réussi. Contient le détail des prix, infos du prestataire et mentions légales.",
-    subject: "Votre reçu de paiement - {{serviceName}} - {{siteName}}",
+    description: "Reçu envoyé au client après un paiement réussi. Le PDF du reçu est joint en pièce jointe et téléchargeable depuis /client/factures. Contient les mentions légales (escrow, intermédiation, Stripe) et le résumé du paiement.",
+    subject: "✓ Paiement confirmé · {{serviceName}} · Reçu PDF en pièce jointe",
     availableVariables: [
       { key: "clientName", description: "Prénom du client", example: "Jean" },
       { key: "serviceName", description: "Nom du service", example: "Garde de chien" },
@@ -912,69 +912,144 @@ const getDefaultHtmlContent = (slug: string): string => {
 </html>`;
 
     case "payment_receipt":
+      // Refonte 2026 : design Animigo (vert foncé/crème), badge PAYÉ, PDF en PJ mis en avant,
+      // mentions légales escrow + Stripe + intermédiation, suppression du tableau fiscal
+      // (déplacé dans le PDF). CTA → /client/factures pour télécharger l'historique.
       return `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><style>${baseStyle}</style></head>
-<body>
-<div style="padding: 40px 20px; background-color: #f4f4f5;">
-  <div class="container">
-    <div style="background: linear-gradient(135deg, #4ECDC4 0%, #44A08D 100%); padding: 40px 30px; text-align: center;">
-      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold;">Reçu de paiement</h1>
-      <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">Réf. {{paymentRef}}</p>
-    </div>
-    <div class="content">
-      <h2>Bonjour {{clientName}},</h2>
-      <p>Votre paiement a bien été enregistré. Voici le détail de votre transaction.</p>
-
-      <div class="info-box">
-        <p style="margin: 0 0 10px 0; font-weight: bold; color: #0369a1;">Détails de la prestation</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Service :</strong> {{serviceName}}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Dates :</strong> Du {{startDate}} au {{endDate}}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Prestataire :</strong> {{announcerName}} — {{announcerStatus}}</p>
-        <p style="margin: 5px 0; color: #475569;">{{announcerCompany}}{{announcerSiret}}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Date de paiement :</strong> {{paymentDate}}</p>
-        <p style="margin: 5px 0; color: #475569;"><strong>Moyen de paiement :</strong> {{paymentMethod}}</p>
-      </div>
-
-      <div style="margin: 20px 0; padding: 20px; background-color: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0;">
-        <p style="margin: 0 0 15px 0; font-weight: bold; color: #1e293b; font-size: 16px;">Détail des prix</p>
-        <table style="width: 100%; border-collapse: collapse;">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Paiement confirmé</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#fcfaf4;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;-webkit-font-smoothing:antialiased;color:#1f1f1d;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fcfaf4;">
+<tr><td align="center" style="padding:32px 16px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #ece9e1;">
+    <!-- HEADER : badge PAYÉ + montant -->
+    <tr>
+      <td style="padding:32px;background-color:#f5f9f6;border-bottom:1px solid #cfdbd3;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
           <tr>
-            <td style="padding: 6px 0; color: #475569; font-size: 14px;">Prestation HT</td>
-            <td style="padding: 6px 0; color: #1e293b; font-size: 14px; text-align: right;">{{prestationHT}}</td>
-          </tr>
-          <tr>
-            <td style="padding: 6px 0; color: #475569; font-size: 14px;">TVA ({{tvaRate}}%) {{sapBadge}}</td>
-            <td style="padding: 6px 0; color: #1e293b; font-size: 14px; text-align: right;">{{tvaAmount}}</td>
-          </tr>
-          <tr>
-            <td style="padding: 6px 0; color: #475569; font-size: 14px;">Commission plateforme ({{commissionRate}}%)</td>
-            <td style="padding: 6px 0; color: #1e293b; font-size: 14px; text-align: right;">{{commissionAmount}}</td>
-          </tr>
-          <tr>
-            <td style="padding: 6px 0; color: #475569; font-size: 14px;">Frais de paiement ({{stripeFeeRate}}%)</td>
-            <td style="padding: 6px 0; color: #1e293b; font-size: 14px; text-align: right;">{{stripeFeeAmount}}</td>
-          </tr>
-          <tr style="border-top: 2px solid #e2e8f0;">
-            <td style="padding: 12px 0 6px 0; color: #1e293b; font-size: 16px; font-weight: bold;">Total payé</td>
-            <td style="padding: 12px 0 6px 0; color: #1e293b; font-size: 18px; font-weight: bold; text-align: right;">{{totalAmount}}</td>
+            <td align="left" style="vertical-align:top;">
+              <span style="display:inline-block;padding:6px 14px;background-color:#10b981;color:#ffffff;font-size:11px;font-weight:bold;letter-spacing:1px;border-radius:99px;">✓ PAIEMENT REÇU</span>
+              <h1 style="margin:14px 0 0 0;color:#1f3a33;font-size:24px;font-weight:bold;letter-spacing:-0.5px;">Merci pour votre paiement</h1>
+              <p style="margin:6px 0 0 0;color:#6d6d68;font-size:12px;">Réf. : <span style="font-family:'Courier New',monospace;color:#1f3a33;">{{paymentRef}}</span></p>
+            </td>
+            <td align="right" style="vertical-align:top;width:140px;">
+              <p style="margin:0;color:#9c9484;font-size:10px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;">Montant payé</p>
+              <p style="margin:4px 0 0 0;color:#10b981;font-size:28px;font-weight:bold;">{{totalAmount}}</p>
+            </td>
           </tr>
         </table>
-      </div>
-
-      <div class="warning-box">
-        <p style="margin: 0; color: #92400e; font-size: 13px;">Ce document est un reçu de paiement émis par {{siteName}}, plateforme intermédiaire de mise en relation. Il ne constitue pas une facture. La facture sera générée une fois la prestation terminée.</p>
-      </div>
-
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="{{reservationsUrl}}" class="btn">Voir mes réservations</a>
-      </div>
-    </div>
-    <div class="footer">
-      <p>&copy; 2025 {{siteName}}. Tous droits réservés.</p>
-      <p style="margin: 5px 0 0 0; color: #94a3b8; font-size: 11px;">{{siteName}} — Plateforme de mise en relation pour services animaliers</p>
-    </div>
-  </div>
-</div>
+      </td>
+    </tr>
+    <!-- Salutation -->
+    <tr>
+      <td style="padding:28px 32px 8px 32px;">
+        <p style="margin:0;color:#1f1f1d;font-size:15px;line-height:1.5;">Bonjour <strong>{{clientName}}</strong>,</p>
+        <p style="margin:12px 0 0 0;color:#6d6d68;font-size:14px;line-height:1.6;">Votre paiement de <strong style="color:#1f3a33;">{{totalAmount}}</strong> pour <strong style="color:#1f3a33;">{{serviceName}}</strong> a bien été reçu et sécurisé sur notre plateforme. Votre réservation est désormais confirmée.</p>
+      </td>
+    </tr>
+    <!-- PDF en pièce jointe (mise en avant principale) -->
+    <tr>
+      <td style="padding:8px 32px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#ecfdf5;border:1px solid #a7f3d0;border-radius:12px;">
+          <tr>
+            <td style="padding:18px 20px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="vertical-align:middle;width:42px;font-size:24px;">📎</td>
+                  <td style="vertical-align:middle;">
+                    <p style="margin:0;color:#065f46;font-size:14px;font-weight:bold;">Votre reçu PDF est joint à cet email</p>
+                    <p style="margin:4px 0 0 0;color:#047857;font-size:12.5px;line-height:1.5;">Téléchargeable à tout moment depuis votre espace personnel,<br/>section <strong>Mes factures › Reçus de paiement</strong></p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <!-- Récap prestation -->
+    <tr>
+      <td style="padding:8px 32px;">
+        <p style="margin:0 0 8px 0;color:#9c9484;font-size:10px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;">Détail de la prestation</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fcfaf4;border:1px solid #ece9e1;border-radius:10px;">
+          <tr>
+            <td style="padding:14px 16px;">
+              <p style="margin:0 0 6px 0;color:#1f1f1d;font-size:14px;font-weight:bold;">{{serviceName}}</p>
+              <p style="margin:0;color:#6d6d68;font-size:13px;">📅 Du {{startDate}} au {{endDate}}</p>
+              <p style="margin:6px 0 0 0;color:#6d6d68;font-size:13px;">👤 Prestataire : <strong style="color:#1f1f1d;">{{announcerName}}</strong> · {{announcerStatus}}</p>
+              <p style="margin:4px 0 0 0;color:#9c9484;font-size:12px;">{{announcerCompany}}{{announcerSiret}}</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <!-- Récap paiement -->
+    <tr>
+      <td style="padding:8px 32px 16px 32px;">
+        <p style="margin:0 0 8px 0;color:#9c9484;font-size:10px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;">Détail du paiement</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fcfaf4;border:1px solid #ece9e1;border-radius:10px;">
+          <tr>
+            <td style="padding:14px 16px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="padding:4px 0;color:#9c9484;font-size:12.5px;width:140px;">Date du paiement</td>
+                  <td style="padding:4px 0;color:#1f1f1d;font-size:13px;font-weight:600;text-align:right;">{{paymentDate}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:4px 0;color:#9c9484;font-size:12.5px;">Mode de paiement</td>
+                  <td style="padding:4px 0;color:#1f1f1d;font-size:13px;font-weight:600;text-align:right;">{{paymentMethod}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 0 4px 0;color:#9c9484;font-size:12.5px;border-top:1px solid #ece9e1;">Total payé</td>
+                  <td style="padding:8px 0 4px 0;color:#10b981;font-size:15px;font-weight:bold;text-align:right;border-top:1px solid #ece9e1;">{{totalAmount}}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+        <p style="margin:8px 0 0 0;color:#9c9484;font-size:11px;line-height:1.5;font-style:italic;">Le détail comptable complet (HT, TVA, commission, frais Stripe) figure dans le reçu PDF joint à cet email.</p>
+      </td>
+    </tr>
+    <!-- CTA principal -->
+    <tr>
+      <td align="center" style="padding:8px 32px 20px 32px;">
+        <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{reservationsUrl}}" style="height:48px;width:280px;v-text-anchor:middle;" arcsize="50%" fillcolor="#1f3a33" stroke="false"><v:textbox><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;">Voir tous mes reçus</center></v:textbox></v:roundrect><![endif]-->
+        <!--[if !mso]><!--><a href="{{reservationsUrl}}" style="display:inline-block;background-color:#1f3a33;color:#f7f5ef;text-decoration:none;padding:14px 32px;border-radius:99px;font-weight:bold;font-size:14px;letter-spacing:0.3px;">Voir tous mes reçus →</a><!--<![endif]-->
+      </td>
+    </tr>
+    <!-- Mentions légales -->
+    <tr>
+      <td style="padding:16px 32px 8px 32px;border-top:1px solid #f1ede3;">
+        <p style="margin:0 0 10px 0;color:#9c9484;font-size:10px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;">Mentions légales</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:8px;">
+          <tr>
+            <td style="padding:10px 14px;background-color:#f5f9f6;border-left:3px solid #1f3a33;border-radius:6px;">
+              <p style="margin:0;color:#1f3a33;font-size:11.5px;line-height:1.5;"><strong>🔒 Fonds sécurisés :</strong> votre paiement est conservé sur le compte séquestre {{siteName}} jusqu'à confirmation de la réalisation du service par vos soins, puis reversé au prestataire conformément à nos CGV.</p>
+            </td>
+          </tr>
+        </table>
+        <p style="margin:8px 0;color:#9c9484;font-size:11px;line-height:1.6;">{{siteName}} agit en tant que <strong>plateforme de mise en relation</strong> entre les particuliers et les prestataires de services animaliers. Le présent document est un reçu de paiement et <strong>ne constitue pas une facture commerciale</strong>.</p>
+        <p style="margin:8px 0;color:#9c9484;font-size:11px;line-height:1.6;">La facture comptable détaillée (avec TVA, mentions légales du prestataire) sera émise par votre prestataire une fois la prestation terminée.</p>
+        <p style="margin:8px 0 0 0;color:#9c9484;font-size:11px;line-height:1.6;">Paiement sécurisé traité par <strong>Stripe Payments Europe Ltd</strong>, prestataire de services de paiement agréé.</p>
+      </td>
+    </tr>
+    <!-- Footer -->
+    <tr>
+      <td align="center" style="background-color:#fcfaf4;padding:24px 32px;border-top:1px solid #f1ede3;">
+        <p style="margin:0;color:#1f3a33;font-size:13px;font-weight:600;">{{siteName}}</p>
+        <p style="margin:6px 0 0 0;color:#9c9484;font-size:11px;">Plateforme de services animaliers</p>
+        <p style="margin:12px 0 0 0;color:#cdc9c0;font-size:10px;">© 2026 {{siteName}}. Tous droits réservés.</p>
+      </td>
+    </tr>
+  </table>
+</td></tr>
+</table>
 </body>
 </html>`;
 
