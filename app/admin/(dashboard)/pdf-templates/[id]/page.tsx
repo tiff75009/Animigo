@@ -748,8 +748,16 @@ export default function PdfTemplateEditorPage() {
         }
 
         // Pré-remplir les champs dynamiques vides avec leurs exemples
-        // pour que l'admin puisse les voir, les positionner et les styler dans l'éditeur
-        const fieldExamples = new Map(TEXT_FIELDS.map(f => [f.key, f.example]));
+        // pour que l'admin puisse les voir, les positionner et les styler dans l'éditeur.
+        // La balise `documentType` est dynamique selon le type sélectionné.
+        const dynamicDocTypeLabel = documentType === "invoice"
+          ? "FACTURE"
+          : documentType === "client_receipt"
+          ? "REÇU DE PAIEMENT"
+          : "REÇU";
+        const fieldExamples = new Map(TEXT_FIELDS.map(f =>
+          f.key === "documentType" ? [f.key, dynamicDocTypeLabel] : [f.key, f.example]
+        ));
         for (const page of templateData.schemas) {
           for (const schema of page) {
             if (schema.type === "text" && !schema.content && fieldExamples.has(schema.name)) {
@@ -833,6 +841,32 @@ export default function PdfTemplateEditorPage() {
     template.basePdf = { ...template.basePdf, padding: margins };
     designerInstance.current.updateTemplate(template);
   }, [margins, designerLoaded]);
+
+  // ─── Sync de la balise documentType dans l'aperçu en temps réel ───
+  // Quand l'admin change le type (Facture / Reçu client) dans la sidebar,
+  // on met à jour le `content` du schéma `documentType` dans le designer
+  // pour que l'aperçu reflète immédiatement le bon libellé.
+  useEffect(() => {
+    if (!designerInstance.current || !designerLoaded) return;
+    const documentTypeLabels: Record<string, string> = {
+      invoice: "FACTURE",
+      client_receipt: "REÇU DE PAIEMENT",
+      receipt: "REÇU",
+    };
+    const newLabel = documentTypeLabels[documentType] || "DOCUMENT";
+    const template = designerInstance.current.getTemplate();
+    let changed = false;
+    for (const page of template.schemas) {
+      const docTypeSchema = page.find((s: any) => s.name === "documentType");
+      if (docTypeSchema && docTypeSchema.content !== newLabel) {
+        docTypeSchema.content = newLabel;
+        changed = true;
+      }
+    }
+    if (changed) {
+      designerInstance.current.updateTemplate(template);
+    }
+  }, [documentType, designerLoaded]);
 
   // Cleanup
   useEffect(() => {
