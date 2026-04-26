@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { MapPin, LocateFixed, Loader2, X } from "lucide-react";
 import { useGeolocation } from "@/app/hooks/useGeolocation";
@@ -27,6 +27,8 @@ interface LocationSearchBarProps {
   showGeolocationButton?: boolean; // Afficher le bouton de géolocalisation
   /** Contenu personnalisé affiché à droite dans le champ (avant le bouton clear) */
   rightSlot?: React.ReactNode;
+  /** Mettre le focus sur l'input au montage (utile dans un popover) */
+  autoFocus?: boolean;
 }
 
 export default function LocationSearchBar({
@@ -37,7 +39,16 @@ export default function LocationSearchBar({
   className,
   showGeolocationButton = true,
   rightSlot,
+  autoFocus = false,
 }: LocationSearchBarProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (autoFocus && inputRef.current) {
+      const t = setTimeout(() => inputRef.current?.focus(), 50);
+      return () => clearTimeout(t);
+    }
+  }, [autoFocus]);
   const [inputValue, setInputValue] = useState(value.text);
   const [isOpen, setIsOpen] = useState(false);
   const [predictions, setPredictions] = useState<
@@ -196,6 +207,7 @@ export default function LocationSearchBar({
           </div>
 
           <input
+            ref={inputRef}
             type="text"
             value={inputValue}
             onChange={handleInputChange}
