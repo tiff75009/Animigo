@@ -367,7 +367,7 @@ export function getDefaultClientReceiptTemplate() {
 
       // ─── DESTINATAIRE (CLIENT) ───
       {
-        name: "_label_client",
+        name: "labelClient",
         type: "text",
         content: "REÇU REMIS À",
         position: { x: 0, y: 30 },
@@ -410,7 +410,7 @@ export function getDefaultClientReceiptTemplate() {
 
       // ─── ÉMETTEUR (ANIMIGO) ───
       {
-        name: "_label_platform",
+        name: "labelPlatform",
         type: "text",
         content: "ÉMIS PAR",
         position: { x: 110, y: 30 },
@@ -456,7 +456,7 @@ export function getDefaultClientReceiptTemplate() {
       },
       // ─── BLOC SERVICE RÉSERVÉ ───
       {
-        name: "_section_service",
+        name: "sectionService",
         type: "text",
         content: "DÉTAIL DE LA PRESTATION",
         position: { x: 0, y: 65 },
@@ -510,7 +510,7 @@ export function getDefaultClientReceiptTemplate() {
       },
       // Prestataire (sous le service)
       {
-        name: "_label_provider",
+        name: "labelProvider",
         type: "text",
         content: "Prestataire :",
         position: { x: 2, y: 90 },
@@ -552,7 +552,7 @@ export function getDefaultClientReceiptTemplate() {
 
       // ─── BLOC PAIEMENT ───
       {
-        name: "_section_payment",
+        name: "sectionPayment",
         type: "text",
         content: "DÉTAIL DU PAIEMENT",
         position: { x: 0, y: 108 },
@@ -564,7 +564,7 @@ export function getDefaultClientReceiptTemplate() {
         backgroundColor: "#f5f9f6",
       },
       {
-        name: "_label_paymentDate",
+        name: "labelPaymentDate",
         type: "text",
         content: "Date du paiement :",
         position: { x: 2, y: 115 },
@@ -584,7 +584,7 @@ export function getDefaultClientReceiptTemplate() {
         fontColor: "#1f1f1d",
       },
       {
-        name: "_label_paymentMethod",
+        name: "labelPaymentMethod",
         type: "text",
         content: "Mode de paiement :",
         position: { x: 2, y: 121 },
@@ -604,7 +604,7 @@ export function getDefaultClientReceiptTemplate() {
         fontColor: "#1f1f1d",
       },
       {
-        name: "_label_transaction",
+        name: "labelTransaction",
         type: "text",
         content: "Réf. transaction :",
         position: { x: 2, y: 127 },
@@ -626,7 +626,7 @@ export function getDefaultClientReceiptTemplate() {
 
       // ─── MONTANT TOTAL ───
       {
-        name: "_label_total",
+        name: "labelTotal",
         type: "text",
         content: "MONTANT TOTAL PAYÉ",
         position: { x: 110, y: 138 },
@@ -650,7 +650,7 @@ export function getDefaultClientReceiptTemplate() {
 
       // ─── DÉCOMPOSITION ───
       {
-        name: "_label_breakdown",
+        name: "labelBreakdown",
         type: "text",
         content: "Dont commission Animigo :",
         position: { x: 110, y: 158 },
@@ -672,7 +672,7 @@ export function getDefaultClientReceiptTemplate() {
         alignment: "right",
       },
       {
-        name: "_label_provider_earnings",
+        name: "labelProviderEarnings",
         type: "text",
         content: "Reversé au prestataire :",
         position: { x: 110, y: 163 },
@@ -696,7 +696,7 @@ export function getDefaultClientReceiptTemplate() {
 
       // ─── MENTIONS LÉGALES OBLIGATOIRES ───
       {
-        name: "_section_legal",
+        name: "sectionLegal",
         type: "text",
         content: "MENTIONS LÉGALES",
         position: { x: 0, y: 180 },
@@ -736,7 +736,7 @@ export function getDefaultClientReceiptTemplate() {
         fontColor: "#64748b",
       },
       {
-        name: "_legal_note",
+        name: "legalNote",
         type: "text",
         content: "Ce reçu n'est pas une facture commerciale. Pour toute facture comptable détaillée (TVA, mentions légales du prestataire), veuillez vous référer à la facture émise par votre prestataire.",
         position: { x: 0, y: 211 },
