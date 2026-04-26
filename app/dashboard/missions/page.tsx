@@ -247,54 +247,82 @@ function MissionsPageContent() {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 text-primary animate-spin mx-auto mb-4" />
-          <p className="text-text-light">Chargement...</p>
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3" style={{ color: "#1f3a33" }} />
+          <p className="text-[13px]" style={{ color: "#6d6d68" }}>
+            Chargement...
+          </p>
         </div>
       </div>
     );
   }
 
+  const activeFilterCount =
+    (serviceType !== "all" ? 1 : 0) +
+    (sessionType !== "all" ? 1 : 0) +
+    (animalType !== "all" ? 1 : 0) +
+    (month !== "all" ? 1 : 0);
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-4">
+      {/* Header — esprit du planning */}
       <motion.div
-        initial={{ opacity: 0, y: -20 }}
+        initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={`p-3 ${tabConfig.bgColor} rounded-2xl`}>
-              <tabConfig.icon className={`w-6 h-6 ${tabConfig.textColor}`} />
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <div
+              className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{
+                background: tabConfig.pastelBg,
+                border: `1px solid ${tabConfig.pastelBorder}`,
+              }}
+            >
+              <tabConfig.icon
+                className="w-4 h-4 sm:w-5 sm:h-5"
+                style={{ color: tabConfig.accent }}
+              />
             </div>
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+            <div className="min-w-0">
+              <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484]">
                 Mes missions
+              </div>
+              <h1 className="text-[20px] sm:text-[24px] font-semibold text-[#1f1f1d] tracking-[-0.02em] truncate m-0">
+                {tabConfig.label}
               </h1>
-              <p className="text-text-light">
-                Gérez toutes vos missions en un seul endroit
-              </p>
             </div>
           </div>
 
-          {/* Bouton filtres */}
+          {/* Bouton filtres — pill cohérente avec le planning */}
           <motion.button
             onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm transition-colors ${
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors flex-shrink-0"
+            style={
               showFilters || hasActiveFilters
-                ? "bg-primary text-white"
-                : "bg-slate-100 text-foreground hover:bg-slate-200"
-            }`}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+                ? { background: "#1f3a33", color: "#f7f5ef", border: "1px solid #1f3a33" }
+                : {
+                    background: "#fff",
+                    color: "#1f1f1d",
+                    border: "1px solid #ece9e1",
+                  }
+            }
+            whileTap={{ scale: 0.97 }}
           >
-            <Filter className="w-4 h-4" />
+            <Filter className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Filtres</span>
             {hasActiveFilters && (
-              <span className="w-5 h-5 bg-white/20 rounded-full text-xs flex items-center justify-center">
-                {(serviceType !== "all" ? 1 : 0) +
-                 (sessionType !== "all" ? 1 : 0) +
-                 (animalType !== "all" ? 1 : 0) +
-                 (month !== "all" ? 1 : 0)}
+              <span
+                className="min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center"
+                style={{
+                  background:
+                    showFilters || hasActiveFilters
+                      ? "rgba(247,245,239,0.2)"
+                      : "#f7f5ef",
+                  color:
+                    showFilters || hasActiveFilters ? "#f7f5ef" : "#6d6d68",
+                }}
+              >
+                {activeFilterCount}
               </span>
             )}
           </motion.button>

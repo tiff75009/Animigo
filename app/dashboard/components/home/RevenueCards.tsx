@@ -24,48 +24,64 @@ export function RevenueCards({ upcomingRevenue, completedRevenue }: RevenueCards
       label: "À venir",
       value: upcomingRevenue,
       icon: Clock,
-      bg: "bg-secondary/10",
-      iconBg: "bg-secondary/20",
-      iconColor: "text-secondary",
-      valueColor: "text-secondary",
+      iconBg: "#f7f5ef",
+      iconBorder: "#ece9e1",
+      iconColor: "#1f1f1d",
+      featured: false,
     },
     {
       label: "Encaissé",
       value: completedRevenue,
       icon: CheckCircle,
-      bg: "bg-green-50",
-      iconBg: "bg-green-100",
-      iconColor: "text-green-600",
-      valueColor: "text-green-700",
+      iconBg: "#f5f9f6",
+      iconBorder: "#cfdbd3",
+      iconColor: "#1f3a33",
+      featured: false,
     },
     {
       label: "Total",
       value: total,
       icon: TrendingUp,
-      bg: "bg-gradient-to-br from-primary/10 to-primary/5",
-      iconBg: "bg-primary/20",
-      iconColor: "text-primary",
-      valueColor: "text-primary",
+      iconBg: "rgba(247,245,239,0.25)",
+      iconBorder: "rgba(247,245,239,0.4)",
+      iconColor: "#f7f5ef",
+      featured: true,
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
       {cards.map((card, i) => (
         <motion.div
           key={card.label}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 + i * 0.05 }}
-          className={`rounded-2xl p-5 shadow-sm ${card.bg}`}
+          className="p-4 transition-all hover:shadow-[0_10px_30px_rgba(30,30,28,0.06)]"
+          style={
+            card.featured
+              ? { borderRadius: 14, background: "#1f3a33", border: "1px solid #1f3a33" }
+              : { borderRadius: 14, background: "#fff", border: "1px solid #ece9e1" }
+          }
         >
-          <div className="flex items-center gap-3 mb-2">
-            <div className={`w-10 h-10 ${card.iconBg} rounded-xl flex items-center justify-center`}>
-              <card.icon className={`w-5 h-5 ${card.iconColor}`} />
+          <div className="flex items-center justify-between mb-3">
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center"
+              style={{ background: card.iconBg, border: `1px solid ${card.iconBorder}` }}
+            >
+              <card.icon className="w-4 h-4" style={{ color: card.iconColor }} />
             </div>
-            <span className="text-sm font-medium text-text-light">{card.label}</span>
           </div>
-          <p className={`text-2xl font-bold ${card.valueColor}`}>
+          <div
+            className="text-[10px] font-medium uppercase tracking-[0.1em] mb-1"
+            style={{ color: card.featured ? "rgba(247,245,239,0.7)" : "#9c9484" }}
+          >
+            {card.label}
+          </div>
+          <p
+            className="text-[24px] font-semibold tracking-[-0.02em] leading-none"
+            style={{ color: card.featured ? "#f7f5ef" : "#1f1f1d" }}
+          >
             {formatCurrency(card.value)}
           </p>
         </motion.div>

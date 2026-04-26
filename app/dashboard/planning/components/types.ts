@@ -91,6 +91,113 @@ export const statusLabels: Record<MissionStatus, string> = {
   cancelled: "Annulee",
 };
 
+// Style visuel par statut — palette sobre cohérente avec le design system
+// Distingue clairement les 3 grandes étapes du tunnel :
+// • À accepter (action requise annonceur)
+// • Acceptée mais en attente de paiement client
+// • Payée par le client (confirmée)
+export interface MissionVisualStyle {
+  background: string;       // fond du bloc événement
+  borderColor: string;      // bordure complète
+  borderLeftColor: string;  // bordure gauche d'accent (la plus visible)
+  borderStyle: "solid" | "dashed";
+  textColor: string;
+  subTextColor: string;
+  dotColor: string;         // pour pastilles compactes (mois)
+  shortLabel: string;       // label court (badges)
+}
+
+export const missionVisualStyles: Record<MissionStatus, MissionVisualStyle> = {
+  // À accepter : jaune pastel + bordure pointillée jaune (action requise)
+  pending_acceptance: {
+    background: "#fdf8ec",
+    borderColor: "#f4e6c1",
+    borderLeftColor: "#c9a14a",
+    borderStyle: "dashed",
+    textColor: "#7a5b1a",
+    subTextColor: "#a08247",
+    dotColor: "#c9a14a",
+    shortLabel: "À accepter",
+  },
+  // Acceptée mais en attente paiement client : orange clair + bordure orange
+  pending_confirmation: {
+    background: "#fdf0e6",
+    borderColor: "#f4d6bc",
+    borderLeftColor: "#d97f3a",
+    borderStyle: "solid",
+    textColor: "#7a4a1a",
+    subTextColor: "#a36e3a",
+    dotColor: "#d97f3a",
+    shortLabel: "Attente paiement",
+  },
+  // Payée par client → confirmée : vert pastel + bordure vert foncé (le statut "réussi")
+  upcoming: {
+    background: "#f5f9f6",
+    borderColor: "#cfdbd3",
+    borderLeftColor: "#1f3a33",
+    borderStyle: "solid",
+    textColor: "#1f3a33",
+    subTextColor: "#3a6052",
+    dotColor: "#1f3a33",
+    shortLabel: "Confirmée",
+  },
+  // En cours : bleu pastel
+  in_progress: {
+    background: "#eaf0fd",
+    borderColor: "#c8d6f0",
+    borderLeftColor: "#3a72c4",
+    borderStyle: "solid",
+    textColor: "#1e3f7a",
+    subTextColor: "#3a5a96",
+    dotColor: "#3a72c4",
+    shortLabel: "En cours",
+  },
+  // Terminée : vert sourd (déjà passée, moins saillante)
+  completed: {
+    background: "#f0f5f0",
+    borderColor: "#d3ddd3",
+    borderLeftColor: "#5a8a6e",
+    borderStyle: "solid",
+    textColor: "#3a5a48",
+    subTextColor: "#6d8a78",
+    dotColor: "#5a8a6e",
+    shortLabel: "Terminée",
+  },
+  // Refusée : rouge pastel
+  refused: {
+    background: "#fdf0f0",
+    borderColor: "#f1cdcd",
+    borderLeftColor: "#c45656",
+    borderStyle: "solid",
+    textColor: "#8a3a3a",
+    subTextColor: "#a35858",
+    dotColor: "#c45656",
+    shortLabel: "Refusée",
+  },
+  // Annulée : gris sourd
+  cancelled: {
+    background: "#f7f5ef",
+    borderColor: "#ece9e1",
+    borderLeftColor: "#9c9484",
+    borderStyle: "solid",
+    textColor: "#6d6d68",
+    subTextColor: "#9c9484",
+    dotColor: "#9c9484",
+    shortLabel: "Annulée",
+  },
+};
+
+// Helper : retourne le style visuel.
+// Si le client a payé (paymentStatus === "paid") et que le statut est "upcoming",
+// on garde le style "Confirmée". Si paid + status pending_confirmation,
+// on bascule vers "Confirmée" (le client a payé donc c'est validé).
+export function getMissionVisualStyle(mission: Mission): MissionVisualStyle {
+  if (mission.paymentStatus === "paid" && mission.status === "pending_confirmation") {
+    return missionVisualStyles.upcoming;
+  }
+  return missionVisualStyles[mission.status];
+}
+
 // Availability colors
 export const availabilityColors: Record<AvailabilityStatus, string> = {
   available: "bg-green-100 text-green-800 border-green-200",

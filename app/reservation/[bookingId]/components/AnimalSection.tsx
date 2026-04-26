@@ -46,15 +46,26 @@ export default function AnimalSection({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.1 }}
-      className="bg-white rounded-2xl shadow-sm overflow-hidden"
+      className="bg-white p-[18px]"
+      style={{ borderRadius: 14, border: "1px solid #ece9e1" }}
     >
-      <div className="bg-gradient-to-r from-secondary to-secondary/80 px-6 py-4">
-        <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-          <PawPrint className="w-5 h-5" />
-          {isCollectiveFormula || isMultiAnimal ? "Vos animaux" : "Votre animal"}
-        </h2>
+      <div className="mb-4 flex items-start gap-2.5">
+        <div
+          className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+          style={{ background: "#f5f9f6", border: "1px solid #cfdbd3" }}
+        >
+          <PawPrint className="w-4 h-4" style={{ color: "#1f3a33" }} />
+        </div>
+        <div className="min-w-0">
+          <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484]">
+            Section · {isCollectiveFormula || isMultiAnimal ? "Animaux concernés" : "Animal concerné"}
+          </div>
+          <h2 className="text-base font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+            {isCollectiveFormula || isMultiAnimal ? "Vos animaux" : "Votre animal"}
+          </h2>
+        </div>
       </div>
-      <div className="p-6">
+      <div>
         {isLoggedIn && token ? (
           <>
             {isCollectiveFormula && collectiveSlots ? (
@@ -112,13 +123,20 @@ export default function AnimalSection({
           </>
         ) : (
           <>
-            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-              <p className="text-sm text-amber-800 flex items-start gap-2">
-                <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <div
+              className="mb-4 p-3"
+              style={{
+                borderRadius: 12,
+                background: "#fdf8ec",
+                border: "1px solid #f4e6c1",
+              }}
+            >
+              <p className="text-[12px] flex items-start gap-2" style={{ color: "#7a5b1a" }}>
+                <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
                 <span>
                   En tant que nouvel utilisateur, vous pouvez inscrire <strong>un seul animal</strong> pour cette réservation.
                   {isCollectiveFormula && (
-                    <span className="block mt-1 text-amber-700">
+                    <span className="block mt-1 opacity-90">
                       Pour inscrire plusieurs animaux aux séances collectives, veuillez d&apos;abord créer un compte et vous connecter.
                     </span>
                   )}

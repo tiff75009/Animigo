@@ -613,19 +613,33 @@ export default function ReservationPage({
   // Bloquer les annonceurs
   if (!authLoading && isAnnouncer) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full text-center space-y-4">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto">
-            <ShieldAlert className="w-8 h-8 text-red-500" />
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: "#fcfaf4" }}>
+        <div
+          className="bg-white p-8 max-w-md w-full text-center space-y-4"
+          style={{ borderRadius: 18, border: "1px solid #ece9e1" }}
+        >
+          <div
+            className="w-14 h-14 rounded-full flex items-center justify-center mx-auto"
+            style={{ background: "#fdf0f0", border: "1px solid #f1cdcd" }}
+          >
+            <ShieldAlert className="w-7 h-7" style={{ color: "#8a3a3a" }} />
           </div>
-          <h2 className="text-xl font-bold text-foreground">Réservation impossible</h2>
-          <p className="text-text-light">
+          <div>
+            <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-1">
+              Accès refusé
+            </div>
+            <h2 className="text-[18px] font-semibold text-[#1f1f1d] tracking-[-0.01em]">
+              Réservation impossible
+            </h2>
+          </div>
+          <p className="text-[13px] text-[#6d6d68] leading-[1.5]">
             Les comptes annonceurs ne peuvent pas effectuer de réservations.
             Pour réserver un service, veuillez utiliser un compte client.
           </p>
           <button
             onClick={() => router.back()}
-            className="w-full py-3 bg-primary text-white font-semibold rounded-full hover:bg-primary/90 transition-colors"
+            className="w-full py-3 font-semibold rounded-full transition-opacity hover:opacity-90"
+            style={{ background: "#1f3a33", color: "#f7f5ef" }}
           >
             Retour
           </button>
@@ -637,10 +651,10 @@ export default function ReservationPage({
   // Loading state
   if (bookingData === undefined) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#fcfaf4" }}>
         <div className="text-center">
-          <Loader2 className="w-10 h-10 text-primary animate-spin mx-auto mb-4" />
-          <p className="text-text-light">Chargement de votre réservation...</p>
+          <Loader2 className="w-9 h-9 animate-spin mx-auto mb-3" style={{ color: "#1f3a33" }} />
+          <p className="text-[13px]" style={{ color: "#6d6d68" }}>Chargement de votre réservation...</p>
         </div>
       </div>
     );
@@ -649,10 +663,10 @@ export default function ReservationPage({
   // Redirection en cours après finalisation
   if (isFinalized) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#fcfaf4" }}>
         <div className="text-center">
-          <Loader2 className="w-10 h-10 text-primary animate-spin mx-auto mb-4" />
-          <p className="text-text-light">Redirection en cours...</p>
+          <Loader2 className="w-9 h-9 animate-spin mx-auto mb-3" style={{ color: "#1f3a33" }} />
+          <p className="text-[13px]" style={{ color: "#6d6d68" }}>Redirection en cours...</p>
         </div>
       </div>
     );
@@ -661,28 +675,36 @@ export default function ReservationPage({
   // Not found or expired
   if (!bookingData || isExpired) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background flex items-center justify-center p-4">
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: "#fcfaf4" }}>
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="text-center max-w-md bg-white rounded-3xl shadow-xl p-8"
+          className="text-center max-w-md bg-white p-8"
+          style={{ borderRadius: 18, border: "1px solid #ece9e1" }}
         >
-          <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <AlertCircle className="w-10 h-10 text-red-500" />
+          <div
+            className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5"
+            style={{ background: "#fdf0f0", border: "1px solid #f1cdcd" }}
+          >
+            <AlertCircle className="w-8 h-8" style={{ color: "#8a3a3a" }} />
           </div>
-          <h1 className="text-2xl font-bold text-foreground mb-3">
+          <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-2">
+            {isExpired ? "Délai dépassé" : "Erreur"}
+          </div>
+          <h1 className="text-[20px] font-semibold text-[#1f1f1d] tracking-[-0.01em] mb-3">
             {isExpired ? "Réservation expirée" : "Réservation introuvable"}
           </h1>
-          <p className="text-text-light mb-8">
+          <p className="text-[13px] mb-7 leading-[1.5]" style={{ color: "#6d6d68" }}>
             {isExpired
               ? "Cette réservation a expiré. Les réservations sont valides pendant 24 heures. Veuillez recommencer votre recherche."
               : "Cette réservation n'existe pas ou a déjà été finalisée."}
           </p>
           <Link
             href="/"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white font-medium rounded-xl hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20"
+            className="inline-flex items-center gap-2 px-5 py-2.5 font-medium rounded-full transition-opacity hover:opacity-90"
+            style={{ background: "#1f3a33", color: "#f7f5ef" }}
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-4 h-4" />
             Retour à l&apos;accueil
           </Link>
         </motion.div>
@@ -691,30 +713,39 @@ export default function ReservationPage({
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-10">
-        <div className="container max-w-5xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
+    <div className="min-h-screen" style={{ background: "#fcfaf4" }}>
+      {/* Header sticky */}
+      <div
+        className="bg-white sticky top-0 z-10"
+        style={{ borderBottom: "1px solid #ece9e1" }}
+      >
+        <div className="container max-w-5xl mx-auto px-4 py-3.5">
+          <div className="flex items-center justify-between gap-3">
             <button
               onClick={handleBack}
-              className="flex items-center gap-2 text-text-light hover:text-foreground transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors hover:bg-[#f7f5ef]"
+              style={{ color: "#1f3a33", border: "1px solid #ece9e1" }}
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Retour</span>
             </button>
-            <h1 className="text-lg font-bold text-foreground">
-              Finaliser la réservation
-            </h1>
-            <div className="w-20" />
+            <div className="text-center min-w-0">
+              <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484]">
+                Étape finale
+              </div>
+              <h1 className="text-[15px] font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0 truncate">
+                Finaliser la réservation
+              </h1>
+            </div>
+            <div className="w-[72px] flex-shrink-0" />
           </div>
         </div>
       </div>
 
-      <div className="container max-w-5xl mx-auto px-4 py-8">
-        <div className="grid lg:grid-cols-5 gap-6">
+      <div className="container max-w-5xl mx-auto px-4 py-6 sm:py-8">
+        <div className="grid lg:grid-cols-5 gap-5">
           {/* Colonne principale */}
-          <div className="lg:col-span-3 space-y-6">
+          <div className="lg:col-span-3 space-y-3">
             {/* Section Authentification */}
             <AuthSection
               isLoggedIn={isLoggedIn}
@@ -760,36 +791,45 @@ export default function ReservationPage({
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="bg-white rounded-2xl shadow-sm overflow-visible relative z-20"
+              className="bg-white p-[18px] overflow-visible relative z-20"
+              style={{ borderRadius: 14, border: "1px solid #ece9e1" }}
             >
-              <div className="bg-gradient-to-r from-accent to-accent/80 px-6 py-4">
-                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                  <MapPin className="w-5 h-5" />
-                  Adresse de la prestation
-                </h2>
+              <div className="mb-4 flex items-start gap-2.5">
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                  style={{ background: "#f5f9f6", border: "1px solid #cfdbd3" }}
+                >
+                  <MapPin className="w-4 h-4" style={{ color: "#1f3a33" }} />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484]">
+                    Section · Lieu
+                  </div>
+                  <h2 className="text-base font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+                    Adresse de la prestation
+                  </h2>
+                </div>
               </div>
-              <div className="p-6">
-                <AddressSectionBooking
-                  sessionToken={token}
-                  isLoggedIn={isLoggedIn}
-                  serviceLocation={bookingData.serviceLocation}
-                  announcerLocation={bookingData.announcer.location}
-                  announcerCity={bookingData.announcer.city}
-                  announcerPostalCode={bookingData.announcer.postalCode}
-                  isCollectiveFormula={isCollectiveFormula}
-                  currentAddress={address}
-                  currentCity={city}
-                  currentPostalCode={postalCode}
-                  currentCoordinates={coordinates}
-                  onAddressChange={(data) => {
-                    setAddress(data.address);
-                    setCity(data.city);
-                    setPostalCode(data.postalCode);
-                    setCoordinates(data.coordinates);
-                  }}
-                  error={fieldErrors.address}
-                />
-              </div>
+              <AddressSectionBooking
+                sessionToken={token}
+                isLoggedIn={isLoggedIn}
+                serviceLocation={bookingData.serviceLocation}
+                announcerLocation={bookingData.announcer.location}
+                announcerCity={bookingData.announcer.city}
+                announcerPostalCode={bookingData.announcer.postalCode}
+                isCollectiveFormula={isCollectiveFormula}
+                currentAddress={address}
+                currentCity={city}
+                currentPostalCode={postalCode}
+                currentCoordinates={coordinates}
+                onAddressChange={(data) => {
+                  setAddress(data.address);
+                  setCity(data.city);
+                  setPostalCode(data.postalCode);
+                  setCoordinates(data.coordinates);
+                }}
+                error={fieldErrors.address}
+              />
             </motion.div>
 
             {/* Section Notes */}
@@ -797,24 +837,38 @@ export default function ReservationPage({
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="bg-white rounded-2xl shadow-sm overflow-hidden"
+              className="bg-white p-[18px]"
+              style={{ borderRadius: 14, border: "1px solid #ece9e1" }}
             >
-              <div className="px-6 py-4 border-b border-gray-100">
-                <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-primary" />
-                  Notes complémentaires
-                  <span className="text-sm font-normal text-text-light">(optionnel)</span>
-                </h2>
+              <div className="mb-3 flex items-start gap-2.5">
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                  style={{ background: "#fcfaf4", border: "1px solid #ece9e1" }}
+                >
+                  <FileText className="w-4 h-4" style={{ color: "#1f3a33" }} />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484]">
+                    Section · Notes (optionnel)
+                  </div>
+                  <h2 className="text-base font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+                    Notes complémentaires
+                  </h2>
+                </div>
               </div>
-              <div className="p-6">
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Informations complémentaires pour l'annonceur (code d'accès, instructions particulières...)"
-                  rows={3}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-none"
-                />
-              </div>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Informations complémentaires pour l'annonceur (code d'accès, instructions particulières...)"
+                rows={3}
+                className="w-full px-4 py-3 text-[13px] focus:outline-none focus:ring-1 transition-all resize-none"
+                style={{
+                  borderRadius: 12,
+                  border: "1px solid #dfdcd4",
+                  background: "#fff",
+                  color: "#1f1f1d",
+                }}
+              />
             </motion.div>
           </div>
 

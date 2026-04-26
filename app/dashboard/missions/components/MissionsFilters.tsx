@@ -2,32 +2,24 @@
 
 import { useMemo } from "react";
 import { motion } from "framer-motion";
-import { Home, Briefcase, Users, User, Dog, Cat, Bird, Rabbit, X, CalendarDays } from "lucide-react";
-import { cn } from "@/app/lib/utils";
+import { Home, Briefcase, Users, User, Dog, Cat, Bird, Rabbit, X, CalendarDays, SlidersHorizontal } from "lucide-react";
 
 export type ServiceTypeFilter = "all" | "garde" | "service";
 export type SessionTypeFilter = "all" | "individual" | "collective";
-export type AnimalTypeFilter = string; // "all" ou le type d'animal
-export type MonthFilter = string; // "all" ou "YYYY-MM"
+export type AnimalTypeFilter = string;
+export type MonthFilter = string;
 
 interface MissionsFiltersProps {
-  // Filtre type de service
   serviceType: ServiceTypeFilter;
   onServiceTypeChange: (type: ServiceTypeFilter) => void;
-  // Filtre type de session (individuel/collectif)
   sessionType: SessionTypeFilter;
   onSessionTypeChange: (type: SessionTypeFilter) => void;
-  // Filtre type d'animal
   animalType: AnimalTypeFilter;
   onAnimalTypeChange: (type: AnimalTypeFilter) => void;
-  // Filtre par mois
   month: MonthFilter;
   onMonthChange: (month: MonthFilter) => void;
-  // Types d'animaux disponibles dans les missions
   availableAnimalTypes: string[];
-  // Mois disponibles dans les missions (format YYYY-MM)
   availableMonths: string[];
-  // Compteurs pour les badges (optionnel)
   counts?: {
     garde?: number;
     service?: number;
@@ -38,7 +30,6 @@ interface MissionsFiltersProps {
   };
 }
 
-// Helper pour obtenir l'emoji de l'animal
 function getAnimalEmoji(type: string): string {
   const emojiMap: Record<string, string> = {
     chien: "🐕",
@@ -56,17 +47,6 @@ function getAnimalEmoji(type: string): string {
   return emojiMap[type.toLowerCase()] || "🐾";
 }
 
-// Helper pour obtenir l'icône de l'animal
-function getAnimalIcon(type: string) {
-  const typeL = type.toLowerCase();
-  if (typeL === "chien") return Dog;
-  if (typeL === "chat") return Cat;
-  if (typeL === "oiseau") return Bird;
-  if (typeL === "lapin") return Rabbit;
-  return Dog; // Défaut
-}
-
-// Helper pour formater le mois en français
 function formatMonth(monthStr: string): string {
   const [year, month] = monthStr.split("-");
   const date = new Date(parseInt(year), parseInt(month) - 1, 1);
@@ -86,7 +66,8 @@ export function MissionsFilters({
   availableMonths,
   counts,
 }: MissionsFiltersProps) {
-  const hasActiveFilters = serviceType !== "all" || sessionType !== "all" || animalType !== "all" || month !== "all";
+  const hasActiveFilters =
+    serviceType !== "all" || sessionType !== "all" || animalType !== "all" || month !== "all";
 
   const clearFilters = () => {
     onServiceTypeChange("all");
@@ -95,7 +76,6 @@ export function MissionsFilters({
     onMonthChange("all");
   };
 
-  // Trier les mois par ordre chronologique
   const sortedMonths = useMemo(() => {
     return [...availableMonths].sort((a, b) => a.localeCompare(b));
   }, [availableMonths]);
@@ -104,17 +84,29 @@ export function MissionsFilters({
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-2xl p-4 shadow-sm space-y-4"
+      className="bg-white p-[18px] space-y-4"
+      style={{ borderRadius: 14, border: "1px solid #ece9e1" }}
     >
-      {/* Header avec bouton reset */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-foreground">Filtres</h3>
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <SlidersHorizontal className="w-3.5 h-3.5" style={{ color: "#1f3a33" }} />
+          <div>
+            <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484]">
+              Filtres
+            </div>
+            <h3 className="text-[14px] font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+              Affiner la liste
+            </h3>
+          </div>
+        </div>
         {hasActiveFilters && (
           <motion.button
-            initial={{ opacity: 0, scale: 0.8 }}
+            initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             onClick={clearFilters}
-            className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors hover:bg-[#f7f5ef]"
+            style={{ color: "#1f3a33", border: "1px solid #ece9e1" }}
           >
             <X className="w-3 h-3" />
             Réinitialiser
@@ -122,44 +114,37 @@ export function MissionsFilters({
         )}
       </div>
 
-      {/* Filtre Type de service */}
-      <div className="space-y-2">
-        <p className="text-xs text-text-light font-medium">Type de service</p>
-        <div className="flex flex-wrap gap-2">
-          <FilterChip
-            active={serviceType === "all"}
-            onClick={() => onServiceTypeChange("all")}
-            label="Tous"
-          />
-          <FilterChip
-            active={serviceType === "garde"}
-            onClick={() => onServiceTypeChange("garde")}
-            icon={<Home className="w-3.5 h-3.5" />}
-            label="Garde"
-            count={counts?.garde}
-            color="purple"
-          />
-          <FilterChip
-            active={serviceType === "service"}
-            onClick={() => onServiceTypeChange("service")}
-            icon={<Briefcase className="w-3.5 h-3.5" />}
-            label="Service"
-            count={counts?.service}
-            color="blue"
-          />
-        </div>
-      </div>
+      {/* Type de service */}
+      <FilterGroup label="Type de service">
+        <FilterChip
+          active={serviceType === "all"}
+          onClick={() => onServiceTypeChange("all")}
+          label="Tous"
+        />
+        <FilterChip
+          active={serviceType === "garde"}
+          onClick={() => onServiceTypeChange("garde")}
+          icon={<Home className="w-3.5 h-3.5" />}
+          label="Garde"
+          count={counts?.garde}
+        />
+        <FilterChip
+          active={serviceType === "service"}
+          onClick={() => onServiceTypeChange("service")}
+          icon={<Briefcase className="w-3.5 h-3.5" />}
+          label="Service"
+          count={counts?.service}
+        />
+      </FilterGroup>
 
-      {/* Filtre Individuel/Collectif - visible seulement si service sélectionné */}
+      {/* Individuel/Collectif */}
       {serviceType === "service" && (
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}
           exit={{ opacity: 0, height: 0 }}
-          className="space-y-2"
         >
-          <p className="text-xs text-text-light font-medium">Type de séance</p>
-          <div className="flex flex-wrap gap-2">
+          <FilterGroup label="Type de séance">
             <FilterChip
               active={sessionType === "all"}
               onClick={() => onSessionTypeChange("all")}
@@ -171,7 +156,6 @@ export function MissionsFilters({
               icon={<User className="w-3.5 h-3.5" />}
               label="Individuel"
               count={counts?.individual}
-              color="green"
             />
             <FilterChip
               active={sessionType === "collective"}
@@ -179,66 +163,67 @@ export function MissionsFilters({
               icon={<Users className="w-3.5 h-3.5" />}
               label="Collectif"
               count={counts?.collective}
-              color="orange"
             />
-          </div>
+          </FilterGroup>
         </motion.div>
       )}
 
-      {/* Filtre Type d'animal */}
+      {/* Type d'animal */}
       {availableAnimalTypes.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs text-text-light font-medium">Type d'animal</p>
-          <div className="flex flex-wrap gap-2">
+        <FilterGroup label="Type d'animal">
+          <FilterChip
+            active={animalType === "all"}
+            onClick={() => onAnimalTypeChange("all")}
+            label="Tous"
+          />
+          {availableAnimalTypes.map((type) => (
             <FilterChip
-              active={animalType === "all"}
-              onClick={() => onAnimalTypeChange("all")}
-              label="Tous"
+              key={type}
+              active={animalType === type}
+              onClick={() => onAnimalTypeChange(type)}
+              emoji={getAnimalEmoji(type)}
+              label={type.charAt(0).toUpperCase() + type.slice(1)}
+              count={counts?.byAnimal?.[type]}
             />
-            {availableAnimalTypes.map((type) => (
-              <FilterChip
-                key={type}
-                active={animalType === type}
-                onClick={() => onAnimalTypeChange(type)}
-                emoji={getAnimalEmoji(type)}
-                label={type.charAt(0).toUpperCase() + type.slice(1)}
-                count={counts?.byAnimal?.[type]}
-                color="slate"
-              />
-            ))}
-          </div>
-        </div>
+          ))}
+        </FilterGroup>
       )}
 
-      {/* Filtre par mois */}
+      {/* Mois */}
       {sortedMonths.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs text-text-light font-medium">Période</p>
-          <div className="flex flex-wrap gap-2">
+        <FilterGroup label="Période">
+          <FilterChip
+            active={month === "all"}
+            onClick={() => onMonthChange("all")}
+            label="Tous"
+          />
+          {sortedMonths.map((m) => (
             <FilterChip
-              active={month === "all"}
-              onClick={() => onMonthChange("all")}
-              label="Tous"
+              key={m}
+              active={month === m}
+              onClick={() => onMonthChange(m)}
+              icon={<CalendarDays className="w-3.5 h-3.5" />}
+              label={formatMonth(m)}
+              count={counts?.byMonth?.[m]}
             />
-            {sortedMonths.map((m) => (
-              <FilterChip
-                key={m}
-                active={month === m}
-                onClick={() => onMonthChange(m)}
-                icon={<CalendarDays className="w-3.5 h-3.5" />}
-                label={formatMonth(m)}
-                count={counts?.byMonth?.[m]}
-                color="purple"
-              />
-            ))}
-          </div>
-        </div>
+          ))}
+        </FilterGroup>
       )}
     </motion.div>
   );
 }
 
-// Composant Chip réutilisable
+function FilterGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "#9c9484" }}>
+        {label}
+      </p>
+      <div className="flex flex-wrap gap-1.5">{children}</div>
+    </div>
+  );
+}
+
 interface FilterChipProps {
   active: boolean;
   onClick: () => void;
@@ -246,39 +231,37 @@ interface FilterChipProps {
   icon?: React.ReactNode;
   emoji?: string;
   count?: number;
-  color?: "purple" | "blue" | "green" | "orange" | "slate";
 }
 
-function FilterChip({ active, onClick, label, icon, emoji, count, color = "slate" }: FilterChipProps) {
-  const colorClasses = {
-    purple: active ? "bg-purple text-white" : "bg-purple/10 text-purple hover:bg-purple/20",
-    blue: active ? "bg-blue-500 text-white" : "bg-blue-100 text-blue-700 hover:bg-blue-200",
-    green: active ? "bg-green-500 text-white" : "bg-green-100 text-green-700 hover:bg-green-200",
-    orange: active ? "bg-orange-500 text-white" : "bg-orange-100 text-orange-700 hover:bg-orange-200",
-    slate: active ? "bg-foreground text-white" : "bg-slate-100 text-foreground hover:bg-slate-200",
-  };
-
+function FilterChip({ active, onClick, label, icon, emoji, count }: FilterChipProps) {
   return (
     <motion.button
       onClick={onClick}
       aria-pressed={active}
       aria-label={`Filtre ${label}${count !== undefined && count > 0 ? `, ${count} résultat${count > 1 ? "s" : ""}` : ""}`}
-      className={cn(
-        "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
-        active ? colorClasses[color].split(" ").slice(0, 2).join(" ") : colorClasses[color]
-      )}
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
+      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11.5px] font-medium transition-colors capitalize"
+      style={{
+        background: active ? "#1f3a33" : "#fff",
+        color: active ? "#f7f5ef" : "#1f1f1d",
+        border: `1px solid ${active ? "#1f3a33" : "#dfdcd4"}`,
+      }}
+      whileHover={{ y: -1 }}
+      whileTap={{ scale: 0.97 }}
     >
       {emoji && <span aria-hidden="true">{emoji}</span>}
-      {icon && <span aria-hidden="true">{icon}</span>}
+      {icon && (
+        <span aria-hidden="true" style={{ color: active ? "#f7f5ef" : "#9c9484" }}>
+          {icon}
+        </span>
+      )}
       <span>{label}</span>
       {count !== undefined && count > 0 && (
         <span
-          className={cn(
-            "min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center",
-            active ? "bg-white/20" : "bg-white"
-          )}
+          className="min-w-[16px] h-[16px] px-1 rounded-full text-[9.5px] font-bold flex items-center justify-center"
+          style={{
+            background: active ? "rgba(247,245,239,0.2)" : "#f7f5ef",
+            color: active ? "#f7f5ef" : "#6d6d68",
+          }}
           aria-hidden="true"
         >
           {count}

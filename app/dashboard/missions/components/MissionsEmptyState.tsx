@@ -2,19 +2,23 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import type { MissionTab } from "./MissionsTabs";
 
 interface MissionsEmptyStateProps {
   tab: MissionTab;
 }
 
-const emptyStateConfig: Record<MissionTab, {
-  emoji: string;
-  title: string;
-  description: string;
-  linkText?: string;
-  linkHref?: string;
-}> = {
+const emptyStateConfig: Record<
+  MissionTab,
+  {
+    emoji: string;
+    title: string;
+    description: string;
+    linkText?: string;
+    linkHref?: string;
+  }
+> = {
   pending_acceptance: {
     emoji: "📭",
     title: "Aucune mission en attente",
@@ -30,17 +34,20 @@ const emptyStateConfig: Record<MissionTab, {
   upcoming: {
     emoji: "📆",
     title: "Aucune mission planifiée",
-    description: "Vous n'avez pas de mission à venir. Acceptez de nouvelles demandes pour remplir votre planning !",
+    description:
+      "Vous n'avez pas de mission à venir. Acceptez de nouvelles demandes pour remplir votre planning !",
   },
   in_progress: {
     emoji: "🏖️",
     title: "Pas de mission en cours",
-    description: "Vous n'avez pas de mission active pour le moment. Consultez vos missions à venir !",
+    description:
+      "Vous n'avez pas de mission active pour le moment. Consultez vos missions à venir !",
   },
   completed: {
     emoji: "🎯",
     title: "Aucune mission terminée",
-    description: "Vous n'avez pas encore terminé de mission. Vos missions complétées apparaîtront ici.",
+    description:
+      "Vous n'avez pas encore terminé de mission. Vos missions complétées apparaîtront ici.",
   },
   refused: {
     emoji: "👍",
@@ -59,7 +66,8 @@ export function MissionsEmptyState({ tab }: MissionsEmptyStateProps) {
 
   return (
     <motion.div
-      className="bg-white rounded-2xl p-12 shadow-md text-center"
+      className="bg-white p-10 text-center"
+      style={{ borderRadius: 14, border: "1px solid #ece9e1" }}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
     >
@@ -67,22 +75,28 @@ export function MissionsEmptyState({ tab }: MissionsEmptyStateProps) {
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
         transition={{ type: "spring", delay: 0.2 }}
-        className="text-6xl mb-4"
+        className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-[32px]"
+        style={{ background: "#fcfaf4", border: "1px solid #f1ede3" }}
       >
         {config.emoji}
       </motion.div>
-      <h3 className="text-xl font-semibold text-foreground mb-2">
+      <div className="text-[10px] font-medium uppercase tracking-[0.1em] mb-1" style={{ color: "#9c9484" }}>
+        Liste vide
+      </div>
+      <h3 className="text-[16px] font-semibold text-[#1f1f1d] tracking-[-0.01em] mb-2">
         {config.title}
       </h3>
-      <p className="text-text-light mb-6 max-w-md mx-auto">
+      <p className="text-[13px] mb-5 max-w-md mx-auto leading-[1.5]" style={{ color: "#6d6d68" }}>
         {config.description}
       </p>
       {config.linkText && config.linkHref && (
         <Link
           href={config.linkHref}
-          className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white font-semibold rounded-xl hover:bg-primary/90 transition-colors"
+          className="inline-flex items-center gap-1.5 px-4 py-2 font-semibold rounded-full transition-opacity hover:opacity-90 text-[13px]"
+          style={{ background: "#1f3a33", color: "#f7f5ef" }}
         >
           {config.linkText}
+          <ArrowRight className="w-3.5 h-3.5" />
         </Link>
       )}
     </motion.div>

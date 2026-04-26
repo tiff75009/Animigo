@@ -8,13 +8,13 @@ import {
   Mail,
   CreditCard,
   Shield,
-  FileText,
   AlertCircle,
   ChevronDown,
   ChevronUp,
   Bell,
   Lock,
   Calendar,
+  Check,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -37,7 +37,7 @@ interface ConfirmationModalProps {
   onClose: () => void;
   onConfirm: () => void;
   isSubmitting: boolean;
-  isGuest: boolean; // Si l'utilisateur crée un compte
+  isGuest: boolean;
   userEmail?: string;
   cancellationPolicy?: CancellationPolicyInfo;
 }
@@ -74,121 +74,144 @@ export default function ConfirmationModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
+            className="fixed inset-0 z-50"
+            style={{ background: "rgba(31,31,29,0.45)", backdropFilter: "blur(4px)" }}
           />
 
           {/* Modal */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            initial={{ opacity: 0, scale: 0.96, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            exit={{ opacity: 0, scale: 0.96, y: 16 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
           >
-            <div role="dialog" aria-modal="true" aria-label="Confirmer votre réservation" className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Confirmer votre réservation"
+              className="bg-white max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col"
+              style={{ borderRadius: 18, border: "1px solid #ece9e1" }}
+            >
               {/* Header */}
-              <div className="bg-gradient-to-r from-primary to-primary/80 px-6 py-4 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                  <CheckCircle className="w-5 h-5" />
-                  Confirmer votre réservation
-                </h2>
+              <div
+                className="px-5 py-4 flex items-start justify-between gap-3"
+                style={{ borderBottom: "1px solid #f1ede3", background: "#fff" }}
+              >
+                <div className="flex items-start gap-3 min-w-0">
+                  <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+                    style={{ background: "#f5f9f6", border: "1px solid #cfdbd3" }}
+                  >
+                    <CheckCircle className="w-4 h-4" style={{ color: "#1f3a33" }} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484]">
+                      Dernière étape
+                    </div>
+                    <h2 className="text-base font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+                      Confirmer votre réservation
+                    </h2>
+                  </div>
+                </div>
                 <button
                   onClick={onClose}
                   disabled={isSubmitting}
                   aria-label="Fermer la fenêtre"
-                  className="text-white/80 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10"
+                  className="w-8 h-8 inline-flex items-center justify-center rounded-full transition-colors hover:bg-[#f7f5ef] flex-shrink-0 disabled:opacity-50"
+                  style={{ color: "#1f1f1d", border: "1px solid #ece9e1" }}
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-3.5 h-3.5" />
                 </button>
               </div>
 
               {/* Content */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-5">
-                {/* Informations importantes */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-foreground flex items-center gap-2">
-                    <AlertCircle className="w-5 h-5 text-primary" />
+              <div
+                className="flex-1 overflow-y-auto p-5 space-y-5"
+                style={{ background: "#fcfaf4" }}
+              >
+                {/* Bloc Informations importantes */}
+                <div>
+                  <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-2 flex items-center gap-1.5">
+                    <AlertCircle className="w-3 h-3" />
                     Informations importantes
-                  </h3>
-
-                  {/* Email de confirmation */}
-                  <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-xl">
-                    <Mail className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium text-blue-900">
-                        Confirmation par email requise
-                      </p>
-                      <p className="text-xs text-blue-700 mt-1">
-                        Pour que votre réservation soit 100% confirmée, vous devrez valider
-                        votre adresse email en cliquant sur le lien que nous vous enverrons
-                        {userEmail && (
-                          <span className="font-medium"> à {userEmail}</span>
-                        )}
-                        .
-                      </p>
-                    </div>
                   </div>
 
-                  {/* Identifiants de connexion (pour les invités) */}
-                  {isGuest && (
-                    <div className="flex items-start gap-3 p-3 bg-purple-50 rounded-xl">
-                      <Lock className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium text-purple-900">
-                          Vos identifiants de connexion
-                        </p>
-                        <p className="text-xs text-purple-700 mt-1">
-                          L&apos;adresse email et le mot de passe que vous avez saisis seront
-                          vos identifiants pour vous connecter à votre espace client Animigo.
-                        </p>
-                      </div>
-                    </div>
-                  )}
+                  <div className="space-y-2">
+                    <InfoCard
+                      icon={<Mail className="w-3.5 h-3.5" />}
+                      title="Confirmation par email requise"
+                      description={
+                        <>
+                          Pour que votre réservation soit 100 % confirmée, validez votre adresse
+                          email en cliquant sur le lien que nous vous enverrons
+                          {userEmail && (
+                            <>
+                              {" "}
+                              à <strong className="text-[#1f1f1d]">{userEmail}</strong>
+                            </>
+                          )}
+                          .
+                        </>
+                      }
+                    />
 
-                  {/* Paiement */}
-                  <div className="flex items-start gap-3 p-3 bg-green-50 rounded-xl">
-                    <CreditCard className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium text-green-900">
-                        Paiement après acceptation
-                      </p>
-                      <p className="text-xs text-green-700 mt-1">
-                        Le paiement sera effectué uniquement lorsque l&apos;annonceur aura
-                        accepté votre réservation. Vous recevrez un email et un SMS avec
-                        un lien de paiement sécurisé.
-                      </p>
-                    </div>
-                  </div>
+                    {isGuest && (
+                      <InfoCard
+                        icon={<Lock className="w-3.5 h-3.5" />}
+                        title="Vos identifiants de connexion"
+                        description={
+                          <>
+                            L&apos;email et le mot de passe que vous avez saisis seront vos
+                            identifiants pour vous connecter à votre espace client Animigo.
+                          </>
+                        }
+                      />
+                    )}
 
-                  {/* Notifications */}
-                  <div className="flex items-start gap-3 p-3 bg-amber-50 rounded-xl">
-                    <Bell className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium text-amber-900">
-                        Suivi de votre réservation
-                      </p>
-                      <p className="text-xs text-amber-700 mt-1">
-                        Vous serez notifié par email et SMS à chaque étape : acceptation,
-                        rappels, et finalisation de la prestation.
-                      </p>
-                    </div>
+                    <InfoCard
+                      icon={<CreditCard className="w-3.5 h-3.5" />}
+                      title="Paiement après acceptation"
+                      description={
+                        <>
+                          Le paiement sera effectué uniquement lorsque l&apos;annonceur aura accepté
+                          votre réservation. Vous recevrez un email et un SMS avec un lien de
+                          paiement sécurisé.
+                        </>
+                      }
+                    />
+
+                    <InfoCard
+                      icon={<Bell className="w-3.5 h-3.5" />}
+                      title="Suivi de votre réservation"
+                      description={
+                        <>
+                          Vous serez notifié par email et SMS à chaque étape : acceptation,
+                          rappels et finalisation de la prestation.
+                        </>
+                      }
+                    />
                   </div>
                 </div>
 
-                {/* Politique d'annulation */}
-                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                {/* Politique d'annulation - accordéon */}
+                <div
+                  className="overflow-hidden bg-white"
+                  style={{ borderRadius: 12, border: "1px solid #ece9e1" }}
+                >
                   <button
                     type="button"
                     onClick={() => setShowCancellationPolicy(!showCancellationPolicy)}
-                    className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
+                    className="w-full flex items-center justify-between p-3.5 transition-colors hover:bg-[#fafafa]"
                   >
-                    <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-                      <Calendar className="w-4 h-4 text-primary" />
+                    <span className="flex items-center gap-2 text-[13px] font-semibold text-[#1f1f1d] tracking-[-0.01em]">
+                      <Calendar className="w-3.5 h-3.5" style={{ color: "#1f3a33" }} />
                       Conditions d&apos;annulation
                     </span>
                     {showCancellationPolicy ? (
-                      <ChevronUp className="w-4 h-4 text-gray-400" />
+                      <ChevronUp className="w-4 h-4" style={{ color: "#9c9484" }} />
                     ) : (
-                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                      <ChevronDown className="w-4 h-4" style={{ color: "#9c9484" }} />
                     )}
                   </button>
                   <AnimatePresence>
@@ -199,79 +222,116 @@ export default function ConfirmationModal({
                         exit={{ height: 0, opacity: 0 }}
                         className="overflow-hidden"
                       >
-                        <div className="px-4 pb-4 text-xs text-text-light space-y-2 border-t border-gray-100 pt-3">
+                        <div
+                          className="px-3.5 pb-3.5 text-[12px] space-y-2 pt-3"
+                          style={{ borderTop: "1px solid #f1ede3", color: "#3a3a38" }}
+                        >
                           <ul className="space-y-1.5">
-                            <li className="flex items-start gap-2">
-                              <span className="text-green-600 mt-0.5">✓</span>
-                              <span>Remboursement intégral dans les <span className="font-medium text-foreground">24h après paiement</span></span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                              <span className="text-green-600 mt-0.5">✓</span>
-                              <span>Plus de <span className="font-medium text-foreground">48h avant le début</span> : remboursement total - commission plateforme</span>
-                            </li>
-                            {/* Palier moins de 48h - basé sur l'historique réel */}
+                            <PolicyItem tone="ok">
+                              Remboursement intégral dans les{" "}
+                              <strong className="text-[#1f1f1d]">24h après paiement</strong>
+                            </PolicyItem>
+                            <PolicyItem tone="ok">
+                              Plus de <strong className="text-[#1f1f1d]">48h avant le début</strong>{" "}
+                              : remboursement total – commission plateforme
+                            </PolicyItem>
+
                             {cpInfo?.clientInfo ? (
                               cpInfo.clientInfo.cancellationCount === 0 ? (
-                                <li className="flex items-start gap-2">
-                                  <span className="text-green-600 mt-0.5">✓</span>
-                                  <span>Moins de <span className="font-medium text-foreground">48h avant le début</span> : remboursement total - commission plateforme <span className="text-green-600 font-medium">(1ère annulation)</span></span>
-                                </li>
+                                <PolicyItem tone="ok">
+                                  Moins de{" "}
+                                  <strong className="text-[#1f1f1d]">48h avant le début</strong> :
+                                  remboursement total – commission plateforme{" "}
+                                  <span className="font-semibold" style={{ color: "#2f4a3f" }}>
+                                    (1ère annulation)
+                                  </span>
+                                </PolicyItem>
                               ) : cpInfo.clientInfo.cancellationCount === 1 ? (
-                                <li className="flex items-start gap-2">
-                                  <span className="text-amber-600 mt-0.5">!</span>
-                                  <span>Moins de <span className="font-medium text-foreground">48h avant le début</span> : l&apos;annonceur conserve {cpInfo.clientInfo.secondAnnouncerPercent}% de ses gains <span className="text-amber-600 font-medium">(2ème annulation)</span></span>
-                                </li>
+                                <PolicyItem tone="warn">
+                                  Moins de{" "}
+                                  <strong className="text-[#1f1f1d]">48h avant le début</strong> :
+                                  l&apos;annonceur conserve {cpInfo.clientInfo.secondAnnouncerPercent}
+                                  % de ses gains{" "}
+                                  <span className="font-semibold" style={{ color: "#7a5b1a" }}>
+                                    (2ème annulation)
+                                  </span>
+                                </PolicyItem>
                               ) : (
-                                <li className="flex items-start gap-2">
-                                  <span className="text-red-500 mt-0.5">✗</span>
-                                  <span>Moins de <span className="font-medium text-foreground">48h avant le début</span> : <span className="text-red-600 font-medium">aucun remboursement</span> ({cpInfo.clientInfo.cancellationCount + 1}ème annulation)</span>
-                                </li>
+                                <PolicyItem tone="ko">
+                                  Moins de{" "}
+                                  <strong className="text-[#1f1f1d]">48h avant le début</strong> :{" "}
+                                  <strong style={{ color: "#8a3a3a" }}>aucun remboursement</strong>{" "}
+                                  ({cpInfo.clientInfo.cancellationCount + 1}ème annulation)
+                                </PolicyItem>
                               )
                             ) : (
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-600 mt-0.5">✓</span>
-                                <span>Moins de <span className="font-medium text-foreground">48h avant le début</span> : remboursement total - commission plateforme <span className="text-green-600 font-medium">(1ère annulation)</span></span>
-                              </li>
+                              <PolicyItem tone="ok">
+                                Moins de{" "}
+                                <strong className="text-[#1f1f1d]">48h avant le début</strong> :
+                                remboursement total – commission plateforme{" "}
+                                <span className="font-semibold" style={{ color: "#2f4a3f" }}>
+                                  (1ère annulation)
+                                </span>
+                              </PolicyItem>
                             )}
-                            {cpInfo && (cpInfo.serviceType === "uni_seance" || cpInfo.serviceType === "garde") && (
-                              <li className="flex items-start gap-2">
-                                <span className="text-red-500 mt-0.5">✗</span>
-                                <span>Non annulable une fois la prestation <span className="font-medium text-foreground">en cours</span></span>
-                              </li>
-                            )}
+
+                            {cpInfo &&
+                              (cpInfo.serviceType === "uni_seance" ||
+                                cpInfo.serviceType === "garde") && (
+                                <PolicyItem tone="ko">
+                                  Non annulable une fois la prestation{" "}
+                                  <strong className="text-[#1f1f1d]">en cours</strong>
+                                </PolicyItem>
+                              )}
                           </ul>
 
-                          {/* Règles multi-séance / collectif */}
-                          {cpInfo && (cpInfo.serviceType === "collectif" || cpInfo.serviceType === "multi_seance") && (
-                            <div className="mt-2 pt-2 border-t border-gray-100">
-                              <p className="font-medium text-foreground mb-1.5">En cours de prestation :</p>
-                              {cpInfo.announcerPolicy?.refundMode === "percentage_remaining" ? (
-                                <ul className="space-y-1">
-                                  <li className="flex items-start gap-2">
-                                    <span className="text-blue-600 mt-0.5">•</span>
-                                    <span>L&apos;annonceur conserve <span className="font-medium text-foreground">{cpInfo.announcerPolicy.commissionPercent}%</span> du montant des séances restantes</span>
-                                  </li>
-                                  <li className="flex items-start gap-2">
-                                    <span className="text-blue-600 mt-0.5">•</span>
-                                    <span>Les séances déjà effectuées <span className="font-medium text-foreground">ne sont pas remboursables</span></span>
-                                  </li>
-                                </ul>
-                              ) : (
-                                <ul className="space-y-1">
-                                  <li className="flex items-start gap-2">
-                                    <span className="text-blue-600 mt-0.5">•</span>
-                                    <span>Les <span className="font-medium text-foreground">séances restantes</span> sont intégralement remboursées</span>
-                                  </li>
-                                  <li className="flex items-start gap-2">
-                                    <span className="text-blue-600 mt-0.5">•</span>
-                                    <span>Les séances déjà effectuées <span className="font-medium text-foreground">ne sont pas remboursables</span></span>
-                                  </li>
-                                </ul>
-                              )}
-                            </div>
-                          )}
+                          {cpInfo &&
+                            (cpInfo.serviceType === "collectif" ||
+                              cpInfo.serviceType === "multi_seance") && (
+                              <div
+                                className="mt-2 pt-2"
+                                style={{ borderTop: "1px solid #f1ede3" }}
+                              >
+                                <p className="text-[11px] font-semibold text-[#1f1f1d] tracking-[-0.01em] mb-1.5 uppercase">
+                                  En cours de prestation
+                                </p>
+                                {cpInfo.announcerPolicy?.refundMode === "percentage_remaining" ? (
+                                  <ul className="space-y-1">
+                                    <PolicyItem tone="info">
+                                      L&apos;annonceur conserve{" "}
+                                      <strong className="text-[#1f1f1d]">
+                                        {cpInfo.announcerPolicy.commissionPercent}%
+                                      </strong>{" "}
+                                      du montant des séances restantes
+                                    </PolicyItem>
+                                    <PolicyItem tone="info">
+                                      Les séances déjà effectuées{" "}
+                                      <strong className="text-[#1f1f1d]">
+                                        ne sont pas remboursables
+                                      </strong>
+                                    </PolicyItem>
+                                  </ul>
+                                ) : (
+                                  <ul className="space-y-1">
+                                    <PolicyItem tone="info">
+                                      Les{" "}
+                                      <strong className="text-[#1f1f1d]">
+                                        séances restantes
+                                      </strong>{" "}
+                                      sont intégralement remboursées
+                                    </PolicyItem>
+                                    <PolicyItem tone="info">
+                                      Les séances déjà effectuées{" "}
+                                      <strong className="text-[#1f1f1d]">
+                                        ne sont pas remboursables
+                                      </strong>
+                                    </PolicyItem>
+                                  </ul>
+                                )}
+                              </div>
+                            )}
 
-                          <p className="mt-2 text-text-light">
+                          <p className="mt-2 text-[11.5px] italic" style={{ color: "#6d6d68" }}>
                             En cas d&apos;annulation par l&apos;annonceur, vous serez intégralement
                             remboursé quelle que soit la date.
                           </p>
@@ -281,169 +341,118 @@ export default function ConfirmationModal({
                   </AnimatePresence>
                 </div>
 
-                {/* Checkboxes */}
-                <div className="space-y-3 pt-2">
-                  <h3 className="font-semibold text-foreground flex items-center gap-2">
-                    <Shield className="w-5 h-5 text-primary" />
+                {/* Acceptations */}
+                <div>
+                  <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-2 flex items-center gap-1.5">
+                    <Shield className="w-3 h-3" />
                     Acceptations requises
-                  </h3>
+                  </div>
 
-                  {/* CGV */}
-                  <label className="flex items-start gap-3 cursor-pointer group">
-                    <div className="relative flex-shrink-0 mt-0.5">
-                      <input
-                        type="checkbox"
-                        checked={acceptCGV}
-                        onChange={(e) => setAcceptCGV(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-5 h-5 border-2 border-gray-300 rounded-md peer-checked:border-primary peer-checked:bg-primary transition-all flex items-center justify-center group-hover:border-primary/50">
-                        {acceptCGV && (
-                          <motion.svg
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            className="w-3 h-3 text-white"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={3}
+                  <div className="space-y-2">
+                    <CheckboxRow
+                      checked={acceptCGV}
+                      onChange={setAcceptCGV}
+                      required
+                      label={
+                        <>
+                          J&apos;accepte les{" "}
+                          <Link
+                            href="/cgv"
+                            target="_blank"
+                            className="font-semibold underline underline-offset-2 hover:opacity-80"
+                            style={{ color: "#1f3a33" }}
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M5 13l4 4L19 7"
-                            />
-                          </motion.svg>
-                        )}
-                      </div>
-                    </div>
-                    <span className="text-sm text-foreground">
-                      J&apos;accepte les{" "}
-                      <Link
-                        href="/cgv"
-                        target="_blank"
-                        className="text-primary hover:underline font-medium"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        Conditions Générales de Vente
-                      </Link>{" "}
-                      <span className="text-red-500">*</span>
-                    </span>
-                  </label>
-
-                  {/* Politique de confidentialité */}
-                  <label className="flex items-start gap-3 cursor-pointer group">
-                    <div className="relative flex-shrink-0 mt-0.5">
-                      <input
-                        type="checkbox"
-                        checked={acceptPrivacy}
-                        onChange={(e) => setAcceptPrivacy(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-5 h-5 border-2 border-gray-300 rounded-md peer-checked:border-primary peer-checked:bg-primary transition-all flex items-center justify-center group-hover:border-primary/50">
-                        {acceptPrivacy && (
-                          <motion.svg
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            className="w-3 h-3 text-white"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={3}
+                            Conditions Générales de Vente
+                          </Link>
+                        </>
+                      }
+                    />
+                    <CheckboxRow
+                      checked={acceptPrivacy}
+                      onChange={setAcceptPrivacy}
+                      required
+                      label={
+                        <>
+                          J&apos;accepte la{" "}
+                          <Link
+                            href="/confidentialite"
+                            target="_blank"
+                            className="font-semibold underline underline-offset-2 hover:opacity-80"
+                            style={{ color: "#1f3a33" }}
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M5 13l4 4L19 7"
-                            />
-                          </motion.svg>
-                        )}
-                      </div>
-                    </div>
-                    <span className="text-sm text-foreground">
-                      J&apos;accepte la{" "}
-                      <Link
-                        href="/confidentialite"
-                        target="_blank"
-                        className="text-primary hover:underline font-medium"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        Politique de Confidentialité
-                      </Link>{" "}
-                      <span className="text-red-500">*</span>
-                    </span>
-                  </label>
-
-                  {/* Marketing (optionnel) */}
-                  <label className="flex items-start gap-3 cursor-pointer group">
-                    <div className="relative flex-shrink-0 mt-0.5">
-                      <input
-                        type="checkbox"
-                        checked={acceptMarketing}
-                        onChange={(e) => setAcceptMarketing(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-5 h-5 border-2 border-gray-300 rounded-md peer-checked:border-primary peer-checked:bg-primary transition-all flex items-center justify-center group-hover:border-primary/50">
-                        {acceptMarketing && (
-                          <motion.svg
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            className="w-3 h-3 text-white"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={3}
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M5 13l4 4L19 7"
-                            />
-                          </motion.svg>
-                        )}
-                      </div>
-                    </div>
-                    <span className="text-sm text-text-light">
-                      J&apos;accepte de recevoir les offres et actualités Animigo par email
-                      <span className="text-xs ml-1">(optionnel)</span>
-                    </span>
-                  </label>
+                            Politique de Confidentialité
+                          </Link>
+                        </>
+                      }
+                    />
+                    <CheckboxRow
+                      checked={acceptMarketing}
+                      onChange={setAcceptMarketing}
+                      muted
+                      label={
+                        <>
+                          J&apos;accepte de recevoir les offres et actualités Animigo par email{" "}
+                          <span className="text-[10px]" style={{ color: "#9c9484" }}>
+                            (optionnel)
+                          </span>
+                        </>
+                      }
+                    />
+                  </div>
                 </div>
 
                 {!canConfirm && (
-                  <p className="text-xs text-amber-600 flex items-center gap-1">
+                  <p
+                    className="text-[11.5px] flex items-center gap-1.5"
+                    style={{ color: "#7a5b1a" }}
+                  >
                     <AlertCircle className="w-3 h-3" />
-                    Veuillez accepter les conditions obligatoires pour continuer
+                    Veuillez accepter les conditions obligatoires pour continuer.
                   </p>
                 )}
               </div>
 
               {/* Footer */}
-              <div className="border-t border-gray-100 px-6 py-4 bg-gray-50 flex gap-3">
+              <div
+                className="px-5 py-3.5 flex gap-2"
+                style={{ borderTop: "1px solid #f1ede3", background: "#fff" }}
+              >
                 <button
                   onClick={onClose}
                   disabled={isSubmitting}
-                  className="flex-1 py-3 border border-gray-200 text-foreground font-medium rounded-xl hover:bg-gray-100 transition-colors disabled:opacity-50"
+                  className="flex-1 py-2.5 font-medium rounded-full transition-colors text-[13px] hover:bg-[#fafafa] disabled:opacity-50"
+                  style={{ background: "#fff", color: "#1f1f1d", border: "1px solid #dfdcd4" }}
                 >
                   Annuler
                 </button>
                 <button
                   onClick={handleConfirm}
                   disabled={!canConfirm || isSubmitting}
-                  className="flex-1 py-3 bg-gradient-to-r from-primary to-primary/90 text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-primary/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none transition-all flex items-center justify-center gap-2"
+                  className="flex-1 py-2.5 font-semibold rounded-full transition-opacity text-[13px] flex items-center justify-center gap-2"
+                  style={{
+                    background: !canConfirm || isSubmitting ? "#dfdcd4" : "#1f3a33",
+                    color: !canConfirm || isSubmitting ? "#9c9484" : "#f7f5ef",
+                    cursor: !canConfirm || isSubmitting ? "not-allowed" : "pointer",
+                  }}
                 >
                   {isSubmitting ? (
                     <>
                       <motion.div
                         animate={{ rotate: 360 }}
                         transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                        className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
+                        className="w-4 h-4 rounded-full"
+                        style={{
+                          border: "2px solid rgba(247,245,239,0.3)",
+                          borderTopColor: "#f7f5ef",
+                        }}
                       />
                       Confirmation...
                     </>
                   ) : (
                     <>
-                      <CheckCircle className="w-5 h-5" />
+                      <CheckCircle className="w-4 h-4" />
                       Confirmer
                     </>
                   )}
@@ -454,5 +463,117 @@ export default function ConfirmationModal({
         </>
       )}
     </AnimatePresence>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Sous-composants
+// ──────────────────────────────────────────────────────────────────
+
+function InfoCard({
+  icon,
+  title,
+  description,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: React.ReactNode;
+}) {
+  return (
+    <div
+      className="flex items-start gap-3 p-3 bg-white"
+      style={{ borderRadius: 12, border: "1px solid #ece9e1" }}
+    >
+      <div
+        className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+        style={{ background: "#f5f9f6", color: "#1f3a33", border: "1px solid #cfdbd3" }}
+      >
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <p className="text-[13px] font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+          {title}
+        </p>
+        <p className="text-[11.5px] mt-0.5 leading-[1.5]" style={{ color: "#6d6d68" }}>
+          {description}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function PolicyItem({
+  tone,
+  children,
+}: {
+  tone: "ok" | "warn" | "ko" | "info";
+  children: React.ReactNode;
+}) {
+  const dot =
+    tone === "ok"
+      ? "#2f4a3f"
+      : tone === "warn"
+        ? "#c9a14a"
+        : tone === "ko"
+          ? "#c45656"
+          : "#1f3a33";
+  return (
+    <li className="flex items-start gap-2">
+      <span
+        className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5"
+        style={{ background: dot }}
+      />
+      <span>{children}</span>
+    </li>
+  );
+}
+
+function CheckboxRow({
+  checked,
+  onChange,
+  label,
+  required,
+  muted,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: React.ReactNode;
+  required?: boolean;
+  muted?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className="w-full flex items-start gap-2.5 p-3 text-left transition-colors hover:bg-[#fafafa]"
+      style={{
+        borderRadius: 12,
+        background: "#fff",
+        border: `1px solid ${checked ? "#1f3a33" : "#ece9e1"}`,
+      }}
+    >
+      <div
+        className="rounded flex items-center justify-center flex-shrink-0 mt-0.5"
+        style={{
+          width: 18,
+          height: 18,
+          background: checked ? "#1f3a33" : "#fff",
+          border: `1px solid ${checked ? "#1f3a33" : "#dfdcd4"}`,
+        }}
+      >
+        {checked && <Check className="w-3 h-3 text-white" />}
+      </div>
+      <span
+        className="text-[12.5px] flex-1 leading-[1.4]"
+        style={{ color: muted ? "#6d6d68" : "#3a3a38" }}
+      >
+        {label}
+        {required && (
+          <span className="ml-0.5" style={{ color: "#c45656" }}>
+            *
+          </span>
+        )}
+      </span>
+    </button>
   );
 }

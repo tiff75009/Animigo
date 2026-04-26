@@ -106,7 +106,7 @@ export function GenericMissionTab({
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-2">
         {/* Stats skeleton */}
         <div className="bg-white rounded-2xl p-5 shadow-sm animate-pulse">
           <div className="flex justify-between items-center">
@@ -143,7 +143,7 @@ export function GenericMissionTab({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-2">
       {/* Stats */}
       <MissionsStats
         tab={tabId}
@@ -161,7 +161,7 @@ export function GenericMissionTab({
       {sortedMissions.length === 0 ? (
         <MissionsEmptyState tab={tabId} />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-2">
           {sortedMissions.map((mission: MissionType, index: number) => (
             <motion.div
               key={mission.id}

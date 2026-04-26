@@ -593,6 +593,48 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.33.0 - Refonte UX/UI dashboard (planning, missions, services + apercu live formule)
+
+- **Dashboard planning : statuts visuels distincts** (`components/types.ts`)
+  - Helper `getMissionVisualStyle()` : 7 styles cohérents (background pastel + bordure gauche d'accent + label court) selon le statut mission
+  - Distinction immédiate "À accepter" (jaune pointillé), "En attente paiement" (orange), "Confirmée/payée" (vert), "En cours" (bleu), "Terminée" (vert sourd), "Refusée", "Annulée"
+  - Logique : `paymentStatus === "paid"` + `pending_confirmation` → bascule auto en "Confirmée"
+  - Propagation : `WeekView` (desktop + mobile day bar), `DayView`, `MonthView`, `ListView` dans `page.tsx`, `MissionDetailModal`
+  - `WeekView` : correction du décalage events/colonnes (passage de `grid-cols-8` vers `gridTemplateColumns: "64px repeat(7, 1fr)"` + recalcul des `left`/`width` overlays)
+
+- **Dashboard missions refondu** (`app/dashboard/missions/`)
+  - Header pattern planning : icône cercle pastel + eyebrow "Mes missions" + titre = label de l'onglet actif
+  - `MissionsTabs` : pill bar unifiée façon planning, vert foncé `#1f3a33` actif + petit point d'accent statut
+  - `MissionsFilters` : carte sobre, FilterChip blanc/outline → vert foncé actif (palette unifiée)
+  - `MissionsStats` : 2-4 cartes KPI sobres avec icônes pastel
+  - `MissionsEmptyState` + `MissionsInfoBanner` : pattern eyebrow + titre + description, banner avec borderLeft d'accent statut
+  - `MissionCard` (composant `mission-card.tsx`) compactée : padding p-2.5, avatar 36px, prix inline en haut-droit, infos+badges sur une seule ligne en chips, footer 12.5px
+  - Bandeau "Répondre sous" déplacé en strip pleine largeur au-dessus du header (pas d'overlap avec le prix)
+  - Layout dashboard (`layout.tsx`) : container `max-w-none` quand sidebar repliée (vs `max-w-7xl mx-auto` étendue) avec `transition-all`
+
+- **Page réservation refondue** (`app/reservation/[bookingId]/`)
+  - Page principale : fond crème, header sticky sobre (back pill + eyebrow + titre centré), espacement réduit
+  - `AuthSection`, `AnimalSection`, `OptionsSection` : headers eyebrow + icône cercle pastel (fini les gradients colorés primary/secondary/accent)
+  - Inputs unifiés : `borderRadius: 12`, border `#dfdcd4`, padding réduit, erreurs en pastel rouge
+  - `OptionsSection` : cards d'option transformées en `<button>` (a11y) avec border vert foncé pastel quand sélectionné
+  - `ReservationSummary` (sidebar) : refonte complète avec `SectionCard`/`SessionPill`/`FiscalLine` réutilisables, bloc fiscal vert pastel, total à 22px sur fond vert pastel, bouton confirmer pill vert foncé
+  - `SummaryStep` (étape récap pre-paiement dans `/reserver/[announcerId]`) : même langage visuel, "Chez {prénom}" au lieu de "Chez le pet-sitter", fix du calcul "1h × 0,00 €/h" → "Prestation forfaitaire"
+  - `ConfirmationModal` : refonte complète (header sobre, contenu sur fond crème, InfoCard blanches, accordéon politique d'annulation avec PolicyItem à pastilles, CheckboxRow cliquables pleine largeur, footer pill vert foncé)
+
+- **Aperçu live de la card formule dans dashboard/services** (nouveau)
+  - `ServiceCardPreview.tsx` : panneau d'aperçu réutilisant `FormuleCardGrid`/`FormuleCardList` (fidélité 100% avec `/recherche`)
+  - `buildPreviewFormule.ts` : builder pur qui construit un `FormuleResult` partiel depuis (catégorie + variante + annonceur)
+  - `useAnnouncerPreviewData.ts` : hook combinant `useAuth` + `api.public.search.getAnnouncerById`
+  - Layout split-screen desktop (`lg:grid-cols-[minmax(0,1fr)_400px]`) + tabs Form/Aperçu sur mobile
+  - Header sticky du panneau (eyebrow + toggle Grille/Liste + sélecteur de variante)
+  - Vue Liste rendue dans un viewport virtuel 640px puis scaled-down via `transform: scale` + `ResizeObserver` pour s'adapter à la largeur du panneau
+  - Décomposition de prix annonceur → prix client (commission + frais Stripe) avec calculs détaillés (15/12/10% selon statut)
+  - Wrapper `pointer-events-none` pour neutraliser favori/lien/lightbox + filigrane "Aperçu"
+  - **Intégré dans création** (`ServiceForm.tsx`, étapes 1-2-3 du wizard) ET **dans modification** (`VariantEditForm` dans `ServiceCard.tsx`)
+  - Description en double supprimée (étape 1) — chaque variante a son propre champ description
+  - Sticky du panneau : `lg:sticky lg:top-4` activé après suppression des `overflow-hidden` parents (motion.div ServiceCard + ServiceForm)
+  - `overflow-x-hidden` sur les containers preview pour éviter scroll horizontal
+
 ### v0.32.0 - Refonte UX/UI page annonceur : wizard reservation, calendrier hotel et systeme de design unifie
 
 - **Systeme de design coherent** aligne sur les cards de resultats de recherche

@@ -91,7 +91,7 @@ export function PendingAcceptanceTab({
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-2">
         {/* Stats skeleton */}
         <div className="bg-white rounded-2xl p-5 shadow-sm animate-pulse">
           <div className="flex justify-between items-center">
@@ -125,7 +125,7 @@ export function PendingAcceptanceTab({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-2">
       {/* Stats */}
       <MissionsStats
         tab="pending_acceptance"
@@ -137,7 +137,7 @@ export function PendingAcceptanceTab({
       {filteredMissions.length === 0 ? (
         <MissionsEmptyState tab="pending_acceptance" />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-2">
           {filteredMissions.map((mission, index) => (
             <motion.div
               key={mission.id}

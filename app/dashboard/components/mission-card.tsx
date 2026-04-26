@@ -168,14 +168,65 @@ const ANIMAL_TRAITS = {
   },
 };
 
-const statusConfig: Record<string, { label: string; color: string }> = {
-  completed: { label: "Terminée", color: "bg-green-100 text-green-700" },
-  in_progress: { label: "En cours", color: "bg-blue-100 text-blue-700" },
-  upcoming: { label: "À venir", color: "bg-purple/20 text-purple" },
-  pending_acceptance: { label: "À accepter", color: "bg-accent/30 text-foreground" },
-  pending_confirmation: { label: "En attente", color: "bg-orange-100 text-orange-700" },
-  refused: { label: "Refusée", color: "bg-red-100 text-red-700" },
-  cancelled: { label: "Annulée", color: "bg-gray-100 text-gray-700" },
+// Style visuel par statut — palette sobre cohérente avec planning
+interface StatusStyle {
+  label: string;
+  accent: string;       // couleur d'accent (border-left, dot, badge)
+  pastelBg: string;     // fond pastel pour le badge
+  pastelBorder: string; // bordure du badge
+  textColor: string;    // texte du badge
+}
+
+const statusConfig: Record<string, StatusStyle> = {
+  pending_acceptance: {
+    label: "À accepter",
+    accent: "#c9a14a",
+    pastelBg: "#fdf8ec",
+    pastelBorder: "#f4e6c1",
+    textColor: "#7a5b1a",
+  },
+  pending_confirmation: {
+    label: "En attente",
+    accent: "#d97f3a",
+    pastelBg: "#fdf0e6",
+    pastelBorder: "#f4d6bc",
+    textColor: "#7a4a1a",
+  },
+  upcoming: {
+    label: "Confirmée",
+    accent: "#1f3a33",
+    pastelBg: "#f5f9f6",
+    pastelBorder: "#cfdbd3",
+    textColor: "#1f3a33",
+  },
+  in_progress: {
+    label: "En cours",
+    accent: "#3a72c4",
+    pastelBg: "#eaf0fd",
+    pastelBorder: "#c8d6f0",
+    textColor: "#1e3f7a",
+  },
+  completed: {
+    label: "Terminée",
+    accent: "#5a8a6e",
+    pastelBg: "#f0f5f0",
+    pastelBorder: "#d3ddd3",
+    textColor: "#3a5a48",
+  },
+  refused: {
+    label: "Refusée",
+    accent: "#c45656",
+    pastelBg: "#fdf0f0",
+    pastelBorder: "#f1cdcd",
+    textColor: "#8a3a3a",
+  },
+  cancelled: {
+    label: "Annulée",
+    accent: "#9c9484",
+    pastelBg: "#f7f5ef",
+    pastelBorder: "#ece9e1",
+    textColor: "#6d6d68",
+  },
 };
 
 // Helper functions
@@ -370,213 +421,337 @@ export function MissionCard({
   return (
     <>
       <motion.div
-        className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden border border-slate-100 relative"
+        className="bg-white overflow-hidden relative transition-shadow hover:shadow-[0_8px_24px_rgba(30,30,28,0.06)]"
+        style={{
+          borderRadius: 14,
+          border: "1px solid #ece9e1",
+          borderLeft: `3px solid ${status.accent}`,
+        }}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        {/* Badge décompte à cheval sur le bord haut, juste avant les boutons */}
+        {/* Bandeau décompte (esprit "alerte" au-dessus du contenu) */}
         {mission.acceptanceDeadline && mission.status === "pending_acceptance" && showActions && (
-          <div className="absolute -top-2 right-[4.5rem] z-10 group">
-            <div className="flex items-center gap-1.5 bg-white rounded-lg shadow-md px-2 py-1 border border-slate-200">
-              <span className="text-[10px] text-text-light font-medium">Répondre sous</span>
+          <div
+            className="px-2.5 py-1 flex items-center justify-between gap-2 group"
+            style={{
+              background: status.pastelBg,
+              borderBottom: `1px solid ${status.pastelBorder}`,
+            }}
+          >
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span
+                className="text-[10px] font-medium uppercase tracking-[0.05em]"
+                style={{ color: status.textColor }}
+              >
+                Répondre sous
+              </span>
               <DeadlineCountdown
                 deadline={mission.acceptanceDeadline}
                 bookedAt={mission.bookedAt}
                 compact
               />
-              <div className="relative">
-                <Info className="w-3.5 h-3.5 text-text-light hover:text-foreground cursor-help" />
-                {/* Tooltip - affiché en dessous */}
-                <div className="absolute top-full right-0 mt-2 w-56 p-2 bg-foreground text-white text-[10px] rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none">
-                  <div className="absolute top-0 right-3 -translate-y-1/2 rotate-45 w-2 h-2 bg-foreground"></div>
-                  <p>Si vous ne répondez pas avant la fin du délai, la demande sera <strong>automatiquement refusée</strong> et votre <strong>note de confiance</strong> pourrait baisser.</p>
-                </div>
+            </div>
+            <div className="relative flex-shrink-0">
+              <Info className="w-3 h-3 cursor-help" style={{ color: status.textColor }} />
+              <div
+                className="absolute top-full right-0 mt-1.5 w-56 p-2 text-[10px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none"
+                style={{
+                  borderRadius: 8,
+                  background: "#1f1f1d",
+                  color: "#f7f5ef",
+                  boxShadow: "0 8px 24px rgba(30,30,28,0.18)",
+                }}
+              >
+                <div
+                  className="absolute top-0 right-2 -translate-y-1/2 rotate-45 w-2 h-2"
+                  style={{ background: "#1f1f1d" }}
+                />
+                <p>
+                  Si vous ne répondez pas avant la fin du délai, la demande sera{" "}
+                  <strong>automatiquement refusée</strong> et votre{" "}
+                  <strong>note de confiance</strong> pourrait baisser.
+                </p>
               </div>
             </div>
           </div>
         )}
+
         <div className="flex">
           {/* Contenu principal */}
           <div className="flex-1 min-w-0">
-            {/* Header compact */}
-            <div className="p-3 flex items-center gap-3">
-              <div className="w-11 h-11 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0 relative">
+            {/* Header */}
+            <div className="p-2.5 flex items-start gap-2.5">
+              {/* Avatar animal */}
+              <div
+                className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{ background: "#f5f9f6", border: "1px solid #cfdbd3" }}
+              >
                 {mission.animals && mission.animals.length > 1 ? (
                   <div className="flex items-center">
                     {mission.animals.slice(0, 3).map((a, i) => (
                       <span
                         key={i}
-                        className="text-lg"
-                        style={{ marginLeft: i > 0 ? "-4px" : "0" }}
+                        className="text-[12px]"
+                        style={{ marginLeft: i > 0 ? "-3px" : "0" }}
                       >
                         {a.emoji}
                       </span>
                     ))}
                     {mission.animals.length > 3 && (
-                      <span className="text-[10px] font-bold text-primary ml-0.5">+{mission.animals.length - 3}</span>
+                      <span
+                        className="text-[9px] font-bold ml-0.5"
+                        style={{ color: "#1f3a33" }}
+                      >
+                        +{mission.animals.length - 3}
+                      </span>
                     )}
                   </div>
                 ) : (
-                  <span className="text-xl">{mission.animal.emoji}</span>
+                  <span className="text-[16px]">{mission.animal.emoji}</span>
                 )}
               </div>
+
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-semibold text-foreground truncate">{firstName}</p>
-                  <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-medium", status.color)}>
+                <div className="flex items-center gap-1 flex-wrap">
+                  <p
+                    className="text-[13px] font-semibold tracking-[-0.01em] truncate m-0"
+                    style={{ color: "#1f1f1d" }}
+                  >
+                    {firstName}
+                  </p>
+                  <span
+                    className="inline-flex items-center px-1.5 py-px rounded-full text-[9.5px] font-medium uppercase tracking-[0.05em]"
+                    style={{
+                      background: status.pastelBg,
+                      color: status.textColor,
+                      border: `1px solid ${status.pastelBorder}`,
+                    }}
+                  >
                     {status.label}
                   </span>
-                  {/* Indicateur de confiance client */}
+                  {/* Trust */}
                   {mission.clientTrustStats && (
                     <span
-                      className={cn(
-                        "flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium",
-                        getTrustScoreColor(mission.clientTrustStats.trustScore).bg,
-                        getTrustScoreColor(mission.clientTrustStats.trustScore).text
-                      )}
-                      title={`${mission.clientTrustStats.totalBookings} réservation${mission.clientTrustStats.totalBookings > 1 ? "s" : ""} • ${mission.clientTrustStats.completed} terminée${mission.clientTrustStats.completed > 1 ? "s" : ""}`}
+                      className="inline-flex items-center gap-0.5 px-1 py-px rounded-full text-[9.5px] font-medium"
+                      style={(() => {
+                        const score = mission.clientTrustStats.trustScore;
+                        const bg = score >= 80 ? "#f0f5f0" : score >= 50 ? "#fdf0e6" : "#fdf0f0";
+                        const color = score >= 80 ? "#3a5a48" : score >= 50 ? "#7a4a1a" : "#8a3a3a";
+                        return { background: bg, color, border: `1px solid ${color}33` };
+                      })()}
+                      title={`${mission.clientTrustStats.totalBookings} réservation${mission.clientTrustStats.totalBookings > 1 ? "s" : ""} · ${mission.clientTrustStats.completed} terminée${mission.clientTrustStats.completed > 1 ? "s" : ""}`}
                     >
-                      <ShieldCheck className="w-3 h-3" />
+                      <ShieldCheck className="w-2.5 h-2.5" />
                       {mission.clientTrustStats.trustScore}%
                     </span>
                   )}
-                  {/* Indicateur historique client avec cet annonceur */}
-                  {mission.clientHistory && (
-                    mission.clientHistory.isNewClient ? (
-                      <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-purple/10 text-purple rounded-full text-[10px] font-medium">
+                  {/* Historique */}
+                  {mission.clientHistory &&
+                    (mission.clientHistory.isNewClient ? (
+                      <span
+                        className="inline-flex items-center gap-0.5 px-1 py-px rounded-full text-[9.5px] font-medium"
+                        style={{
+                          background: "#fcfaf4",
+                          color: "#7a5b1a",
+                          border: "1px solid #f4e6c1",
+                        }}
+                      >
                         <Star className="w-2.5 h-2.5" />
                         Nouveau
                       </span>
                     ) : (
                       <span
-                        className="flex items-center gap-0.5 px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-medium"
+                        className="inline-flex items-center gap-0.5 px-1 py-px rounded-full text-[9.5px] font-medium"
+                        style={{
+                          background: "#f5f9f6",
+                          color: "#2f4a3f",
+                          border: "1px solid #cfdbd3",
+                        }}
                         title={`${mission.clientHistory.previousMissionsCount} mission${mission.clientHistory.previousMissionsCount > 1 ? "s" : ""} terminée${mission.clientHistory.previousMissionsCount > 1 ? "s" : ""} ensemble`}
                       >
                         <Repeat className="w-2.5 h-2.5" />
-                        Client fidèle ({mission.clientHistory.previousMissionsCount}x)
+                        Fidèle {mission.clientHistory.previousMissionsCount}×
                       </span>
-                    )
-                  )}
+                    ))}
                 </div>
-                <p className="text-xs text-text-light truncate">
+                <p
+                  className="text-[11px] truncate mt-px leading-tight"
+                  style={{ color: "#6d6d68" }}
+                >
                   {mission.animals && mission.animals.length > 1
                     ? mission.animals.length <= 3
-                      ? mission.animals.map(a => a.name).join(" & ")
+                      ? mission.animals.map((a) => a.name).join(" & ")
                       : `${mission.animals.length} animaux`
-                    : mission.animal.name
-                  } • {mission.serviceName}
+                    : mission.animal.name}
+                  {" · "}
+                  {mission.serviceName}
                 </p>
-                {/* Temps écoulé depuis la réservation */}
+                {/* Temps écoulé */}
                 {mission.bookedAt && mission.status === "pending_acceptance" && (
-                  <p className="text-[10px] text-orange-500 font-medium mt-0.5">
+                  <p
+                    className="text-[10px] font-medium mt-0.5 flex items-center gap-0.5 leading-tight"
+                    style={{ color: status.accent }}
+                  >
+                    <Clock className="w-2.5 h-2.5" />
                     Reçue {formatBookedAtElapsed(mission.bookedAt)}
                   </p>
                 )}
               </div>
-            </div>
 
-            {/* Infos principales - compact */}
-            <div className="px-3 pb-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-              <span className="flex items-center gap-1 text-foreground">
-                <Calendar className="w-3.5 h-3.5 text-purple" />
-                {formatDateRange(mission.startDate, mission.endDate)}
-                {/* Afficher le nombre de jours uniquement pour les formules uni-séance standard */}
-                {days > 1 && !mission.sessions && mission.sessionType !== "collective" && (
-                  <span className="text-text-light">({days}j)</span>
-                )}
-              </span>
-              {mission.startTime && (
-                <span className="flex items-center gap-1 text-foreground">
-                  <Clock className="w-3.5 h-3.5 text-accent" />
-                  {formatTime(mission.startTime, mission.endTime)}
-                </span>
-              )}
-              {/* Lieu de prestation */}
-              {mission.serviceLocation === "announcer_home" ? (
-                <span className="flex items-center gap-1 text-secondary font-medium">
-                  <MapPin className="w-3.5 h-3.5" />
-                  Chez vous
-                </span>
-              ) : cityDisplay && (
-                <span className="flex items-center gap-1 text-text-light">
-                  <MapPin className="w-3.5 h-3.5 text-secondary" />
-                  {cityDisplay}
-                </span>
-              )}
-              {distance !== null && (
-                <span className="flex items-center gap-1 text-text-light">
-                  <Navigation className="w-3.5 h-3.5 text-blue-500" />
-                  {formatDistance(distance)}
-                </span>
-              )}
-            </div>
-
-            {/* Prix et revenus - compact */}
-            <div className="mx-3 mb-2 bg-gradient-to-r from-secondary/5 to-primary/5 rounded-lg p-2 flex items-center justify-between">
-              <div>
-                <p className="text-[10px] text-text-light">Votre revenu</p>
-                <p className="text-base font-bold text-secondary">
+              {/* Revenu inline (à droite) */}
+              <div className="text-right flex-shrink-0">
+                <p
+                  className="text-[9px] font-medium uppercase tracking-[0.08em] m-0 leading-tight"
+                  style={{ color: "#9c9484" }}
+                >
+                  Revenu
+                </p>
+                <p
+                  className="text-[15px] font-semibold tracking-[-0.02em] m-0 leading-tight"
+                  style={{ color: "#1f3a33" }}
+                >
                   {formatPrice(mission.announcerEarnings ?? mission.amount * 0.85)}
                 </p>
               </div>
-              <div className="flex items-center gap-1.5">
-                {/* Badge SAP */}
-                {mission.isSapApplied && (
-                  <span className="flex items-center gap-1 text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-md">
-                    <ShieldCheck className="w-3 h-3" />
-                    SAP
-                  </span>
-                )}
-                {/* Badge type de formule */}
-                {mission.sessionType === "collective" ? (
-                  <span className="flex items-center gap-1 text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-md">
-                    <Users className="w-3 h-3" />
-                    Collectif
-                  </span>
-                ) : mission.sessions && mission.sessions.length > 1 ? (
-                  <span className="flex items-center gap-1 text-[10px] bg-secondary/20 text-secondary px-1.5 py-0.5 rounded-md">
-                    <Repeat className="w-3 h-3" />
-                    {mission.sessions.length}x
-                  </span>
-                ) : null}
-                {mission.variantName && (
-                  <span className="text-xs bg-white/80 px-2 py-1 rounded-md text-foreground">
-                    {mission.variantName}
-                  </span>
-                )}
-              </div>
             </div>
 
-            {/* Bouton voir détails */}
+            {/* Infos + badges sur une seule ligne */}
+            <div className="px-2.5 pb-2 flex flex-wrap items-center gap-1 text-[10.5px]">
+              <InfoChip
+                icon={<Calendar className="w-2.5 h-2.5" />}
+                label={
+                  <>
+                    {formatDateRange(mission.startDate, mission.endDate)}
+                    {days > 1 &&
+                      !mission.sessions &&
+                      mission.sessionType !== "collective" && (
+                        <span style={{ color: "#9c9484" }}> ({days}j)</span>
+                      )}
+                  </>
+                }
+              />
+              {mission.startTime && (
+                <InfoChip
+                  icon={<Clock className="w-2.5 h-2.5" />}
+                  label={formatTime(mission.startTime, mission.endTime)}
+                />
+              )}
+              {mission.serviceLocation === "announcer_home" ? (
+                <InfoChip
+                  icon={<MapPin className="w-2.5 h-2.5" />}
+                  label="Chez vous"
+                  highlight
+                />
+              ) : (
+                cityDisplay && (
+                  <InfoChip
+                    icon={<MapPin className="w-2.5 h-2.5" />}
+                    label={cityDisplay}
+                  />
+                )
+              )}
+              {distance !== null && (
+                <InfoChip
+                  icon={<Navigation className="w-2.5 h-2.5" />}
+                  label={formatDistance(distance)}
+                />
+              )}
+              {/* Badges fusionnés dans la ligne d'infos */}
+              {mission.isSapApplied && (
+                <span
+                  className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-px rounded-full"
+                  style={{
+                    background: "#f5f9f6",
+                    color: "#2f4a3f",
+                    border: "1px solid #cfdbd3",
+                  }}
+                >
+                  <ShieldCheck className="w-2.5 h-2.5" />
+                  SAP
+                </span>
+              )}
+              {mission.sessionType === "collective" ? (
+                <span
+                  className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-px rounded-full"
+                  style={{
+                    background: "#f3eafa",
+                    color: "#5e3a8a",
+                    border: "1px solid #e0cef0",
+                  }}
+                >
+                  <Users className="w-2.5 h-2.5" />
+                  Collectif
+                </span>
+              ) : mission.sessions && mission.sessions.length > 1 ? (
+                <span
+                  className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-px rounded-full"
+                  style={{
+                    background: "#f5f9f6",
+                    color: "#1f3a33",
+                    border: "1px solid #cfdbd3",
+                  }}
+                >
+                  <Repeat className="w-2.5 h-2.5" />
+                  {mission.sessions.length}×
+                </span>
+              ) : null}
+              {mission.variantName && (
+                <span
+                  className="text-[10px] font-medium px-1.5 py-px rounded-full truncate max-w-[140px]"
+                  style={{
+                    background: "#fcfaf4",
+                    color: "#3a3a38",
+                    border: "1px solid #ece9e1",
+                  }}
+                  title={mission.variantName}
+                >
+                  {mission.variantName}
+                </span>
+              )}
+            </div>
+
+            {/* Footer : voir détails (compact) */}
             <button
-              className="w-full py-2 px-3 bg-slate-50 hover:bg-slate-100 text-sm text-foreground flex items-center justify-center gap-1.5 transition-colors"
+              className="w-full py-1.5 px-3 text-[11.5px] font-medium flex items-center justify-center gap-1 transition-colors hover:bg-[#f7f5ef]"
+              style={{
+                color: "#1f3a33",
+                borderTop: "1px solid #f1ede3",
+              }}
               onClick={onViewDetails}
             >
-              <Eye className="w-4 h-4" />
+              <Eye className="w-3 h-3" />
               Voir les détails
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-3 h-3" />
             </button>
 
-            {/* Actions pour les missions à venir (upcoming) ou en cours (in_progress) - en bas de la carte */}
+            {/* Actions upcoming/in_progress */}
             {(mission.status === "upcoming" || mission.status === "in_progress") && (
-              <div className="p-2 border-t border-slate-100 flex gap-2">
+              <div
+                className="px-2 py-1.5 flex gap-1.5"
+                style={{ borderTop: "1px solid #f1ede3" }}
+              >
                 <motion.button
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-secondary hover:bg-secondary/90 text-white rounded-lg text-sm font-semibold"
-                  whileHover={{ scale: 1.02 }}
+                  className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-full text-[11.5px] font-semibold transition-opacity hover:opacity-90"
+                  style={{ background: "#1f3a33", color: "#f7f5ef" }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => onContact?.(mission.id as string)}
                 >
-                  <MessageSquare className="w-4 h-4" />
+                  <MessageSquare className="w-3 h-3" />
                   Contacter
                 </motion.button>
                 {mission.status === "upcoming" && (
                   <motion.button
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-semibold"
-                    whileHover={{ scale: 1.02 }}
+                    className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-full text-[11.5px] font-medium transition-colors hover:bg-[#fafafa]"
+                    style={{
+                      background: "#fff",
+                      color: "#1f1f1d",
+                      border: "1px solid #dfdcd4",
+                    }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => onCancel?.(mission.id as string)}
                   >
-                    <X className="w-4 h-4" />
+                    <X className="w-3 h-3" />
                     Annuler
                   </motion.button>
                 )}
@@ -584,36 +759,75 @@ export function MissionCard({
             )}
           </div>
 
-          {/* Boutons d'action à droite - uniquement pour pending_acceptance */}
+          {/* Boutons Accepter/Refuser à droite */}
           {showActions && mission.status === "pending_acceptance" && (
-            <div className="flex flex-col border-l border-slate-100">
-              {/* Bouton Accepter */}
+            <div className="flex flex-col" style={{ borderLeft: "1px solid #f1ede3" }}>
               <motion.button
-                className="flex-1 w-16 flex items-center justify-center bg-secondary/10 hover:bg-secondary text-secondary hover:text-white transition-colors"
-                whileHover={{ scale: 1.05 }}
+                className="flex-1 w-11 flex items-center justify-center transition-colors"
+                style={{ background: "#f5f9f6", color: "#1f3a33" }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => onAccept?.(mission.id as string)}
                 title="Accepter"
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "#1f3a33";
+                  e.currentTarget.style.color = "#f7f5ef";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "#f5f9f6";
+                  e.currentTarget.style.color = "#1f3a33";
+                }}
               >
-                <Check className="w-6 h-6" />
+                <Check className="w-4 h-4" />
               </motion.button>
-              {/* Séparateur */}
-              <div className="h-px bg-slate-100" />
-              {/* Bouton Refuser */}
+              <div className="h-px" style={{ background: "#f1ede3" }} />
               <motion.button
-                className="flex-1 w-16 flex items-center justify-center bg-primary/10 hover:bg-primary text-primary hover:text-white transition-colors"
-                whileHover={{ scale: 1.05 }}
+                className="flex-1 w-11 flex items-center justify-center transition-colors"
+                style={{ background: "#fdf0f0", color: "#8a3a3a" }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => onRefuse?.(mission.id as string)}
                 title="Refuser"
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "#c45656";
+                  e.currentTarget.style.color = "#fff";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "#fdf0f0";
+                  e.currentTarget.style.color = "#8a3a3a";
+                }}
               >
-                <X className="w-6 h-6" />
+                <X className="w-4 h-4" />
               </motion.button>
             </div>
           )}
         </div>
       </motion.div>
     </>
+  );
+}
+
+// Sous-composant : pastille d'info compacte
+function InfoChip({
+  icon,
+  label,
+  highlight,
+}: {
+  icon: React.ReactNode;
+  label: React.ReactNode;
+  highlight?: boolean;
+}) {
+  return (
+    <span
+      className="inline-flex items-center gap-0.5 px-1.5 py-px rounded-full text-[10.5px]"
+      style={{
+        background: highlight ? "#f5f9f6" : "#fcfaf4",
+        color: highlight ? "#1f3a33" : "#3a3a38",
+        border: `1px solid ${highlight ? "#cfdbd3" : "#f1ede3"}`,
+        fontWeight: highlight ? 600 : 500,
+      }}
+    >
+      <span style={{ color: highlight ? "#1f3a33" : "#9c9484" }}>{icon}</span>
+      {label}
+    </span>
   );
 }
 

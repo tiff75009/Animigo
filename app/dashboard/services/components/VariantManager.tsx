@@ -29,6 +29,37 @@ import { cn } from "@/app/lib/utils";
 import { useAuth } from "@/app/hooks/useAuth";
 import ConfirmModal from "./shared/ConfirmModal";
 
+/**
+ * En-tête de section dans le formulaire d'ajout/modification de formule.
+ * Style cohérent avec les cards de recherche : numéro circulaire dark green + titre semi-bold.
+ */
+function SectionLabel({
+  number,
+  title,
+  required,
+  customIcon,
+}: {
+  number: number;
+  title: string;
+  required?: boolean;
+  customIcon?: string;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <div
+        className="w-6 h-6 inline-flex items-center justify-center text-[11px] font-bold rounded-full flex-shrink-0"
+        style={{ background: "#1f3a33", color: "#f7f5ef" }}
+      >
+        {customIcon || number}
+      </div>
+      <h4 className="text-[13.5px] font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+        {title}
+        {required && <span className="text-[#c45656] ml-1">*</span>}
+      </h4>
+    </div>
+  );
+}
+
 type PriceUnit = "hour" | "half_day" | "day" | "week" | "month" | "flat";
 type BillingType = "hourly" | "daily" | "flexible";
 
@@ -507,22 +538,37 @@ function SimpleVariantCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm"
+      className="bg-white overflow-hidden"
+      style={{ borderRadius: 14, border: "1px solid #ece9e1" }}
     >
       {/* Header compact */}
-      <div className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-primary/5 to-secondary/5 border-b border-gray-100">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-white shadow-sm flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-primary" />
+      <div
+        className="flex items-center justify-between px-5 py-3"
+        style={{ background: "#fcfaf4", borderBottom: "1px solid #f1ede3" }}
+      >
+        <div className="flex items-center gap-2">
+          <div
+            className="w-7 h-7 inline-flex items-center justify-center text-[11px] font-bold rounded-full flex-shrink-0"
+            style={{ background: "#1f3a33", color: "#f7f5ef" }}
+          >
+            {index + 1}
           </div>
-          <span className="text-sm font-medium text-text-light">Service {index + 1}</span>
+          <div>
+            <div className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "#9c9484" }}>
+              Formule
+            </div>
+            <span className="text-[13px] font-semibold text-[#1f1f1d] tracking-[-0.01em]">
+              {variant.name || `Formule ${index + 1}`}
+            </span>
+          </div>
         </div>
         {canDelete && (
           <button
             onClick={onDelete}
-            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+            className="w-8 h-8 inline-flex items-center justify-center rounded-full transition-colors hover:bg-[rgba(196,86,86,0.08)]"
+            style={{ color: "#c45656", border: "1px solid #f1cdcd", background: "#fff" }}
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="w-3.5 h-3.5" />
           </button>
         )}
       </div>
@@ -531,44 +577,43 @@ function SimpleVariantCard({
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {/* SECTION 1: IDENTITÉ */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs text-primary">1</div>
-            Identité du service
-          </div>
+        <div className="space-y-3">
+          <SectionLabel number={1} title="Identité de la formule" />
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             {/* Nom */}
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                Nom du service
+              <label className="block text-[10px] font-medium uppercase tracking-[0.1em] mb-1.5" style={{ color: "#9c9484" }}>
+                Nom
               </label>
               <input
                 type="text"
                 value={variant.name}
                 onChange={(e) => onUpdate({ name: e.target.value })}
-                placeholder="Ex: Service découverte"
-                className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 focus:bg-white text-sm transition-all"
+                placeholder="Ex: Formule découverte"
+                className="w-full px-3 py-2.5 text-[13px] text-[#1f1f1d] focus:outline-none focus:ring-2 focus:ring-[#1f3a33]/20 transition-all placeholder:text-[#cdc9c0]"
+                style={{ borderRadius: 10, border: "1px solid #ece9e1", background: "#fff" }}
               />
             </div>
 
             {/* Description */}
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                Description <span className="text-gray-400">(optionnel)</span>
+              <label className="block text-[10px] font-medium uppercase tracking-[0.1em] mb-1.5" style={{ color: "#9c9484" }}>
+                Description <span className="normal-case text-[#cdc9c0] font-normal">(optionnel)</span>
               </label>
               <input
                 type="text"
                 value={variant.description || ""}
                 onChange={(e) => onUpdate({ description: e.target.value || undefined })}
                 placeholder="Ce qui est inclus..."
-                className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 focus:bg-white text-sm transition-all"
+                className="w-full px-3 py-2.5 text-[13px] text-[#1f1f1d] focus:outline-none focus:ring-2 focus:ring-[#1f3a33]/20 transition-all placeholder:text-[#cdc9c0]"
+                style={{ borderRadius: 10, border: "1px solid #ece9e1", background: "#fff" }}
               />
             </div>
           </div>
 
-          {/* Photos de la formule — affichées dans les résultats de recherche */}
-          <div className="pt-4 border-t border-gray-100">
+          {/* Photos de la formule */}
+          <div className="pt-4" style={{ borderTop: "1px solid #f1ede3" }}>
             <ServicePhotosUploader
               photos={(variant.photos || []).map((url, i) => ({ url, order: i }))}
               onChange={(urls) => onUpdate({ photos: urls })}
@@ -577,24 +622,30 @@ function SimpleVariantCard({
         </div>
 
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* SECTION ANIMAUX: Sélection des animaux acceptés */}
+        {/* SECTION ANIMAUX */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center text-xs">🐾</div>
-            Animaux acceptés <span className="text-primary">*</span>
-          </div>
+        <div className="space-y-3">
+          <SectionLabel
+            number={2}
+            title="Animaux acceptés"
+            required
+            customIcon="🐾"
+          />
 
-          <div className={cn(
-            "p-4 rounded-xl border space-y-3 transition-all",
-            (!variant.animalTypes || variant.animalTypes.length === 0)
-              ? "bg-green-50/50 border-green-300"
-              : "bg-gray-50/50 border-gray-100"
-          )}>
-            <p className="text-xs text-gray-500">
-              Sélectionnez les types d&apos;animaux que vous acceptez pour ce service
+          <div
+            className="p-3 space-y-2.5 transition-all"
+            style={{
+              borderRadius: 12,
+              background: (!variant.animalTypes || variant.animalTypes.length === 0)
+                ? "#f5f9f6"
+                : "#fcfaf4",
+              border: `1px solid ${(!variant.animalTypes || variant.animalTypes.length === 0) ? "#cfdbd3" : "#f1ede3"}`,
+            }}
+          >
+            <p className="text-[11px] text-[#6d6d68]">
+              Sélectionnez les types d&apos;animaux que vous acceptez pour cette formule.
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5">
               {ANIMAL_TYPES.map((animal) => {
                 const isSelected = variant.animalTypes?.includes(animal.id);
                 return (
@@ -608,12 +659,12 @@ function SimpleVariantCard({
                         : [...currentTypes, animal.id];
                       onUpdate({ animalTypes: newTypes });
                     }}
-                    className={cn(
-                      "flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all",
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors"
+                    style={
                       isSelected
-                        ? "bg-green-500 text-white shadow-sm"
-                        : "bg-white border border-gray-200 text-gray-600 hover:border-green-300 hover:bg-green-50"
-                    )}
+                        ? { background: "#1f3a33", color: "#f7f5ef", border: "1px solid #1f3a33" }
+                        : { background: "#fff", color: "#3a3a38", border: "1px solid #dfdcd4" }
+                    }
                   >
                     <span>{animal.emoji}</span>
                     <span>{animal.label}</span>
@@ -622,7 +673,7 @@ function SimpleVariantCard({
               })}
             </div>
             {(!variant.animalTypes || variant.animalTypes.length === 0) && (
-              <p className="text-xs text-green-600 font-medium">
+              <p className="text-[11px] font-medium" style={{ color: "#2f4a3f" }}>
                 Sélectionnez au moins un type d&apos;animal
               </p>
             )}

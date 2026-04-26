@@ -29,80 +29,81 @@ function formatCurrency(amountInCents: number): string {
   }).format(amountInCents / 100);
 }
 
+interface StatConfig {
+  countIcon: typeof Calendar;
+  countLabel: string;
+  // Couleur d'accent (palette sobre)
+  accent: string;
+  pastelBg: string;
+  pastelBorder: string;
+  amountLabel: string;
+  showPaid?: boolean;
+}
+
+const statsConfig: Record<MissionTab, StatConfig> = {
+  pending_acceptance: {
+    countIcon: HelpCircle,
+    countLabel: "En attente",
+    accent: "#c9a14a",
+    pastelBg: "#fdf8ec",
+    pastelBorder: "#f4e6c1",
+    amountLabel: "Revenus potentiels",
+  },
+  pending_confirmation: {
+    countIcon: Clock,
+    countLabel: "En attente",
+    accent: "#d97f3a",
+    pastelBg: "#fdf0e6",
+    pastelBorder: "#f4d6bc",
+    amountLabel: "Montant potentiel",
+  },
+  upcoming: {
+    countIcon: Calendar,
+    countLabel: "À venir",
+    accent: "#1f3a33",
+    pastelBg: "#f5f9f6",
+    pastelBorder: "#cfdbd3",
+    amountLabel: "Revenus prévus",
+  },
+  in_progress: {
+    countIcon: CalendarClock,
+    countLabel: "En cours",
+    accent: "#3a72c4",
+    pastelBg: "#eaf0fd",
+    pastelBorder: "#c8d6f0",
+    amountLabel: "Montant total",
+  },
+  completed: {
+    countIcon: CheckCircle,
+    countLabel: "Terminées",
+    accent: "#5a8a6e",
+    pastelBg: "#f0f5f0",
+    pastelBorder: "#d3ddd3",
+    amountLabel: "Total gagné",
+    showPaid: true,
+  },
+  refused: {
+    countIcon: XCircle,
+    countLabel: "Refusées",
+    accent: "#c45656",
+    pastelBg: "#fdf0f0",
+    pastelBorder: "#f1cdcd",
+    amountLabel: "Montant refusé",
+  },
+  cancelled: {
+    countIcon: Ban,
+    countLabel: "Annulées",
+    accent: "#9c9484",
+    pastelBg: "#f7f5ef",
+    pastelBorder: "#ece9e1",
+    amountLabel: "Montant perdu",
+  },
+};
+
 export function MissionsStats({ tab, count, totalAmount, paidAmount = 0 }: MissionsStatsProps) {
   if (count === 0) return null;
 
   const pendingAmount = totalAmount - paidAmount;
-
-  // Configuration par onglet
-  const statsConfig: Record<MissionTab, {
-    countIcon: typeof Calendar;
-    countLabel: string;
-    countColor: string;
-    countBg: string;
-    amountLabel: string;
-    amountColor: string;
-    showPaid?: boolean;
-  }> = {
-    pending_acceptance: {
-      countIcon: HelpCircle,
-      countLabel: "En attente",
-      countColor: "text-foreground",
-      countBg: "bg-accent/20",
-      amountLabel: "Revenus potentiels",
-      amountColor: "text-secondary",
-    },
-    pending_confirmation: {
-      countIcon: Clock,
-      countLabel: "En attente",
-      countColor: "text-orange-600",
-      countBg: "bg-orange-100",
-      amountLabel: "Montant potentiel",
-      amountColor: "text-primary",
-    },
-    upcoming: {
-      countIcon: Calendar,
-      countLabel: "À venir",
-      countColor: "text-purple",
-      countBg: "bg-purple/20",
-      amountLabel: "Revenus prévus",
-      amountColor: "text-primary",
-    },
-    in_progress: {
-      countIcon: CalendarClock,
-      countLabel: "En cours",
-      countColor: "text-blue-600",
-      countBg: "bg-blue-100",
-      amountLabel: "Montant total",
-      amountColor: "text-primary",
-    },
-    completed: {
-      countIcon: CheckCircle,
-      countLabel: "Terminées",
-      countColor: "text-green-600",
-      countBg: "bg-green-100",
-      amountLabel: "Total gagné",
-      amountColor: "text-primary",
-      showPaid: true,
-    },
-    refused: {
-      countIcon: XCircle,
-      countLabel: "Refusées",
-      countColor: "text-red-600",
-      countBg: "bg-red-100",
-      amountLabel: "Montant refusé",
-      amountColor: "text-gray-500",
-    },
-    cancelled: {
-      countIcon: Ban,
-      countLabel: "Annulées",
-      countColor: "text-gray-600",
-      countBg: "bg-gray-100",
-      amountLabel: "Montant perdu",
-      amountColor: "text-gray-500",
-    },
-  };
-
   const config = statsConfig[tab];
   const Icon = config.countIcon;
 
@@ -111,67 +112,92 @@ export function MissionsStats({ tab, count, totalAmount, paidAmount = 0 }: Missi
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.1 }}
-      className={`grid gap-4 ${config.showPaid ? "grid-cols-2 md:grid-cols-4" : "grid-cols-2"}`}
+      className={`grid gap-3 ${config.showPaid ? "grid-cols-2 md:grid-cols-4" : "grid-cols-2"}`}
     >
       {/* Count */}
-      <div className="bg-white rounded-2xl p-4 shadow-md">
-        <div className="flex items-center gap-3">
-          <div className={`p-2 ${config.countBg} rounded-xl`}>
-            <Icon className={`w-5 h-5 ${config.countColor}`} />
-          </div>
-          <div>
-            <p className="text-sm text-text-light">{config.countLabel}</p>
-            <p className="text-2xl font-bold text-foreground">{count}</p>
-          </div>
-        </div>
-      </div>
+      <StatCard
+        icon={<Icon className="w-4 h-4" style={{ color: config.accent }} />}
+        iconBg={config.pastelBg}
+        iconBorder={config.pastelBorder}
+        label={config.countLabel}
+        value={String(count)}
+        valueColor="#1f1f1d"
+      />
 
-      {/* Total amount */}
-      <div className="bg-white rounded-2xl p-4 shadow-md">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary/10 rounded-xl">
-            <TrendingUp className="w-5 h-5 text-primary" />
-          </div>
-          <div>
-            <p className="text-sm text-text-light">{config.amountLabel}</p>
-            <p className={`text-2xl font-bold ${config.amountColor}`}>
-              {formatCurrency(totalAmount)}
-            </p>
-          </div>
-        </div>
-      </div>
+      {/* Total */}
+      <StatCard
+        icon={<TrendingUp className="w-4 h-4" style={{ color: "#1f3a33" }} />}
+        iconBg="#f5f9f6"
+        iconBorder="#cfdbd3"
+        label={config.amountLabel}
+        value={formatCurrency(totalAmount)}
+        valueColor="#1f3a33"
+      />
 
-      {/* Paid amount (only for completed) */}
+      {/* Paid (only completed) */}
       {config.showPaid && (
         <>
-          <div className="bg-white rounded-2xl p-4 shadow-md">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-xl">
-                <Euro className="w-5 h-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm text-text-light">Encaissé</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {formatCurrency(paidAmount)}
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-2xl p-4 shadow-md">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-100 rounded-xl">
-                <Euro className="w-5 h-5 text-orange-600" />
-              </div>
-              <div>
-                <p className="text-sm text-text-light">À encaisser</p>
-                <p className="text-2xl font-bold text-orange-600">
-                  {formatCurrency(pendingAmount)}
-                </p>
-              </div>
-            </div>
-          </div>
+          <StatCard
+            icon={<Euro className="w-4 h-4" style={{ color: "#1f3a33" }} />}
+            iconBg="#f5f9f6"
+            iconBorder="#cfdbd3"
+            label="Encaissé"
+            value={formatCurrency(paidAmount)}
+            valueColor="#1f3a33"
+          />
+          <StatCard
+            icon={<Euro className="w-4 h-4" style={{ color: "#d97f3a" }} />}
+            iconBg="#fdf0e6"
+            iconBorder="#f4d6bc"
+            label="À encaisser"
+            value={formatCurrency(pendingAmount)}
+            valueColor="#7a4a1a"
+          />
         </>
       )}
     </motion.div>
+  );
+}
+
+function StatCard({
+  icon,
+  iconBg,
+  iconBorder,
+  label,
+  value,
+  valueColor,
+}: {
+  icon: React.ReactNode;
+  iconBg: string;
+  iconBorder: string;
+  label: string;
+  value: string;
+  valueColor: string;
+}) {
+  return (
+    <div
+      className="bg-white p-3"
+      style={{ borderRadius: 14, border: "1px solid #ece9e1" }}
+    >
+      <div className="flex items-center gap-2.5">
+        <div
+          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+          style={{ background: iconBg, border: `1px solid ${iconBorder}` }}
+        >
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] font-medium uppercase tracking-[0.1em] m-0" style={{ color: "#9c9484" }}>
+            {label}
+          </p>
+          <p
+            className="text-[18px] font-semibold tracking-[-0.02em] m-0 truncate"
+            style={{ color: valueColor }}
+          >
+            {value}
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/app/lib/utils";
 import { Users } from "lucide-react";
@@ -8,10 +8,10 @@ import {
   Mission,
   Availability,
   CollectiveSlot,
-  statusColors,
   availabilityColors,
   dayNames,
   formatDateLocal,
+  getMissionVisualStyle,
 } from "../types";
 import { CategoryType } from "@/app/hooks/usePlanning";
 
@@ -22,13 +22,18 @@ interface WeekViewProps {
   collectiveSlots?: CollectiveSlot[];
   categoryTypes?: CategoryType[];
   selectedTypeId?: string | null;
+  dynamicSlots?: {
+    morning: { start: string; end: string } | null;
+    afternoon: { start: string; end: string } | null;
+    evening: { start: string; end: string } | null;
+  };
   onDayClick: (date: string) => void;
   onRangeSelect?: (startDate: string, endDate: string) => void;
   onMissionClick: (mission: Mission) => void;
   onSlotClick?: (slot: CollectiveSlot) => void;
 }
 
-const hours = Array.from({ length: 13 }, (_, i) => i + 8); // 8h - 20h
+const HOUR_HEIGHT = 56;
 
 export function WeekView({
   currentDate,
@@ -37,11 +42,43 @@ export function WeekView({
   collectiveSlots = [],
   categoryTypes = [],
   selectedTypeId,
+  dynamicSlots,
   onDayClick,
   onRangeSelect,
   onMissionClick,
   onSlotClick,
 }: WeekViewProps) {
+  // Plages de travail dynamiques (depuis paramètres)
+  const parseHour = (t: string): number => parseInt(t.split(":")[0] ?? "0", 10);
+  const workingStart = dynamicSlots?.morning ? parseHour(dynamicSlots.morning.start) : 8;
+  const workingEnd = dynamicSlots?.evening
+    ? parseHour(dynamicSlots.evening.end)
+    : dynamicSlots?.afternoon
+      ? parseHour(dynamicSlots.afternoon.end)
+      : 20;
+  const displayStart = Math.max(0, workingStart - 1);
+  const displayEnd = Math.min(24, workingEnd + 1);
+  const hours = useMemo(
+    () => Array.from({ length: displayEnd - displayStart }, (_, i) => i + displayStart),
+    [displayStart, displayEnd]
+  );
+
+  // Current time line
+  const [now, setNow] = useState<Date>(new Date());
+  useEffect(() => {
+    const i = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(i);
+  }, []);
+
+  // Auto-scroll au current time
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      const top = (now.getHours() - displayStart) * HOUR_HEIGHT - 200;
+      scrollContainerRef.current.scrollTop = Math.max(0, top);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Range selection state
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectionStart, setSelectionStart] = useState<string | null>(null);
@@ -205,6 +242,338 @@ export function WeekView({
     return h + m / 60;
   };
 
+  // Détermine si une heure (entière) est dispo pour un jour donné
+  const isHourAvailable = (date: Date, hour: number): "full" | "none" => {
+    const avs = getAvailabilitiesForDate(date);
+    if (avs.some((a) => a.status === "available")) return "full";
+    const partials = avs.filter((a) => a.status === "partial");
+    for (const a of partials) {
+      if (!a.timeSlots) continue;
+      for (const slot of a.timeSlots) {
+        const start = parseTimeToHours(slot.startTime);
+        const end = parseTimeToHours(slot.endTime);
+        if (hour >= start && hour < end) return "full";
+      }
+    }
+    return "none";
+  };
+
+  const nowFractionalHour = now.getHours() + now.getMinutes() / 60;
+  const todayIndex = weekDates.findIndex((d) => isToday(d));
+
+  // Détection mobile : sur mobile on bascule en vue Agenda (style Google Calendar)
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  // ──────────────────────────────────────────────────────────────────
+  // VUE MOBILE — Barre de jours horizontale + liste verticale
+  // (style Google Calendar mobile classique)
+  // ──────────────────────────────────────────────────────────────────
+  // Index du jour sélectionné dans la semaine (par défaut today si dans la semaine, sinon 0)
+  const [selectedDayIndex, setSelectedDayIndex] = useState<number>(() => {
+    const idx = weekDates.findIndex((d) => isToday(d));
+    return idx >= 0 ? idx : 0;
+  });
+
+  // Resync si la semaine change (navigation Prev/Next)
+  useEffect(() => {
+    if (!isMobile) return;
+    const todayIdx = weekDates.findIndex((d) => isToday(d));
+    setSelectedDayIndex(todayIdx >= 0 ? todayIdx : 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDate.getTime(), isMobile]);
+
+  if (isMobile) {
+    const selectedDate = weekDates[selectedDayIndex] ?? weekDates[0];
+    const selectedDateStr = formatDateLocal(selectedDate);
+    const selectedPast = isPastDate(selectedDate);
+    const selectedAvs = getAvailabilitiesForDate(selectedDate);
+    const selectedSlots = getSlotsForDate(selectedDate);
+    const selectedMissions = getMissionsForDate(selectedDate).filter(
+      (m) => m.sessionType !== "collective"
+    );
+    const hasContent = selectedSlots.length > 0 || selectedMissions.length > 0;
+
+    // Statut dispo global du jour sélectionné
+    let dispoLabel = "Indispo";
+    let dispoStyle: React.CSSProperties = {
+      background: "#fcfaf4",
+      color: "#9c9484",
+      border: "1px solid #ece9e1",
+    };
+    if (selectedAvs.some((a) => a.status === "available")) {
+      dispoLabel = "Dispo journée";
+      dispoStyle = { background: "#f5f9f6", color: "#2f4a3f", border: "1px solid #cfdbd3" };
+    } else if (selectedAvs.some((a) => a.status === "partial")) {
+      dispoLabel = "Dispo partielle";
+      dispoStyle = { background: "#fdf8ec", color: "#7a5b1a", border: "1px solid #f4e6c1" };
+    }
+
+    return (
+      <div className="space-y-3">
+        {/* Barre horizontale des 7 jours (sticky) */}
+        <div
+          className="bg-white p-1.5 sticky top-0 z-20"
+          style={{ borderRadius: 14, border: "1px solid #ece9e1" }}
+        >
+          <div className="grid grid-cols-7 gap-0.5">
+            {weekDates.map((date, idx) => {
+              const dateStr = formatDateLocal(date);
+              const past = isPastDate(date);
+              const todayDay = isToday(date);
+              const isSelected = idx === selectedDayIndex;
+              const dayAvs = getAvailabilitiesForDate(date);
+              const daySlots = getSlotsForDate(date);
+              const dayMissions = getMissionsForDate(date).filter(
+                (m) => m.sessionType !== "collective"
+              );
+              const eventCount = daySlots.length + dayMissions.length;
+
+              // Statut dispo bref pour micro-indicateur
+              const hasAvailable = dayAvs.some((a) => a.status === "available");
+              const hasPartial = dayAvs.some((a) => a.status === "partial");
+              const dotColor = hasAvailable
+                ? "#2f4a3f"
+                : hasPartial
+                  ? "#c9a14a"
+                  : null;
+
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedDayIndex(idx);
+                  }}
+                  onDoubleClick={() => onDayClick(dateStr)}
+                  className="flex flex-col items-center justify-center py-2 px-1 transition-all"
+                  style={{
+                    borderRadius: 10,
+                    background: isSelected
+                      ? "#1f3a33"
+                      : todayDay
+                        ? "#f5f9f6"
+                        : "transparent",
+                    border: `1px solid ${
+                      isSelected
+                        ? "#1f3a33"
+                        : todayDay
+                          ? "#cfdbd3"
+                          : "transparent"
+                    }`,
+                    opacity: past ? 0.5 : 1,
+                  }}
+                >
+                  <span
+                    className="text-[9px] font-medium uppercase tracking-[0.05em]"
+                    style={{
+                      color: isSelected
+                        ? "rgba(247,245,239,0.8)"
+                        : todayDay
+                          ? "#1f3a33"
+                          : "#9c9484",
+                    }}
+                  >
+                    {dayNames[idx].slice(0, 3)}
+                  </span>
+                  <span
+                    className="text-[16px] font-bold tracking-[-0.02em] leading-none mt-0.5"
+                    style={{
+                      color: isSelected
+                        ? "#f7f5ef"
+                        : todayDay
+                          ? "#1f3a33"
+                          : past
+                            ? "#cdc9c0"
+                            : "#1f1f1d",
+                    }}
+                  >
+                    {date.getDate()}
+                  </span>
+                  {/* Indicateur événements */}
+                  <div className="flex items-center gap-0.5 mt-1 h-1.5">
+                    {eventCount > 0 && (
+                      <span
+                        className="w-1 h-1 rounded-full"
+                        style={{ background: isSelected ? "#f7f5ef" : "#1f3a33" }}
+                      />
+                    )}
+                    {dotColor && eventCount === 0 && !past && (
+                      <span
+                        className="w-1 h-1 rounded-full"
+                        style={{ background: isSelected ? "#f7f5ef" : dotColor }}
+                      />
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Détail du jour sélectionné */}
+        <div
+          className="bg-white p-3"
+          style={{ borderRadius: 14, border: "1px solid #ece9e1" }}
+        >
+          {/* Header jour */}
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div>
+              <div className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "#9c9484" }}>
+                {isToday(selectedDate) ? "Aujourd'hui" : ""}
+              </div>
+              <h3 className="text-[15px] font-semibold text-[#1f1f1d] tracking-[-0.01em] capitalize m-0">
+                {selectedDate.toLocaleDateString("fr-FR", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                })}
+              </h3>
+            </div>
+            <div className="flex flex-col items-end gap-1">
+              {!selectedPast && (
+                <span
+                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium"
+                  style={dispoStyle}
+                >
+                  {dispoLabel}
+                </span>
+              )}
+              {!selectedPast && (
+                <button
+                  type="button"
+                  onClick={() => onDayClick(selectedDateStr)}
+                  className="text-[11px] font-medium underline"
+                  style={{ color: "#1f3a33" }}
+                >
+                  Modifier dispo
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Liste événements */}
+          {hasContent ? (
+            <div className="space-y-1.5">
+              {selectedSlots.map((slot) => {
+                const hasBookings = slot.bookings && slot.bookings.length > 0;
+                return (
+                  <button
+                    key={slot._id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSlotClick?.(slot);
+                    }}
+                    className="w-full flex items-center gap-2 p-2.5 text-left transition-colors hover:bg-[#f7f5ef]"
+                    style={{
+                      borderRadius: 10,
+                      background: hasBookings ? "#f5f9f6" : "#fcfaf4",
+                      border: `1px solid ${hasBookings ? "#cfdbd3" : "#f1ede3"}`,
+                      borderLeft: `3px solid #1f3a33`,
+                    }}
+                  >
+                    <Users className="w-4 h-4 flex-shrink-0" style={{ color: "#1f3a33" }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-semibold text-[#1f1f1d] tracking-[-0.01em] truncate">
+                        {slot.variantName}
+                      </p>
+                      <p className="text-[11px]" style={{ color: "#6d6d68" }}>
+                        {slot.startTime} – {slot.endTime}
+                      </p>
+                    </div>
+                    <span
+                      className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium flex-shrink-0"
+                      style={{ background: "#1f3a33", color: "#f7f5ef" }}
+                    >
+                      {hasBookings
+                        ? `${slot.bookings![0].animalEmoji} ${slot.bookings!.length}`
+                        : `${slot.bookedAnimals}/${slot.maxAnimals}`}
+                    </span>
+                  </button>
+                );
+              })}
+              {selectedMissions.map((mission) => {
+                const vs = getMissionVisualStyle(mission);
+                return (
+                  <button
+                    key={mission.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMissionClick(mission);
+                    }}
+                    className="w-full flex items-center gap-2 p-2.5 text-left transition-colors hover:brightness-95"
+                    style={{
+                      borderRadius: 10,
+                      background: vs.background,
+                      border: `1px solid ${vs.borderColor}`,
+                      borderLeft: `3px ${vs.borderStyle} ${vs.borderLeftColor}`,
+                      color: vs.textColor,
+                    }}
+                  >
+                    <span className="text-[18px] flex-shrink-0">
+                      {mission.animals && mission.animals.length > 1
+                        ? mission.animals.map((a) => a.emoji).join("")
+                        : mission.animal.emoji}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className="text-[13px] font-semibold tracking-[-0.01em] truncate"
+                        style={{ color: vs.textColor }}
+                      >
+                        {mission.animals && mission.animals.length > 1
+                          ? mission.animals.map((a) => a.name).join(", ")
+                          : mission.animal.name}
+                      </p>
+                      <p
+                        className="text-[11px] truncate"
+                        style={{ color: vs.subTextColor }}
+                      >
+                        {mission.startTime || "09:00"} – {mission.endTime || "18:00"} · {mission.serviceName}
+                      </p>
+                    </div>
+                    <span
+                      className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium flex-shrink-0 uppercase tracking-[0.05em]"
+                      style={{
+                        background: "rgba(255,255,255,0.7)",
+                        color: vs.textColor,
+                        border: `1px solid ${vs.borderLeftColor}`,
+                      }}
+                    >
+                      {vs.shortLabel}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div
+              className="text-center py-6"
+              style={{ borderRadius: 10, background: "#fcfaf4", border: "1px solid #f1ede3" }}
+            >
+              <p className="text-[12px]" style={{ color: "#9c9484" }}>
+                {selectedPast ? "Pas d'événement ce jour" : "Aucun événement prévu"}
+              </p>
+              {!selectedPast && (
+                <p className="text-[11px] mt-1" style={{ color: "#cdc9c0" }}>
+                  Cliquez sur &quot;Modifier dispo&quot; pour gérer ce jour
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────────────
+  // VUE GRILLE DESKTOP (≥ md)
+  // ──────────────────────────────────────────────────────────────────
   return (
     <div
       className="overflow-x-auto select-none"
@@ -213,9 +582,12 @@ export function WeekView({
     >
       <div className="min-w-[800px]">
         {/* Header with days */}
-        <div className="grid grid-cols-8 gap-1 mb-2">
+        <div
+          className="grid gap-1 mb-2"
+          style={{ gridTemplateColumns: "64px repeat(7, minmax(0, 1fr))" }}
+        >
           {/* Empty cell for time column */}
-          <div className="w-16" />
+          <div />
           {weekDates.map((date, index) => {
             const today = isToday(date);
             const past = isPastDate(date);
@@ -232,25 +604,38 @@ export function WeekView({
                   handleMouseDown(dateStr);
                 }}
                 onMouseEnter={() => handleMouseEnter(dateStr)}
-                className={cn(
-                  "text-center py-3 rounded-lg transition-colors border",
-                  // Past dates styling
-                  past
-                    ? "bg-gray-50 border-gray-100 cursor-not-allowed opacity-60"
-                    : "cursor-pointer border-gray-200 hover:border-gray-300",
-                  // Today styling (only if not past)
-                  !past && today && "bg-primary/10 border-primary",
-                  // Availability colors (only if not past and not today)
-                  !past && !today && !inSelection && bgClass,
-                  // Selection styling (only if not past)
-                  !past && inSelection && "bg-primary/20 border-primary ring-2 ring-primary"
-                )}
+                className="text-center py-3 transition-colors"
+                style={{
+                  borderRadius: 12,
+                  border: `1px solid ${
+                    past
+                      ? "#f1ede3"
+                      : inSelection
+                        ? "#1f3a33"
+                        : today
+                          ? "#1f3a33"
+                          : "#ece9e1"
+                  }`,
+                  background: past
+                    ? "#fcfaf4"
+                    : inSelection
+                      ? "#f5f9f6"
+                      : today
+                        ? "#f5f9f6"
+                        : !inSelection && bgClass.includes("green")
+                          ? "#f5f9f6"
+                          : !inSelection && bgClass.includes("orange")
+                            ? "#fdf8ec"
+                            : "#fff",
+                  cursor: past ? "not-allowed" : "pointer",
+                  opacity: past ? 0.6 : 1,
+                }}
               >
                 <div className="flex items-center justify-between px-2">
-                  <p className={cn(
-                    "text-sm font-medium",
-                    past ? "text-gray-400" : "text-text-light"
-                  )}>
+                  <p
+                    className="text-[10px] font-medium uppercase tracking-[0.1em]"
+                    style={{ color: past ? "#cdc9c0" : "#9c9484" }}
+                  >
                     {dayNames[index]}
                   </p>
                   {/* Indicateurs de type de disponibilité */}
@@ -266,7 +651,7 @@ export function WeekView({
                         return (
                           <span
                             key={type._id}
-                            className="w-2 h-2 rounded-full"
+                            className="w-1.5 h-1.5 rounded-full"
                             style={{ backgroundColor: type.color }}
                             title={`${type.name}: ${typeAvail.status === "available" ? "Disponible" : "Partiel"}`}
                           />
@@ -276,13 +661,14 @@ export function WeekView({
                   )}
                 </div>
                 <p
-                  className={cn(
-                    "text-lg font-bold",
-                    past && "text-gray-400",
-                    !past && today && "text-primary",
-                    !past && !today && "text-foreground",
-                    !past && inSelection && "text-primary"
-                  )}
+                  className="text-[18px] font-semibold tracking-[-0.02em]"
+                  style={{
+                    color: past
+                      ? "#cdc9c0"
+                      : today || inSelection
+                        ? "#1f3a33"
+                        : "#1f1f1d",
+                  }}
                 >
                   {date.getDate()}
                 </p>
@@ -291,38 +677,105 @@ export function WeekView({
           })}
         </div>
 
-        {/* Time grid */}
-        <div className="relative border rounded-xl overflow-hidden">
+        {/* Time grid (style Google Calendar : current time line + layer dispo) */}
+        <div
+          ref={scrollContainerRef}
+          className="relative overflow-auto max-h-[640px]"
+          style={{ borderRadius: 14, border: "1px solid #ece9e1", background: "#fff" }}
+        >
           {/* Hour rows */}
           {hours.map((hour) => (
-            <div key={hour} className="grid grid-cols-8 border-b last:border-b-0">
+            <div
+              key={hour}
+              className="grid relative"
+              style={{
+                gridTemplateColumns: "64px repeat(7, minmax(0, 1fr))",
+                borderBottom: "1px solid #f7f5ef",
+                height: HOUR_HEIGHT,
+              }}
+            >
               {/* Time label */}
-              <div className="w-16 py-6 px-2 text-xs text-text-light border-r bg-gray-50">
-                {hour}:00
+              <div
+                className="px-2 text-[10px] font-medium pt-1 sticky left-0 z-10"
+                style={{ color: "#9c9484", background: "#fcfaf4", borderRight: "1px solid #f1ede3" }}
+              >
+                {hour}h
               </div>
-              {/* Day cells */}
+              {/* Day cells avec layer dispo */}
               {weekDates.map((date, dayIndex) => {
                 const dateStr = formatDateLocal(date);
-                const dayAvailabilities = getAvailabilitiesForDate(date);
                 const past = isPastDate(date);
-                const bgClass = getDayBackgroundClass(dayAvailabilities, false);
+                const todayDay = isToday(date);
+                const availStatus = isHourAvailable(date, hour);
+                const isWorkingHour = hour >= workingStart && hour < workingEnd;
 
                 return (
                   <div
                     key={dayIndex}
                     onClick={() => !past && onDayClick(dateStr)}
                     className={cn(
-                      "border-r last:border-r-0 min-h-[48px] transition-colors relative",
-                      past
-                        ? "bg-gray-50/80 cursor-not-allowed"
-                        : "cursor-pointer hover:bg-gray-100/50",
-                      !past && bgClass
+                      "transition-colors relative",
+                      past ? "cursor-not-allowed" : "cursor-pointer hover:bg-[#f7f5ef]"
                     )}
-                  />
+                    style={{
+                      borderRight: dayIndex < 6 ? "1px solid #f7f5ef" : "none",
+                      background: past
+                        ? "#fcfaf4"
+                        : availStatus === "full"
+                          ? "rgba(245,249,246,0.5)"
+                          : isWorkingHour
+                            ? todayDay
+                              ? "rgba(31,58,51,0.02)"
+                              : "#fff"
+                            : "#fcfaf4",
+                    }}
+                  >
+                    {/* 30-min subdivision */}
+                    <div
+                      className="absolute left-0 right-0 pointer-events-none"
+                      style={{
+                        top: HOUR_HEIGHT / 2,
+                        borderTop: "1px dashed #f7f5ef",
+                      }}
+                    />
+                    {/* Diagonal stripes pour heures non-dispo dans heures de travail */}
+                    {availStatus === "none" && isWorkingHour && !past && (
+                      <div
+                        className="absolute inset-0 opacity-40 pointer-events-none"
+                        style={{
+                          background:
+                            "repeating-linear-gradient(45deg, transparent, transparent 6px, #f1ede3 6px, #f1ede3 7px)",
+                        }}
+                      />
+                    )}
+                  </div>
                 );
               })}
             </div>
           ))}
+
+          {/* Current time line (rouge style Google) — uniquement sur la colonne d'aujourd'hui */}
+          {todayIndex >= 0 &&
+            nowFractionalHour >= displayStart &&
+            nowFractionalHour <= displayEnd && (
+              <div
+                className="absolute pointer-events-none"
+                style={{
+                  top: (nowFractionalHour - displayStart) * HOUR_HEIGHT,
+                  left: `calc(64px + ${todayIndex} * ((100% - 64px) / 7))`,
+                  width: `calc((100% - 64px) / 7)`,
+                  zIndex: 30,
+                }}
+              >
+                <div className="relative">
+                  <div
+                    className="absolute -left-1.5 -top-1.5 w-3 h-3 rounded-full"
+                    style={{ background: "#c45656" }}
+                  />
+                  <div className="h-px" style={{ background: "#c45656" }} />
+                </div>
+              </div>
+            )}
 
           {/* Collective slot overlays */}
           {weekDates.map((date, dayIndex) => {
@@ -332,8 +785,8 @@ export function WeekView({
               const startHour = parseTimeToHours(slot.startTime);
               const endHour = parseTimeToHours(slot.endTime);
 
-              const top = (startHour - 8) * 48;
-              const height = Math.max((endHour - startHour) * 48, 32);
+              const top = (startHour - displayStart) * HOUR_HEIGHT;
+              const height = Math.max((endHour - startHour) * HOUR_HEIGHT - 2, 36);
               const hasBookings = slot.bookings && slot.bookings.length > 0;
 
               return (
@@ -344,26 +797,26 @@ export function WeekView({
                     e.stopPropagation();
                     onSlotClick?.(slot);
                   }}
-                  className={cn(
-                    "absolute rounded-lg p-2 text-white text-xs cursor-pointer overflow-hidden border-l-4",
-                    hasBookings
-                      ? "bg-purple-600 border-purple-800"
-                      : "bg-purple-400 border-purple-600"
-                  )}
+                  className="absolute p-2 text-[11px] cursor-pointer overflow-hidden"
                   style={{
+                    borderRadius: 8,
+                    background: hasBookings ? "#1f3a33" : "#fff",
+                    color: hasBookings ? "#f7f5ef" : "#1f3a33",
+                    border: `1px solid ${hasBookings ? "#1f3a33" : "#cfdbd3"}`,
+                    borderLeft: `3px solid #1f3a33`,
                     top: `${top}px`,
-                    left: `calc(64px + ${dayIndex * ((100 - 8) / 7)}% + 2px)`,
-                    width: `calc(${(100 - 8) / 7}% - 4px)`,
+                    left: `calc(64px + ${dayIndex} * ((100% - 64px) / 7) + 2px)`,
+                    width: `calc((100% - 64px) / 7 - 4px)`,
                     height: `${height}px`,
                     zIndex: hasBookings ? 20 + slotIndex : 15 + slotIndex,
                   }}
                   whileHover={{ scale: 1.02, zIndex: 50 }}
                 >
-                  <div className="flex items-center gap-1 font-medium truncate">
+                  <div className="flex items-center gap-1 font-semibold truncate tracking-[-0.01em]">
                     <Users className="w-3 h-3 flex-shrink-0" />
                     <span className="truncate">{slot.variantName}</span>
                   </div>
-                  <div className="truncate opacity-90">
+                  <div className="truncate opacity-90 text-[10px]">
                     {hasBookings
                       ? `${slot.bookings![0].animalEmoji} ${slot.bookings!.length} résa`
                       : `${slot.bookedAnimals}/${slot.maxAnimals}`
@@ -390,8 +843,9 @@ export function WeekView({
                 ? parseTimeToHours(mission.endTime)
                 : 18;
 
-              const top = (startHour - 8) * 48; // 48px per hour
-              const height = (endHour - startHour) * 48;
+              const top = (startHour - displayStart) * HOUR_HEIGHT;
+              const height = Math.max((endHour - startHour) * HOUR_HEIGHT - 2, 36);
+              const vs = getMissionVisualStyle(mission);
 
               return (
                 <motion.div
@@ -401,26 +855,36 @@ export function WeekView({
                     e.stopPropagation();
                     onMissionClick(mission);
                   }}
-                  className={cn(
-                    "absolute rounded-lg p-2 text-white text-xs cursor-pointer overflow-hidden",
-                    statusColors[mission.status]
-                  )}
+                  className="absolute p-2 text-[11px] cursor-pointer overflow-hidden"
                   style={{
+                    borderRadius: 8,
+                    background: vs.background,
+                    color: vs.textColor,
+                    border: `1px solid ${vs.borderColor}`,
+                    borderLeft: `3px ${vs.borderStyle} ${vs.borderLeftColor}`,
                     top: `${top}px`,
-                    left: `calc(64px + ${dayIndex * ((100 - 8) / 7)}% + 2px)`,
-                    width: `calc(${(100 - 8) / 7}% - 4px)`,
+                    left: `calc(64px + ${dayIndex} * ((100% - 64px) / 7) + 2px)`,
+                    width: `calc((100% - 64px) / 7 - 4px)`,
                     height: `${Math.max(height, 32)}px`,
-                    marginLeft: slotOffset + missionIndex * 4, // Offset overlapping missions
+                    marginLeft: slotOffset + missionIndex * 4,
                     zIndex: 10 + missionIndex,
                   }}
                   whileHover={{ scale: 1.02, zIndex: 50 }}
                 >
-                  <div className="font-medium truncate">
+                  <div
+                    className="font-semibold truncate tracking-[-0.01em]"
+                    style={{ color: vs.textColor }}
+                  >
                     {mission.animals && mission.animals.length > 1
                       ? `${mission.animals.map((a) => a.emoji).join("")} ${mission.animals.map((a) => a.name).join(", ")}`
                       : `${mission.animal.emoji} ${mission.animal.name}`}
                   </div>
-                  <div className="truncate opacity-80">{mission.serviceName}</div>
+                  <div
+                    className="truncate text-[10px]"
+                    style={{ color: vs.subTextColor }}
+                  >
+                    {mission.serviceName}
+                  </div>
                 </motion.div>
               );
             });

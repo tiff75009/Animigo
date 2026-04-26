@@ -25,27 +25,31 @@ export function WelcomeHeader({ displayName, pendingAcceptance, totalUnread }: W
       className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
     >
       <div>
-        <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-          Bonjour {displayName} !
+        <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] capitalize mb-1">
+          {today}
+        </div>
+        <h1 className="text-[24px] md:text-[28px] font-semibold text-[#1f1f1d] tracking-[-0.02em] m-0">
+          Bonjour {displayName}
         </h1>
-        <p className="text-text-light mt-0.5 capitalize">{today}</p>
       </div>
       <div className="flex items-center gap-2">
         {pendingAcceptance > 0 && (
           <Link
             href="/dashboard/missions?tab=pending_acceptance"
-            className="flex items-center gap-2 px-3 py-2 bg-amber-50 text-amber-700 rounded-xl hover:bg-amber-100 transition-colors text-sm font-medium"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors hover:bg-[#fdf8ec]"
+            style={{ background: "#fff", border: "1px solid #f4e6c1", color: "#7a5b1a" }}
           >
-            <Bell className="w-4 h-4" />
+            <Bell className="w-3.5 h-3.5" />
             <span>{pendingAcceptance} à accepter</span>
           </Link>
         )}
         {totalUnread > 0 && (
           <Link
             href="/dashboard/messagerie"
-            className="flex items-center gap-2 px-3 py-2 bg-primary/10 text-primary rounded-xl hover:bg-primary/20 transition-colors text-sm font-medium"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-opacity hover:opacity-90"
+            style={{ background: "#1f3a33", color: "#f7f5ef" }}
           >
-            <MessageSquare className="w-4 h-4" />
+            <MessageSquare className="w-3.5 h-3.5" />
             <span>{totalUnread} message{totalUnread > 1 ? "s" : ""}</span>
           </Link>
         )}

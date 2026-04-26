@@ -115,7 +115,7 @@ export function UpcomingTab({
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-2">
         {/* Stats skeleton */}
         <div className="bg-white rounded-2xl p-5 shadow-sm animate-pulse">
           <div className="flex justify-between items-center">
@@ -149,7 +149,7 @@ export function UpcomingTab({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-2">
       {/* Stats */}
       <MissionsStats
         tab="upcoming"
@@ -164,7 +164,7 @@ export function UpcomingTab({
       {sortedMissions.length === 0 ? (
         <MissionsEmptyState tab="upcoming" />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-2">
           {sortedMissions.map((mission: MissionType, index: number) => (
             <motion.div
               key={mission.id}

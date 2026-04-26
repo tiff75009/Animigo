@@ -184,15 +184,28 @@ export default function ServicesTab({
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="flex items-center justify-between p-4 bg-secondary/10 border border-secondary/20 rounded-xl"
+            className="flex items-center justify-between gap-3 p-3"
+            style={{
+              borderRadius: 12,
+              background: "#f5f9f6",
+              border: "1px solid #cfdbd3",
+            }}
           >
-            <div className="flex items-center gap-3">
-              <CheckCircle className="w-5 h-5 text-secondary" />
-              <p className="text-secondary font-medium">{successMessage}</p>
+            <div className="flex items-center gap-3 min-w-0">
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{ background: "#1f3a33" }}
+              >
+                <CheckCircle className="w-4 h-4 text-white" />
+              </div>
+              <p className="text-[13.5px] font-semibold text-[#1f3a33] tracking-[-0.01em] truncate">
+                {successMessage}
+              </p>
             </div>
             <button
               onClick={onClearSuccess}
-              className="text-secondary/60 hover:text-secondary"
+              className="w-7 h-7 rounded-full inline-flex items-center justify-center hover:bg-[rgba(31,58,51,0.08)] flex-shrink-0 transition-colors"
+              style={{ color: "#1f3a33" }}
             >
               ✕
             </button>
@@ -207,21 +220,27 @@ export default function ServicesTab({
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl"
+            className="flex items-start gap-3 p-3"
+            style={{
+              borderRadius: 12,
+              background: "#f7f5ef",
+              border: "1px solid #ece9e1",
+            }}
           >
-            <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+            <Info className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: "#6d6d68" }} />
             <div>
-              <p className="font-medium text-blue-700">Bienvenue !</p>
-              <p className="text-sm text-blue-600 mt-1">
-                Créez votre premier service pour commencer à recevoir des demandes.
-                Vous pourrez définir vos tarifs et options.
+              <p className="text-[13.5px] font-semibold text-[#1f1f1d] tracking-[-0.01em]">
+                Bienvenue !
+              </p>
+              <p className="text-[12px] text-[#6d6d68] leading-[1.5] mt-0.5">
+                Créez votre premier service pour commencer à recevoir des demandes. Vous pourrez définir vos tarifs et options.
               </p>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Add Service Button */}
+      {/* Add Service Button - card sobre dashed */}
       <AnimatePresence>
         {!isAddingService && canCreateServices && (
           <motion.button
@@ -229,18 +248,26 @@ export default function ServicesTab({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             onClick={() => setIsAddingService(true)}
-            className="w-full p-5 border-2 border-dashed border-foreground/20 rounded-2xl text-center hover:border-primary/50 hover:bg-primary/5 transition-all group"
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
+            className="w-full p-5 text-center transition-all group hover:bg-[#fafafa]"
+            style={{
+              borderRadius: 14,
+              border: "1px dashed #cfdbd3",
+              background: "#fff",
+            }}
+            whileHover={{ scale: 1.005 }}
+            whileTap={{ scale: 0.995 }}
           >
             <div className="flex flex-col items-center gap-2">
-              <div className="p-3 bg-primary/10 rounded-full group-hover:bg-primary/20 transition-colors">
-                <Plus className="w-6 h-6 text-primary" />
+              <div
+                className="w-10 h-10 rounded-full flex items-center justify-center transition-colors"
+                style={{ background: "#f5f9f6", border: "1px solid #cfdbd3" }}
+              >
+                <Plus className="w-4 h-4" style={{ color: "#1f3a33" }} />
               </div>
-              <span className="font-medium text-foreground">
+              <span className="text-[14px] font-semibold text-[#1f1f1d] tracking-[-0.01em]">
                 Ajouter un service
               </span>
-              <span className="text-sm text-text-light">
+              <span className="text-[12px] text-[#6d6d68]">
                 Créez une nouvelle offre de garde
               </span>
             </div>

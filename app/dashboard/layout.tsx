@@ -19,7 +19,15 @@ function DashboardContent({ children }: { children: ReactNode }) {
         "pt-8 pb-8 md:pl-24 transition-all duration-300",
         isCollapsed ? "lg:pl-24" : "lg:pl-80"
       )}>
-        <div className="px-4 lg:px-8 max-w-7xl">
+        <div
+          className={cn(
+            "px-4 lg:px-8 transition-all duration-300",
+            // Si la sidebar est repliée, on laisse le container s'étendre
+            // sur toute la largeur disponible. Sinon on plafonne à 7xl
+            // (1280 px) centré pour préserver la lisibilité.
+            isCollapsed ? "max-w-none" : "max-w-7xl mx-auto"
+          )}
+        >
           {children}
         </div>
       </main>

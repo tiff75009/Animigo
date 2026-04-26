@@ -2,7 +2,21 @@
 
 import React from "react";
 import Image from "next/image";
-import { AlertCircle, Clock, MapPin, Moon, Sun, Home, CalendarCheck, Users, CreditCard, Package, Plus, PawPrint, Edit2 } from "lucide-react";
+import {
+  AlertCircle,
+  Clock,
+  MapPin,
+  Moon,
+  Home,
+  CalendarCheck,
+  Users,
+  Package,
+  Plus,
+  PawPrint,
+  Edit2,
+  Receipt,
+  Check,
+} from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import type { ServiceDetail, ServiceVariant } from "./FormulaStep";
 import type { ServiceOption } from "./OptionsStep";
@@ -78,18 +92,14 @@ interface SummaryStepProps {
   selectedOptionIds: string[];
   priceBreakdown: PriceBreakdown;
   serviceLocation: "announcer_home" | "client_home" | null;
-  commissionRate?: number; // Taux de commission en %
-  // Support pour les formules collectives
+  commissionRate?: number;
   isCollectiveFormula?: boolean;
   collectiveSlots?: CollectiveSlotInfo[];
   animalCount?: number;
-  // Support pour les formules individuelles multi-séances
   isMultiSessionIndividual?: boolean;
   selectedSessions?: SelectedSession[];
-  // Animaux de l'utilisateur
   userAnimals?: UserAnimal[] | null;
   selectedAnimalIds?: string[];
-  // Gestion des adresses
   sessionToken?: string | null;
   selectedAddressId?: string | null;
   onAddressSelect?: (addressId: string | null, addressData?: {
@@ -98,13 +108,10 @@ interface SummaryStepProps {
     postalCode?: string;
     coordinates?: { lat: number; lng: number };
   }) => void;
-  // Adresse guest pour utilisateurs non connectés
   guestAddress?: GuestAddress | null;
   onGuestAddressChange?: (address: GuestAddress | null) => void;
   announcerCoordinates?: { lat: number; lng: number };
-  // Données du chien invité (pour utilisateurs non connectés)
   guestDogData?: GuestDogData | null;
-  // Billing info pour affichage jours/demi-journées
   billingInfo?: {
     billingUnit?: string;
     fullDays: number;
@@ -113,11 +120,10 @@ interface SummaryStepProps {
     lastDayIsHalfDay?: boolean;
   };
   clientBillingMode?: "exact_hourly" | "round_half_day" | "round_full_day";
-  // Pricing details
-  stripeFeeRate?: number; // Frais de gestion de paiement (Stripe)
-  vatRate?: number; // TVA sur les commissions
-  isSapApplied?: boolean; // true si taux réduit SAP applicable
-  sapVatRate?: number; // Taux TVA SAP (10 ou 20)
+  stripeFeeRate?: number;
+  vatRate?: number;
+  isSapApplied?: boolean;
+  sapVatRate?: number;
   announcerStatusType?: "particulier" | "micro_entrepreneur" | "professionnel";
   error: string | null;
 }
@@ -158,30 +164,22 @@ export default function SummaryStep({
   priceBreakdown,
   serviceLocation,
   commissionRate = 15,
-  // Formules collectives
   isCollectiveFormula = false,
   collectiveSlots = [],
   animalCount = 1,
-  // Formules multi-séances
   isMultiSessionIndividual = false,
   selectedSessions = [],
-  // Animaux de l'utilisateur
   userAnimals = null,
   selectedAnimalIds = [],
-  // Gestion des adresses
   sessionToken = null,
   selectedAddressId = null,
   onAddressSelect,
-  // Adresse guest
   guestAddress = null,
   onGuestAddressChange,
   announcerCoordinates,
-  // Chien invité
   guestDogData = null,
-  // Billing info
   billingInfo,
   clientBillingMode,
-  // Pricing details
   stripeFeeRate = 3,
   vatRate = 20,
   isSapApplied = false,
@@ -195,7 +193,6 @@ export default function SummaryStep({
   const isCollective = isCollectiveFormula || selectedVariant.sessionType === "collective";
   const isMultiSession = isMultiSessionIndividual || (!isCollective && (selectedVariant.numberOfSessions || 1) > 1);
   const numberOfSessions = selectedVariant.numberOfSessions || 1;
-  // Nombre réel de créneaux sélectionnés (pour les formules collectives)
   const actualSlotCount = isCollective && collectiveSlots.length > 0 ? collectiveSlots.length : numberOfSessions;
 
   // Filtrer les animaux sélectionnés
@@ -220,13 +217,11 @@ export default function SummaryStep({
       const endHour = endParts[0] + endParts[1] / 60;
 
       if (isMultiDay) {
-        // Multi-jours: heures du premier jour + jours complets + heures du dernier jour
-        const firstDayHours = 20 - startHour; // Jusqu'à 20h par défaut
-        const lastDayHours = endHour - 8; // Depuis 8h par défaut
+        const firstDayHours = 20 - startHour;
+        const lastDayHours = endHour - 8;
         const middleDays = days - 2;
         return firstDayHours + (middleDays > 0 ? middleDays * 8 : 0) + lastDayHours;
       } else {
-        // Même jour
         return endHour - startHour;
       }
     }
@@ -235,29 +230,56 @@ export default function SummaryStep({
 
   const totalHours = calculateTotalHours();
 
-  // Helper pour afficher le lieu de prestation
   const getLocationLabel = () => {
     if (!serviceLocation) return null;
     return serviceLocation === "client_home"
-      ? "À domicile (chez vous)"
-      : "Chez le pet-sitter";
+      ? "À votre domicile"
+      : `Chez ${announcer.firstName}${announcer.lastName ? ` ${announcer.lastName.charAt(0)}.` : ""}`;
   };
 
   return (
-    <div className="bg-white rounded-2xl p-5 shadow-sm">
-      <h2 className="text-lg font-bold text-foreground mb-4">Récapitulatif</h2>
+    <div
+      className="bg-white p-[18px]"
+      style={{ borderRadius: 14, border: "1px solid #ece9e1" }}
+    >
+      {/* Header */}
+      <div className="mb-4">
+        <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-1">
+          Étape · Confirmation
+        </div>
+        <h3 className="text-base font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+          Récapitulatif de votre réservation
+        </h3>
+        <p className="text-[12px] text-[#6d6d68] mt-1">
+          Vérifiez les informations ci-dessous avant de finaliser le paiement.
+        </p>
+      </div>
 
-      {/* Error */}
+      {/* Erreur */}
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-red-700 text-sm">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />
-          {error}
+        <div
+          className="mb-4 p-3 flex items-start gap-2 text-[12px]"
+          style={{
+            borderRadius: 12,
+            background: "#fdf0f0",
+            border: "1px solid #f1cdcd",
+            color: "#8a3a3a",
+          }}
+        >
+          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>{error}</span>
         </div>
       )}
 
-      {/* Announcer */}
-      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl mb-4">
-        <div className="relative w-12 h-12 rounded-full overflow-hidden flex-shrink-0">
+      {/* Annonceur */}
+      <div
+        className="flex items-center gap-3 p-3 mb-4"
+        style={{ borderRadius: 12, background: "#fcfaf4", border: "1px solid #f1ede3" }}
+      >
+        <div
+          className="relative w-11 h-11 rounded-full overflow-hidden flex-shrink-0"
+          style={{ border: "1px solid #ece9e1" }}
+        >
           {announcer.profileImage ? (
             <Image
               src={announcer.profileImage}
@@ -266,18 +288,22 @@ export default function SummaryStep({
               className="object-cover"
             />
           ) : (
-            <div className="w-full h-full bg-primary/10 flex items-center justify-center">
-              <span className="text-primary font-semibold text-lg">
-                {announcer.firstName.charAt(0)}
-              </span>
+            <div
+              className="w-full h-full flex items-center justify-center text-[15px] font-semibold"
+              style={{ background: "#f5f9f6", color: "#1f3a33" }}
+            >
+              {announcer.firstName.charAt(0)}
             </div>
           )}
         </div>
         <div className="min-w-0">
-          <p className="font-semibold text-foreground truncate">
+          <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484]">
+            Pet-sitter
+          </div>
+          <p className="text-[14px] font-semibold text-[#1f1f1d] tracking-[-0.01em] truncate m-0">
             {announcer.firstName} {announcer.lastName?.charAt(0)}.
           </p>
-          <p className="text-sm text-text-light flex items-center gap-1 truncate">
+          <p className="text-[11px] text-[#6d6d68] flex items-center gap-1 truncate mt-0.5">
             <MapPin className="w-3 h-3 flex-shrink-0" />
             {announcer.city && announcer.postalCode
               ? `${announcer.postalCode} ${announcer.city}`
@@ -286,79 +312,93 @@ export default function SummaryStep({
         </div>
       </div>
 
-      {/* Service Details */}
-      <div className="space-y-3 mb-4">
-        <div className="flex justify-between text-sm">
-          <span className="text-text-light">Service</span>
-          <span className="font-medium text-foreground">
-            {selectedService.categoryIcon} {selectedService.categoryName}
-          </span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-text-light">Prestation</span>
-          <span className="font-medium text-foreground flex items-center gap-2">
-            {selectedVariant.name}
-            {isCollective && (
-              <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full">
-                Collectif
+      {/* Section Prestation */}
+      <SectionCard
+        eyebrow="Prestation"
+        title={selectedVariant.name}
+        badge={
+          isCollective
+            ? { label: "Collectif", tone: "purple" }
+            : isMultiSession
+              ? { label: `${numberOfSessions} séances`, tone: "primary" }
+              : null
+        }
+      >
+        <SummaryRow
+          label="Catégorie"
+          value={
+            <span className="inline-flex items-center gap-1.5">
+              <span>{selectedService.categoryIcon}</span>
+              <span>{selectedService.categoryName}</span>
+            </span>
+          }
+        />
+
+        {/* Lieu : chez l'annonceur */}
+        {serviceLocation === "announcer_home" && (
+          <SummaryRow
+            label="Lieu de prestation"
+            value={
+              <span className="inline-flex items-center gap-1">
+                <Home className="w-3 h-3" style={{ color: "#9c9484" }} />
+                {getLocationLabel()}
               </span>
-            )}
-            {isMultiSession && !isCollective && (
-              <span className="px-1.5 py-0.5 bg-primary/10 text-primary text-xs rounded-full">
-                {numberOfSessions} séances
-              </span>
-            )}
-          </span>
-        </div>
-        {/* Section Adresse de la prestation */}
-        {serviceLocation === "client_home" && sessionToken && onAddressSelect && (
-          <AddressSection
-            sessionToken={sessionToken}
-            serviceLocation={serviceLocation}
-            announcerLocation={announcer.location}
-            selectedAddressId={selectedAddressId}
-            onAddressSelect={onAddressSelect}
+            }
           />
         )}
+      </SectionCard>
 
-        {/* Adresse guest pour utilisateurs non connectés */}
-        {serviceLocation === "client_home" && !sessionToken && onGuestAddressChange && (
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-text-light">Lieu de prestation</span>
-              <span className="font-medium text-foreground flex items-center gap-1">
-                <Home className="w-3 h-3" />
-                À votre domicile
-              </span>
-            </div>
+      {/* Section Adresse — utilisateur connecté */}
+      {serviceLocation === "client_home" && sessionToken && onAddressSelect && (
+        <div className="mt-3">
+          <SectionCard eyebrow="Adresse de prestation" title="À votre domicile">
+            <AddressSection
+              sessionToken={sessionToken}
+              serviceLocation={serviceLocation}
+              announcerLocation={announcer.location}
+              selectedAddressId={selectedAddressId}
+              onAddressSelect={onAddressSelect}
+            />
+          </SectionCard>
+        </div>
+      )}
+
+      {/* Section Adresse — utilisateur invité */}
+      {serviceLocation === "client_home" && !sessionToken && onGuestAddressChange && (
+        <div className="mt-3">
+          <SectionCard eyebrow="Adresse de prestation" title="À votre domicile">
             {guestAddress?.address ? (
-              <div className="p-3 bg-green-50 border border-green-200 rounded-xl">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-start gap-2">
-                    <MapPin className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium text-green-800">
-                        Adresse de la prestation
+              <div
+                className="p-3 flex items-start justify-between gap-2"
+                style={{ borderRadius: 10, background: "#f5f9f6", border: "1px solid #cfdbd3" }}
+              >
+                <div className="flex items-start gap-2 min-w-0">
+                  <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: "#1f3a33" }} />
+                  <div className="min-w-0">
+                    <p className="text-[12px] font-semibold text-[#1f3a33] tracking-[-0.01em]">
+                      Adresse confirmée
+                    </p>
+                    <p className="text-[12px] text-[#3a3a38] mt-0.5 truncate">
+                      {guestAddress.address}
+                    </p>
+                    {(guestAddress.city || guestAddress.postalCode) && (
+                      <p className="text-[11px] text-[#6d6d68] mt-0.5">
+                        {guestAddress.postalCode}
+                        {guestAddress.postalCode && guestAddress.city ? " " : ""}
+                        {guestAddress.city}
                       </p>
-                      <p className="text-sm text-green-700 mt-1">
-                        {guestAddress.address}
-                      </p>
-                      {(guestAddress.city || guestAddress.postalCode) && (
-                        <p className="text-sm text-green-600">
-                          {guestAddress.postalCode}{guestAddress.postalCode && guestAddress.city ? " " : ""}{guestAddress.city}
-                        </p>
-                      )}
-                    </div>
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => onGuestAddressChange(null)}
-                    className="p-1.5 text-green-600 hover:bg-green-100 rounded-lg transition-colors"
-                    title="Modifier l'adresse"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => onGuestAddressChange(null)}
+                  className="p-1.5 rounded-lg transition-colors hover:bg-white flex-shrink-0"
+                  style={{ color: "#1f3a33" }}
+                  title="Modifier l'adresse"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                </button>
               </div>
             ) : (
               <GuestAddressSelector
@@ -367,176 +407,151 @@ export default function SummaryStep({
                 onAddressChange={onGuestAddressChange}
               />
             )}
-          </div>
-        )}
+          </SectionCard>
+        </div>
+      )}
 
-        {/* Lieu chez l'annonceur */}
-        {serviceLocation === "announcer_home" && (
-          <div className="flex justify-between text-sm">
-            <span className="text-text-light">Lieu</span>
-            <span className="font-medium text-foreground flex items-center gap-1">
-              <MapPin className="w-3 h-3" />
-              {getLocationLabel()}
-            </span>
-          </div>
-        )}
-
-        {/* Affichage des dates selon le type de formule */}
+      {/* Section Dates / Créneaux */}
+      <div className="mt-3">
         {isCollective ? (
-          // Formule collective: liste numérotée des créneaux
-          <div className="p-3 bg-purple-50 rounded-xl">
-            <div className="flex items-center gap-2 mb-2">
-              <CalendarCheck className="w-4 h-4 text-purple-600" />
-              <span className="text-sm font-medium text-purple-800">
-                {collectiveSlots.length > 0
-                  ? `${collectiveSlots.length} créneau${collectiveSlots.length > 1 ? "x" : ""} sélectionné${collectiveSlots.length > 1 ? "s" : ""}`
-                  : "Séances collectives"
-                }
-              </span>
-            </div>
+          <SectionCard
+            eyebrow="Créneaux collectifs"
+            title={
+              collectiveSlots.length > 0
+                ? `${collectiveSlots.length} créneau${collectiveSlots.length > 1 ? "x" : ""} sélectionné${collectiveSlots.length > 1 ? "s" : ""}`
+                : "Séances collectives"
+            }
+            icon={<CalendarCheck className="w-3.5 h-3.5" />}
+          >
             {collectiveSlots.length > 0 ? (
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 {collectiveSlots
                   .sort((a, b) => a.date.localeCompare(b.date))
                   .map((slot, index) => (
-                  <div
-                    key={slot._id}
-                    className="flex items-center gap-2 text-sm"
-                  >
-                    <span className="w-5 h-5 rounded-full bg-purple-200 text-purple-700 text-xs flex items-center justify-center font-semibold">
-                      {index + 1}
-                    </span>
-                    <span className="text-gray-700 capitalize">
-                      {formatDate(slot.date)}
-                    </span>
-                    <span className="text-gray-500">•</span>
-                    <span className="text-purple-700 font-medium">
-                      {slot.startTime} - {slot.endTime}
-                    </span>
-                  </div>
-                ))}
+                    <SessionPill
+                      key={slot._id}
+                      index={index + 1}
+                      date={formatDate(slot.date)}
+                      time={`${slot.startTime} – ${slot.endTime}`}
+                    />
+                  ))}
               </div>
             ) : (
-              <p className="text-sm text-purple-600/70 animate-pulse">
+              <p className="text-[12px] text-[#9c9484] animate-pulse">
                 Chargement des créneaux...
               </p>
             )}
             {effectiveAnimalCount > 1 && (
-              <div className="mt-2 pt-2 border-t border-purple-200 flex items-center gap-2">
-                <Users className="w-4 h-4 text-purple-600" />
-                <span className="text-sm text-purple-700">
+              <div
+                className="flex items-center gap-2 mt-2 pt-2"
+                style={{ borderTop: "1px solid #f1ede3" }}
+              >
+                <Users className="w-3.5 h-3.5" style={{ color: "#9c9484" }} />
+                <span className="text-[11px] text-[#6d6d68]">
                   {effectiveAnimalCount} animal{effectiveAnimalCount > 1 ? "aux" : ""}
                 </span>
               </div>
             )}
-          </div>
+          </SectionCard>
         ) : isMultiSession ? (
-          // Formule multi-séances: liste numérotée des séances
-          <div className="p-3 bg-primary/5 rounded-xl">
-            <div className="flex items-center gap-2 mb-2">
-              <CalendarCheck className="w-4 h-4 text-primary" />
-              <span className="text-sm font-medium text-foreground">
-                {selectedSessions.length > 0
-                  ? `Séances planifiées (${selectedSessions.length}/${numberOfSessions})`
-                  : `${numberOfSessions} séance${numberOfSessions > 1 ? "s" : ""} à planifier`
-                }
-              </span>
-            </div>
+          <SectionCard
+            eyebrow="Séances planifiées"
+            title={
+              selectedSessions.length > 0
+                ? `${selectedSessions.length} sur ${numberOfSessions} séance${numberOfSessions > 1 ? "s" : ""}`
+                : `${numberOfSessions} séance${numberOfSessions > 1 ? "s" : ""} à planifier`
+            }
+            icon={<CalendarCheck className="w-3.5 h-3.5" />}
+          >
             {selectedSessions.length > 0 ? (
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 {selectedSessions
                   .sort((a, b) => a.date.localeCompare(b.date))
                   .map((session, index) => (
-                  <div
-                    key={`${session.date}-${session.startTime}`}
-                    className="flex items-center gap-2 text-sm"
-                  >
-                    <span className="w-5 h-5 rounded-full bg-primary/20 text-primary text-xs flex items-center justify-center font-semibold">
-                      {index + 1}
-                    </span>
-                    <span className="text-gray-700 capitalize">
-                      {formatDate(session.date)}
-                    </span>
-                    <span className="text-gray-500">•</span>
-                    <span className="text-primary font-medium">
-                      {session.startTime} - {session.endTime}
-                    </span>
-                  </div>
-                ))}
+                    <SessionPill
+                      key={`${session.date}-${session.startTime}`}
+                      index={index + 1}
+                      date={formatDate(session.date)}
+                      time={`${session.startTime} – ${session.endTime}`}
+                    />
+                  ))}
               </div>
             ) : (
-              <p className="text-sm text-primary/70 animate-pulse">
+              <p className="text-[12px] text-[#9c9484] animate-pulse">
                 Chargement des séances...
               </p>
             )}
-          </div>
+          </SectionCard>
         ) : (
-          // Formule uni-séance: affichage classique
-          <div className="text-sm">
-            <span className="text-text-light block mb-1">Date et horaire</span>
-            <div className="font-medium text-foreground">
+          <SectionCard
+            eyebrow="Date et horaires"
+            title={
+              isMultiDay && selectedTime && selectedEndTime
+                ? `${formatDate(selectedDate)} → ${formatDate(selectedEndDate!)}`
+                : selectedTime && selectedEndTime
+                  ? formatDate(selectedDate)
+                  : selectedTime
+                    ? formatDate(selectedDate)
+                    : isMultiDay
+                      ? `${formatDate(selectedDate)} → ${formatDate(selectedEndDate!)}`
+                      : formatDate(selectedDate)
+            }
+            icon={<CalendarCheck className="w-3.5 h-3.5" />}
+          >
+            <div className="text-[12.5px] text-[#3a3a38] capitalize">
               {isMultiDay && selectedTime && selectedEndTime ? (
-                // Multi-jours avec heures
-                <span>
-                  Du {formatDate(selectedDate)} à {formatTime(selectedTime)} jusqu&apos;au {formatDate(selectedEndDate)} à {formatTime(selectedEndTime)}
-                </span>
+                <>
+                  Du <strong className="text-[#1f1f1d]">{formatDate(selectedDate)}</strong> à{" "}
+                  <strong className="text-[#1f1f1d]">{formatTime(selectedTime)}</strong>
+                  <br />
+                  jusqu&apos;au <strong className="text-[#1f1f1d]">{formatDate(selectedEndDate!)}</strong> à{" "}
+                  <strong className="text-[#1f1f1d]">{formatTime(selectedEndTime)}</strong>
+                </>
               ) : selectedTime && selectedEndTime ? (
-                // Même jour avec plage horaire
-                <span>
-                  {formatDate(selectedDate)} de {formatTime(selectedTime)} à {formatTime(selectedEndTime)}
-                </span>
+                <>
+                  De <strong className="text-[#1f1f1d]">{formatTime(selectedTime)}</strong> à{" "}
+                  <strong className="text-[#1f1f1d]">{formatTime(selectedEndTime)}</strong>
+                </>
               ) : selectedTime ? (
-                // Même jour avec heure de début seulement
-                <span>
-                  {formatDate(selectedDate)} à {formatTime(selectedTime)}
-                </span>
-              ) : isMultiDay ? (
-                // Multi-jours sans heures
-                <span>
-                  Du {formatDate(selectedDate)} au {formatDate(selectedEndDate)}
-                </span>
-              ) : (
-                // Date simple
-                <span>{formatDate(selectedDate)}</span>
-              )}
+                <>
+                  À <strong className="text-[#1f1f1d]">{formatTime(selectedTime)}</strong>
+                </>
+              ) : null}
             </div>
+
             {/* Durée */}
             {(days >= 1 || totalHours > 0) && (
-              <div className="flex items-center gap-1 mt-1.5 text-xs text-text-light">
+              <div
+                className="flex items-center gap-1.5 mt-2 pt-2 text-[11px]"
+                style={{ borderTop: "1px solid #f1ede3", color: "#6d6d68" }}
+              >
                 <Clock className="w-3 h-3" />
                 <span>
                   {(() => {
-                    // Si on a des infos de facturation avec demi-journées
-                    const isHalfDayBilling = billingInfo?.billingUnit === "half_day" || billingInfo?.billingUnit === "day" ||
-                      billingInfo?.firstDayIsHalfDay || billingInfo?.lastDayIsHalfDay ||
+                    const isHalfDayBilling =
+                      billingInfo?.billingUnit === "half_day" ||
+                      billingInfo?.billingUnit === "day" ||
+                      billingInfo?.firstDayIsHalfDay ||
+                      billingInfo?.lastDayIsHalfDay ||
                       clientBillingMode === "round_half_day";
 
                     if (isHalfDayBilling && billingInfo) {
                       const fullDays = billingInfo.fullDays ?? 0;
                       const halfDays = billingInfo.halfDays ?? 0;
-
                       const parts: string[] = [];
-                      if (fullDays > 0) {
-                        parts.push(`${fullDays} journée${fullDays > 1 ? "s" : ""}`);
-                      }
-                      if (halfDays > 0) {
-                        parts.push(`${halfDays} demi-journée${halfDays > 1 ? "s" : ""}`);
-                      }
-
+                      if (fullDays > 0) parts.push(`${fullDays} journée${fullDays > 1 ? "s" : ""}`);
+                      if (halfDays > 0) parts.push(`${halfDays} demi-journée${halfDays > 1 ? "s" : ""}`);
                       const durationStr = parts.length > 0 ? parts.join(" + ") : `${days} jour${days > 1 ? "s" : ""}`;
-
-                      // Ajouter les nuits si applicable
                       if (includeOvernightStay && priceBreakdown.nights > 0) {
-                        return `${durationStr} • ${priceBreakdown.nights} nuit${priceBreakdown.nights > 1 ? "s" : ""}`;
+                        return `${durationStr} · ${priceBreakdown.nights} nuit${priceBreakdown.nights > 1 ? "s" : ""}`;
                       }
                       return durationStr;
                     }
 
-                    // Affichage par défaut
                     if (days > 1) {
                       let result = `${days} jour${days > 1 ? "s" : ""}`;
                       if (includeOvernightStay && priceBreakdown.nights > 0) {
-                        result += ` • ${priceBreakdown.nights} nuit${priceBreakdown.nights > 1 ? "s" : ""}`;
+                        result += ` · ${priceBreakdown.nights} nuit${priceBreakdown.nights > 1 ? "s" : ""}`;
                       }
                       return result;
                     } else if (totalHours > 0) {
@@ -547,24 +562,21 @@ export default function SummaryStep({
                 </span>
               </div>
             )}
-          </div>
+          </SectionCard>
         )}
+      </div>
 
-        {/* Section Animaux - visible si des animaux sont sélectionnés */}
-        {selectedAnimals.length > 0 && (
-          <div className="p-3 bg-amber-50 rounded-xl mt-3">
-            <div className="flex items-center gap-2 mb-2">
-              <PawPrint className="w-4 h-4 text-amber-600" />
-              <span className="text-sm font-medium text-amber-800">
-                {selectedAnimals.length > 1 ? "Animaux concernés" : "Animal concerné"}
-              </span>
-            </div>
+      {/* Section Animaux — utilisateurs connectés */}
+      {selectedAnimals.length > 0 && (
+        <div className="mt-3">
+          <SectionCard
+            eyebrow={selectedAnimals.length > 1 ? "Animaux concernés" : "Animal concerné"}
+            title={`${selectedAnimals.length} ${selectedAnimals.length > 1 ? "animaux" : "animal"}`}
+            icon={<PawPrint className="w-3.5 h-3.5" />}
+          >
             <div className="space-y-2">
               {selectedAnimals.map((animal) => (
-                <div
-                  key={animal.id}
-                  className="flex items-center gap-3"
-                >
+                <div key={animal.id} className="flex items-center gap-2.5">
                   {animal.primaryPhotoUrl ? (
                     <Image
                       src={animal.primaryPhotoUrl}
@@ -572,304 +584,305 @@ export default function SummaryStep({
                       width={32}
                       height={32}
                       className="rounded-full object-cover"
+                      style={{ border: "1px solid #ece9e1" }}
                     />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-amber-200 flex items-center justify-center text-amber-700 text-sm">
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-[13px]"
+                      style={{ background: "#f5f9f6", color: "#1f3a33", border: "1px solid #cfdbd3" }}
+                    >
                       {animal.emoji || animal.name.charAt(0).toUpperCase()}
                     </div>
                   )}
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{animal.name}</p>
-                    <p className="text-xs text-text-light">
-                      {animal.type}{animal.breed ? ` - ${animal.breed}` : ""}
+                  <div className="min-w-0">
+                    <p className="text-[12.5px] font-semibold text-[#1f1f1d] tracking-[-0.01em] truncate">
+                      {animal.name}
+                    </p>
+                    <p className="text-[10.5px] text-[#9c9484] truncate">
+                      {animal.type}
+                      {animal.breed ? ` · ${animal.breed}` : ""}
                     </p>
                   </div>
                 </div>
               ))}
             </div>
             {selectedAnimals.length > 1 && (
-              <p className="text-xs text-amber-600 mt-2 pt-2 border-t border-amber-200">
+              <p
+                className="text-[10.5px] mt-2 pt-2 italic"
+                style={{ borderTop: "1px solid #f1ede3", color: "#9c9484" }}
+              >
                 Le prix est ajusté pour {selectedAnimals.length} animaux
               </p>
             )}
-          </div>
-        )}
+          </SectionCard>
+        </div>
+      )}
 
-        {/* Section Animaux - utilisateurs invités (non connectés) */}
-        {!sessionToken && guestDogData && (
-          <div className="p-3 bg-amber-50 rounded-xl mt-3">
-            <div className="flex items-center gap-2 mb-2">
-              <PawPrint className="w-4 h-4 text-amber-600" />
-              <span className="text-sm font-medium text-amber-800">
-                Votre chien
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-amber-200 flex items-center justify-center text-amber-700 text-lg">
-                🐕
-              </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">
-                  {/* Affichage de la race */}
-                  {guestDogData.isMixedBreed
-                    ? guestDogData.dominantBreed
-                      ? `Croisé ${guestDogData.dominantBreed}`
-                      : "Croisé"
-                    : guestDogData.breed || "Race non spécifiée"}
-                </p>
-                <p className="text-xs text-text-light">
-                  {guestDogData.size === "small" && "Petit chien (< 10 kg)"}
-                  {guestDogData.size === "medium" && "Chien moyen (10-25 kg)"}
-                  {guestDogData.size === "large" && "Grand chien (> 25 kg)"}
-                  {guestDogData.isMixedBreed && guestDogData.weight && ` • ${guestDogData.weight} kg`}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Section Animaux — invité */}
+      {!sessionToken && guestDogData && (
+        <div className="mt-3">
+          <SectionCard
+            eyebrow="Votre chien"
+            title={
+              guestDogData.isMixedBreed
+                ? guestDogData.dominantBreed
+                  ? `Croisé ${guestDogData.dominantBreed}`
+                  : "Croisé"
+                : guestDogData.breed || "Race non spécifiée"
+            }
+            icon={<PawPrint className="w-3.5 h-3.5" />}
+          >
+            <p className="text-[11.5px] text-[#6d6d68]">
+              {guestDogData.size === "small" && "Petit chien (< 10 kg)"}
+              {guestDogData.size === "medium" && "Chien moyen (10–25 kg)"}
+              {guestDogData.size === "large" && "Grand chien (> 25 kg)"}
+              {guestDogData.isMixedBreed && guestDogData.weight && ` · ${guestDogData.weight} kg`}
+            </p>
+          </SectionCard>
+        </div>
+      )}
 
-      {/* Price Breakdown - Mode Plan/Détaillé */}
-      <div className="border-t border-gray-200 pt-4 space-y-3">
-        {/* En-tête avec icône */}
-        <div className="flex items-center gap-2 mb-2">
-          <CreditCard className="w-4 h-4 text-gray-600" />
-          <span className="text-sm font-semibold text-foreground">Détail du prix</span>
+      {/* ─── DÉTAIL DU PRIX ──────────────────────────────────── */}
+      <div className="mt-5 pt-5" style={{ borderTop: "1px solid #f1ede3" }}>
+        <div className="mb-3 flex items-center gap-2">
+          <Receipt className="w-4 h-4" style={{ color: "#1f3a33" }} />
+          <div>
+            <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484]">
+              Détail du prix
+            </div>
+            <h4 className="text-[14px] font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+              Composition du tarif
+            </h4>
+          </div>
         </div>
 
-        {/* Formule de base - Prix HT (sans commission) */}
-        <div className={cn(
-          "rounded-xl p-4 space-y-3",
-          isCollective ? "bg-purple-50" : isMultiSession ? "bg-primary/5" : "bg-gray-50"
-        )}>
-          {/* Ligne formule */}
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <Package className={cn(
-                  "w-4 h-4",
-                  isCollective ? "text-purple-600" : isMultiSession ? "text-primary" : "text-gray-600"
-                )} />
-                <span className="font-medium text-foreground">
-                  Service : {selectedVariant.name}
-                </span>
-              </div>
-
-              {/* Détail du calcul selon le type - Prix HT */}
-              {isCollective ? (
-                // Formule collective: prix × créneaux × animaux
-                <p className="text-xs text-gray-500 ml-6">
-                  └ {formatPrice(selectedVariant.price)} × {actualSlotCount} créneau{actualSlotCount > 1 ? "x" : ""}
-                  {effectiveAnimalCount > 1 && ` × ${effectiveAnimalCount} animaux`}
-                </p>
-              ) : isMultiSession ? (
-                // Formule multi-séances: prix × séances × animaux
-                <p className="text-xs text-gray-500 ml-6">
-                  └ {formatPrice(selectedVariant.price)} × {numberOfSessions} séance{numberOfSessions > 1 ? "s" : ""}
-                  {effectiveAnimalCount > 1 && ` × ${effectiveAnimalCount} animaux`}
-                </p>
-              ) : (
-                // Formule uni-séance: détail avec jours/demi-journées
-                <div className="text-xs text-gray-500 ml-6 space-y-1">
-                  {(() => {
-                    // Récupérer les horaires de journée du service
-                    const dayStart = selectedService.dayStartTime || "08:00";
-                    const dayEnd = selectedService.dayEndTime || "18:00";
-                    const dailyRate = priceBreakdown.dailyRate;
-                    const halfDayRate = Math.round(dailyRate / 2);
-
-                    // Si on a des infos de facturation avec demi-journées
-                    const isHalfDayBilling = billingInfo?.billingUnit === "half_day" || billingInfo?.billingUnit === "day" ||
-                      billingInfo?.firstDayIsHalfDay || billingInfo?.lastDayIsHalfDay ||
-                      clientBillingMode === "round_half_day";
-
-                    if (isHalfDayBilling && billingInfo && days >= 1) {
-                      const fullDays = billingInfo.fullDays ?? 0;
-                      const halfDays = billingInfo.halfDays ?? 0;
-                      const firstDayIsHalf = billingInfo.firstDayIsHalfDay ?? false;
-                      const lastDayIsHalf = billingInfo.lastDayIsHalfDay ?? false;
-
-                      const lines: React.ReactNode[] = [];
-
-                      // Formater les horaires pour affichage
-                      const dayStartDisplay = dayStart.replace(":", "h");
-                      const dayEndDisplay = dayEnd.replace(":", "h");
-
-                      if (days === 1) {
-                        // Un seul jour
-                        const startDisplay = selectedTime ? formatTime(selectedTime) : dayStartDisplay;
-                        const endDisplay = selectedEndTime ? formatTime(selectedEndTime) : dayEndDisplay;
-                        if (firstDayIsHalf || halfDays === 1) {
-                          lines.push(
-                            <div key="single" className="flex justify-between">
-                              <span>└ Demi-journée ({startDisplay} → {endDisplay})</span>
-                              <span>{formatPrice(halfDayRate)}</span>
-                            </div>
-                          );
-                        } else {
-                          lines.push(
-                            <div key="single" className="flex justify-between">
-                              <span>└ Journée complète ({startDisplay} → {endDisplay})</span>
-                              <span>{formatPrice(dailyRate)}</span>
-                            </div>
-                          );
-                        }
-                      } else {
-                        // Multi-jours : afficher le détail
-                        // Premier jour
-                        const startDisplay = selectedTime ? formatTime(selectedTime) : dayStartDisplay;
-                        if (firstDayIsHalf) {
-                          lines.push(
-                            <div key="first" className="flex justify-between">
-                              <span>└ 1er jour : demi-journée ({startDisplay} → {dayEndDisplay})</span>
-                              <span>{formatPrice(halfDayRate)}</span>
-                            </div>
-                          );
-                        } else {
-                          lines.push(
-                            <div key="first" className="flex justify-between">
-                              <span>└ 1er jour : journée ({startDisplay} → {dayEndDisplay})</span>
-                              <span>{formatPrice(dailyRate)}</span>
-                            </div>
-                          );
-                        }
-
-                        // Jours intermédiaires (si plus de 2 jours)
-                        if (days > 2) {
-                          const middleDays = days - 2; // tous les jours sauf premier et dernier
-                          if (middleDays > 0) {
-                            lines.push(
-                              <div key="middle" className="flex justify-between">
-                                <span>└ {middleDays} jour{middleDays > 1 ? "s" : ""} complet{middleDays > 1 ? "s" : ""} ({dayStartDisplay} → {dayEndDisplay})</span>
-                                <span>{formatPrice(dailyRate * middleDays)}</span>
-                              </div>
-                            );
-                          }
-                        }
-
-                        // Dernier jour
-                        const endDisplay = selectedEndTime ? formatTime(selectedEndTime) : dayEndDisplay;
-                        if (lastDayIsHalf) {
-                          lines.push(
-                            <div key="last" className="flex justify-between">
-                              <span>└ Dernier jour : demi-journée ({dayStartDisplay} → {endDisplay})</span>
-                              <span>{formatPrice(halfDayRate)}</span>
-                            </div>
-                          );
-                        } else {
-                          lines.push(
-                            <div key="last" className="flex justify-between">
-                              <span>└ Dernier jour : journée ({dayStartDisplay} → {endDisplay})</span>
-                              <span>{formatPrice(dailyRate)}</span>
-                            </div>
-                          );
-                        }
-                      }
-
-                      // Ligne récap avec totaux
-                      lines.push(
-                        <div key="recap" className="flex justify-between pt-1 border-t border-gray-200/50 mt-1 font-medium text-gray-600">
-                          <span>
-                            {fullDays > 0 && `${fullDays} journée${fullDays > 1 ? "s" : ""} × ${formatPrice(dailyRate)}`}
-                            {fullDays > 0 && halfDays > 0 && " + "}
-                            {halfDays > 0 && `${halfDays} demi-journée${halfDays > 1 ? "s" : ""} × ${formatPrice(halfDayRate)}`}
-                          </span>
-                        </div>
-                      );
-
-                      return lines;
-                    }
-
-                    // Affichage par défaut (facturation horaire ou jours simples)
-                    if (days > 1) {
-                      return (
-                        <div className="flex justify-between">
-                          <span>└ {days} jours × {formatPrice(dailyRate)}/jour</span>
-                          <span>{formatPrice(dailyRate * days)}</span>
-                        </div>
-                      );
-                    } else if (priceBreakdown.firstDayHours > 0) {
-                      return (
-                        <div className="flex justify-between">
-                          <span>└ {formatHours(priceBreakdown.firstDayHours)} × {formatPrice(priceBreakdown.hourlyRate)}/h</span>
-                          <span>{formatPrice(priceBreakdown.firstDayAmount)}</span>
-                        </div>
-                      );
-                    }
-                    return (
-                      <div className="flex justify-between">
-                        <span>└ Prestation</span>
-                        <span>{formatPrice(priceBreakdown.firstDayAmount)}</span>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
+        {/* Carte service */}
+        <div
+          className="p-3 mb-2"
+          style={{ borderRadius: 12, background: "#fcfaf4", border: "1px solid #f1ede3" }}
+        >
+          <div className="flex items-start justify-between gap-3 mb-1.5">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Package className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#1f3a33" }} />
+              <span className="text-[12.5px] font-semibold text-[#1f1f1d] tracking-[-0.01em] truncate">
+                {selectedVariant.name}
+              </span>
             </div>
-            <span className={cn(
-              "font-bold text-lg",
-              isCollective ? "text-purple-700" : isMultiSession ? "text-primary" : "text-foreground"
-            )}>
-              {isCollective ? (
-                formatPrice(Math.round(selectedVariant.price * actualSlotCount * effectiveAnimalCount))
-              ) : isMultiSession ? (
-                formatPrice(Math.round(selectedVariant.price * numberOfSessions * effectiveAnimalCount))
-              ) : (
-                formatPrice((priceBreakdown.firstDayAmount + priceBreakdown.fullDaysAmount + priceBreakdown.lastDayAmount) * effectiveAnimalCount)
-              )}
+            <span className="text-[14px] font-bold text-[#1f1f1d] tracking-[-0.01em] flex-shrink-0">
+              {isCollective
+                ? formatPrice(Math.round(selectedVariant.price * actualSlotCount * effectiveAnimalCount))
+                : isMultiSession
+                  ? formatPrice(Math.round(selectedVariant.price * numberOfSessions * effectiveAnimalCount))
+                  : formatPrice(
+                      (priceBreakdown.firstDayAmount + priceBreakdown.fullDaysAmount + priceBreakdown.lastDayAmount) *
+                        effectiveAnimalCount
+                    )}
             </span>
           </div>
 
-          {/* Nuits (si applicable et pas formule collective/multi-session) - Prix HT */}
-          {!isCollective && !isMultiSession && includeOvernightStay && priceBreakdown.nights > 0 && (
-            <div className="flex items-start justify-between pt-2 border-t border-gray-200/50">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <Moon className="w-4 h-4 text-indigo-600" />
-                  <span className="font-medium text-indigo-800">Nuits</span>
-                </div>
-                <p className="text-xs text-indigo-600 ml-6">
-                  └ {priceBreakdown.nights} nuit{priceBreakdown.nights > 1 ? "s" : ""} × {formatPrice(priceBreakdown.nightlyRate)}/nuit
-                  {effectiveAnimalCount > 1 && ` × ${effectiveAnimalCount} animaux`}
-                </p>
-              </div>
-              <span className="font-medium text-indigo-700">
-                +{formatPrice(priceBreakdown.nightsAmount * effectiveAnimalCount)}
-              </span>
+          {/* Détail du calcul */}
+          {isCollective ? (
+            <p className="text-[11px] text-[#6d6d68]">
+              {formatPrice(selectedVariant.price)} × {actualSlotCount} créneau
+              {actualSlotCount > 1 ? "x" : ""}
+              {effectiveAnimalCount > 1 && ` × ${effectiveAnimalCount} animaux`}
+            </p>
+          ) : isMultiSession ? (
+            <p className="text-[11px] text-[#6d6d68]">
+              {formatPrice(selectedVariant.price)} × {numberOfSessions} séance
+              {numberOfSessions > 1 ? "s" : ""}
+              {effectiveAnimalCount > 1 && ` × ${effectiveAnimalCount} animaux`}
+            </p>
+          ) : (
+            <div className="text-[11px] text-[#6d6d68] space-y-0.5">
+              {(() => {
+                const dayStart = selectedService.dayStartTime || "08:00";
+                const dayEnd = selectedService.dayEndTime || "18:00";
+                const dailyRate = priceBreakdown.dailyRate;
+                const halfDayRate = Math.round(dailyRate / 2);
+
+                const isHalfDayBilling =
+                  billingInfo?.billingUnit === "half_day" ||
+                  billingInfo?.billingUnit === "day" ||
+                  billingInfo?.firstDayIsHalfDay ||
+                  billingInfo?.lastDayIsHalfDay ||
+                  clientBillingMode === "round_half_day";
+
+                if (isHalfDayBilling && billingInfo && days >= 1) {
+                  const fullDays = billingInfo.fullDays ?? 0;
+                  const halfDays = billingInfo.halfDays ?? 0;
+                  const firstDayIsHalf = billingInfo.firstDayIsHalfDay ?? false;
+                  const lastDayIsHalf = billingInfo.lastDayIsHalfDay ?? false;
+                  const lines: React.ReactNode[] = [];
+                  const dayStartDisplay = dayStart.replace(":", "h");
+                  const dayEndDisplay = dayEnd.replace(":", "h");
+
+                  if (days === 1) {
+                    const startDisplay = selectedTime ? formatTime(selectedTime) : dayStartDisplay;
+                    const endDisplay = selectedEndTime ? formatTime(selectedEndTime) : dayEndDisplay;
+                    if (firstDayIsHalf || halfDays === 1) {
+                      lines.push(
+                        <BreakdownLine
+                          key="single"
+                          label={`Demi-journée (${startDisplay} → ${endDisplay})`}
+                          value={formatPrice(halfDayRate)}
+                        />
+                      );
+                    } else {
+                      lines.push(
+                        <BreakdownLine
+                          key="single"
+                          label={`Journée complète (${startDisplay} → ${endDisplay})`}
+                          value={formatPrice(dailyRate)}
+                        />
+                      );
+                    }
+                  } else {
+                    const startDisplay = selectedTime ? formatTime(selectedTime) : dayStartDisplay;
+                    if (firstDayIsHalf) {
+                      lines.push(
+                        <BreakdownLine
+                          key="first"
+                          label={`1er jour : demi-journée (${startDisplay} → ${dayEndDisplay})`}
+                          value={formatPrice(halfDayRate)}
+                        />
+                      );
+                    } else {
+                      lines.push(
+                        <BreakdownLine
+                          key="first"
+                          label={`1er jour : journée (${startDisplay} → ${dayEndDisplay})`}
+                          value={formatPrice(dailyRate)}
+                        />
+                      );
+                    }
+
+                    if (days > 2) {
+                      const middleDays = days - 2;
+                      if (middleDays > 0) {
+                        lines.push(
+                          <BreakdownLine
+                            key="middle"
+                            label={`${middleDays} jour${middleDays > 1 ? "s" : ""} complet${middleDays > 1 ? "s" : ""} (${dayStartDisplay} → ${dayEndDisplay})`}
+                            value={formatPrice(dailyRate * middleDays)}
+                          />
+                        );
+                      }
+                    }
+
+                    const endDisplay = selectedEndTime ? formatTime(selectedEndTime) : dayEndDisplay;
+                    if (lastDayIsHalf) {
+                      lines.push(
+                        <BreakdownLine
+                          key="last"
+                          label={`Dernier jour : demi-journée (${dayStartDisplay} → ${endDisplay})`}
+                          value={formatPrice(halfDayRate)}
+                        />
+                      );
+                    } else {
+                      lines.push(
+                        <BreakdownLine
+                          key="last"
+                          label={`Dernier jour : journée (${dayStartDisplay} → ${endDisplay})`}
+                          value={formatPrice(dailyRate)}
+                        />
+                      );
+                    }
+                  }
+
+                  return lines;
+                }
+
+                if (days > 1 && dailyRate > 0) {
+                  return (
+                    <BreakdownLine
+                      label={`${days} jours × ${formatPrice(dailyRate)}/jour`}
+                      value={formatPrice(dailyRate * days)}
+                    />
+                  );
+                } else if (priceBreakdown.firstDayHours > 0 && priceBreakdown.hourlyRate > 0) {
+                  return (
+                    <BreakdownLine
+                      label={`${formatHours(priceBreakdown.firstDayHours)} × ${formatPrice(priceBreakdown.hourlyRate)}/h`}
+                      value={formatPrice(priceBreakdown.firstDayAmount)}
+                    />
+                  );
+                }
+                // Fallback : tarif forfaitaire (pas de calcul horaire/journalier valide)
+                const totalAmount =
+                  priceBreakdown.firstDayAmount + priceBreakdown.fullDaysAmount + priceBreakdown.lastDayAmount;
+                if (priceBreakdown.firstDayHours > 0) {
+                  return (
+                    <BreakdownLine
+                      label={`Prestation forfaitaire (${formatHours(priceBreakdown.firstDayHours)})`}
+                      value={formatPrice(totalAmount)}
+                    />
+                  );
+                }
+                return <BreakdownLine label="Prestation forfaitaire" value={formatPrice(totalAmount)} />;
+              })()}
             </div>
           )}
         </div>
 
-        {/* Options - Prix HT */}
-        {selectedOptionIds.length > 0 && (
-          <div className="bg-secondary/5 rounded-xl p-4 space-y-2">
-            <div className="flex items-center gap-2 mb-2">
-              <Plus className="w-4 h-4 text-secondary" />
-              <span className="font-medium text-foreground">Options</span>
+        {/* Nuits */}
+        {!isCollective && !isMultiSession && includeOvernightStay && priceBreakdown.nights > 0 && (
+          <div
+            className="p-3 mb-2 flex items-center justify-between gap-3"
+            style={{ borderRadius: 12, background: "#fcfaf4", border: "1px solid #f1ede3" }}
+          >
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Moon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#1f3a33" }} />
+              <div className="min-w-0">
+                <p className="text-[12.5px] font-semibold text-[#1f1f1d] tracking-[-0.01em]">
+                  Garde de nuit
+                </p>
+                <p className="text-[11px] text-[#6d6d68]">
+                  {priceBreakdown.nights} nuit{priceBreakdown.nights > 1 ? "s" : ""} × {formatPrice(priceBreakdown.nightlyRate)}/nuit
+                  {effectiveAnimalCount > 1 && ` × ${effectiveAnimalCount} animaux`}
+                </p>
+              </div>
             </div>
-            {selectedOptionIds.map((optId) => {
-              const opt = selectedService.options.find(
-                (o: ServiceOption) => o.id === optId
-              );
-              if (!opt) return null;
-              return (
-                <div
-                  key={optId}
-                  className="flex justify-between text-sm ml-6"
-                >
-                  <span className="text-gray-600">└ {opt.name}</span>
-                  <span className="font-medium text-secondary">+{formatPrice(opt.price)}</span>
-                </div>
-              );
-            })}
+            <span className="text-[13px] font-semibold text-[#1f1f1d] flex-shrink-0">
+              +{formatPrice(priceBreakdown.nightsAmount * effectiveAnimalCount)}
+            </span>
           </div>
         )}
 
-        {/* Prix annonceur HT + Commissions + Total */}
-        <div className="bg-gray-100 rounded-xl p-4 space-y-2">
-          {/* Prix annonceur avec détail HT/TTC + commissions */}
+        {/* Options */}
+        {selectedOptionIds.length > 0 && (
+          <div
+            className="p-3 mb-2"
+            style={{ borderRadius: 12, background: "#fcfaf4", border: "1px solid #f1ede3" }}
+          >
+            <div className="flex items-center gap-1.5 mb-2">
+              <Plus className="w-3.5 h-3.5" style={{ color: "#1f3a33" }} />
+              <span className="text-[12.5px] font-semibold text-[#1f1f1d] tracking-[-0.01em]">
+                Options additionnelles
+              </span>
+            </div>
+            <div className="space-y-0.5">
+              {selectedOptionIds.map((optId) => {
+                const opt = selectedService.options.find((o: ServiceOption) => o.id === optId);
+                if (!opt) return null;
+                return (
+                  <BreakdownLine
+                    key={optId}
+                    label={opt.name}
+                    value={`+${formatPrice(opt.price)}`}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Carte synthèse fiscale + total */}
+        <div
+          className="p-4"
+          style={{ borderRadius: 12, background: "#f5f9f6", border: "1px solid #cfdbd3" }}
+        >
           {(() => {
-            // Calcul du montant de la prestation
             const optionsAmount = selectedOptionIds.reduce((sum, optId) => {
               const opt = selectedService.options.find((o: ServiceOption) => o.id === optId);
               return sum + (opt?.price || 0);
@@ -881,103 +894,85 @@ export default function SummaryStep({
                 ? Math.round(selectedVariant.price * numberOfSessions * effectiveAnimalCount) + optionsAmount
                 : priceBreakdown.totalAmount * effectiveAnimalCount;
 
-            // Déterminer si l'annonceur est assujetti TVA
             const isVatSubject = announcerStatusType === "professionnel";
             const serviceVatRate = selectedVariant.isSapEligible ? 10 : 20;
 
-            // Calcul HT/TTC de la prestation
-            const serviceHT = isVatSubject
-              ? Math.round(serviceAmount / (1 + serviceVatRate / 100))
-              : serviceAmount;
-            const serviceTVA = isVatSubject
-              ? serviceAmount - serviceHT
-              : 0;
+            const serviceHT = isVatSubject ? Math.round(serviceAmount / (1 + serviceVatRate / 100)) : serviceAmount;
+            const serviceTVA = isVatSubject ? serviceAmount - serviceHT : 0;
 
-            // Commission plateforme
-            const platformCommission = Math.round(serviceAmount * commissionRate / 100);
-
-            // TVA sur commission
-            const vatOnCommission = Math.round(platformCommission * vatRate / 100);
-
-            // Frais de gestion de paiement
-            const paymentFees = Math.round(serviceAmount * stripeFeeRate / 100);
-
-            // Total final
+            const platformCommission = Math.round((serviceAmount * commissionRate) / 100);
+            const vatOnCommission = Math.round((platformCommission * vatRate) / 100);
+            const paymentFees = Math.round((serviceAmount * stripeFeeRate) / 100);
             const totalTTC = serviceAmount + platformCommission + vatOnCommission + paymentFees;
 
             return (
               <>
-                {/* Prix prestataire avec détail HT/TTC */}
                 {isVatSubject ? (
                   <>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Prix prestataire HT</span>
-                      <span className="font-medium text-foreground">
-                        {formatPrice(serviceHT)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm text-gray-500">
-                      <span>TVA prestation ({serviceVatRate}%)</span>
-                      <span>{formatPrice(serviceTVA)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600 font-medium">Prix prestataire TTC</span>
-                      <span className="font-semibold text-foreground">
-                        {formatPrice(serviceAmount)}
-                      </span>
-                    </div>
+                    <FiscalLine label="Prix prestataire HT" value={formatPrice(serviceHT)} />
+                    <FiscalLine label={`TVA prestation (${serviceVatRate} %)`} value={formatPrice(serviceTVA)} muted />
+                    <FiscalLine
+                      label="Prix prestataire TTC"
+                      value={formatPrice(serviceAmount)}
+                      strong
+                    />
                   </>
                 ) : (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Prix prestataire</span>
-                    <span className="font-medium text-foreground">
-                      {formatPrice(serviceAmount)}
+                  <FiscalLine label="Prix prestataire" value={formatPrice(serviceAmount)} />
+                )}
+
+                {announcerStatusType === "micro_entrepreneur" && (
+                  <p className="text-[10.5px] italic mt-1" style={{ color: "#6d6d68" }}>
+                    TVA non applicable (art. 293 B du CGI)
+                  </p>
+                )}
+
+                {selectedVariant.isSapEligible && (
+                  <div
+                    className="flex items-center gap-1.5 mt-2 px-2 py-1 inline-flex"
+                    style={{ borderRadius: 999, background: "#fff", border: "1px solid #cfdbd3" }}
+                  >
+                    <Check className="w-3 h-3" style={{ color: "#1f3a33" }} />
+                    <span className="text-[10.5px] font-medium" style={{ color: "#1f3a33" }}>
+                      TVA réduite SAP : 10 % au lieu de 20 %
                     </span>
                   </div>
                 )}
 
-                {/* Mention TVA pour micro-entrepreneurs */}
-                {announcerStatusType === "micro_entrepreneur" && (
-                  <div className="text-xs text-gray-500 italic">
-                    TVA non applicable (art. 293 B du CGI)
-                  </div>
-                )}
-
-                {/* Indicateur TVA réduite SAP */}
-                {selectedVariant.isSapEligible && (
-                  <div className="flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
-                    <span className="font-medium">TVA réduite SAP : 10%</span>
-                    <span className="text-green-600">au lieu de 20%</span>
-                  </div>
-                )}
-
-                {/* Commission plateforme */}
-                <div className="flex justify-between text-sm text-gray-500">
-                  <span>Commission plateforme ({commissionRate}%)</span>
-                  <span>+{formatPrice(platformCommission)}</span>
+                <div className="mt-2 pt-2 space-y-0.5" style={{ borderTop: "1px solid #cfdbd3" }}>
+                  <FiscalLine
+                    label={`Commission plateforme (${commissionRate} %)`}
+                    value={`+${formatPrice(platformCommission)}`}
+                    muted
+                  />
+                  {vatRate > 0 && (
+                    <FiscalLine
+                      label={`TVA sur commission (${vatRate} %)`}
+                      value={`+${formatPrice(vatOnCommission)}`}
+                      muted
+                    />
+                  )}
+                  <FiscalLine
+                    label={`Frais de paiement (${stripeFeeRate} %)`}
+                    value={`+${formatPrice(paymentFees)}`}
+                    muted
+                  />
                 </div>
-
-                {/* TVA sur commission — masquer si 0% */}
-                {vatRate > 0 && (
-                  <div className="flex justify-between text-sm text-gray-500">
-                    <span>TVA sur commission ({vatRate}%)</span>
-                    <span>+{formatPrice(vatOnCommission)}</span>
-                  </div>
-                )}
-
-                {/* Frais de gestion de paiement */}
-                <div className="flex justify-between text-sm text-gray-500">
-                  <span>Frais de paiement ({stripeFeeRate}%)</span>
-                  <span>+{formatPrice(paymentFees)}</span>
-                </div>
-
-                {/* Ligne de séparation */}
-                <div className="border-t-2 border-primary/20 my-2" />
 
                 {/* Total à payer */}
-                <div className="flex justify-between">
-                  <span className="font-bold text-lg text-foreground">Total à payer</span>
-                  <span className="font-bold text-xl text-primary">
+                <div
+                  className="mt-3 pt-3 flex items-baseline justify-between"
+                  style={{ borderTop: "2px solid #1f3a33" }}
+                >
+                  <div>
+                    <div className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "#1f3a33" }}>
+                      Total à payer
+                    </div>
+                    <p className="text-[10.5px]" style={{ color: "#6d6d68" }}>
+                      Tout compris, sans surprise
+                    </p>
+                  </div>
+                  <span className="text-[22px] font-bold tracking-[-0.02em]" style={{ color: "#1f3a33" }}>
                     {formatPrice(totalTTC)}
                   </span>
                 </div>
@@ -986,6 +981,141 @@ export default function SummaryStep({
           })()}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Sous-composants
+// ──────────────────────────────────────────────────────────────────
+
+function SectionCard({
+  eyebrow,
+  title,
+  icon,
+  badge,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  icon?: React.ReactNode;
+  badge?: { label: string; tone: "purple" | "primary" } | null;
+  children: React.ReactNode;
+}) {
+  const badgeStyle = badge
+    ? badge.tone === "purple"
+      ? { background: "#f3eafa", color: "#5e3a8a", border: "1px solid #e0cef0" }
+      : { background: "#f5f9f6", color: "#2f4a3f", border: "1px solid #cfdbd3" }
+    : null;
+
+  return (
+    <div
+      className="p-3"
+      style={{ borderRadius: 12, background: "#fff", border: "1px solid #ece9e1" }}
+    >
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="min-w-0 flex-1">
+          <div
+            className="text-[10px] font-medium uppercase tracking-[0.1em] flex items-center gap-1.5"
+            style={{ color: "#9c9484" }}
+          >
+            {icon && <span style={{ color: "#9c9484" }}>{icon}</span>}
+            {eyebrow}
+          </div>
+          <h4 className="text-[13.5px] font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0 mt-0.5 capitalize truncate">
+            {title}
+          </h4>
+        </div>
+        {badge && badgeStyle && (
+          <span
+            className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium flex-shrink-0"
+            style={badgeStyle}
+          >
+            {badge.label}
+          </span>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div
+      className="flex justify-between items-center text-[12px] py-1.5"
+      style={{ borderTop: "1px solid #f7f5ef" }}
+    >
+      <span style={{ color: "#6d6d68" }}>{label}</span>
+      <span className="font-semibold text-[#1f1f1d] tracking-[-0.01em]">{value}</span>
+    </div>
+  );
+}
+
+function SessionPill({
+  index,
+  date,
+  time,
+}: {
+  index: number;
+  date: string;
+  time: string;
+}) {
+  return (
+    <div
+      className="flex items-center gap-2 p-2 text-[12px]"
+      style={{ borderRadius: 10, background: "#f5f9f6", border: "1px solid #cfdbd3" }}
+    >
+      <span
+        className="w-5 h-5 rounded-full inline-flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+        style={{ background: "#1f3a33", color: "#f7f5ef" }}
+      >
+        {index}
+      </span>
+      <span className="font-semibold text-[#1f1f1d] capitalize flex-1 truncate tracking-[-0.01em]">
+        {date}
+      </span>
+      <span className="text-[11.5px] font-medium" style={{ color: "#1f3a33" }}>
+        {time}
+      </span>
+    </div>
+  );
+}
+
+function BreakdownLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between items-center text-[11.5px]">
+      <span style={{ color: "#6d6d68" }}>{label}</span>
+      <span className="font-medium text-[#1f1f1d] tabular-nums">{value}</span>
+    </div>
+  );
+}
+
+function FiscalLine({
+  label,
+  value,
+  muted,
+  strong,
+}: {
+  label: string;
+  value: string;
+  muted?: boolean;
+  strong?: boolean;
+}) {
+  return (
+    <div className="flex justify-between items-center text-[12px]">
+      <span style={{ color: muted ? "#6d6d68" : "#3a3a38", fontWeight: strong ? 600 : 400 }}>
+        {label}
+      </span>
+      <span
+        className="tabular-nums"
+        style={{
+          color: strong ? "#1f1f1d" : muted ? "#6d6d68" : "#1f1f1d",
+          fontWeight: strong ? 700 : 500,
+        }}
+      >
+        {value}
+      </span>
     </div>
   );
 }

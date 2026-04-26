@@ -19,7 +19,7 @@ import {
   Repeat,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
-import { Mission, statusColors, statusLabels, formatPrice } from "./types";
+import { Mission, formatPrice, getMissionVisualStyle } from "./types";
 
 // Extraire uniquement le code postal et la ville d'une adresse française
 // Ex: "3 Rue de l'Abbé Gruet, 75001 Paris, France" → "75001 Paris"
@@ -179,26 +179,25 @@ export function MissionDetailModal({
 
           {/* Status */}
           <div className="mb-4">
-            <span
-              className={cn(
-                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium text-white",
-                statusColors[mission.status]
-              )}
-            >
-              {mission.status === "in_progress" && (
-                <Clock className="w-3.5 h-3.5" />
-              )}
-              {mission.status === "completed" && (
-                <CheckCircle className="w-3.5 h-3.5" />
-              )}
-              {mission.status === "pending_acceptance" && (
-                <AlertCircle className="w-3.5 h-3.5" />
-              )}
-              {mission.status === "cancelled" && (
-                <XCircle className="w-3.5 h-3.5" />
-              )}
-              {statusLabels[mission.status]}
-            </span>
+            {(() => {
+              const vs = getMissionVisualStyle(mission);
+              return (
+                <span
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium uppercase tracking-[0.05em] text-[12px]"
+                  style={{
+                    background: vs.background,
+                    color: vs.textColor,
+                    border: `1px solid ${vs.borderLeftColor}`,
+                  }}
+                >
+                  {mission.status === "in_progress" && <Clock className="w-3.5 h-3.5" />}
+                  {mission.status === "completed" && <CheckCircle className="w-3.5 h-3.5" />}
+                  {mission.status === "pending_acceptance" && <AlertCircle className="w-3.5 h-3.5" />}
+                  {mission.status === "cancelled" && <XCircle className="w-3.5 h-3.5" />}
+                  {vs.shortLabel}
+                </span>
+              );
+            })()}
           </div>
 
           {/* Details */}

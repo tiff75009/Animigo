@@ -2,7 +2,7 @@
 
 const DEFAULT_VAT_RATE = 20;
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -38,6 +38,8 @@ import {
   Eye,
   EyeOff,
   FileCheck,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import ConfirmModal from "../shared/ConfirmModal";
@@ -47,6 +49,8 @@ import { cn } from "@/app/lib/utils";
 import { Tooltip } from "@/app/components/ui/tooltip";
 import { useAuth } from "@/app/hooks/useAuth";
 import { ServicePhotosUploader } from "./ServicePhotosUploader";
+import { ServiceCardPreview } from "./ServiceCardPreview";
+import type { LocalVariant } from "../VariantManager";
 
 interface ServiceCategory {
   slug: string;
@@ -323,57 +327,70 @@ export default function ServiceCard({
   return (
     <motion.div
       layout
-      className={cn(
-        "bg-white rounded-2xl overflow-hidden transition-all",
-        service.isActive
-          ? "border border-foreground/10 shadow-sm"
-          : "border-2 border-dashed border-red-300/70 bg-red-50/20"
-      )}
+      whileHover={{ y: -1 }}
+      transition={{ duration: 0.15 }}
+      className="bg-white transition-shadow hover:shadow-[0_10px_30px_rgba(30,30,28,0.06)]"
+      style={{
+        borderRadius: 16,
+        border: service.isActive
+          ? "1px solid #ece9e1"
+          : "1px dashed #f1cdcd",
+        background: service.isActive ? "#fff" : "#fdf6f6",
+      }}
     >
-      {/* Header du service */}
+      {/* Header du service - bandeau visuellement distinct */}
       <div
-        className={cn(
-          "p-4",
-          !service.isActive && "bg-red-50/30"
-        )}
+        className="p-4"
+        style={{
+          background: service.isActive ? "#fff" : "#fdf6f6",
+          borderBottom: "1px solid #f1ede3",
+        }}
       >
-        <div className="flex items-center gap-4">
-          {/* Icon */}
+        <div className="flex items-center gap-3">
+          {/* Icon catégorie - rond plus prononcé */}
           <div
-            className={cn(
-              "w-12 h-12 rounded-xl flex items-center justify-center text-xl flex-shrink-0",
-              service.isActive
-                ? "bg-gradient-to-br from-primary/10 to-secondary/10"
-                : "bg-red-100/80"
-            )}
+            className="w-12 h-12 flex items-center justify-center text-[24px] flex-shrink-0"
+            style={{
+              borderRadius: 999,
+              background: service.isActive
+                ? "linear-gradient(135deg, #f5f9f6 0%, #eaf0ed 100%)"
+                : "#fdf0f0",
+              border: `1px solid ${service.isActive ? "#cfdbd3" : "#f1cdcd"}`,
+            }}
           >
             {categoryData?.icon || "✨"}
           </div>
 
           {/* Info */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className={cn(
-                "font-bold truncate",
-                service.isActive ? "text-foreground" : "text-foreground/60"
-              )}>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <h3
+                className="text-[14.5px] font-semibold tracking-[-0.01em] truncate m-0"
+                style={{ color: service.isActive ? "#1f1f1d" : "#9c9484" }}
+              >
                 {categoryData?.name || service.category}
               </h3>
               {!service.isActive && !phoneVerified && (
-                <span className="flex items-center gap-1 text-xs text-amber-600 font-medium px-2 py-0.5 bg-amber-100 rounded-full">
-                  <Phone className="w-3 h-3" />
+                <span
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                  style={{ border: "1px solid #f4e6c1", color: "#7a5b1a", background: "#fdf8ec" }}
+                >
+                  <Phone className="w-2.5 h-2.5" />
                   Tel. non vérifié
                 </span>
               )}
               {(service.variants || []).some(v => v.isSapEligible) && (
-                <span className="flex items-center gap-1 text-xs text-emerald-700 font-medium px-2 py-0.5 bg-emerald-100 rounded-full">
-                  <FileCheck className="w-3 h-3" />
+                <span
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                  style={{ border: "1px solid #cfdbd3", color: "#2f4a3f", background: "#f5f9f6" }}
+                >
+                  <FileCheck className="w-2.5 h-2.5" />
                   SAP
                 </span>
               )}
             </div>
-            <p className="text-sm text-text-light">
-              {activeVariants.length}/{variantsCount} service{variantsCount > 1 ? "s" : ""} actif{activeVariants.length > 1 ? "s" : ""}
+            <p className="text-[12px] text-[#6d6d68] mt-0.5">
+              {activeVariants.length}/{variantsCount} formule{variantsCount > 1 ? "s" : ""} active{activeVariants.length > 1 ? "s" : ""}
               {optionsCount > 0 && ` · ${optionsCount} option${optionsCount > 1 ? "s" : ""}`}
             </p>
           </div>
@@ -381,37 +398,40 @@ export default function ServiceCard({
           {/* Price */}
           {globalMinPrice && (
             <div className="text-right hidden sm:block">
-              <div className="text-xs text-text-light">À partir de</div>
-              <div className="text-lg font-bold text-primary">
+              <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484]">
+                À partir de
+              </div>
+              <div className="text-[16px] font-semibold text-[#1f1f1d] tracking-[-0.01em]">
                 {formatPrice(globalMinPrice.value)}
-                <span className="text-xs font-normal text-text-light">{globalMinPrice.label}</span>
+                <span className="text-[10px] font-normal text-[#6d6d68] ml-0.5">{globalMinPrice.label}</span>
               </div>
               {isVatSubject && (
-                <div className="text-[10px] text-blue-500 font-medium">
+                <div className="text-[10px] font-medium" style={{ color: "#6d6d68" }}>
                   HT : {formatPrice(Math.round(globalMinPrice.value / (1 + DEFAULT_VAT_RATE / 100)))}
                 </div>
               )}
               {companyType === "micro_enterprise" && !isVatSubject && (
-                <div className="text-[9px] text-text-light italic">TVA non applicable</div>
+                <div className="text-[9px] text-[#9c9484] italic">TVA non applicable</div>
               )}
             </div>
           )}
 
           {/* Actions */}
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <Tooltip content="Ajouter un service" position="top">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <Tooltip content="Ajouter une formule" position="top">
               <button
                 onClick={() => {
                   setIsAddingVariant(true);
                   setEditingSection("variants");
                 }}
-                className="p-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
+                className="w-8 h-8 inline-flex items-center justify-center rounded-full transition-colors hover:bg-[#fafafa]"
+                style={{ background: "#fff", border: "1px solid #ece9e1", color: "#1f3a33" }}
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-3.5 h-3.5" />
               </button>
             </Tooltip>
 
-            {/* Toggle catégorie — bien visible */}
+            {/* Toggle catégorie — pill */}
             <button
               onClick={() => {
                 if (!service.isActive && !phoneVerified) {
@@ -420,14 +440,14 @@ export default function ServiceCard({
                 }
                 onToggle();
               }}
-              className={cn(
-                "relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all",
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors"
+              style={
                 service.isActive
-                  ? "bg-secondary/15 text-secondary hover:bg-secondary/25"
+                  ? { background: "#f5f9f6", color: "#1f3a33", border: "1px solid #cfdbd3" }
                   : !phoneVerified
-                    ? "bg-amber-100 text-amber-600 hover:bg-amber-200"
-                    : "bg-red-100 text-red-500 hover:bg-red-200"
-              )}
+                    ? { background: "#fdf8ec", color: "#7a5b1a", border: "1px solid #f4e6c1" }
+                    : { background: "#fdf0f0", color: "#8a3a3a", border: "1px solid #f1cdcd" }
+              }
               title={
                 !service.isActive && !phoneVerified
                   ? "Vérifiez votre téléphone pour activer"
@@ -438,12 +458,12 @@ export default function ServiceCard({
             >
               {service.isActive ? (
                 <>
-                  <Eye className="w-3.5 h-3.5" />
+                  <Eye className="w-3 h-3" />
                   <span className="hidden sm:inline">En ligne</span>
                 </>
               ) : (
                 <>
-                  <EyeOff className="w-3.5 h-3.5" />
+                  <EyeOff className="w-3 h-3" />
                   <span className="hidden sm:inline">Hors ligne</span>
                 </>
               )}
@@ -452,17 +472,18 @@ export default function ServiceCard({
             <Tooltip content="Supprimer" position="top">
               <button
                 onClick={() => setShowDeleteModal(true)}
-                className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors"
+                className="w-8 h-8 inline-flex items-center justify-center rounded-full transition-colors hover:bg-[rgba(196,86,86,0.08)]"
+                style={{ background: "#fff", border: "1px solid #f1cdcd", color: "#c45656" }}
               >
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="w-3.5 h-3.5" />
               </button>
             </Tooltip>
           </div>
         </div>
       </div>
 
-      {/* Services - Affichées directement */}
-      <div className="border-t border-foreground/10">
+      {/* Services - Affichées directement (zone "nested" cream pour différencier du parent) */}
+      <div style={{ background: "#fafaf6" }}>
         <AnimatePresence mode="wait">
           {editingSection === "variants" && isAddingVariant ? (
             <motion.div
@@ -1139,6 +1160,7 @@ function VariantEditor({ serviceId, variants, token, categoryData, category, all
             variant={variantToEdit}
             token={token}
             category={category}
+            categoryData={categoryData}
             recommendedPrice={recommendedPrice}
             isGardeService={isGardeService}
             allowOvernightStay={allowOvernightStay}
@@ -1411,65 +1433,93 @@ function VariantPreviewCard({
   const prices = getVariantPrices(variant, allowedPriceUnits, allowOvernightStay);
 
   return (
-    <div className={cn(
-      "p-4 rounded-xl border-2 transition-all",
-      variant.isActive
-        ? "bg-white border-primary/20"
-        : "bg-red-50/50 border-red-200"
-    )}>
+    <div
+      className="p-3.5 transition-all hover:bg-[#f7f5ef]"
+      style={{
+        borderRadius: 12,
+        background: variant.isActive ? "#fcfaf4" : "#fdf6f6",
+        border: `1px solid ${variant.isActive ? "#f1ede3" : "#f1cdcd"}`,
+        borderLeft: `3px solid ${variant.isActive ? "#1f3a33" : "#c45656"}`,
+      }}
+    >
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3 flex-1 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center flex-shrink-0">
-            <Sparkles className="w-5 h-5 text-primary" />
+        <div className="flex items-start gap-2.5 flex-1 min-w-0">
+          {/* Indicateur numéroté nested (au lieu de l'avatar Sparkles) */}
+          <div
+            className="w-7 h-7 inline-flex items-center justify-center text-[11px] font-bold rounded-full flex-shrink-0"
+            style={{
+              background: variant.isActive ? "#1f3a33" : "#c45656",
+              color: "#f7f5ef",
+            }}
+          >
+            {index + 1}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1 flex-wrap">
-              <h5 className="font-semibold text-foreground truncate">{variant.name}</h5>
+            {/* Nom direct (sans eyebrow car indicateur numéroté à gauche) */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <h5 className="text-[14px] font-semibold text-[#1f1f1d] tracking-[-0.01em] truncate m-0">
+                {variant.name}
+              </h5>
               {/* Service collective sans créneaux */}
               {variant.sessionType === "collective" && (variant.needsSlotConfiguration || !variant.slotsCount) && (
-                <span className="text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full animate-pulse font-medium">Créneaux requis</span>
+                <StatusPill tone="danger" pulse>
+                  Créneaux requis
+                </StatusPill>
               )}
               {/* Service inactive (non collective ou autre raison) */}
               {!variant.isActive && variant.sessionType !== "collective" && (
-                <span className="text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full">Inactif</span>
+                <StatusPill tone="danger">Inactif</StatusPill>
               )}
               {/* Service collective avec créneaux configurés */}
               {variant.sessionType === "collective" && variant.slotsCount && variant.slotsCount > 0 && (
-                <span className="text-xs px-2 py-0.5 bg-green-100 text-green-600 rounded-full">{variant.slotsCount} créneaux</span>
+                <StatusPill tone="success">{variant.slotsCount} créneaux</StatusPill>
               )}
             </div>
             {variant.description && (
-              <p className="text-xs text-text-light mb-2 line-clamp-2">{variant.description}</p>
+              <p className="text-[12px] text-[#6d6d68] mb-2 line-clamp-2 leading-[1.5]">
+                {variant.description}
+              </p>
             )}
-            <div className="flex flex-wrap items-center gap-2">
+            {/* Pills de prix */}
+            <div className="flex flex-wrap items-center gap-1.5">
               {prices.map((price, idx) => (
-                <span key={idx} className={cn(
-                  "text-sm font-bold px-2.5 py-1 rounded-lg",
-                  price.unit === "hour" && "bg-primary/10 text-primary",
-                  price.unit === "half_day" && "bg-orange-100 text-orange-600",
-                  price.unit === "day" && "bg-secondary/10 text-secondary",
-                  price.unit === "week" && "bg-purple-100 text-purple-600",
-                  price.unit === "month" && "bg-amber-100 text-amber-600",
-                  price.unit === "nightly" && "bg-indigo-100 text-indigo-600"
-                )}>
-                  {formatPrice(price.value)}{price.label}
+                <span
+                  key={idx}
+                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-semibold"
+                  style={{ background: "#1f3a33", color: "#f7f5ef" }}
+                >
+                  {formatPrice(price.value)}
+                  <span className="font-normal opacity-80 ml-0.5">{price.label}</span>
                 </span>
               ))}
               {variant.numberOfSessions && variant.numberOfSessions > 1 && (
-                <span className="text-sm font-bold px-2.5 py-1 rounded-lg bg-blue-100 text-blue-600">
+                <span
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                  style={{ border: "1px solid #cfdbd3", color: "#2f4a3f" }}
+                >
+                  <Layers className="w-2.5 h-2.5" />
                   {variant.numberOfSessions} séances
                 </span>
               )}
               {variant.duration && (
-                <span className="text-xs text-text-light flex items-center gap-1">
-                  <Clock className="w-3 h-3" />{variant.duration} min
+                <span
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                  style={{ border: "1px solid #dfdcd4", color: "#3a3a38" }}
+                >
+                  <Clock className="w-2.5 h-2.5" />
+                  {variant.duration} min
                 </span>
               )}
             </div>
+            {/* Objectifs / activités */}
             {variant.objectives && variant.objectives.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-2">
                 {variant.objectives.map((objective, idx) => (
-                  <span key={idx} className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full">
+                  <span
+                    key={idx}
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                    style={{ border: "1px solid #dfdcd4", color: "#3a3a38" }}
+                  >
                     <span>{objective.icon}</span>
                     <span>{objective.text}</span>
                   </span>
@@ -1477,45 +1527,40 @@ function VariantPreviewCard({
               </div>
             )}
             {/* Type de séance, lieu et animaux */}
-            <div className="flex flex-wrap items-center gap-2 mt-2">
-              {/* Type de séance */}
+            <div className="flex flex-wrap items-center gap-1.5 mt-2">
               {variant.sessionType === "collective" ? (
-                <span className="flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-600 text-xs rounded-full font-medium">
-                  <Users className="w-3 h-3" />
-                  Collectif{variant.maxAnimalsPerSession ? ` (${variant.maxAnimalsPerSession} max)` : ""}
-                </span>
+                <PreviewPill>
+                  <Users className="w-2.5 h-2.5" />
+                  Collectif{variant.maxAnimalsPerSession ? ` · ${variant.maxAnimalsPerSession} max` : ""}
+                </PreviewPill>
               ) : (
-                <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full font-medium">
-                  <User className="w-3 h-3" />
+                <PreviewPill>
+                  <User className="w-2.5 h-2.5" />
                   Individuel
-                </span>
+                </PreviewPill>
               )}
-              {/* Lieu de prestation */}
               {variant.serviceLocation && (
-                <span className={cn(
-                  "flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium",
-                  variant.serviceLocation === "announcer_home" && "bg-primary/10 text-primary",
-                  variant.serviceLocation === "client_home" && "bg-secondary/10 text-secondary",
-                  variant.serviceLocation === "both" && "bg-purple-100 text-purple-600"
-                )}>
-                  {variant.serviceLocation === "announcer_home" && <><Home className="w-3 h-3" /> Mon domicile</>}
-                  {variant.serviceLocation === "client_home" && <><MapPin className="w-3 h-3" /> À domicile</>}
-                  {variant.serviceLocation === "both" && <><Home className="w-2.5 h-2.5" /><MapPin className="w-2.5 h-2.5" /> Flexible</>}
-                </span>
+                <PreviewPill>
+                  {variant.serviceLocation === "announcer_home" && <><Home className="w-2.5 h-2.5" /> Mon domicile</>}
+                  {variant.serviceLocation === "client_home" && <><MapPin className="w-2.5 h-2.5" /> À domicile</>}
+                  {variant.serviceLocation === "both" && <><Home className="w-2.5 h-2.5" /> Flexible</>}
+                </PreviewPill>
               )}
-              {/* Animaux acceptés */}
               {variant.animalTypes && variant.animalTypes.length > 0 && (
-                <div className="flex flex-wrap gap-1">
+                <>
                   {variant.animalTypes.map((animal) => (
-                    <span key={animal} className="px-2 py-0.5 bg-foreground/5 text-foreground/70 text-xs rounded-full">
+                    <span
+                      key={animal}
+                      className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                      style={{ background: "#f7f5ef", color: "#3a3a38" }}
+                    >
                       {animalLabels[animal] || animal}
                     </span>
                   ))}
-                </div>
+                </>
               )}
               {/* Restrictions chiens */}
               {(() => {
-                // Vérifier si cette service accepte les chiens (fallback sur service)
                 const serviceAcceptsDogs = variant.animalTypes?.includes("chien") ||
                   (!variant.animalTypes?.length && serviceAnimalTypes.includes("chien"));
                 if (!serviceAcceptsDogs) return null;
@@ -1526,40 +1571,22 @@ function VariantPreviewCard({
 
                 return (
                   <>
-                    {/* Tailles acceptées */}
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs text-text-light">🐕</span>
-                      <div className="flex gap-1">
-                        {allSizes ? (
-                          <span className="px-2 py-0.5 bg-green-100 text-green-600 text-xs rounded-full">Toutes tailles</span>
-                        ) : (
-                          <>
-                            {dogSizes.includes("small") && (
-                              <span className="px-2 py-0.5 bg-green-100 text-green-600 text-xs rounded-full">Petit</span>
-                            )}
-                            {dogSizes.includes("medium") && (
-                              <span className="px-2 py-0.5 bg-yellow-100 text-yellow-600 text-xs rounded-full">Moyen</span>
-                            )}
-                            {dogSizes.includes("large") && (
-                              <span className="px-2 py-0.5 bg-orange-100 text-orange-600 text-xs rounded-full">Grand</span>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    {/* Catégories acceptées */}
-                    <span className={cn(
-                      "px-2 py-0.5 text-xs rounded-full font-medium",
-                      dogCategory === "none" && "bg-gray-100 text-gray-600",
-                      dogCategory === "cat1" && "bg-amber-100 text-amber-700",
-                      dogCategory === "cat2" && "bg-orange-100 text-orange-700",
-                      dogCategory === "both" && "bg-red-100 text-red-700"
-                    )}>
+                    <span className="text-[10px] text-[#9c9484]">🐕</span>
+                    {allSizes ? (
+                      <PreviewPill tone="success">Toutes tailles</PreviewPill>
+                    ) : (
+                      <>
+                        {dogSizes.includes("small") && <PreviewPill tone="success">Petit</PreviewPill>}
+                        {dogSizes.includes("medium") && <PreviewPill>Moyen</PreviewPill>}
+                        {dogSizes.includes("large") && <PreviewPill>Grand</PreviewPill>}
+                      </>
+                    )}
+                    <PreviewPill tone={dogCategory === "none" ? "default" : "success"}>
                       {dogCategory === "none" && "Cat. non acceptées"}
                       {dogCategory === "cat1" && "Cat. 1 ✓"}
                       {dogCategory === "cat2" && "Cat. 2 ✓"}
                       {dogCategory === "both" && "Cat. 1 & 2 ✓"}
-                    </span>
+                    </PreviewPill>
                   </>
                 );
               })()}
@@ -1567,38 +1594,43 @@ function VariantPreviewCard({
           </div>
         </div>
 
-        <div className="flex items-center gap-1 flex-shrink-0">
-          {/* Bouton Créneaux pour les services collectives */}
+        {/* Actions */}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
           {variant.sessionType === "collective" && onManageSlots && (
             <Tooltip content="Gérer les créneaux" position="top">
               <button
                 onClick={() => onManageSlots(variant)}
                 className={cn(
-                  "p-2 rounded-lg transition-colors",
-                  variant.needsSlotConfiguration
-                    ? "text-white bg-orange-500 hover:bg-orange-600 animate-pulse"
-                    : "text-orange-500 hover:bg-orange-50"
+                  "w-8 h-8 inline-flex items-center justify-center rounded-full transition-colors",
+                  variant.needsSlotConfiguration && "animate-pulse"
                 )}
+                style={
+                  variant.needsSlotConfiguration
+                    ? { background: "#1f3a33", color: "#f7f5ef", border: "1px solid #1f3a33" }
+                    : { background: "#fff", color: "#1f3a33", border: "1px solid #cfdbd3" }
+                }
               >
-                <Calendar className="w-4 h-4" />
+                <Calendar className="w-3.5 h-3.5" />
               </button>
             </Tooltip>
           )}
           <Tooltip content="Modifier" position="top">
             <button
               onClick={onEdit}
-              className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors"
+              className="w-8 h-8 inline-flex items-center justify-center rounded-full transition-colors hover:bg-[#fafafa]"
+              style={{ background: "#fff", border: "1px solid #ece9e1", color: "#1f3a33" }}
             >
-              <Edit2 className="w-4 h-4" />
+              <Edit2 className="w-3.5 h-3.5" />
             </button>
           </Tooltip>
           {canDelete && (
             <Tooltip content="Supprimer" position="top">
               <button
                 onClick={onDelete}
-                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                className="w-8 h-8 inline-flex items-center justify-center rounded-full transition-colors hover:bg-[rgba(196,86,86,0.08)]"
+                style={{ background: "#fff", border: "1px solid #f1cdcd", color: "#c45656" }}
               >
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="w-3.5 h-3.5" />
               </button>
             </Tooltip>
           )}
@@ -1607,20 +1639,24 @@ function VariantPreviewCard({
 
       {/* Alerte créneaux requis */}
       {variant.sessionType === "collective" && (variant.needsSlotConfiguration || !variant.slotsCount) && onManageSlots && (
-        <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-xl">
+        <div
+          className="mt-3 p-3"
+          style={{ borderRadius: 12, background: "#fdf8ec", border: "1px solid #f4e6c1" }}
+        >
           <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-orange-800">
+            <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: "#7a5b1a" }} />
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-semibold text-[#1f1f1d] tracking-[-0.01em]">
                 Créneaux non configurés
               </p>
-              <p className="text-xs text-orange-600 mt-1">
-                Cette service collective est inactive car aucun créneau n'est défini.
+              <p className="text-[12px] mt-0.5 leading-[1.5]" style={{ color: "#7a5b1a" }}>
+                Cette formule collective est inactive car aucun créneau n&apos;est défini.
                 Ajoutez des créneaux pour permettre aux clients de réserver.
               </p>
               <button
                 onClick={() => onManageSlots(variant)}
-                className="mt-2 inline-flex items-center gap-1 px-3 py-1.5 bg-orange-500 text-white text-xs font-medium rounded-lg hover:bg-orange-600 transition-colors"
+                className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-opacity hover:opacity-90"
+                style={{ background: "#1f3a33", color: "#f7f5ef" }}
               >
                 <Calendar className="w-3 h-3" />
                 Configurer les créneaux
@@ -1633,11 +1669,67 @@ function VariantPreviewCard({
   );
 }
 
+/**
+ * Pill de statut (succès / danger / défaut) pour les badges en haut de la card formule.
+ */
+function StatusPill({
+  tone,
+  pulse,
+  children,
+}: {
+  tone: "success" | "danger" | "default";
+  pulse?: boolean;
+  children: React.ReactNode;
+}) {
+  const palette =
+    tone === "success"
+      ? { border: "1px solid #cfdbd3", color: "#2f4a3f", background: "#fff" }
+      : tone === "danger"
+        ? { border: "1px solid #f1cdcd", color: "#8a3a3a", background: "#fdf6f6" }
+        : { border: "1px solid #dfdcd4", color: "#3a3a38", background: "#fff" };
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium",
+        pulse && "animate-pulse"
+      )}
+      style={palette}
+    >
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Pill outline neutre pour métadonnées (lieu, type, taille, catégorie).
+ */
+function PreviewPill({
+  tone = "default",
+  children,
+}: {
+  tone?: "default" | "success";
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+      style={
+        tone === "success"
+          ? { border: "1px solid #cfdbd3", color: "#2f4a3f" }
+          : { border: "1px solid #dfdcd4", color: "#3a3a38" }
+      }
+    >
+      {children}
+    </span>
+  );
+}
+
 // Variant Edit Form
 function VariantEditForm({
   variant,
   token,
   category,
+  categoryData,
   recommendedPrice,
   isGardeService,
   allowOvernightStay,
@@ -1653,6 +1745,7 @@ function VariantEditForm({
   variant: Variant;
   token: string;
   category: string;
+  categoryData?: ServiceCategory;
   recommendedPrice: number;
   isGardeService: boolean;
   allowOvernightStay?: boolean;
@@ -1714,6 +1807,66 @@ function VariantEditForm({
   );
   const [acceptedDogSizes, setAcceptedDogSizes] = useState<("small" | "medium" | "large")[]>(
     variant.acceptedDogSizes || ["small", "medium", "large"]
+  );
+
+  // Onglet mobile : Form ou Aperçu
+  const [mobileTab, setMobileTab] = useState<"form" | "preview">("form");
+
+  // Construction live d'un LocalVariant + ServiceCategoryLite à partir des
+  // states locaux pour alimenter l'aperçu. Re-build à chaque modification.
+  const previewVariant: LocalVariant = useMemo(
+    () => ({
+      localId: String(variant.id),
+      name,
+      description,
+      objectives,
+      numberOfSessions,
+      sessionInterval,
+      sessionType,
+      maxAnimalsPerSession,
+      serviceLocation,
+      animalTypes: selectedAnimalTypes,
+      dogCategoryAcceptance,
+      acceptedDogSizes,
+      price: pricing.daily ?? pricing.hourly ?? variant.price ?? 0,
+      priceUnit: isGardeService ? "day" : variant.priceUnit ?? "hour",
+      pricing,
+      duration,
+      includedFeatures,
+      photos: photoUrls,
+    }),
+    [
+      variant.id,
+      variant.price,
+      variant.priceUnit,
+      name,
+      description,
+      objectives,
+      numberOfSessions,
+      sessionInterval,
+      sessionType,
+      maxAnimalsPerSession,
+      serviceLocation,
+      selectedAnimalTypes,
+      dogCategoryAcceptance,
+      acceptedDogSizes,
+      pricing,
+      duration,
+      includedFeatures,
+      photoUrls,
+      isGardeService,
+    ]
+  );
+
+  const previewCategory = useMemo(
+    () => ({
+      slug: category,
+      name: categoryData?.name ?? category,
+      icon: categoryData?.icon,
+      isCapacityBased: isGardeService,
+      allowOvernightStay: categoryData?.allowOvernightStay,
+    }),
+    [category, categoryData, isGardeService]
   );
 
   // Calcul du prix journalier recommandé (pour le slider)
@@ -1849,37 +2002,91 @@ function VariantEditForm({
   };
 
   return (
-    <div className="p-4 bg-primary/5 rounded-xl border-2 border-primary/20 space-y-4">
-      <div className="flex items-center justify-between">
-        <h5 className="font-semibold text-foreground flex items-center gap-2">
-          <Edit2 className="w-4 h-4 text-primary" />
-          Modifier la service
-        </h5>
-        <div className="flex items-center gap-3">
+    <div
+      className="lg:grid lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-4"
+      style={{ borderRadius: 14 }}
+    >
+      {/* Colonne gauche : formulaire */}
+      <div
+        className={cn(
+          "p-4 space-y-4 lg:block",
+          mobileTab === "form" ? "block" : "hidden"
+        )}
+        style={{ borderRadius: 14, background: "#fcfaf4", border: "1px solid #ece9e1" }}
+      >
+      {/* Toggle Form/Aperçu — visible uniquement sur mobile */}
+      <div
+        className="lg:hidden inline-flex items-center p-0.5 w-full max-w-[260px]"
+        style={{ borderRadius: 999, background: "#fff", border: "1px solid #ece9e1" }}
+      >
+        <button
+          type="button"
+          onClick={() => setMobileTab("form")}
+          className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors"
+          style={mobileTab === "form" ? { background: "#1f3a33", color: "#f7f5ef" } : { color: "#6d6d68" }}
+        >
+          Formulaire
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab("preview")}
+          className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors"
+          style={mobileTab === "preview" ? { background: "#1f3a33", color: "#f7f5ef" } : { color: "#6d6d68" }}
+        >
+          Aperçu
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <div
+            className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{ background: "#1f3a33" }}
+          >
+            <Edit2 className="w-3.5 h-3.5 text-white" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "#9c9484" }}>
+              Modification
+            </div>
+            <h5 className="text-[14px] font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+              Modifier la formule
+            </h5>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 flex-shrink-0">
           {isSapApproved && (
-            <label className="flex items-center gap-1.5 cursor-pointer">
+            <label
+              className="inline-flex items-center gap-1.5 cursor-pointer px-2 py-1 rounded-full hover:bg-[#fafafa] transition-colors"
+              style={{ border: "1px solid #cfdbd3", background: "#fff" }}
+            >
               <input
                 type="checkbox"
                 checked={sapEligible}
                 onChange={(e) => setSapEligible(e.target.checked)}
-                className="w-4 h-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500"
+                className="w-3.5 h-3.5 rounded"
+                style={{ accentColor: "#1f3a33" }}
               />
-              <span className="flex items-center gap-1 text-xs font-medium text-emerald-700">
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold" style={{ color: "#2f4a3f" }}>
                 <FileCheck className="w-3 h-3" />
                 SAP
               </span>
             </label>
           )}
+          <label
+            className="inline-flex items-center gap-2 cursor-pointer px-2 py-1 rounded-full hover:bg-[#fafafa] transition-colors"
+            style={{ border: "1px solid #ece9e1", background: "#fff" }}
+          >
+            <span className="text-[10px] font-medium" style={{ color: "#6d6d68" }}>Active</span>
+            <input
+              type="checkbox"
+              checked={isActive}
+              onChange={(e) => setIsActive(e.target.checked)}
+              className="w-3.5 h-3.5 rounded"
+              style={{ accentColor: "#1f3a33" }}
+            />
+          </label>
         </div>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <span className="text-xs text-text-light">Active</span>
-          <input
-            type="checkbox"
-            checked={isActive}
-            onChange={(e) => setIsActive(e.target.checked)}
-            className="w-4 h-4 rounded border-foreground/20 text-primary focus:ring-primary"
-          />
-        </label>
       </div>
 
       {/* Name */}
@@ -2536,22 +2743,54 @@ function VariantEditForm({
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-2 pt-2">
-        <motion.button
-          onClick={handleSave}
-          disabled={isSaving || !name}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl font-medium disabled:opacity-50"
-          whileTap={{ scale: 0.98 }}
-        >
-          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-          Enregistrer
-        </motion.button>
+      <div
+        className="flex items-center justify-end gap-2 pt-3 mt-2"
+        style={{ borderTop: "1px solid #f1ede3" }}
+      >
         <button
           onClick={onCancel}
-          className="px-4 py-2 text-text-light hover:text-foreground transition-colors"
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-medium text-[#6d6d68] hover:text-[#1f1f1d] hover:bg-[#f7f5ef] transition-colors"
         >
           Annuler
         </button>
+        <motion.button
+          onClick={handleSave}
+          disabled={isSaving || !name}
+          className="inline-flex items-center gap-2 px-5 py-2 rounded-full text-[13px] font-medium transition-opacity hover:opacity-90"
+          style={
+            !isSaving && name
+              ? { background: "#1f3a33", color: "#f7f5ef" }
+              : { background: "#ece9e1", color: "#9c9484", cursor: "not-allowed" }
+          }
+          whileTap={{ scale: !isSaving && name ? 0.98 : 1 }}
+        >
+          {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+          Enregistrer
+        </motion.button>
+      </div>
+      </div>
+      {/* Fin de la colonne gauche (formulaire) */}
+
+      {/* Colonne droite : aperçu live */}
+      <div
+        className={cn(
+          "lg:block lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto overflow-x-hidden p-4",
+          mobileTab === "preview" ? "block" : "hidden"
+        )}
+        style={{
+          borderRadius: 14,
+          background: "#fcfaf4",
+          border: "1px solid #ece9e1",
+        }}
+      >
+        <ServiceCardPreview
+          category={previewCategory}
+          variants={[previewVariant]}
+          isSapEligible={sapEligible}
+          allowOvernightStay={allowOvernightStay}
+          serviceDescription={undefined}
+          currentStep={2}
+        />
       </div>
     </div>
   );
@@ -2610,7 +2849,10 @@ function VariantAddForm({
   }) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [name, setName] = useState(`Service ${existingCount + 1}`);
+  // Wizard step state — formule d'ajout en step-by-step
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
+
+  const [name, setName] = useState(`Formule ${existingCount + 1}`);
   const [description, setDescription] = useState("");
   const [objectives, setObjectives] = useState<Objective[]>([]);
   const [showActivitySelector, setShowActivitySelector] = useState(false);
@@ -2770,58 +3012,149 @@ function VariantAddForm({
   };
 
   return (
-    <div className="p-4 bg-secondary/5 rounded-xl border-2 border-secondary/20 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Plus className="w-4 h-4 text-secondary" />
-          <h5 className="font-semibold text-foreground">Nouvelle service</h5>
+    <div
+      className="p-4 space-y-4"
+      style={{ borderRadius: 14, background: "#fcfaf4", border: "1px solid #ece9e1" }}
+    >
+      {/* Header avec eyebrow + step indicator wizard */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ background: "#1f3a33" }}
+            >
+              <Plus className="w-3.5 h-3.5 text-white" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "#9c9484" }}>
+                Création
+              </div>
+              <h5 className="text-[14px] font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
+                Nouvelle formule
+              </h5>
+            </div>
+          </div>
+          {isSapApproved && (
+            <label
+              className="inline-flex items-center gap-1.5 cursor-pointer px-2 py-1 rounded-full hover:bg-[#fafafa] transition-colors flex-shrink-0"
+              style={{ border: "1px solid #cfdbd3", background: "#fff" }}
+            >
+              <input
+                type="checkbox"
+                checked={sapEligible}
+                onChange={(e) => setSapEligible(e.target.checked)}
+                className="w-3.5 h-3.5 rounded"
+                style={{ accentColor: "#1f3a33" }}
+              />
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold" style={{ color: "#2f4a3f" }}>
+                <FileCheck className="w-3 h-3" />
+                SAP
+              </span>
+            </label>
+          )}
         </div>
-        {isSapApproved && (
-          <label className="flex items-center gap-1.5 cursor-pointer">
+      </div>
+
+      {/* Step indicator wizard */}
+      <div
+        className="bg-white p-1 overflow-x-auto"
+        style={{ borderRadius: 999, border: "1px solid #ece9e1" }}
+      >
+        <div className="flex items-center gap-0.5 min-w-max">
+          {[
+            { id: 1 as const, label: "Identité" },
+            { id: 2 as const, label: "Configuration" },
+            { id: 3 as const, label: "Tarifs" },
+          ].map((step, idx, arr) => {
+            const isActive = currentStep === step.id;
+            const isCompleted = currentStep > step.id;
+            return (
+              <div key={step.id} className="flex items-center gap-0.5 flex-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isCompleted) setCurrentStep(step.id);
+                  }}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-full text-[12px] font-medium whitespace-nowrap transition-all"
+                  style={
+                    isActive
+                      ? { background: "#1f3a33", color: "#f7f5ef" }
+                      : isCompleted
+                        ? { color: "#2f4a3f", background: "#eaf0ed", cursor: "pointer" }
+                        : { color: "#9c9484", cursor: "default" }
+                  }
+                >
+                  <span
+                    className="flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold flex-shrink-0"
+                    style={
+                      isActive
+                        ? { background: "rgba(247,245,239,0.25)", color: "#f7f5ef" }
+                        : isCompleted
+                          ? { background: "rgba(47,74,63,0.15)", color: "#2f4a3f" }
+                          : { background: "#f7f5ef", color: "#9c9484" }
+                    }
+                  >
+                    {isCompleted ? <Check className="w-2.5 h-2.5" /> : step.id}
+                  </span>
+                  <span>{step.label}</span>
+                </button>
+                {idx < arr.length - 1 && (
+                  <div
+                    className="w-2 h-px flex-shrink-0"
+                    style={{ background: isCompleted ? "#cfdbd3" : "#ece9e1" }}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ÉTAPE 1 : Identité (nom, description, photos) */}
+      {currentStep === 1 && (
+        <>
+          {/* Name */}
+          <div>
+            <label className="block text-[10px] font-medium uppercase tracking-[0.1em] mb-1.5" style={{ color: "#9c9484" }}>
+              Nom de la formule
+            </label>
             <input
-              type="checkbox"
-              checked={sapEligible}
-              onChange={(e) => setSapEligible(e.target.checked)}
-              className="w-4 h-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full px-3 py-2.5 text-[13px] text-[#1f1f1d] focus:outline-none focus:ring-2 focus:ring-[#1f3a33]/20 transition-all placeholder:text-[#cdc9c0]"
+              style={{ borderRadius: 10, border: "1px solid #ece9e1", background: "#fff" }}
             />
-            <span className="flex items-center gap-1 text-xs font-medium text-emerald-700">
-              <FileCheck className="w-3 h-3" />
-              SAP
-            </span>
-          </label>
-        )}
-      </div>
+          </div>
 
-      {/* Name */}
-      <div>
-        <label className="block text-sm font-medium text-foreground mb-1">Nom</label>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="w-full px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none"
-        />
-      </div>
+          {/* Description */}
+          <div>
+            <label className="block text-[10px] font-medium uppercase tracking-[0.1em] mb-1.5" style={{ color: "#9c9484" }}>
+              Description <span className="normal-case text-[#cdc9c0] font-normal">(optionnel)</span>
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={2}
+              className="w-full px-3 py-2.5 text-[13px] text-[#1f1f1d] focus:outline-none focus:ring-2 focus:ring-[#1f3a33]/20 transition-all resize-none placeholder:text-[#cdc9c0]"
+              style={{ borderRadius: 10, border: "1px solid #ece9e1", background: "#fff" }}
+            />
+          </div>
 
-      {/* Description */}
-      <div>
-        <label className="block text-sm font-medium text-foreground mb-1">Description (optionnel)</label>
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={2}
-          className="w-full px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-secondary focus:ring-1 focus:ring-secondary outline-none resize-none"
-        />
-      </div>
+          {/* Photos */}
+          <div className="pt-3" style={{ borderTop: "1px solid #f1ede3" }}>
+            <ServicePhotosUploader
+              photos={photoUrls.map((url, i) => ({ url, order: i }))}
+              onChange={(urls) => setPhotoUrls(urls)}
+            />
+          </div>
+        </>
+      )}
 
-      {/* Photos de la formule — affichées dans les résultats de recherche */}
-      <div className="pt-3 border-t border-secondary/10">
-        <ServicePhotosUploader
-          photos={photoUrls.map((url, i) => ({ url, order: i }))}
-          onChange={(urls) => setPhotoUrls(urls)}
-        />
-      </div>
-
+      {/* Sections suivantes : visibles à partir de l'étape 2 */}
+      {currentStep >= 2 && (
+      <>
       {/* Objectifs / Activités - Sélecteur depuis admin */}
       <div>
         <label className="block text-sm font-medium text-foreground mb-2">
@@ -3400,24 +3733,59 @@ function VariantAddForm({
           />
         )}
       </div>
+      </>
+      )}
 
-      {/* Actions */}
-      <div className="flex items-center gap-2 pt-2">
-        <motion.button
-          onClick={handleSave}
-          disabled={isSaving || !name}
-          className="flex items-center gap-2 px-4 py-2 bg-secondary text-white rounded-xl font-medium disabled:opacity-50"
-          whileTap={{ scale: 0.98 }}
-        >
-          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-          Ajouter
-        </motion.button>
+      {/* Wizard navigation footer */}
+      <div
+        className="flex items-center justify-between gap-2 pt-3 mt-2"
+        style={{ borderTop: "1px solid #f1ede3" }}
+      >
         <button
-          onClick={onCancel}
-          className="px-4 py-2 text-text-light hover:text-foreground transition-colors"
+          onClick={() => {
+            if (currentStep === 1) {
+              onCancel();
+            } else {
+              setCurrentStep((currentStep - 1) as 1 | 2 | 3);
+            }
+          }}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-medium text-[#6d6d68] hover:text-[#1f1f1d] hover:bg-[#f7f5ef] transition-colors"
         >
-          Annuler
+          <ChevronLeft className="w-3.5 h-3.5" />
+          {currentStep === 1 ? "Annuler" : "Retour"}
         </button>
+
+        {currentStep < 3 ? (
+          <motion.button
+            onClick={() => setCurrentStep((currentStep + 1) as 1 | 2 | 3)}
+            disabled={currentStep === 1 && !name}
+            className="inline-flex items-center gap-2 px-5 py-2 rounded-full text-[13px] font-medium transition-opacity hover:opacity-90"
+            style={
+              !(currentStep === 1 && !name)
+                ? { background: "#1f3a33", color: "#f7f5ef" }
+                : { background: "#ece9e1", color: "#9c9484", cursor: "not-allowed" }
+            }
+            whileTap={{ scale: !(currentStep === 1 && !name) ? 0.98 : 1 }}
+          >
+            Suivant
+            <ChevronRight className="w-3.5 h-3.5" />
+          </motion.button>
+        ) : (
+          <motion.button
+            onClick={handleSave}
+            disabled={isSaving || !name}
+            className="inline-flex items-center gap-2 px-5 py-2 rounded-full text-[13px] font-medium transition-opacity hover:opacity-90"
+            style={
+              !isSaving && name
+                ? { background: "#1f3a33", color: "#f7f5ef" }
+                : { background: "#ece9e1", color: "#9c9484", cursor: "not-allowed" }
+            }
+            whileTap={{ scale: !isSaving && name ? 0.98 : 1 }}
+          >
+            {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+            Créer la formule
+          </motion.button>
+        )}
       </div>
     </div>
   );

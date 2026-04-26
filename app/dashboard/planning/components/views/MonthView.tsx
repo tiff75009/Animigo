@@ -8,11 +8,11 @@ import {
   Mission,
   Availability,
   CollectiveSlot,
-  statusColors,
   getDaysInMonth,
   getFirstDayOfMonth,
   formatDateStr,
   dayNames,
+  getMissionVisualStyle,
 } from "../types";
 import { CategoryType } from "@/app/hooks/usePlanning";
 
@@ -23,6 +23,12 @@ interface MonthViewProps {
   collectiveSlots?: CollectiveSlot[];
   categoryTypes?: CategoryType[];
   selectedTypeId?: string | null;
+  // Plages dynamiques Matin/Aprem/Soir basées sur les paramètres planning utilisateur
+  dynamicSlots?: {
+    morning: { start: string; end: string } | null;
+    afternoon: { start: string; end: string } | null;
+    evening: { start: string; end: string } | null;
+  };
   onDayClick: (date: string) => void;
   onRangeSelect?: (startDate: string, endDate: string) => void;
   onMissionClick: (mission: Mission) => void;
@@ -36,6 +42,7 @@ export function MonthView({
   collectiveSlots = [],
   categoryTypes = [],
   selectedTypeId,
+  dynamicSlots,
   onDayClick,
   onRangeSelect,
   onMissionClick,
@@ -204,6 +211,60 @@ export function MonthView({
     return "";
   };
 
+  // Détermine l'état des périodes Matin / Aprem / Soir pour un jour donné
+  // Renvoie 3 booléens : si chaque période est couverte par les disponibilités
+  // Les bornes M/A/S sont issues des paramètres planning utilisateur (dynamicSlots)
+  const getDayPeriods = (dayAvailabilities: Availability[]): { morning: boolean; afternoon: boolean; evening: boolean } => {
+    // Filtre par type actif si applicable
+    const relevant = selectedTypeId
+      ? dayAvailabilities.filter((a) => a.categoryTypeId === selectedTypeId)
+      : dayAvailabilities;
+
+    // Si au moins une dispo "available" (journée entière) → tout est ouvert
+    if (relevant.some((a) => a.status === "available")) {
+      return { morning: true, afternoon: true, evening: true };
+    }
+
+    // Bornes dynamiques en heures (fallback si dynamicSlots non fourni)
+    const parseHour = (t: string) => parseInt(t.split(":")[0] ?? "0", 10);
+    const morningEndH = dynamicSlots?.morning ? parseHour(dynamicSlots.morning.end) : 12;
+    const afternoonEndH = dynamicSlots?.afternoon ? parseHour(dynamicSlots.afternoon.end) : 17;
+
+    // Helper : compare horaires (minute-précis) avec les presets dynamiques
+    const matchesPreset = (slot: { startTime: string; endTime: string }, preset: { start: string; end: string } | null | undefined) => {
+      if (!preset) return false;
+      return slot.startTime === preset.start && slot.endTime === preset.end;
+    };
+
+    let morning = false;
+    let afternoon = false;
+    let evening = false;
+    for (const a of relevant) {
+      if (a.status !== "partial" || !a.timeSlots) continue;
+      for (const slot of a.timeSlots) {
+        // 1. Match exact avec un preset → priorité (Matin + Soir = strict)
+        if (matchesPreset(slot, dynamicSlots?.morning)) {
+          morning = true;
+          continue;
+        }
+        if (matchesPreset(slot, dynamicSlots?.afternoon)) {
+          afternoon = true;
+          continue;
+        }
+        if (matchesPreset(slot, dynamicSlots?.evening)) {
+          evening = true;
+          continue;
+        }
+        // 2. Sinon, fallback par heure de début (créneaux personnalisés)
+        const startH = parseHour(slot.startTime);
+        if (startH < morningEndH) morning = true;
+        else if (startH < afternoonEndH) afternoon = true;
+        else evening = true;
+      }
+    }
+    return { morning, afternoon, evening };
+  };
+
   // Noms des jours abrégés pour mobile
   const dayNamesShort = ["L", "M", "M", "J", "V", "S", "D"];
 
@@ -316,6 +377,19 @@ export function MonthView({
                 )}
               </div>
 
+              {/* Indicateur Matin / Aprem / Soir — visible uniquement si dispo */}
+              {!past && !inSelection && dayAvailabilities.length > 0 && (() => {
+                const periods = getDayPeriods(dayAvailabilities);
+                if (!periods.morning && !periods.afternoon && !periods.evening) return null;
+                return (
+                  <div className="flex items-center gap-0.5 mb-0.5 sm:mb-1">
+                    <PeriodPill label="M" active={periods.morning} title="Matin" />
+                    <PeriodPill label="A" active={periods.afternoon} title="Après-midi" />
+                    <PeriodPill label="S" active={periods.evening} title="Soir" />
+                  </div>
+                );
+              })()}
+
               {/* Missions et créneaux collectifs */}
               <div className="space-y-0.5 overflow-hidden">
                 {/* Créneaux collectifs - n'afficher que ceux avec réservations, sinon 1 seul */}
@@ -376,32 +450,38 @@ export function MonthView({
                   return dayMissions
                     .filter((m) => m.sessionType !== "collective")
                     .slice(0, maxMissions)
-                    .map((mission) => (
-                      <motion.div
-                        key={mission.id}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onMissionClick(mission);
-                        }}
-                        className={cn(
-                          "text-[8px] sm:text-[10px] md:text-xs text-white px-1 sm:px-1.5 py-0.5 rounded truncate cursor-pointer",
-                          statusColors[mission.status]
-                        )}
-                        whileHover={{ scale: 1.05 }}
-                      >
-                        <span className="sm:hidden">
-                          {mission.animals && mission.animals.length > 1
-                            ? mission.animals.map((a) => a.emoji).join("")
-                            : mission.animal.emoji}
-                        </span>
-                        <span className="hidden sm:inline">
-                          {mission.animals && mission.animals.length > 1
-                            ? `${mission.animals.map((a) => a.emoji).join("")} ${mission.animals.map((a) => a.name).join(", ")}`
-                            : `${mission.animal.emoji} ${mission.animal.name}`}
-                        </span>
-                      </motion.div>
-                    ));
+                    .map((mission) => {
+                      const vs = getMissionVisualStyle(mission);
+                      return (
+                        <motion.div
+                          key={mission.id}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onMissionClick(mission);
+                          }}
+                          className="text-[8px] sm:text-[10px] md:text-xs px-1 sm:px-1.5 py-0.5 truncate cursor-pointer"
+                          style={{
+                            borderRadius: 4,
+                            background: vs.background,
+                            color: vs.textColor,
+                            borderLeft: `2px ${vs.borderStyle} ${vs.borderLeftColor}`,
+                          }}
+                          whileHover={{ scale: 1.05 }}
+                        >
+                          <span className="sm:hidden">
+                            {mission.animals && mission.animals.length > 1
+                              ? mission.animals.map((a) => a.emoji).join("")
+                              : mission.animal.emoji}
+                          </span>
+                          <span className="hidden sm:inline">
+                            {mission.animals && mission.animals.length > 1
+                              ? `${mission.animals.map((a) => a.emoji).join("")} ${mission.animals.map((a) => a.name).join(", ")}`
+                              : `${mission.animal.emoji} ${mission.animal.name}`}
+                          </span>
+                        </motion.div>
+                      );
+                    });
                 })()}
                 {(() => {
                   const slotsWithBookings = daySlots.filter((s) => s.bookings && s.bookings.length > 0);
@@ -430,5 +510,37 @@ export function MonthView({
         })}
       </div>
     </div>
+  );
+}
+
+/**
+ * Mini pill M/A/S pour visualiser les périodes disponibles dans la vue mois.
+ * Active = pastille pleine dark green, inactive = outline gris léger.
+ */
+function PeriodPill({
+  label,
+  active,
+  title,
+}: {
+  label: string;
+  active: boolean;
+  title: string;
+}) {
+  return (
+    <span
+      title={`${title} : ${active ? "Disponible" : "Indisponible"}`}
+      className="inline-flex items-center justify-center text-[7px] sm:text-[9px] font-bold leading-none"
+      style={{
+        width: "min(14px, 20%)",
+        minWidth: 10,
+        height: 12,
+        borderRadius: 999,
+        background: active ? "#1f3a33" : "#fff",
+        color: active ? "#f7f5ef" : "#cdc9c0",
+        border: `1px solid ${active ? "#1f3a33" : "#ece9e1"}`,
+      }}
+    >
+      {label}
+    </span>
   );
 }

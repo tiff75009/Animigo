@@ -138,35 +138,45 @@ export function YearView({
     return (
       <motion.div
         onClick={() => onMonthClick(month)}
-        className={cn(
-          "bg-white rounded-xl p-3 cursor-pointer border transition-all",
-          isCurrentMonth
-            ? "border-primary shadow-md"
-            : "border-gray-100 hover:border-gray-200 hover:shadow-sm"
-        )}
-        whileHover={{ scale: 1.02, y: -2 }}
+        className="p-3 cursor-pointer transition-all hover:shadow-[0_10px_30px_rgba(30,30,28,0.06)] hover:-translate-y-0.5"
+        style={{
+          borderRadius: 14,
+          background: "#fff",
+          border: `1px solid ${isCurrentMonth ? "#1f3a33" : "#ece9e1"}`,
+        }}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: month * 0.05 }}
+        transition={{ delay: month * 0.04 }}
       >
-        {/* Month name */}
+        {/* Month name + badges */}
         <div className="flex items-center justify-between mb-2">
-          <h3
-            className={cn(
-              "font-bold text-sm",
-              isCurrentMonth ? "text-primary" : "text-foreground"
-            )}
-          >
-            {monthNames[month]}
-          </h3>
-          <div className="flex gap-1">
+          <div className="min-w-0">
+            <div className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "#9c9484" }}>
+              {isCurrentMonth ? "Mois en cours" : ""}
+            </div>
+            <h3
+              className="text-[14px] font-semibold tracking-[-0.01em] capitalize"
+              style={{ color: isCurrentMonth ? "#1f3a33" : "#1f1f1d" }}
+            >
+              {monthNames[month]}
+            </h3>
+          </div>
+          <div className="flex gap-1 flex-shrink-0">
             {missionCount > 0 && (
-              <span className="text-[10px] bg-purple/10 text-purple px-1.5 py-0.5 rounded-full font-medium">
+              <span
+                className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                style={{ border: "1px solid #cfdbd3", color: "#2f4a3f", background: "#fff" }}
+                title={`${missionCount} mission${missionCount > 1 ? "s" : ""}`}
+              >
                 {missionCount}
               </span>
             )}
             {unavailableCount > 0 && (
-              <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-medium">
+              <span
+                className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                style={{ border: "1px solid #f1cdcd", color: "#8a3a3a", background: "#fff" }}
+                title={`${unavailableCount} jour${unavailableCount > 1 ? "s" : ""} indispo`}
+              >
                 {unavailableCount}
               </span>
             )}
@@ -179,7 +189,8 @@ export function YearView({
           {["L", "M", "M", "J", "V", "S", "D"].map((d, i) => (
             <div
               key={i}
-              className="text-[8px] text-text-light text-center font-medium"
+              className="text-[9px] text-center font-medium pb-0.5"
+              style={{ color: "#cdc9c0" }}
             >
               {d}
             </div>
@@ -188,7 +199,7 @@ export function YearView({
           {/* Days */}
           {days.map((day, i) => {
             if (day === null) {
-              return <div key={i} className="w-4 h-4" />;
+              return <div key={i} className="w-5 h-5" />;
             }
 
             const hasMissionToday = hasMission(day);
@@ -201,28 +212,46 @@ export function YearView({
             return (
               <div
                 key={i}
-                className={cn(
-                  "w-4 h-4 flex items-center justify-center text-[8px] rounded-sm",
-                  isTodayDate && "bg-primary text-white font-bold",
-                  !isTodayDate && hasMissionToday && "bg-purple/30",
-                  !isTodayDate && isUnavailableToday && "bg-red-200",
-                  !isTodayDate &&
-                    !hasMissionToday &&
-                    !isUnavailableToday &&
-                    "text-text-light"
-                )}
+                className="w-5 h-5 flex items-center justify-center text-[9px] rounded-full"
+                style={
+                  isTodayDate
+                    ? { background: "#1f3a33", color: "#f7f5ef", fontWeight: 700 }
+                    : hasMissionToday
+                      ? { background: "#f5f9f6", color: "#1f3a33", fontWeight: 600 }
+                      : isUnavailableToday
+                        ? { background: "#fdf0f0", color: "#8a3a3a" }
+                        : { color: "#9c9484" }
+                }
               >
                 {day}
               </div>
             );
           })}
         </div>
+
+        {/* Légende compacte au-dessous (visible si données) */}
+        {(missionCount > 0 || unavailableCount > 0) && (
+          <div className="flex items-center justify-center gap-2 mt-2 pt-2" style={{ borderTop: "1px solid #f7f5ef" }}>
+            {missionCount > 0 && (
+              <div className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 rounded-full" style={{ background: "#1f3a33" }} />
+                <span className="text-[9px]" style={{ color: "#9c9484" }}>Mission</span>
+              </div>
+            )}
+            {unavailableCount > 0 && (
+              <div className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 rounded-full" style={{ background: "#8a3a3a" }} />
+                <span className="text-[9px]" style={{ color: "#9c9484" }}>Indispo</span>
+              </div>
+            )}
+          </div>
+        )}
       </motion.div>
     );
   };
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
       {Array.from({ length: 12 }, (_, i) => (
         <MiniMonth key={i} month={i} />
       ))}
