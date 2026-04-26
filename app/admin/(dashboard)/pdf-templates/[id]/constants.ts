@@ -33,7 +33,7 @@ export interface FieldDef {
   documentTypes?: DocumentType[];
 }
 
-const COMMON_FIELDS: FieldDef[] = [
+export const COMMON_FIELDS: FieldDef[] = [
   { key: "documentType", label: "Type document", example: "FACTURE" },
   { key: "date", label: "Date émission", example: "14/03/2026" },
   // Client (destinataire de la facture / reçu)
@@ -52,7 +52,7 @@ const COMMON_FIELDS: FieldDef[] = [
   { key: "timeRange", label: "Horaires", example: "09:00 - 18:00" },
 ];
 
-const INVOICE_FIELDS: FieldDef[] = [
+export const INVOICE_FIELDS: FieldDef[] = [
   { key: "invoiceNumber", label: "N° Facture", example: "FA-2026-0042", documentTypes: ["invoice"] },
   { key: "announcerName", label: "Nom prestataire", example: "Marie Martin", documentTypes: ["invoice"] },
   { key: "announcerEmail", label: "Email prestataire", example: "marie@example.com", documentTypes: ["invoice"] },
@@ -74,7 +74,7 @@ const INVOICE_FIELDS: FieldDef[] = [
 ];
 
 // Balises spécifiques au reçu client (preuve de paiement émise par la plateforme)
-const CLIENT_RECEIPT_FIELDS: FieldDef[] = [
+export const CLIENT_RECEIPT_FIELDS: FieldDef[] = [
   // ─── Identification du document ───
   { key: "receiptNumber", label: "N° Reçu", example: "REC-2026-0042", documentTypes: ["client_receipt"] },
   { key: "bookingNumber", label: "N° Réservation", example: "RES-2026-0042", documentTypes: ["client_receipt"] },

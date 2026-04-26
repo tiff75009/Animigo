@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import TableColumnsPanel from "./TableColumnsPanel";
-import { filterFieldsByDocumentType, getDefaultClientReceiptTemplate, type DocumentType as DocType, type FieldDef } from "./constants";
+import { filterFieldsByDocumentType, getDefaultClientReceiptTemplate, COMMON_FIELDS, INVOICE_FIELDS, CLIENT_RECEIPT_FIELDS, type DocumentType as DocType, type FieldDef } from "./constants";
 
 // ============================================
 // BALISES DYNAMIQUES
@@ -1931,46 +1931,70 @@ export default function PdfTemplateEditorPage() {
                 {/* Champs texte */}
                 <h4 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                   <Type className="w-3 h-3" />
-                  Champs texte
+                  Balises disponibles
                 </h4>
-                <div className="space-y-1">
-                  {visibleTextFields
-                    .filter((f) => {
-                      if (!fieldSearch) return true;
-                      const q = fieldSearch.toLowerCase();
-                      return f.label.toLowerCase().includes(q) || f.key.toLowerCase().includes(q);
-                    })
-                    .map((field) => {
-                    const isCopied = copiedField === field.key;
+                {/* Groupes : Communes / Facture (si invoice ou ancien receipt) / Reçu client (si client_receipt ou ancien receipt) */}
+                {(() => {
+                  const isClientReceipt = documentType === "client_receipt" || documentType === "receipt";
+                  const isInvoice = documentType === "invoice";
+                  const groups: { title: string; fields: FieldDef[]; color: string }[] = [
+                    { title: "Communes (tous types)", fields: COMMON_FIELDS, color: "text-slate-500" },
+                  ];
+                  if (isInvoice) {
+                    groups.push({ title: "Spécifiques facture", fields: INVOICE_FIELDS, color: "text-blue-400" });
+                  }
+                  if (isClientReceipt) {
+                    groups.push({ title: "Spécifiques reçu client", fields: CLIENT_RECEIPT_FIELDS, color: "text-emerald-400" });
+                  }
+                  // Filtrer par recherche
+                  const search = fieldSearch.toLowerCase();
+                  const matchSearch = (f: FieldDef) =>
+                    !search || f.label.toLowerCase().includes(search) || f.key.toLowerCase().includes(search);
+                  return groups.map((group) => {
+                    const visibleFields = group.fields.filter(matchSearch);
+                    if (visibleFields.length === 0) return null;
                     return (
-                      <div
-                        key={field.key}
-                        className="flex items-center gap-2 p-2 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors group"
-                      >
-                        <Info className="w-3 h-3 text-slate-600 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-slate-300 group-hover:text-white">{field.label}</p>
-                          <p className="text-[10px] text-slate-600 font-mono truncate">{field.key}</p>
-                        </div>
-                        <button
-                          onClick={() => ctxCopyField(field.key)}
-                          className={`flex-shrink-0 p-1.5 rounded-md transition-all duration-300 ${
-                            isCopied
-                              ? "bg-emerald-500/20 text-emerald-400 scale-110"
-                              : "text-slate-600 hover:text-cyan-400 hover:bg-slate-700"
-                          }`}
-                          title={`Copier "${field.key}"`}
-                        >
-                          {isCopied ? (
-                            <Check className="w-3.5 h-3.5" />
-                          ) : (
-                            <Copy className="w-3.5 h-3.5" />
-                          )}
-                        </button>
+                      <div key={group.title} className="space-y-1">
+                        <p className={`text-[10px] font-bold uppercase tracking-wider mt-2 mb-1.5 ${group.color}`}>
+                          {group.title}
+                          <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-500 font-normal text-[9px]">
+                            {visibleFields.length}
+                          </span>
+                        </p>
+                        {visibleFields.map((field) => {
+                          const isCopied = copiedField === field.key;
+                          return (
+                            <div
+                              key={field.key}
+                              className="flex items-center gap-2 p-2 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors group"
+                            >
+                              <Info className="w-3 h-3 text-slate-600 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium text-slate-300 group-hover:text-white">{field.label}</p>
+                                <p className="text-[10px] text-slate-600 font-mono truncate">{field.key}</p>
+                              </div>
+                              <button
+                                onClick={() => ctxCopyField(field.key)}
+                                className={`flex-shrink-0 p-1.5 rounded-md transition-all duration-300 ${
+                                  isCopied
+                                    ? "bg-emerald-500/20 text-emerald-400 scale-110"
+                                    : "text-slate-600 hover:text-cyan-400 hover:bg-slate-700"
+                                }`}
+                                title={`Copier "${field.key}"`}
+                              >
+                                {isCopied ? (
+                                  <Check className="w-3.5 h-3.5" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
                     );
-                  })}
-                </div>
+                  });
+                })()}
 
                 {/* Tableau des prestations - Configuration colonnes */}
                 <TableColumnsPanel
@@ -2150,11 +2174,20 @@ export default function PdfTemplateEditorPage() {
                       </div>
                     </div>
                     <div className="overflow-y-auto flex-1">
-                    {visibleTextFields.filter((field) => {
-                      if (!ctxFieldSearch) return true;
+                    {(() => {
+                      const isClientReceipt = documentType === "client_receipt" || documentType === "receipt";
+                      const isInvoice = documentType === "invoice";
+                      const allFields: FieldDef[] = [
+                        ...COMMON_FIELDS,
+                        ...(isInvoice ? INVOICE_FIELDS : []),
+                        ...(isClientReceipt ? CLIENT_RECEIPT_FIELDS : []),
+                      ];
                       const q = ctxFieldSearch.toLowerCase();
-                      return field.label.toLowerCase().includes(q) || field.key.toLowerCase().includes(q);
-                    }).map((field) => {
+                      return allFields.filter((field) => {
+                        if (!ctxFieldSearch) return true;
+                        return field.label.toLowerCase().includes(q) || field.key.toLowerCase().includes(q);
+                      });
+                    })().map((field) => {
                       const isCopied = copiedField === field.key;
                       return (
                         <div
