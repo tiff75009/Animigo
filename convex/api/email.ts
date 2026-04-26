@@ -2117,9 +2117,30 @@ export const sendPaymentReceiptEmail = internalAction({
       const siteName = "Animigo";
       const appUrl = args.appUrl || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
-      const template = getTemplate("payment_receipt");
+      // 1. Charger en priorité le template personnalisé depuis admin/templates-email (BDD)
+      // 2. Fallback sur le template par défaut hardcodé si non trouvé en BDD
+      let template: { subject: string; htmlContent: string } | null = null;
+      try {
+        const dbTemplate = await ctx.runQuery(internal.api.emailInternal.getEmailTemplate, {
+          slug: "payment_receipt",
+        });
+        if (dbTemplate && dbTemplate.htmlContent) {
+          template = {
+            subject: dbTemplate.subject,
+            htmlContent: dbTemplate.htmlContent,
+          };
+          console.log("[sendPaymentReceiptEmail] Template charge depuis BDD (admin/templates-email)");
+        }
+      } catch (e) {
+        console.warn("[sendPaymentReceiptEmail] Erreur lecture template BDD, fallback sur defaut :", e);
+      }
       if (!template) {
-        return { success: false, error: "Template payment_receipt not found" };
+        const defaultTpl = getTemplate("payment_receipt");
+        if (!defaultTpl) {
+          return { success: false, error: "Template payment_receipt introuvable (BDD + defaut)" };
+        }
+        template = defaultTpl;
+        console.log("[sendPaymentReceiptEmail] Template par defaut utilise (aucune personnalisation admin)");
       }
 
       // Calcul HT et TVA sur le prix du service uniquement
