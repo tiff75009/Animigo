@@ -13,9 +13,12 @@ import {
   ZoomOut,
   Check,
   AlertTriangle,
+  ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { useCloudinary } from "@/app/hooks/useCloudinary";
+import { useAction } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 // Taille minimum requise pour la bannière
 const MIN_WIDTH = 1200;
@@ -97,6 +100,8 @@ export default function CoverImageUpload({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploadImage, uploadState, isConfigured } = useCloudinary();
+  const scanPhotoUrl = useAction(api.api.visionOcr.scanPhotoUrl);
+  const [isScanning, setIsScanning] = useState(false);
 
   // Pour éviter les erreurs SSR avec createPortal
   useEffect(() => {
@@ -200,6 +205,26 @@ export default function CoverImageUpload({
       const url = await uploadImage(croppedFile, "animigo/covers");
       if (!url) {
         throw new Error("Échec de l'upload");
+      }
+
+      // ─── Scan OCR Google Vision (modération) ───
+      setIsScanning(true);
+      let scan: { status: "approved" | "rejected"; rejectionReason?: string } | null = null;
+      try {
+        scan = await scanPhotoUrl({ url });
+      } catch (scanErr) {
+        // Erreur réseau / API Vision → fail-open (la modération admin reste un filet)
+        console.warn("[CoverImageUpload] OCR scan API error (fail-open):", scanErr);
+      } finally {
+        setIsScanning(false);
+      }
+
+      // Bloquer l'upload si le scan a explicitement rejeté la photo
+      if (scan?.status === "rejected") {
+        throw new Error(
+          scan.rejectionReason ||
+            "Cette photo contient des coordonnées (téléphone ou email). Veuillez utiliser une autre image."
+        );
       }
 
       await onUploadComplete(url);
@@ -524,12 +549,22 @@ export default function CoverImageUpload({
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                   >
-                    {isSaving || uploadState.isUploading ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                    {isScanning ? (
+                      <>
+                        <ShieldAlert className="w-4 h-4 animate-pulse" />
+                        Vérification...
+                      </>
+                    ) : isSaving || uploadState.isUploading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Upload...
+                      </>
                     ) : (
-                      <Check className="w-4 h-4" />
+                      <>
+                        <Check className="w-4 h-4" />
+                        Enregistrer
+                      </>
                     )}
-                    Enregistrer
                   </motion.button>
                 </div>
               </div>

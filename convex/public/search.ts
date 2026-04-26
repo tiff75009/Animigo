@@ -1171,6 +1171,22 @@ interface FormuleResult {
   duration?: number;
   sessionType: "individual" | "collective";
   serviceLocation?: "announcer_home" | "client_home" | "both";
+  /**
+   * `serviceLocation` filtré selon la zone d'intervention de l'annonceur.
+   * - Si la formule est `both` mais l'annonceur ne peut pas se déplacer chez le client
+   *   (distance > radius annonceur), on dégrade à `announcer_home`.
+   * - Si la formule était `client_home` exclusive et hors zone, la formule est
+   *   exclue des résultats (pas de result du tout).
+   */
+  effectiveServiceLocation?: "announcer_home" | "client_home" | "both";
+  /**
+   * true si l'annonceur peut se déplacer jusqu'aux coordonnées de recherche
+   * du client (distance(client, pro) <= radius annonceur).
+   * undefined si pas assez d'infos pour calculer (pas de coords ou pas de radius).
+   */
+  announcerCanTravelToClient?: boolean;
+  /** Rayon d'intervention de l'annonceur en km (info pour l'UI) */
+  announcerInterventionRadius?: number;
   numberOfSessions?: number;
   // Infos service/catégorie
   serviceId: string;
@@ -1392,6 +1408,17 @@ export const searchFormules = query({
         if (distance > radius) continue;
       }
 
+      // ─── Zone d'intervention annonceur ───
+      // canTravel : l'annonceur peut-il se déplacer jusqu'aux coordonnées du client ?
+      // - undefined si pas de coords client OU pas de radius annonceur défini
+      // - true si la distance est dans le rayon d'intervention de l'annonceur
+      // - false si l'annonceur a un radius défini et que la distance dépasse
+      const announcerInterventionRadius: number | undefined = profile.radius;
+      let canTravel: boolean | undefined;
+      if (distance !== undefined && announcerInterventionRadius !== undefined) {
+        canTravel = distance <= announcerInterventionRadius;
+      }
+
       // Récupérer la catégorie depuis le cache (Phase 2 batch loading)
       const categoryDoc = service.category ? categoriesMap.get(service.category) ?? null : null;
 
@@ -1451,10 +1478,24 @@ export const searchFormules = query({
         if (args.sessionType === "individual" && isCollective) continue;
         if (args.sessionType === "collective" && !isCollective) continue;
 
-        // Filtrer par lieu si spécifié
+        // Lieu de prestation effectif après filtre zone d'intervention.
+        // Si la formule est `client_home` exclusive ET que l'annonceur ne peut pas
+        // se déplacer (canTravel === false), on EXCLUT cette formule.
+        // Si la formule est `both` ET hors zone, on dégrade en `announcer_home`
+        // (le client gardera la formule mais ne pourra pas choisir "à domicile").
+        const rawLocation = (variant.serviceLocation || service.serviceLocation || "both") as
+          | "announcer_home"
+          | "client_home"
+          | "both";
+        let effectiveLocation: "announcer_home" | "client_home" | "both" = rawLocation;
+        if (canTravel === false) {
+          if (rawLocation === "client_home") continue;
+          if (rawLocation === "both") effectiveLocation = "announcer_home";
+        }
+
+        // Filtrer par lieu si spécifié (sur la base du lieu EFFECTIF, pas celui brut)
         if (args.serviceLocation && args.serviceLocation.length > 0) {
-          const variantLocation = variant.serviceLocation || service.serviceLocation || "both";
-          if (variantLocation !== "both" && !args.serviceLocation.includes(variantLocation as "announcer_home" | "client_home")) {
+          if (effectiveLocation !== "both" && !args.serviceLocation.includes(effectiveLocation as "announcer_home" | "client_home")) {
             continue;
           }
         }
@@ -1675,6 +1716,9 @@ export const searchFormules = query({
           pricingMode: variant.pricingMode,
           sessionType: isCollective ? "collective" : "individual",
           serviceLocation: variant.serviceLocation || service.serviceLocation,
+          effectiveServiceLocation: effectiveLocation,
+          announcerCanTravelToClient: canTravel,
+          announcerInterventionRadius,
           numberOfSessions: variant.numberOfSessions,
           serviceId: service._id,
           categorySlug: service.category,
@@ -1931,6 +1975,13 @@ export const searchFormulesInternal = query({
         if (distance > radius) continue;
       }
 
+      // Zone d'intervention annonceur (cf. searchFormules pour la logique)
+      const announcerInterventionRadius: number | undefined = profile.radius;
+      let canTravel: boolean | undefined;
+      if (distance !== undefined && announcerInterventionRadius !== undefined) {
+        canTravel = distance <= announcerInterventionRadius;
+      }
+
       const categoryDoc = service.category ? categoriesMap.get(service.category) ?? null : null;
       const variants = variantsByServiceMap.get(service._id) ?? [];
 
@@ -1983,9 +2034,19 @@ export const searchFormulesInternal = query({
         if (args.sessionType === "individual" && isCollective) continue;
         if (args.sessionType === "collective" && !isCollective) continue;
 
+        // Zone d'intervention : exclure client_home hors zone, dégrader both → announcer_home
+        const rawLocation = (variant.serviceLocation || service.serviceLocation || "both") as
+          | "announcer_home"
+          | "client_home"
+          | "both";
+        let effectiveLocation: "announcer_home" | "client_home" | "both" = rawLocation;
+        if (canTravel === false) {
+          if (rawLocation === "client_home") continue;
+          if (rawLocation === "both") effectiveLocation = "announcer_home";
+        }
+
         if (args.serviceLocation && args.serviceLocation.length > 0) {
-          const variantLocation = variant.serviceLocation || service.serviceLocation || "both";
-          if (variantLocation !== "both" && !args.serviceLocation.includes(variantLocation as "announcer_home" | "client_home")) {
+          if (effectiveLocation !== "both" && !args.serviceLocation.includes(effectiveLocation as "announcer_home" | "client_home")) {
             continue;
           }
         }
@@ -2310,6 +2371,9 @@ export const searchFormulesInternal = query({
           pricingMode: variant.pricingMode,
           sessionType: isCollective ? "collective" : "individual",
           serviceLocation: variant.serviceLocation || service.serviceLocation,
+          effectiveServiceLocation: effectiveLocation,
+          announcerCanTravelToClient: canTravel,
+          announcerInterventionRadius,
           numberOfSessions: variant.numberOfSessions,
           serviceId: service._id,
           categorySlug: service.category,

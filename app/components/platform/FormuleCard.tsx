@@ -158,6 +158,14 @@ export interface FormuleResult {
   pricingMode?: "per_session" | "per_hour";
   sessionType: "individual" | "collective";
   serviceLocation?: "announcer_home" | "client_home" | "both";
+  /** Lieu effectif après filtre zone d'intervention annonceur (search.ts).
+   *  Si différent de serviceLocation, ça veut dire que le pro ne peut pas
+   *  se déplacer chez ce client : la formule "both" devient "announcer_home". */
+  effectiveServiceLocation?: "announcer_home" | "client_home" | "both";
+  /** L'annonceur peut-il se déplacer aux coords du client ? (undefined = pas calculable) */
+  announcerCanTravelToClient?: boolean;
+  /** Rayon d'intervention de l'annonceur en km */
+  announcerInterventionRadius?: number;
   numberOfSessions?: number;
   serviceId: string;
   categorySlug: string;
@@ -767,16 +775,28 @@ export function FormuleCardGrid({
                 ))}
               </InfoPill>
             )}
-            {formule.serviceLocation && (
-              <InfoPill>
-                {formule.serviceLocation === "client_home" ? (
-                  <Car className="w-2.5 h-2.5" />
-                ) : (
-                  <Home className="w-2.5 h-2.5" />
-                )}
-                {locationLabels[formule.serviceLocation]}
-              </InfoPill>
-            )}
+            {(formule.effectiveServiceLocation ?? formule.serviceLocation) && (() => {
+              const loc = formule.effectiveServiceLocation ?? formule.serviceLocation!;
+              const wasDegraded =
+                formule.serviceLocation === "both" &&
+                formule.effectiveServiceLocation === "announcer_home";
+              return (
+                <InfoPill
+                  title={
+                    wasDegraded
+                      ? `Le pet-sitter ne se déplace pas jusqu'à votre adresse (rayon : ${formule.announcerInterventionRadius} km)`
+                      : undefined
+                  }
+                >
+                  {loc === "client_home" ? (
+                    <Car className="w-2.5 h-2.5" />
+                  ) : (
+                    <Home className="w-2.5 h-2.5" />
+                  )}
+                  {locationLabels[loc]}
+                </InfoPill>
+              );
+            })()}
             {isCollective && (
               <InfoPill>
                 <Users className="w-2.5 h-2.5" /> Collectif

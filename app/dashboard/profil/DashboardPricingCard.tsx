@@ -16,6 +16,7 @@ import {
   Loader2,
   ExternalLink,
   Package,
+  ArrowRight,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import Link from "next/link";
@@ -194,42 +195,65 @@ function VariantCard({ token, category, variant, options }: {
   const variantOptions = options.filter(o => o.isActive && (!o.variantId || o.variantId === variant.id));
 
   return (
-    <div className={cn(
-      "p-3 rounded-xl border transition-colors",
-      variant.isActive
-        ? "bg-white border-gray-100 hover:border-gray-200"
-        : "bg-gray-50/50 border-gray-100 opacity-60"
-    )}>
+    <div
+      className="p-3 transition-colors"
+      style={{
+        borderRadius: 12,
+        background: variant.isActive ? "#fff" : "#fcfaf4",
+        border: "1px solid #f1ede3",
+        opacity: variant.isActive ? 1 : 0.6,
+      }}
+    >
       <div className="flex items-start justify-between gap-2">
         {/* Info formule */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[13px] font-semibold text-gray-900 truncate">{variant.name}</span>
+            <span className="text-[13px] font-semibold truncate" style={{ color: "#1f1f1d" }}>
+              {variant.name}
+            </span>
             {!variant.isActive && (
-              <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-400">Inactive</span>
+              <span
+                className="text-[9px] font-medium px-1.5 py-0.5 rounded-full"
+                style={{ background: "#f7f5ef", color: "#9c9484", border: "1px solid #ece9e1" }}
+              >
+                Inactive
+              </span>
             )}
             {isCollective && (
-              <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-600 flex items-center gap-0.5">
+              <span
+                className="text-[9px] font-medium px-1.5 py-0.5 rounded-full flex items-center gap-0.5"
+                style={{ background: "#f5f9f6", color: "#1f3a33", border: "1px solid #cfdbd3" }}
+              >
                 <Users className="w-2 h-2" />
                 Collectif{variant.maxAnimalsPerSession ? ` (${variant.maxAnimalsPerSession} max)` : ""}
               </span>
             )}
             {isMultiSession && (
-              <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 flex items-center gap-0.5">
+              <span
+                className="text-[9px] font-medium px-1.5 py-0.5 rounded-full flex items-center gap-0.5"
+                style={{ background: "#fcfaf4", color: "#6d6d68", border: "1px solid #ece9e1" }}
+              >
                 <Repeat className="w-2 h-2" />
                 {variant.numberOfSessions} séances
               </span>
             )}
             {variant.isSapEligible && (
-              <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-600">SAP</span>
+              <span
+                className="text-[9px] font-medium px-1.5 py-0.5 rounded-full"
+                style={{ background: "#f5f9f6", color: "#1f3a33", border: "1px solid #cfdbd3" }}
+              >
+                SAP
+              </span>
             )}
           </div>
 
           {/* Durée */}
           {variant.duration && (
             <div className="flex items-center gap-1 mt-1">
-              <Clock className="w-3 h-3 text-gray-400" />
-              <span className="text-[11px] text-gray-500">{variant.duration} min</span>
+              <Clock className="w-3 h-3" style={{ color: "#9c9484" }} />
+              <span className="text-[11px]" style={{ color: "#6d6d68" }}>
+                {variant.duration} min
+              </span>
             </div>
           )}
 
@@ -424,116 +448,179 @@ function CategorySection({ token, category, services }: {
   );
 }
 
-// Composant principal
+// Composant principal — widget recap compact (style Google/Outlook)
 const DashboardPricingCard = memo(function DashboardPricingCard({ token }: { token: string }) {
   const services = useQuery(api.services.services.getMyServices, { token });
 
   if (services === undefined) {
     return (
       <div className="flex items-center justify-center py-8">
-        <Loader2 className="w-5 h-5 animate-spin text-primary" />
+        <Loader2 className="w-5 h-5 animate-spin" style={{ color: "#1f3a33" }} />
       </div>
     );
   }
 
   if (!services || services.length === 0) {
     return (
-      <div className="text-center py-6 space-y-2">
-        <Euro className="w-8 h-8 text-gray-300 mx-auto" />
-        <p className="text-sm text-gray-500">Aucun service configuré</p>
-        <Link href="/dashboard/services" className="text-xs text-primary font-medium hover:underline">
-          Ajouter des services
+      <div
+        className="text-center py-5"
+        style={{ background: "#fcfaf4", borderRadius: 10, border: "1px dashed #ece9e1" }}
+      >
+        <Euro className="w-6 h-6 mx-auto mb-1.5" style={{ color: "#cdc9c0" }} />
+        <p className="text-[12px] m-0" style={{ color: "#6d6d68" }}>
+          Aucun service configuré
+        </p>
+        <Link
+          href="/dashboard/services"
+          className="inline-flex items-center gap-1 text-[11.5px] font-semibold mt-2 transition-opacity hover:opacity-80"
+          style={{ color: "#1f3a33" }}
+        >
+          Ajouter un service <ArrowRight className="w-3 h-3" />
         </Link>
       </div>
     );
   }
 
-  // Grouper par catégorie
-  const categoriesMap = new Map<string, ServiceInfo[]>();
-
+  // Aplatir tous les services + variantes actifs
+  const allActiveVariants: Array<{
+    serviceId: string;
+    category: string;
+    serviceName: string;
+    variant: VariantInfo;
+  }> = [];
   for (const service of services) {
     if (!service.isActive) continue;
-    const activeVariants = service.variants.filter((v: any) => v.price > 0);
-    if (activeVariants.length === 0) continue;
-
-    const serviceInfo: ServiceInfo = {
-      id: service.id,
-      category: service.category,
-      name: service.name,
-      isActive: service.isActive,
-      variants: activeVariants.map((v: any) => ({
-        id: v.id,
-        name: v.name,
-        description: v.description,
-        price: v.price,
-        priceUnit: v.priceUnit,
-        pricing: v.pricing,
-        duration: v.duration,
-        numberOfSessions: v.numberOfSessions,
-        sessionType: v.sessionType,
-        maxAnimalsPerSession: v.maxAnimalsPerSession,
-        isActive: v.isActive,
-        isSapEligible: v.isSapEligible,
-      })),
-      options: service.options.map((o: any) => ({
-        id: o.id,
-        name: o.name,
-        price: o.price,
-        priceType: o.priceType,
-        unitLabel: o.unitLabel,
-        isActive: o.isActive,
-        variantId: o.variantId,
-      })),
-    };
-
-    const existing = categoriesMap.get(service.category) || [];
-    existing.push(serviceInfo);
-    categoriesMap.set(service.category, existing);
+    for (const v of service.variants) {
+      if (!v.isActive || (v.price ?? 0) <= 0) continue;
+      allActiveVariants.push({
+        serviceId: service.id,
+        category: service.category,
+        serviceName: service.name,
+        variant: {
+          id: v.id,
+          name: v.name,
+          description: v.description,
+          price: v.price,
+          priceUnit: v.priceUnit,
+          pricing: v.pricing,
+          duration: v.duration,
+          numberOfSessions: v.numberOfSessions,
+          sessionType: v.sessionType,
+          maxAnimalsPerSession: v.maxAnimalsPerSession,
+          isActive: v.isActive,
+          isSapEligible: v.isSapEligible,
+        },
+      });
+    }
   }
 
-  const categories = Array.from(categoriesMap.entries());
-
-  if (categories.length === 0) {
+  if (allActiveVariants.length === 0) {
     return (
-      <div className="text-center py-6 space-y-2">
-        <Euro className="w-8 h-8 text-gray-300 mx-auto" />
-        <p className="text-sm text-gray-500">Aucune formule active avec tarif</p>
+      <div
+        className="text-center py-5"
+        style={{ background: "#fcfaf4", borderRadius: 10, border: "1px dashed #ece9e1" }}
+      >
+        <Euro className="w-6 h-6 mx-auto mb-1.5" style={{ color: "#cdc9c0" }} />
+        <p className="text-[12px] m-0" style={{ color: "#6d6d68" }}>
+          Aucune formule active
+        </p>
       </div>
     );
   }
 
-  // Stats globales
-  const totalFormules = categories.reduce((sum, [, svcs]) =>
-    sum + svcs.reduce((s, svc) => s + svc.variants.filter(v => v.isActive).length, 0), 0
-  );
-  const totalServices = categories.length;
+  // Stats : nombre de prestations, nombre de formules, prix min/max
+  const uniqueCategories = new Set(allActiveVariants.map((v) => v.category));
+  const prices = allActiveVariants.map((v) => getVariantDisplayPrice(v.variant).price);
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+
+  // Top 3 formules pour preview (par ordre, donc les plus récentes premières)
+  const previewVariants = allActiveVariants.slice(0, 3);
 
   return (
     <div className="space-y-3">
-      {/* Résumé global */}
-      <div className="flex items-center gap-3 px-3 py-2 bg-gray-50 rounded-xl">
-        <div className="flex items-center gap-2 flex-1">
-          <span className="text-[11px] text-gray-500">
-            {totalServices} prestation{totalServices > 1 ? "s" : ""} · {totalFormules} formule{totalFormules > 1 ? "s" : ""} active{totalFormules > 1 ? "s" : ""}
-          </span>
-        </div>
-        <Link
-          href="/dashboard/services"
-          className="text-[11px] text-primary font-medium hover:underline"
+      {/* ─── KPI compactes ─── */}
+      <div className="grid grid-cols-2 gap-2">
+        <div
+          className="px-2.5 py-2"
+          style={{ background: "#f5f9f6", borderRadius: 10, border: "1px solid #cfdbd3" }}
         >
-          Tout gérer
-        </Link>
+          <div className="text-[14px] font-bold leading-none tabular-nums" style={{ color: "#1f3a33" }}>
+            {allActiveVariants.length}
+          </div>
+          <div className="text-[10px] mt-0.5" style={{ color: "#1f3a33", opacity: 0.7 }}>
+            formule{allActiveVariants.length > 1 ? "s" : ""} active{allActiveVariants.length > 1 ? "s" : ""}
+          </div>
+        </div>
+        <div
+          className="px-2.5 py-2"
+          style={{ background: "#fcfaf4", borderRadius: 10, border: "1px solid #ece9e1" }}
+        >
+          <div className="text-[14px] font-bold leading-none tabular-nums" style={{ color: "#1f1f1d" }}>
+            {minPrice === maxPrice
+              ? formatPriceCents(minPrice)
+              : `${formatPriceCents(minPrice).replace(" €", "")}–${formatPriceCents(maxPrice)}`}
+          </div>
+          <div className="text-[10px] mt-0.5" style={{ color: "#6d6d68" }}>
+            sur {uniqueCategories.size} prestation{uniqueCategories.size > 1 ? "s" : ""}
+          </div>
+        </div>
       </div>
 
-      {/* Catégories en accordéon */}
-      {categories.map(([category, svcs]) => (
-        <CategorySection
-          key={category}
-          token={token}
-          category={category}
-          services={svcs}
-        />
-      ))}
+      {/* ─── Top formules (3 lignes compactes style row Google) ─── */}
+      <div>
+        <p className="text-[10px] font-medium uppercase tracking-[0.1em] mb-2" style={{ color: "#9c9484" }}>
+          Aperçu des formules
+        </p>
+        <div className="space-y-1.5">
+          {previewVariants.map(({ category, variant, serviceName }) => {
+            const display = getVariantDisplayPrice(variant);
+            const catInfo = CATEGORY_INFO[category] || { name: category, emoji: "🐾" };
+            return (
+              <div
+                key={variant.id}
+                className="flex items-center gap-2.5 px-2.5 py-2 transition-colors hover:bg-[#fcfaf4]"
+                style={{ background: "#fff", border: "1px solid #f1ede3", borderRadius: 10 }}
+              >
+                <span className="text-[16px] leading-none flex-shrink-0">{catInfo.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12.5px] font-semibold truncate m-0" style={{ color: "#1f1f1d" }}>
+                    {variant.name}
+                  </p>
+                  <p className="text-[10.5px] truncate m-0 mt-0.5" style={{ color: "#6d6d68" }}>
+                    {catInfo.name}
+                    {serviceName && serviceName !== catInfo.name && ` · ${serviceName}`}
+                    {variant.duration && ` · ${variant.duration} min`}
+                  </p>
+                </div>
+                <div className="flex-shrink-0 text-right">
+                  <span className="text-[13px] font-bold tabular-nums" style={{ color: "#1f3a33" }}>
+                    {formatPriceCents(display.price)}
+                  </span>
+                  <span className="text-[10px] font-medium ml-0.5" style={{ color: "#9c9484" }}>
+                    {display.unitLabel}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {allActiveVariants.length > 3 && (
+          <p className="text-[10.5px] mt-2 text-center" style={{ color: "#9c9484" }}>
+            +{allActiveVariants.length - 3} autre{allActiveVariants.length - 3 > 1 ? "s" : ""} formule{allActiveVariants.length - 3 > 1 ? "s" : ""}
+          </p>
+        )}
+      </div>
+
+      {/* ─── Lien gestion ─── */}
+      <Link
+        href="/dashboard/services"
+        className="flex items-center justify-center gap-1.5 py-2 rounded-full text-[12px] font-semibold transition-colors hover:bg-[#f7f5ef]"
+        style={{ color: "#1f3a33", border: "1px solid #ece9e1" }}
+      >
+        Gérer mes services
+        <ArrowRight className="w-3 h-3" />
+      </Link>
     </div>
   );
 });

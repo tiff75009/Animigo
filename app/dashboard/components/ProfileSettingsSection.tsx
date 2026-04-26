@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   Navigation,
@@ -227,6 +227,239 @@ function EquipmentToggle({
   );
 }
 
+// ──────────────────────────────────────────────────────────────────
+// ZoneInterventionWidget : widget compact (style Google/iCloud)
+// ──────────────────────────────────────────────────────────────────
+
+function ZoneInterventionWidget({
+  radius,
+  onRadiusChange,
+  disabled,
+}: {
+  radius: number;
+  onRadiusChange: (v: number) => void;
+  disabled?: boolean;
+}) {
+  const [inputText, setInputText] = useState(String(radius));
+  const inputElRef = useRef<HTMLInputElement>(null);
+  const isFranceEntire = radius >= FRANCE_ENTIRE_VALUE;
+  const sliderValue = isFranceEntire ? 100 : Math.min(radius, 100);
+  const percent = (sliderValue / 100) * 100;
+
+  // Sync l'input avec `radius` chaque fois qu'il change (slider, France entière, prop externe).
+  // On ignore uniquement quand l'utilisateur est EN TRAIN de taper dans l'input
+  // (sinon on écraserait sa frappe).
+  useEffect(() => {
+    if (isFranceEntire) return;
+    const isUserTyping = document.activeElement === inputElRef.current;
+    if (isUserTyping) return;
+    setInputText(String(radius));
+  }, [radius, isFranceEntire]);
+
+  // Label contextuel (sobre, sans emoji)
+  const getZoneLabel = (km: number): string => {
+    if (km >= FRANCE_ENTIRE_VALUE) return "Toute la France";
+    if (km <= 5) return "Proximité immédiate";
+    if (km <= 15) return "Quartier";
+    if (km <= 30) return "Ville";
+    if (km <= 50) return "Agglomération";
+    return "Région";
+  };
+
+  const commitInput = (raw: string) => {
+    const n = parseInt(raw, 10);
+    if (Number.isNaN(n)) {
+      setInputText(String(radius));
+      return;
+    }
+    const clamped = Math.max(1, Math.min(100, n));
+    onRadiusChange(clamped);
+    setInputText(String(clamped));
+  };
+
+  return (
+    <motion.div
+      id="section-radius"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.08, duration: 0.3 }}
+      className="bg-white p-5"
+      style={{ borderRadius: 14, border: "1px solid #ece9e1" }}
+    >
+      {/* Header pattern unifié */}
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <div
+            className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{ background: "#f5f9f6", border: "1px solid #cfdbd3" }}
+          >
+            <Navigation className="w-4 h-4" style={{ color: "#1f3a33" }} />
+          </div>
+          <div className="min-w-0">
+            <div
+              className="text-[10px] font-medium uppercase tracking-[0.1em]"
+              style={{ color: "#9c9484" }}
+            >
+              Section · Mobilité
+            </div>
+            <h3
+              className="text-[15px] font-semibold tracking-[-0.01em] m-0"
+              style={{ color: "#1f1f1d" }}
+            >
+              Zone d&apos;intervention
+            </h3>
+          </div>
+        </div>
+        {/* Badge contextuel */}
+        <span
+          className="text-[11px] font-semibold px-2.5 py-1 rounded-full flex-shrink-0"
+          style={{
+            background: isFranceEntire ? "#fcfaf4" : "#f5f9f6",
+            color: isFranceEntire ? "#a16207" : "#1f3a33",
+            border: `1px solid ${isFranceEntire ? "#fde68a" : "#cfdbd3"}`,
+          }}
+        >
+          {getZoneLabel(radius)}
+        </span>
+      </div>
+
+      {/* Slider + input éditable */}
+      <div className="space-y-3">
+        <style>{`
+          .zone-radius-slider {
+            -webkit-appearance: none;
+            appearance: none;
+          }
+          .zone-radius-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid #1f3a33;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(31, 58, 51, 0.25);
+            transition: transform 0.12s ease;
+          }
+          .zone-radius-slider::-webkit-slider-thumb:hover { transform: scale(1.12); }
+          .zone-radius-slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid #1f3a33;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(31, 58, 51, 0.25);
+            transition: transform 0.12s ease;
+          }
+          .zone-radius-slider::-moz-range-thumb:hover { transform: scale(1.12); }
+        `}</style>
+
+        <div className="flex items-start gap-3">
+          {/* Colonne slider + ses repères (même largeur) */}
+          <div className="flex-1 space-y-1.5">
+            <input
+              type="range"
+              min={1}
+              max={100}
+              step={1}
+              value={sliderValue}
+              disabled={disabled || isFranceEntire}
+              onChange={(e) => onRadiusChange(parseInt(e.target.value, 10))}
+              className="zone-radius-slider w-full h-1.5 rounded-full cursor-pointer focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                background: isFranceEntire
+                  ? "#ece9e1"
+                  : `linear-gradient(to right, #1f3a33 0%, #1f3a33 ${percent}%, #ece9e1 ${percent}%, #ece9e1 100%)`,
+              }}
+              aria-label={`Rayon d'intervention : ${radius} kilomètres`}
+            />
+            {/* Repères : positionnés sur la même base que le thumb (rayon 9px de chaque côté) */}
+            <div
+              className="relative h-3.5"
+              style={{ marginLeft: 9, marginRight: 9 }}
+            >
+              {[1, 25, 50, 75, 100].map((v) => {
+                const left = ((v - 1) / 99) * 100;
+                return (
+                  <span
+                    key={v}
+                    className="absolute top-0 -translate-x-1/2 text-[10px] tabular-nums whitespace-nowrap"
+                    style={{ left: `${left}%`, color: "#9c9484" }}
+                  >
+                    {v === 100 ? "100 km" : v}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+          {/* Badge éditable à droite, dans une colonne séparée */}
+          <label
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full transition-all flex-shrink-0"
+            style={{
+              background: "#fff",
+              border: "1px solid #ece9e1",
+              opacity: isFranceEntire ? 0.5 : 1,
+            }}
+          >
+            <input
+              ref={inputElRef}
+              type="number"
+              min={1}
+              max={100}
+              step={1}
+              value={isFranceEntire ? "" : inputText}
+              disabled={disabled || isFranceEntire}
+              placeholder="—"
+              onChange={(e) => setInputText(e.target.value)}
+              onBlur={(e) => commitInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+              }}
+              className="w-10 bg-transparent text-[12.5px] font-semibold tabular-nums text-right focus:outline-none disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              style={{ color: "#1f1f1d" }}
+              aria-label="Rayon en kilomètres"
+            />
+            <span className="text-[12px] font-semibold select-none" style={{ color: "#1f1f1d" }}>
+              km
+            </span>
+          </label>
+        </div>
+
+        {/* Toggle France entière */}
+        <button
+          type="button"
+          onClick={() => onRadiusChange(isFranceEntire ? 20 : FRANCE_ENTIRE_VALUE)}
+          disabled={disabled}
+          className="w-full flex items-center justify-between gap-2 px-3 py-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{
+            background: isFranceEntire ? "#fcfaf4" : "#fff",
+            border: `1px solid ${isFranceEntire ? "#fde68a" : "#ece9e1"}`,
+            borderRadius: 10,
+          }}
+        >
+          <span className="flex items-center gap-2">
+            <span className="text-[14px] leading-none">🇫🇷</span>
+            <span className="text-[12.5px] font-medium" style={{ color: "#1f1f1d" }}>
+              Intervention sur toute la France
+            </span>
+          </span>
+          <div
+            className="w-9 h-5 rounded-full transition-colors flex items-center px-0.5"
+            style={{ background: isFranceEntire ? "#1f3a33" : "#ece9e1" }}
+          >
+            <div
+              className="w-4 h-4 rounded-full bg-white shadow transition-transform"
+              style={{ transform: isFranceEntire ? "translateX(16px)" : "translateX(0)" }}
+            />
+          </div>
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function ProfileSettingsSection({
   radius = 20,
   onRadiusChange,
@@ -252,26 +485,14 @@ export default function ProfileSettingsSection({
     }
   };
 
-  // Si on affiche uniquement le rayon
+  // Si on affiche uniquement le rayon → widget compact unifié
   if (showOnlyRadius) {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6"
-      >
-        <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-          <Navigation className="w-5 h-5 text-secondary" />
-          Zone d&apos;intervention
-        </h3>
-        <div className="p-4 bg-foreground/[0.02] rounded-xl border border-foreground/10">
-          <RadiusSlider
-            value={radius}
-            onChange={(v) => onRadiusChange?.(v)}
-            disabled={!isEditable || isSaving}
-          />
-        </div>
-      </motion.div>
+      <ZoneInterventionWidget
+        radius={radius}
+        onRadiusChange={(v) => onRadiusChange?.(v)}
+        disabled={!isEditable || isSaving}
+      />
     );
   }
 

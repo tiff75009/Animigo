@@ -6,6 +6,7 @@ import { ANIMAL_TYPES } from "../animals";
 import { internal } from "../_generated/api";
 import { missionsOverlap, missionsOverlapWithBuffers, addMinutesToTime } from "../lib/timeUtils";
 import { checkBookingConflict, checkAnimalBookingConflict } from "../lib/capacityUtils";
+import { calculateDistance } from "../lib/geoUtils";
 import { getEmailConfigFromDb } from "../api/emailInternal";
 import { hashPassword, generateUniqueSlug } from "../auth/utils";
 import {
@@ -263,6 +264,39 @@ export const createPendingBooking = mutation({
 
       if (animalConflict.hasConflict) {
         throw new ConvexError(animalConflict.conflictMessage || "Un de vos animaux est déjà réservé sur ce créneau");
+      }
+    }
+
+    // ─── Vérification zone d'intervention annonceur ───
+    // Si le client choisit "client_home" (à domicile chez lui), vérifier que
+    // l'annonceur peut s'y déplacer (distance <= rayon d'intervention).
+    // On se base sur les coordonnées fournies (guestAddress).
+    // Si pas de coords client (rare) ou pas de radius annonceur défini → on ne
+    // bloque pas (fail-open : la modération admin reste un filet).
+    if (args.serviceLocation === "client_home") {
+      const clientCoords = args.guestAddress?.coordinates;
+      if (clientCoords) {
+        const announcerProfile = await ctx.db
+          .query("profiles")
+          .withIndex("by_user", (q) => q.eq("userId", args.announcerId))
+          .first();
+        if (
+          announcerProfile?.coordinates &&
+          announcerProfile.radius !== undefined &&
+          announcerProfile.radius > 0
+        ) {
+          const distanceKm = calculateDistance(
+            clientCoords.lat,
+            clientCoords.lng,
+            announcerProfile.coordinates.lat,
+            announcerProfile.coordinates.lng
+          );
+          if (distanceKm > announcerProfile.radius) {
+            throw new ConvexError(
+              `Cette adresse est en dehors de la zone d'intervention du pet-sitter (${distanceKm.toFixed(1)} km, max ${announcerProfile.radius} km). Choisissez une autre adresse ou sélectionnez "Chez le pet-sitter".`
+            );
+          }
+        }
       }
     }
 

@@ -32,8 +32,11 @@ import {
   Trash2,
   Edit3,
   Check,
+  ShieldAlert,
 } from "lucide-react";
 import { useCloudinary } from "@/app/hooks/useCloudinary";
+import { useAction } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 interface EnvironmentPhoto {
   id: string;
@@ -199,6 +202,8 @@ export default function EnvironmentPhotosSection({
   const dropZoneRef = useRef<HTMLDivElement>(null);
 
   const { uploadImages, isConfigured } = useCloudinary();
+  const scanPhotoUrl = useAction(api.api.visionOcr.scanPhotoUrl);
+  const [rejectedPhotos, setRejectedPhotos] = useState<{ url: string; reason: string }[]>([]);
 
   // Fonction commune pour uploader des fichiers
   const handleUploadFiles = useCallback(
@@ -210,17 +215,49 @@ export default function EnvironmentPhotosSection({
       if (imageFiles.length === 0) return;
 
       setIsUploading(true);
+      setRejectedPhotos([]);
       try {
         const urls = await uploadImages(imageFiles, "animigo/environment");
 
         if (urls.length > 0) {
-          const newPhotos: EnvironmentPhoto[] = urls.map((url) => ({
-            id: `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            url,
-            caption: undefined,
-          }));
+          // ─── Scan OCR Google Vision en parallèle pour chaque photo ───
+          const scanResults = await Promise.all(
+            urls.map(async (url) => {
+              try {
+                const scan = await scanPhotoUrl({ url });
+                return { url, status: scan.status, reason: scan.rejectionReason };
+              } catch (err) {
+                console.warn("[EnvironmentPhotos] OCR scan failed (fail-open):", err);
+                return { url, status: "approved" as const };
+              }
+            })
+          );
 
-          await onUpdate([...photos, ...newPhotos]);
+          const acceptedUrls: string[] = [];
+          const rejected: { url: string; reason: string }[] = [];
+          for (const r of scanResults) {
+            if (r.status === "rejected") {
+              rejected.push({
+                url: r.url,
+                reason: r.reason || "Coordonnées détectées dans l'image",
+              });
+            } else {
+              acceptedUrls.push(r.url);
+            }
+          }
+
+          if (rejected.length > 0) {
+            setRejectedPhotos(rejected);
+          }
+
+          if (acceptedUrls.length > 0) {
+            const newPhotos: EnvironmentPhoto[] = acceptedUrls.map((url) => ({
+              id: `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              url,
+              caption: undefined,
+            }));
+            await onUpdate([...photos, ...newPhotos]);
+          }
         }
       } catch (error) {
         console.error("Erreur upload:", error);
@@ -231,7 +268,7 @@ export default function EnvironmentPhotosSection({
         }
       }
     },
-    [photos, onUpdate, uploadImages]
+    [photos, onUpdate, uploadImages, scanPhotoUrl]
   );
 
   // Drag & drop pour upload de fichiers
@@ -482,6 +519,45 @@ export default function EnvironmentPhotosSection({
           </DragOverlay>
         </DndContext>
       )}
+
+      {/* Bandeau photos refusées par OCR */}
+      <AnimatePresence>
+        {rejectedPhotos.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden mt-3"
+          >
+            <div
+              className="p-3"
+              style={{ background: "#fdf0f0", border: "1px solid #f1cdcd", borderRadius: 12 }}
+            >
+              <div className="flex items-start gap-2">
+                <ShieldAlert className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: "#8a3a3a" }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12.5px] font-semibold m-0" style={{ color: "#8a3a3a" }}>
+                    {rejectedPhotos.length} photo{rejectedPhotos.length > 1 ? "s" : ""} refusée{rejectedPhotos.length > 1 ? "s" : ""} par la modération automatique
+                  </p>
+                  <ul className="text-[11.5px] mt-1 space-y-0.5 list-disc list-inside m-0" style={{ color: "#8a3a3a" }}>
+                    {rejectedPhotos.map((p, i) => (
+                      <li key={i}>{p.reason}</li>
+                    ))}
+                  </ul>
+                  <button
+                    type="button"
+                    onClick={() => setRejectedPhotos([])}
+                    className="text-[11px] font-semibold mt-1.5 underline underline-offset-2"
+                    style={{ color: "#8a3a3a" }}
+                  >
+                    Compris
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Info */}
       <p className="text-xs text-text-light mt-4 text-center">

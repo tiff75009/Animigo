@@ -593,6 +593,55 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.38.0 - Refonte dashboard/profil en widgets + securite IA descriptions/photos + zone d'intervention
+
+- **Refonte page dashboard/profil en widgets compacts** (style Google Calendar / Outlook / iCloud)
+  - `page.tsx` : header pattern unifie (icone cercle pastel + eyebrow "Espace · Profil" + titre semi-bold + CTA pill `#1f3a33`)
+  - Cards en grille 2 colonnes avec border `1px solid #ece9e1` + radius 14, padding 18
+  - **DashboardAvailabilityCalendar** refondu en widget calendrier mensuel : nav prev/next, mini-grid `aspect-square`, pastilles statut + badge nombre d'evenements en haut-droite, 2 KPI compactes (jours libres / missions), section dynamique (jour selectionne ou "Prochains evenements" 5 max), sous-composant `EventRow` reutilisable, CTA "Voir le planning complet"
+  - **DashboardPricingCard** refondu en widget : 2 KPI (formules actives / prix min-max), top 3 formules en lignes compactes (emoji + nom + sous-titre + prix), compteur "+N autres", CTA "Gerer mes services"
+  - **AcceptedAnimalsSection** compact : header inline + capacite en select dropdown, grille 4 colonnes 2 lignes, bandeau bas (compteur + toggle vehicule pill)
+  - **HousingConditionsSection** : sous-composant `KpiCard` reutilisable (icone cercle + label uppercase + valeur), grille 2 colonnes (Logement input m², Exterieur, Tabac, Enfants, Alimentation, Mes animaux), sous-section enfants (chips ages) + sous-section animaux (chips + bouton ajouter)
+  - **ProfileSettingsSection (showOnlyRadius)** refondu en `ZoneInterventionWidget` : slider sobre `#1f3a33` + input number editable + toggle iOS-like "France entiere"
+  - Typos françaises : « animal » -> « animaux » (le « l » disparait au pluriel)
+
+- **Securite descriptions profil + generation IA via questionnaire guide** (`app/dashboard/components/ProfileBioEditor.tsx`)
+  - Composant dedie remplace `EditableField` pour la bio
+  - Filtre live `useContactInfoCheck` (regex instant + Gemini debounce 1s) avec warning visuel + bordure rouge + tag "(detecte par l'IA)"
+  - Bouton "Enregistrer" desactive en cas de violation
+  - **Mini-generateur IA en questionnaire guide** (6 questions ciblees, toutes optionnelles, indicateur "X/6 repondues") :
+    1. Statut : activite principale / complement (+ input metier) / etudiant / retraite / loisir
+    2. Experience : debutant / 1-3 / 3-10 / 10+ ans
+    3. Formations : multi-select chips (ACACED, premiers secours, veterinaire/ASV, educateur, comportementaliste, toilettage)
+    4. Animaux personnels : Oui (+ input descriptif) / Non
+    5. Competences particulieres : medication, ages, anxieux, cat 1/2, transport, agility, socialisation, education
+    6. Motivation libre (textarea 250 chars)
+  - Choix du ton (4 options : Familial / Professionnel / Chaleureux / Expert) + note libre 150 chars
+  - Sous-composant `Question` reutilisable avec coche verte "repondu"
+  - Helpers de styles partages : `chipStyle`, `pillStyle`, `inputStyle`
+
+- **Action Convex `generateProfileDescription` enrichie** (`convex/api/geminiTextAnalysis.ts`)
+  - Args etendus : `activityStatus`, `currentJob?`, `experienceLevel`, `formations[]`, `ownsAnimals?`, `ownAnimalsDescription?`, `motivation?`, `specialSkills[]`, `favoriteAnimals[]`, `hasGarden?`, `hasVehicle?`, `customNote?`, `tone`
+  - Prompt structure en sections delimitees (STATUT / EXPERIENCE / FORMATIONS / ANIMAUX PERSONNELS / MOTIVATION / COMPETENCES / EQUIPEMENTS / PRECISIONS)
+  - Regles strictes : 120-200 mots, 2-3 paragraphes, n'invente pas (pas de prenom/ville/anecdote), aucun telephone/email/lien, evite cliches, termine par invitation a reserver via Animigo
+
+- **Modération OCR Vision sur image de couverture + photos environnement**
+  - `CoverImageUpload.tsx` : scan post-upload Cloudinary, etat "Verification..." (icone `ShieldAlert` pulse), throw avec motif si rejected, fail-open si erreur API
+  - `EnvironmentPhotosSection.tsx` : scan parallele `Promise.all` sur chaque photo, exclusion des rejected, bandeau rouge en bas listant les photos refusees + motif + bouton "Compris"
+
+- **Switch Gemini 2.5 Flash -> Gemini 2.5 Flash-Lite**
+  - Cause racine : Gemini 2.5 Flash active par defaut un mode "thinking" qui consomme 200-500 tokens en raisonnement interne AVANT la sortie -> reponses tronquees a mi-phrase malgre `maxOutputTokens: 600`
+  - Solution : passage a `gemini-2.5-flash-lite` (pas de thinking par defaut, ~2-3x plus rapide, ~5x moins cher)
+  - Applique a `generateProfileDescription` (maxOutputTokens 800) et `performGeminiAnalysis` (detection contact info)
+  - Detection `finishReason === "MAX_TOKENS"` ajoutee pour debug
+
+- **Filtre zone d'intervention dans la recherche** (`convex/public/search.ts`)
+  - `searchFormules` + `searchFormulesInternal` : apres calcul `distance`, calcul `canTravel = distance <= profile.radius`
+  - Pour chaque variante : si `serviceLocation === "client_home"` ET `!canTravel` -> exclue ; si `"both"` ET `!canTravel` -> degradee en `"announcer_home"`
+  - Type `FormuleResult` etendu : `effectiveServiceLocation`, `announcerCanTravelToClient`, `announcerInterventionRadius`
+  - `FormuleCard.tsx` : pill "Lieu" utilise `effectiveServiceLocation`, tooltip natif si formule degradee
+  - `createPendingBooking` : garde-fou serveur, throw `ConvexError` si client choisit `client_home` hors zone du pro (utilise `calculateDistance` Haversine)
+
 ### v0.37.0 - Detection IA des coordonnees dissimulees via Gemini 2.5 Flash
 
 - **Action publique `analyzeTextForContact`** (`convex/api/geminiTextAnalysis.ts`)

@@ -626,19 +626,14 @@ export default memo(function MultiSessionCalendar({
     setSelectedDay(null);
   };
 
-  // Afficher la suggestion après la première sélection
-  // (uniquement en mode manuel — en mode auto, la cadence du wizard prend le relais)
+  // Afficher la suggestion d'auto-remplissage après la première sélection
   useEffect(() => {
-    if (mode === "auto") {
-      setShowAutoFillSuggestion(false);
-      return;
-    }
     if (canAutoFill && selectedSessions.length === 1) {
       setShowAutoFillSuggestion(true);
     } else {
       setShowAutoFillSuggestion(false);
     }
-  }, [canAutoFill, selectedSessions.length, mode]);
+  }, [canAutoFill, selectedSessions.length]);
 
   // Vue horaire pour un jour spécifique
   const renderTimeView = () => {

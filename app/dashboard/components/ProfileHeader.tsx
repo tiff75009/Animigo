@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import EditableField from "./EditableField";
+import ProfileBioEditor from "./ProfileBioEditor";
 import AvatarUpload from "./AvatarUpload";
 import AddressEditModal from "./AddressEditModal";
 import CoverImageUpload from "./CoverImageUpload";
@@ -489,15 +490,10 @@ export default function ProfileHeader({
 
               <div className="pt-2">
                 {isEditable && onUpdateDescription ? (
-                  <EditableField
+                  <ProfileBioEditor
                     value={description || ""}
                     placeholder="Présentez-vous aux propriétaires d'animaux... Parlez de votre expérience, votre passion pour les animaux, vos disponibilités..."
                     onSave={onUpdateDescription}
-                    type="textarea"
-                    maxLength={1000}
-                    minRows={3}
-                    maxRows={8}
-                    textClassName="text-gray-700 leading-relaxed"
                   />
                 ) : hasDescription ? (
                   <p className="text-gray-700 leading-relaxed whitespace-pre-line">
