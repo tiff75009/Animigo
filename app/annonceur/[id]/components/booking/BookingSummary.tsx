@@ -27,6 +27,7 @@ import { cn } from "@/app/lib/utils";
 import type { ServiceData, FormuleData, OptionData } from "../types";
 import type { BookingSelection, PriceBreakdown, ClientAddress } from "./types";
 import { formatPrice, formatDateDisplay } from "./pricing";
+import { getCollectiveOrMultiSessionTotal, getVariantSessionPrice } from "@/app/lib/pricing";
 import CancellationPolicyModal from "./CancellationPolicyModal";
 
 interface CollectiveSlotInfo {
@@ -343,26 +344,26 @@ export default function BookingSummary({
         )}
 
         {/* Prix total estimé pour formules multi-séances */}
-        {isMultiSessionIndividual && variant && (
-          <div className="pb-4 border-b border-gray-100 mb-4">
-            <div className="p-3 bg-gradient-to-r from-primary/5 to-secondary/5 rounded-xl">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Total estimé</span>
-                <span className="text-lg font-bold text-primary">
-                  {formatPrice(
-                    Math.round(
-                      variant.price * numberOfSessions * animalCount * (1 + commissionRate / 100)
-                    )
-                  )}€
-                </span>
+        {isMultiSessionIndividual && variant && (() => {
+          const sessionPrice = getVariantSessionPrice(variant);
+          const subtotal = getCollectiveOrMultiSessionTotal(variant, numberOfSessions, animalCount);
+          return (
+            <div className="pb-4 border-b border-gray-100 mb-4">
+              <div className="p-3 bg-gradient-to-r from-primary/5 to-secondary/5 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Total estimé</span>
+                  <span className="text-lg font-bold text-primary">
+                    {formatPrice(Math.round(subtotal * (1 + commissionRate / 100)))}€
+                  </span>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  {formatPrice(Math.round(sessionPrice * (1 + commissionRate / 100)))}€ × {numberOfSessions} séances
+                  {animalCount > 1 && ` × ${animalCount} animaux`}
+                </p>
               </div>
-              <p className="text-xs text-gray-400 mt-1">
-                {formatPrice(variant.price * (1 + commissionRate / 100))}€ × {numberOfSessions} séances
-                {animalCount > 1 && ` × ${animalCount} animaux`}
-              </p>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Nombre d'animaux pour formules collectives */}
         {isCollectiveFormule && animalCount > 1 && (
@@ -430,9 +431,9 @@ export default function BookingSummary({
               {(() => {
                 let subtotalHT = 0;
                 if (isCollectiveFormule && variant) {
-                  subtotalHT = variant.price * actualSlotCount * animalCount;
+                  subtotalHT = getCollectiveOrMultiSessionTotal(variant, actualSlotCount, animalCount);
                 } else if (isMultiSessionIndividual && variant) {
-                  subtotalHT = variant.price * actualSlotCount * animalCount;
+                  subtotalHT = getCollectiveOrMultiSessionTotal(variant, actualSlotCount, animalCount);
                 } else if (priceBreakdown) {
                   const baseWithAnimals = priceBreakdown.baseAmount * animalCount;
                   const nightsWithAnimals = (priceBreakdown.nightsAmount || 0) * animalCount;
@@ -844,23 +845,28 @@ export default function BookingSummary({
 
           <div className="space-y-2 text-sm">
             {/* Formule de base - prix unitaire HT */}
-            {(isCollectiveFormule || isMultiSessionIndividual) && variant && (
-              <div className="space-y-1">
-                <div className="flex justify-between text-gray-700">
-                  <span>Formule : {variant.name}</span>
-                  <span className="text-gray-500">{formatPrice(variant.price)}€/séance</span>
+            {(isCollectiveFormule || isMultiSessionIndividual) && variant && (() => {
+              const sessionPrice = getVariantSessionPrice(variant);
+              const sessionCount = isCollectiveFormule ? actualSlotCount : numberOfSessions;
+              const subtotal = getCollectiveOrMultiSessionTotal(variant, sessionCount, animalCount);
+              return (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-gray-700">
+                    <span>Formule : {variant.name}</span>
+                    <span className="text-gray-500">{formatPrice(sessionPrice)}€/séance</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500 pl-4">
+                    <span>
+                      └ {sessionCount} séance{sessionCount > 1 ? "s" : ""}
+                      {animalCount > 1 && ` × ${animalCount} animaux`}
+                    </span>
+                    <span className="font-medium text-gray-900">
+                      {formatPrice(subtotal)}€
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-xs text-gray-500 pl-4">
-                  <span>
-                    └ {isCollectiveFormule ? actualSlotCount : numberOfSessions} {isCollectiveFormule ? "créneau" : "séance"}{(isCollectiveFormule ? actualSlotCount : numberOfSessions) > 1 ? (isCollectiveFormule ? "x" : "s") : ""}
-                    {animalCount > 1 && ` × ${animalCount} animaux`}
-                  </span>
-                  <span className="font-medium text-gray-900">
-                    {formatPrice((isCollectiveFormule ? variant.price * actualSlotCount : variant.price * numberOfSessions) * animalCount)}€
-                  </span>
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {!isCollectiveFormule && !isMultiSessionIndividual && priceBreakdown && (
               <div className="space-y-1">
@@ -1036,9 +1042,9 @@ export default function BookingSummary({
             {(() => {
               let serviceAmount = 0;
               if (isCollectiveFormule && variant) {
-                serviceAmount = variant.price * actualSlotCount * animalCount;
+                serviceAmount = getCollectiveOrMultiSessionTotal(variant, actualSlotCount, animalCount);
               } else if (isMultiSessionIndividual && variant) {
-                serviceAmount = variant.price * actualSlotCount * animalCount;
+                serviceAmount = getCollectiveOrMultiSessionTotal(variant, actualSlotCount, animalCount);
               } else if (priceBreakdown) {
                 const baseWithAnimals = priceBreakdown.baseAmount * animalCount;
                 const nightsWithAnimals = (priceBreakdown.nightsAmount || 0) * animalCount;
@@ -1133,9 +1139,9 @@ export default function BookingSummary({
               {(() => {
                 let subtotalHT = 0;
                 if (isCollectiveFormule && variant) {
-                  subtotalHT = variant.price * actualSlotCount * animalCount;
+                  subtotalHT = getCollectiveOrMultiSessionTotal(variant, actualSlotCount, animalCount);
                 } else if (isMultiSessionIndividual && variant) {
-                  subtotalHT = variant.price * actualSlotCount * animalCount;
+                  subtotalHT = getCollectiveOrMultiSessionTotal(variant, actualSlotCount, animalCount);
                 } else if (priceBreakdown) {
                   const baseWithAnimals = priceBreakdown.baseAmount * animalCount;
                   const nightsWithAnimals = (priceBreakdown.nightsAmount || 0) * animalCount;
@@ -1185,54 +1191,9 @@ export default function BookingSummary({
           </div>
         )}
 
-        {/* CTA Buttons - cohérent avec cards de recherche */}
-        {!compact && (
-          <div className="space-y-2">
-            {/* Bouton secondaire - Vérifier (outline dark green) */}
-            <motion.button
-              whileHover={{ scale: isReadyToBook ? 1.005 : 1 }}
-              whileTap={{ scale: isReadyToBook ? 0.995 : 1 }}
-              onClick={onBook}
-              disabled={!isReadyToBook}
-              className="w-full py-2.5 px-4 rounded-full text-[13px] font-medium transition-colors flex items-center justify-center gap-2"
-              style={
-                isReadyToBook
-                  ? {
-                      background: "#fff",
-                      border: "1px solid #1f3a33",
-                      color: "#1f3a33",
-                    }
-                  : {
-                      background: "#fff",
-                      border: "1px solid #ece9e1",
-                      color: "#cdc9c0",
-                      cursor: "not-allowed",
-                    }
-              }
-            >
-              <Eye className="w-3.5 h-3.5" />
-              Vérifier la réservation
-            </motion.button>
-
-            {/* Bouton principal - Finaliser (dark green plein) */}
-            <motion.button
-              whileHover={{ scale: isReadyToBook ? 1.005 : 1 }}
-              whileTap={{ scale: isReadyToBook ? 0.995 : 1 }}
-              onClick={onFinalize}
-              disabled={!isReadyToBook}
-              className="w-full py-2.5 px-4 rounded-full text-[13px] font-medium transition-opacity flex items-center justify-center gap-2"
-              style={
-                isReadyToBook
-                  ? { background: "#1f3a33", color: "#f7f5ef" }
-                  : { background: "#ece9e1", color: "#9c9484", cursor: "not-allowed" }
-              }
-            >
-              <CreditCard className="w-3.5 h-3.5" />
-              Finaliser la réservation
-              <ArrowRight className="w-3.5 h-3.5" />
-            </motion.button>
-          </div>
-        )}
+        {/* Les boutons "Vérifier" et "Finaliser" ont été retirés.
+            La validation finale se fait via le wizard intégré
+            (étapes Récap + Finalisation dans AnnouncerFormules). */}
       </div>
 
       {/* Footer - politique d'annulation */}
@@ -1268,9 +1229,9 @@ export default function BookingSummary({
         numberOfSessions={numberOfSessions}
         totalPrice={(() => {
           if (isCollectiveFormule && variant) {
-            return variant.price * actualSlotCount * animalCount;
+            return getCollectiveOrMultiSessionTotal(variant, actualSlotCount, animalCount);
           } else if (isMultiSessionIndividual && variant) {
-            return variant.price * actualSlotCount * animalCount;
+            return getCollectiveOrMultiSessionTotal(variant, actualSlotCount, animalCount);
           } else if (priceBreakdown) {
             const baseWithAnimals = priceBreakdown.baseAmount * animalCount;
             const nightsWithAnimals = (priceBreakdown.nightsAmount || 0) * animalCount;

@@ -16,9 +16,10 @@ interface OptionsStepProps {
 
   // Navigation
   onPrevStep: () => void;
+  onNextStep?: () => void;
   isLastStep: boolean;
 
-  // Callbacks de finalisation
+  // Callbacks de finalisation (legacy — wizard intégré utilise onNextStep)
   onBook?: () => void;
   onFinalize?: () => void;
 
@@ -33,6 +34,7 @@ export default function OptionsStep({
   onOptionToggle,
   commissionRate,
   onPrevStep,
+  onNextStep,
   isLastStep,
   onBook,
   onFinalize,
@@ -74,46 +76,14 @@ export default function OptionsStep({
         )}
       </StepCard>
 
-      <StepNav onPrevStep={onPrevStep} showNext={false} />
-
-      {/* Boutons de finalisation - cohérent avec les cards de recherche */}
-      {(onBook || onFinalize) && (
-        <div
-          className="mt-5 pt-5 grid grid-cols-1 sm:grid-cols-2 gap-2.5"
-          style={{ borderTop: "1px solid #f1ede3" }}
-        >
-          {/* Bouton secondaire - Vérifier (outline) */}
-          {onBook && (
-            <button
-              type="button"
-              onClick={onBook}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-[13px] font-medium transition-colors hover:bg-[#f7f5ef]"
-              style={{
-                background: "#fff",
-                border: "1px solid #1f3a33",
-                color: "#1f3a33",
-              }}
-            >
-              <Eye className="w-3.5 h-3.5" />
-              Vérifier la réservation
-            </button>
-          )}
-
-          {/* Bouton principal - Finaliser (dark green plein) */}
-          {onFinalize && (
-            <button
-              type="button"
-              onClick={onFinalize}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-[13px] font-medium transition-opacity hover:opacity-90 active:scale-[0.98]"
-              style={{ background: "#1f3a33", color: "#f7f5ef" }}
-            >
-              <CreditCard className="w-3.5 h-3.5" />
-              Finaliser la réservation
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-      )}
+      {/* Bouton "Continuer" → passe à l'étape Récapitulatif (wizard intégré) */}
+      <StepNav
+        onPrevStep={onPrevStep}
+        onNextStep={onNextStep}
+        canProceed
+        showNext={Boolean(onNextStep)}
+        nextLabel="Voir le récapitulatif"
+      />
     </motion.div>
   );
 }

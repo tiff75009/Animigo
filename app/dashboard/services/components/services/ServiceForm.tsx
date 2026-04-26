@@ -107,6 +107,7 @@ interface ServiceFormProps {
         nightly?: number;
       };
       duration?: number;
+      pricingMode?: "per_session" | "per_hour";
       includedFeatures?: string[];
       // Nouveaux champs au niveau de la formule
       sessionType?: "individual" | "collective";
@@ -214,6 +215,7 @@ export default function ServiceForm({
       priceUnit: v.priceUnit,
       pricing: v.pricing, // Multi-tarification
       duration: v.duration,
+      pricingMode: v.pricingMode, // "per_session" | "per_hour"
       includedFeatures: v.includedFeatures,
       // Nouveaux champs au niveau de la formule
       sessionType: v.sessionType,

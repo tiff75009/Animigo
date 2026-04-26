@@ -23,6 +23,7 @@ import type { ServiceOption } from "./OptionsStep";
 import type { GuestDogData } from "./GuestDogVerification";
 import AddressSection from "./AddressSection";
 import { GuestAddressSelector } from "@/app/annonceur/[id]/components/booking";
+import { getCollectiveOrMultiSessionTotal, getVariantSessionPrice } from "@/app/lib/pricing";
 import type { GuestAddress } from "@/app/annonceur/[id]/components/booking/types";
 
 // Type pour les séances multi-sessions
@@ -670,9 +671,9 @@ export default function SummaryStep({
             </div>
             <span className="text-[14px] font-bold text-[#1f1f1d] tracking-[-0.01em] flex-shrink-0">
               {isCollective
-                ? formatPrice(Math.round(selectedVariant.price * actualSlotCount * effectiveAnimalCount))
+                ? formatPrice(getCollectiveOrMultiSessionTotal(selectedVariant, actualSlotCount, effectiveAnimalCount))
                 : isMultiSession
-                  ? formatPrice(Math.round(selectedVariant.price * numberOfSessions * effectiveAnimalCount))
+                  ? formatPrice(getCollectiveOrMultiSessionTotal(selectedVariant, numberOfSessions, effectiveAnimalCount))
                   : formatPrice(
                       (priceBreakdown.firstDayAmount + priceBreakdown.fullDaysAmount + priceBreakdown.lastDayAmount) *
                         effectiveAnimalCount
@@ -683,13 +684,13 @@ export default function SummaryStep({
           {/* Détail du calcul */}
           {isCollective ? (
             <p className="text-[11px] text-[#6d6d68]">
-              {formatPrice(selectedVariant.price)} × {actualSlotCount} créneau
-              {actualSlotCount > 1 ? "x" : ""}
+              {formatPrice(getVariantSessionPrice(selectedVariant))} × {actualSlotCount} séance
+              {actualSlotCount > 1 ? "s" : ""}
               {effectiveAnimalCount > 1 && ` × ${effectiveAnimalCount} animaux`}
             </p>
           ) : isMultiSession ? (
             <p className="text-[11px] text-[#6d6d68]">
-              {formatPrice(selectedVariant.price)} × {numberOfSessions} séance
+              {formatPrice(getVariantSessionPrice(selectedVariant))} × {numberOfSessions} séance
               {numberOfSessions > 1 ? "s" : ""}
               {effectiveAnimalCount > 1 && ` × ${effectiveAnimalCount} animaux`}
             </p>
@@ -889,9 +890,9 @@ export default function SummaryStep({
             }, 0);
 
             const serviceAmount = isCollective
-              ? Math.round(selectedVariant.price * actualSlotCount * effectiveAnimalCount) + optionsAmount
+              ? getCollectiveOrMultiSessionTotal(selectedVariant, actualSlotCount, effectiveAnimalCount) + optionsAmount
               : isMultiSession
-                ? Math.round(selectedVariant.price * numberOfSessions * effectiveAnimalCount) + optionsAmount
+                ? getCollectiveOrMultiSessionTotal(selectedVariant, numberOfSessions, effectiveAnimalCount) + optionsAmount
                 : priceBreakdown.totalAmount * effectiveAnimalCount;
 
             const isVatSubject = announcerStatusType === "professionnel";

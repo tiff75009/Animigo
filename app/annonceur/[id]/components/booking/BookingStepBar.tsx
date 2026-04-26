@@ -1,9 +1,68 @@
 "use client";
 
-import { useState } from "react";
-import { Check, Package, Calendar, MapPin, Plus, ChevronLeft, ChevronRight, Users, PawPrint, Dog } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
+import { Check, Package, Calendar, CalendarDays, MapPin, Plus, ChevronLeft, ChevronRight, Users, PawPrint, Dog, Receipt, CheckCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/app/lib/utils";
+
+// Tooltip rendu via portail pour échapper aux stacking contexts
+function StepTooltip({ label, anchorRef }: { label: string; anchorRef: React.RefObject<HTMLDivElement | null> }) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    if (!anchorRef.current) return;
+    const rect = anchorRef.current.getBoundingClientRect();
+    setPos({
+      top: rect.top + rect.height / 2,
+      left: rect.right + 8,
+    });
+  }, [anchorRef]);
+
+  if (typeof window === "undefined" || !pos) return null;
+
+  return createPortal(
+    <div
+      className="fixed px-2.5 py-1.5 rounded-md text-[11px] font-medium whitespace-nowrap pointer-events-none"
+      style={{
+        top: pos.top,
+        left: pos.left,
+        transform: "translateY(-50%)",
+        background: "#1f3a33",
+        color: "#f7f5ef",
+        boxShadow: "0 4px 12px rgba(31,58,51,0.15)",
+        zIndex: 99999,
+      }}
+    >
+      {label}
+      <span
+        className="absolute right-full top-1/2 -translate-y-1/2 w-0 h-0"
+        style={{
+          borderTop: "4px solid transparent",
+          borderBottom: "4px solid transparent",
+          borderRight: "4px solid #1f3a33",
+        }}
+      />
+    </div>,
+    document.body
+  );
+}
+
+function StepIconWithTooltip({ children, label }: { children: React.ReactNode; label: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      ref={ref}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      className="relative"
+    >
+      {children}
+      {hover && <StepTooltip label={label} anchorRef={ref} />}
+    </div>
+  );
+}
 
 export interface StepConfig {
   id: string;
@@ -33,13 +92,15 @@ export default function BookingStepBar({ steps, className, defaultCollapsed = tr
   // Vue repliée (compacte) - icônes uniquement
   if (isCollapsed) {
     return (
-      <div className={cn("flex flex-col", className)}>
+      <div className={cn("flex flex-col", className)} style={{ position: "relative", zIndex: 60 }}>
         <div
           className="bg-white p-2"
           style={{
             width: 56,
             borderRadius: 14,
             border: "1px solid #ece9e1",
+            position: "relative",
+            overflow: "visible",
           }}
         >
           {/* Bouton pour déplier */}
@@ -57,24 +118,26 @@ export default function BookingStepBar({ steps, className, defaultCollapsed = tr
               const isLast = index === visibleSteps.length - 1;
               return (
                 <div key={step.id} className="flex flex-col items-center">
-                  <div
-                    className="flex items-center justify-center w-7 h-7 rounded-full transition-all"
-                    style={
-                      step.isCompleted
-                        ? { background: "#1f3a33", color: "#f7f5ef", border: "1px solid #1f3a33" }
-                        : step.isActive
-                          ? { background: "#fff", color: "#1f3a33", border: "1px solid #1f3a33" }
-                          : { background: "#fff", color: "#cdc9c0", border: "1px solid #ece9e1" }
-                    }
-                  >
-                    {step.isCompleted ? (
-                      <Check className="w-3.5 h-3.5" />
-                    ) : (
-                      <span className="w-3.5 h-3.5 flex items-center justify-center">
-                        {step.icon}
-                      </span>
-                    )}
-                  </div>
+                  <StepIconWithTooltip label={step.label}>
+                    <div
+                      className="flex items-center justify-center w-7 h-7 rounded-full transition-all cursor-default"
+                      style={
+                        step.isCompleted
+                          ? { background: "#1f3a33", color: "#f7f5ef", border: "1px solid #1f3a33" }
+                          : step.isActive
+                            ? { background: "#fff", color: "#1f3a33", border: "1px solid #1f3a33" }
+                            : { background: "#fff", color: "#cdc9c0", border: "1px solid #ece9e1" }
+                      }
+                    >
+                      {step.isCompleted ? (
+                        <Check className="w-3.5 h-3.5" />
+                      ) : (
+                        <span className="w-3.5 h-3.5 flex items-center justify-center">
+                          {step.icon}
+                        </span>
+                      )}
+                    </div>
+                  </StepIconWithTooltip>
                   {!isLast && (
                     <div
                       className="w-px h-2 mt-1"
@@ -272,6 +335,8 @@ export function useBookingSteps({
   guestAnimalValid,
   // Nouveaux paramètres pour l'étape Lieu
   serviceLocation,
+  // Étape active actuelle (pour marquer les précédentes comme complétées)
+  currentStepId,
 }: {
   hasVariantSelected: boolean;
   hasDateSelected: boolean;
@@ -303,6 +368,8 @@ export function useBookingSteps({
   guestAnimalValid?: boolean;
   // Nouveaux paramètres pour l'étape Lieu
   serviceLocation?: "announcer_home" | "client_home" | "both" | null;
+  // Étape active actuelle (pour marquer les précédentes comme complétées)
+  currentStepId?: string;
 }): StepConfig[] {
   // Pour les formules collectives, vérifier si tous les créneaux sont sélectionnés
   const isCollectiveSlotsComplete = isCollectiveFormula
@@ -344,7 +411,9 @@ export function useBookingSteps({
   // Label de l'étape lieu selon le type de service
   const locationLabel = isCollectiveFormula ? "Lieu des séances" : "Lieu de prestation";
 
-  return [
+  const dateStepId = isCollectiveFormula ? "slots" : isMultiSessionIndividual ? "sessions" : "calendar";
+
+  const rawSteps: StepConfig[] = [
     {
       id: "formule",
       label: "Formule",
@@ -383,7 +452,7 @@ export function useBookingSteps({
       isVisible: hasVariantSelected,
     },
     {
-      id: isCollectiveFormula ? "slots" : isMultiSessionIndividual ? "sessions" : "calendar",
+      id: dateStepId,
       label: isCollectiveFormula
         ? `Créneaux${requiredSlots && requiredSlots > 1 ? ` (${selectedSlotsCount || 0}/${requiredSlots})` : ""}`
         : isMultiSessionIndividual
@@ -391,7 +460,7 @@ export function useBookingSteps({
           : isRangeMode
             ? "Dates & horaires"
             : "Date & heure",
-      icon: isCollectiveFormula ? <Users className="w-4 h-4" /> : <Calendar className="w-4 h-4" />,
+      icon: isCollectiveFormula ? <Users className="w-4 h-4" /> : <CalendarDays className="w-4 h-4" />,
       isCompleted: isStep2Complete,
       isActive: hasVariantSelected && isAnimalsStepComplete && isAnimalVerificationComplete && isLocationComplete && !isStep2Complete,
       isVisible: hasVariantSelected,
@@ -404,5 +473,52 @@ export function useBookingSteps({
       isActive: hasVariantSelected && isAnimalsStepComplete && isAnimalVerificationComplete && isLocationComplete && isStep2Complete,
       isVisible: hasOptions,
     },
+    {
+      id: "recap",
+      label: "Récapitulatif",
+      icon: <Receipt className="w-4 h-4" />,
+      isCompleted: false,
+      isActive:
+        hasVariantSelected &&
+        isAnimalsStepComplete &&
+        isAnimalVerificationComplete &&
+        isLocationComplete &&
+        isStep2Complete,
+      isVisible: hasVariantSelected,
+    },
+    {
+      id: "finalize",
+      label: "Finaliser",
+      icon: <CheckCircle className="w-4 h-4" />,
+      isCompleted: false,
+      isActive:
+        hasVariantSelected &&
+        isAnimalsStepComplete &&
+        isAnimalVerificationComplete &&
+        isLocationComplete &&
+        isStep2Complete,
+      isVisible: hasVariantSelected,
+    },
   ];
+
+  // Si une étape courante est fournie, marquer toutes les étapes précédentes comme complétées
+  // et seule l'étape courante comme active
+  if (currentStepId) {
+    const visibleSteps = rawSteps.filter((s) => s.isVisible);
+    const currentIdx = visibleSteps.findIndex((s) => s.id === currentStepId);
+    if (currentIdx >= 0) {
+      const completedIds = new Set(visibleSteps.slice(0, currentIdx).map((s) => s.id));
+      return rawSteps.map((step) => {
+        if (step.id === currentStepId) {
+          return { ...step, isActive: true, isCompleted: false };
+        }
+        if (completedIds.has(step.id)) {
+          return { ...step, isCompleted: true, isActive: false };
+        }
+        return { ...step, isActive: false };
+      });
+    }
+  }
+
+  return rawSteps;
 }

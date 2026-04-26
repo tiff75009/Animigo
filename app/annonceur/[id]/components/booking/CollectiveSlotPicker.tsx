@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertCircle,
+  AlertTriangle,
   Info,
   ArrowLeft,
   Repeat,
@@ -248,6 +249,8 @@ export default memo(function CollectiveSlotPicker({
   };
 
   // Gérer la sélection d'un créneau
+  // Règle : exactement `numberOfSessions` séances doivent être sélectionnées
+  // — ni plus, ni moins. La désélection reste toujours autorisée.
   const handleSlotSelect = (slotId: string) => {
     const slot = availableSlots.find((s: CollectiveSlot) => s._id === slotId);
     if (!slot) return;
@@ -255,12 +258,19 @@ export default memo(function CollectiveSlotPicker({
     const isSelected = localSelectedIds.includes(slotId);
 
     if (isSelected) {
-      // Désélectionner
+      // Désélection toujours autorisée
       const newIds = localSelectedIds.filter((id) => id !== slotId);
       setLocalSelectedIds(newIds);
       onSlotsSelected(newIds);
     } else {
-      // Vérifier l'intervalle
+      // Limite haute : refuser l'ajout si déjà au quota
+      if (localSelectedIds.length >= numberOfSessions) {
+        alert(
+          `Vous avez déjà sélectionné les ${numberOfSessions} séance${numberOfSessions > 1 ? "s" : ""} requise${numberOfSessions > 1 ? "s" : ""}. Décochez une séance pour en choisir une autre.`
+        );
+        return;
+      }
+      // Intervalle minimum
       if (!checkInterval(selectedDates, slot.date, sessionInterval)) {
         alert(
           `L'intervalle minimum entre les séances est de ${sessionInterval} jour(s).`
@@ -268,10 +278,11 @@ export default memo(function CollectiveSlotPicker({
         return;
       }
 
-      // Sélectionner
       const newIds = [...localSelectedIds, slotId];
       setLocalSelectedIds(newIds);
       onSlotsSelected(newIds);
+      setSelectedDay(null);
+      setIsCollapsed(false);
     }
   };
 
@@ -280,18 +291,11 @@ export default memo(function CollectiveSlotPicker({
     setLocalSelectedIds(selectedSlotIds);
   }, [selectedSlotIds]);
 
-  const isComplete = localSelectedIds.length >= 1;
+  const isComplete = localSelectedIds.length >= numberOfSessions;
 
-  // Auto-collapse when all slots are selected
-  useEffect(() => {
-    if (isComplete && localSelectedIds.length > 0) {
-      // Petit délai pour laisser voir la sélection avant de replier
-      const timer = setTimeout(() => {
-        setIsCollapsed(true);
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [isComplete, localSelectedIds.length]);
+  // Auto-collapse retiré : il fermait prématurément la vue après chaque
+  // sélection, obligeant à cliquer "Modifier" pour continuer. L'utilisateur
+  // replie manuellement quand il est satisfait.
 
   // Récupérer les détails des créneaux sélectionnés pour le résumé
   const selectedSlotsDetails = useMemo(() => {
@@ -301,62 +305,72 @@ export default memo(function CollectiveSlotPicker({
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [localSelectedIds, availableSlots]);
 
-  // Trouver les créneaux correspondants pour l'auto-fill (même jour de semaine, même heure)
-  const findMatchingSlots = useMemo(() => {
+  // ─── Auto-fill récurrent avec détection des semaines indispos ───
+  // Pour chaque semaine attendue (1 à N-1 après la 1re séance), on cherche
+  // un créneau au MÊME jour de la semaine et à la MÊME heure.
+  // Statut "ok" = créneau dispo · "unavailable" = aucun créneau ce jour/heure
+  type AutoFillEntry = {
+    weekIndex: number; // 1, 2, 3, …
+    targetDate: string; // date attendue
+    slot: CollectiveSlot | null; // null si indispo
+    status: "ok" | "unavailable";
+  };
+
+  const autoFillPlan = useMemo<AutoFillEntry[]>(() => {
     if (localSelectedIds.length !== 1) return [];
 
-    const firstSlot = availableSlots.find((s: CollectiveSlot) => s._id === localSelectedIds[0]);
+    const firstSlot = availableSlots.find(
+      (s: CollectiveSlot) => s._id === localSelectedIds[0]
+    );
     if (!firstSlot) return [];
 
-    const targetDayOfWeek = getDayOfWeek(firstSlot.date);
     const targetTime = firstSlot.startTime;
+    const firstDate = new Date(firstSlot.date);
+    const sessionsToFill = numberOfSessions - 1;
+    const result: AutoFillEntry[] = [];
 
-    // Trouver tous les créneaux au même jour de semaine et même heure
-    const matchingSlots = availableSlots
-      .filter((slot: CollectiveSlot) => {
-        if (slot._id === firstSlot._id) return false; // Exclure le premier
-        if (slot.date < today) return false; // Exclure les dates passées
-        if (getDayOfWeek(slot.date) !== targetDayOfWeek) return false;
-        if (slot.startTime !== targetTime) return false;
-        return true;
-      })
-      .sort((a: CollectiveSlot, b: CollectiveSlot) => a.date.localeCompare(b.date));
+    for (let i = 1; i <= sessionsToFill; i++) {
+      const targetDateObj = new Date(firstDate);
+      targetDateObj.setDate(firstDate.getDate() + 7 * i);
+      const targetDateStr = targetDateObj.toISOString().split("T")[0];
 
-    // Sélectionner les créneaux en respectant l'intervalle (max 10 pour l'auto-fill)
-    const result: CollectiveSlot[] = [];
-    let lastDate = firstSlot.date;
-    const autoFillMax = Math.max(numberOfSessions - 1, 3); // Au moins 3 suggestions
-
-    for (const slot of matchingSlots) {
-      if (result.length >= autoFillMax) break;
-
-      const daysDiff = Math.abs(
-        (new Date(slot.date).getTime() - new Date(lastDate).getTime()) / (1000 * 60 * 60 * 24)
+      // Chercher un créneau au même jour/heure
+      const candidate = availableSlots.find(
+        (s: CollectiveSlot) =>
+          s.date === targetDateStr &&
+          s.startTime === targetTime &&
+          s._id !== firstSlot._id
       );
 
-      if (daysDiff >= sessionInterval) {
-        result.push(slot);
-        lastDate = slot.date;
-      }
+      result.push({
+        weekIndex: i,
+        targetDate: targetDateStr,
+        slot: (candidate as CollectiveSlot) ?? null,
+        status: candidate ? "ok" : "unavailable",
+      });
     }
-
     return result;
-  }, [localSelectedIds, availableSlots, numberOfSessions, sessionInterval, today]);
+  }, [localSelectedIds, availableSlots, numberOfSessions]);
 
-  // Peut-on proposer l'auto-fill ?
-  const canAutoFill = localSelectedIds.length === 1 &&
-    findMatchingSlots.length >= 1;
+  const autoFillOkCount = autoFillPlan.filter((e) => e.status === "ok").length;
+  const autoFillUnavailableCount = autoFillPlan.filter(
+    (e) => e.status === "unavailable"
+  ).length;
 
-  // Appliquer l'auto-fill
+  const canAutoFill = localSelectedIds.length === 1 && autoFillOkCount > 0;
+
+  // Applique l'auto-fill : sélectionne uniquement les créneaux dispo (ok),
+  // ignore les semaines indispos (l'utilisateur les complétera manuellement).
   const applyAutoFill = () => {
     if (!canAutoFill) return;
-
-    const slotsToSelect = findMatchingSlots;
-    const newIds = [...localSelectedIds, ...slotsToSelect.map((s) => s._id)];
+    const okIds = autoFillPlan
+      .filter((e) => e.status === "ok" && e.slot)
+      .map((e) => e.slot!._id);
+    const newIds = Array.from(new Set([...localSelectedIds, ...okIds]));
     setLocalSelectedIds(newIds);
     onSlotsSelected(newIds);
     setShowAutoFillSuggestion(false);
-    setSelectedDay(null); // Revenir au calendrier
+    setSelectedDay(null);
   };
 
   // Afficher la suggestion après la première sélection
@@ -367,6 +381,35 @@ export default memo(function CollectiveSlotPicker({
       setShowAutoFillSuggestion(false);
     }
   }, [canAutoFill, localSelectedIds.length]);
+
+  // Format "Lundi 27 avr."
+  const formatShortDate = (dateStr: string): string => {
+    return new Date(dateStr).toLocaleDateString("fr-FR", {
+      weekday: "long",
+      day: "numeric",
+      month: "short",
+    });
+  };
+
+  // Nom du jour de la semaine de la première séance
+  const recurringDayName = useMemo(() => {
+    if (localSelectedIds.length !== 1) return null;
+    const firstSlot = availableSlots.find(
+      (s: CollectiveSlot) => s._id === localSelectedIds[0]
+    );
+    if (!firstSlot) return null;
+    return new Date(firstSlot.date).toLocaleDateString("fr-FR", {
+      weekday: "long",
+    });
+  }, [localSelectedIds, availableSlots]);
+
+  const recurringTime = useMemo(() => {
+    if (localSelectedIds.length !== 1) return null;
+    const firstSlot = availableSlots.find(
+      (s: CollectiveSlot) => s._id === localSelectedIds[0]
+    );
+    return firstSlot?.startTime ?? null;
+  }, [localSelectedIds, availableSlots]);
 
   // Infos sur le premier créneau sélectionné pour l'auto-fill
   const firstSelectedSlot = localSelectedIds.length > 0
@@ -454,10 +497,12 @@ export default memo(function CollectiveSlotPicker({
           <div className="grid gap-2 max-h-[320px] overflow-y-auto">
             {daySlots.map((slot) => {
               const isSelected = localSelectedIds.includes(slot._id);
+              const reachedLimit = localSelectedIds.length >= numberOfSessions;
               const canSelect =
                 isSelected ||
-                (checkInterval(selectedDates, slot.date, sessionInterval) ||
-                  localSelectedIds.length === 0);
+                (!reachedLimit &&
+                  (checkInterval(selectedDates, slot.date, sessionInterval) ||
+                    localSelectedIds.length === 0));
 
               return (
                 <button
@@ -511,7 +556,7 @@ export default memo(function CollectiveSlotPicker({
           </div>
         )}
 
-        {/* Suggestion d'auto-remplissage */}
+        {/* Suggestion d'auto-remplissage avec preview détaillé semaine par semaine */}
         {showAutoFillSuggestion && canAutoFill && firstSelectedSlot && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -519,7 +564,7 @@ export default memo(function CollectiveSlotPicker({
             className="p-4"
             style={{ borderRadius: 12, background: "#f5f9f6", border: "1px solid #cfdbd3" }}
           >
-            <div className="flex items-start gap-3">
+            <div className="flex items-start gap-3 mb-3">
               <div
                 className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
                 style={{ background: "#fff", border: "1px solid #cfdbd3" }}
@@ -527,35 +572,92 @@ export default memo(function CollectiveSlotPicker({
                 <Sparkles className="w-4 h-4" style={{ color: "#1f3a33" }} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[13.5px] font-semibold text-[#1f1f1d] tracking-[-0.01em] mb-1">
-                  Réserver les mêmes créneaux ?
+                <p className="text-[13.5px] font-semibold text-[#1f1f1d] tracking-[-0.01em] mb-0.5">
+                  Réserver les {numberOfSessions - 1} séances suivantes ?
                 </p>
-                <p className="text-[12px] text-[#3a3a38] leading-[1.5] mb-3">
-                  Ajouter {findMatchingSlots.length} séance{findMatchingSlots.length > 1 ? "s" : ""} tous les{" "}
-                  <strong className="capitalize">{getDayName(firstSelectedSlot.date)}s</strong> à{" "}
-                  <strong>{firstSelectedSlot.startTime}</strong> ?
+                <p className="text-[12px] text-[#3a3a38] leading-[1.5]">
+                  Tous les <strong className="capitalize">{recurringDayName}s</strong> à{" "}
+                  <strong>{recurringTime}</strong>
                 </p>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={applyAutoFill}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-medium transition-opacity hover:opacity-90"
-                    style={{ background: "#1f3a33", color: "#f7f5ef" }}
-                  >
-                    <Repeat className="w-3.5 h-3.5" />
-                    Oui, automatiquement
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowAutoFillSuggestion(false);
-                      setSelectedDay(null);
-                    }}
-                    className="inline-flex items-center px-4 py-2 rounded-full text-[12px] font-medium transition-colors hover:bg-[#fafafa]"
-                    style={{ background: "#fff", border: "1px solid #ece9e1", color: "#1f1f1d" }}
-                  >
-                    Non, manuellement
-                  </button>
-                </div>
               </div>
+            </div>
+
+            {/* Preview détaillé : statut OK ou indispo pour chaque semaine */}
+            <div
+              className="space-y-1 mb-3 p-2"
+              style={{ borderRadius: 10, background: "#fff", border: "1px solid #cfdbd3" }}
+            >
+              {autoFillPlan.map((entry) => (
+                <div
+                  key={entry.weekIndex}
+                  className="flex items-center justify-between gap-2 text-[11.5px]"
+                >
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    {entry.status === "ok" ? (
+                      <Check className="w-3 h-3 flex-shrink-0" style={{ color: "#1f3a33" }} />
+                    ) : (
+                      <AlertTriangle className="w-3 h-3 flex-shrink-0" style={{ color: "#d97f3a" }} />
+                    )}
+                    <span className="capitalize truncate" style={{ color: "#1f1f1d" }}>
+                      Séance {entry.weekIndex + 1} · {formatShortDate(entry.targetDate)}
+                    </span>
+                  </span>
+                  <span
+                    className="text-[10px] font-medium uppercase tracking-[0.05em] flex-shrink-0"
+                    style={{
+                      color: entry.status === "ok" ? "#3a6052" : "#7a4a1a",
+                    }}
+                  >
+                    {entry.status === "ok" ? "Dispo" : "Plus de place"}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Avertissement si des semaines sont indispos */}
+            {autoFillUnavailableCount > 0 && (
+              <div
+                className="flex items-start gap-2 p-2 mb-3"
+                style={{
+                  borderRadius: 8,
+                  background: "#fdf0e6",
+                  border: "1px solid #f4d6bc",
+                }}
+              >
+                <AlertTriangle
+                  className="w-3.5 h-3.5 flex-shrink-0 mt-0.5"
+                  style={{ color: "#d97f3a" }}
+                />
+                <p className="text-[11px] leading-[1.4]" style={{ color: "#7a4a1a" }}>
+                  <strong>
+                    {autoFillUnavailableCount} séance{autoFillUnavailableCount > 1 ? "s" : ""} indisponible{autoFillUnavailableCount > 1 ? "s" : ""}
+                  </strong>{" "}
+                  sur le créneau habituel. Vous devrez les sélectionner manuellement (autre jour ou autre heure).
+                </p>
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={applyAutoFill}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-medium transition-opacity hover:opacity-90"
+                style={{ background: "#1f3a33", color: "#f7f5ef" }}
+              >
+                <Repeat className="w-3.5 h-3.5" />
+                {autoFillUnavailableCount > 0
+                  ? `Ajouter les ${autoFillOkCount} dispos`
+                  : "Oui, tout automatiser"}
+              </button>
+              <button
+                onClick={() => {
+                  setShowAutoFillSuggestion(false);
+                  setSelectedDay(null);
+                }}
+                className="inline-flex items-center px-4 py-2 rounded-full text-[12px] font-medium transition-colors hover:bg-[#fafafa]"
+                style={{ background: "#fff", border: "1px solid #ece9e1", color: "#1f1f1d" }}
+              >
+                Choisir manuellement
+              </button>
             </div>
           </motion.div>
         )}
@@ -647,20 +749,27 @@ export default memo(function CollectiveSlotPicker({
                 const daySlots = slotsByDate.get(dateStr) || [];
                 const slotsCount = daySlots.length;
                 const hasSelectedSlot = daySlots.some((s) => localSelectedIds.includes(s._id));
+                const reachedLimit = localSelectedIds.length >= numberOfSessions;
                 const canSelectDay = hasSlots && (
                   hasSelectedSlot ||
-                  (checkInterval(selectedDates, dateStr, sessionInterval) || localSelectedIds.length === 0)
+                  (!reachedLimit &&
+                    (checkInterval(selectedDates, dateStr, sessionInterval) || localSelectedIds.length === 0))
                 );
 
                 return (
                   <div key={dateStr} className="relative aspect-square">
                     <button
-                      onClick={() => hasSlots && setSelectedDay(dateStr)}
-                      disabled={!hasSlots}
+                      onClick={() => canSelectDay && setSelectedDay(dateStr)}
+                      disabled={!canSelectDay}
+                      title={
+                        !hasSelectedSlot && reachedLimit
+                          ? `Vous avez déjà sélectionné les ${numberOfSessions} séances. Décochez-en une pour modifier.`
+                          : undefined
+                      }
                       className={cn(
                         "group relative w-full h-full flex flex-col items-center justify-center rounded-full transition-all",
-                        hasSlots && !hasSelectedSlot && "hover:bg-[#1f1f1d] hover:text-white cursor-pointer",
-                        !hasSlots && !isPast && "cursor-not-allowed"
+                        canSelectDay && !hasSelectedSlot && "hover:bg-[#1f1f1d] hover:text-white cursor-pointer",
+                        !canSelectDay && !isPast && "cursor-not-allowed"
                       )}
                       style={{
                         background: hasSelectedSlot ? "#1f1f1d" : "transparent",
@@ -670,8 +779,10 @@ export default memo(function CollectiveSlotPicker({
                             ? "#cdc9c0"
                             : !hasSlots
                               ? "#cdc9c0"
-                              : "#1f1f1d",
-                        opacity: isPast ? 0.5 : 1,
+                              : !canSelectDay
+                                ? "#cdc9c0"
+                                : "#1f1f1d",
+                        opacity: isPast ? 0.5 : !canSelectDay && !isPast ? 0.4 : 1,
                       }}
                     >
                       {isToday && !hasSelectedSlot && (
@@ -801,14 +912,14 @@ export default memo(function CollectiveSlotPicker({
         renderCollapsedView()
       ) : (
         <>
-          {/* Header — eyebrow + titre */}
+          {/* Header — eyebrow + titre + compteur visuel */}
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9c9484] mb-1">
                 Étape · Créneaux
               </div>
               <h3 className="text-base font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
-                Choisissez vos créneaux
+                Choisissez vos {numberOfSessions} créneaux
               </h3>
               <p className="text-[12px] text-[#6d6d68] mt-1">
                 Sélectionnez un ou plusieurs créneaux
@@ -817,17 +928,76 @@ export default memo(function CollectiveSlotPicker({
                 )}
               </p>
             </div>
-            <span
-              className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium flex-shrink-0 mt-1"
+            {/* Compteur visuel sticky : X / N séances */}
+            <div
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full flex-shrink-0 mt-1"
               style={
                 isComplete
-                  ? { border: "1px solid #cfdbd3", color: "#2f4a3f", background: "#fff" }
-                  : { border: "1px solid #f4e6c1", color: "#7a5b1a", background: "#fff" }
+                  ? { background: "#1f3a33", color: "#f7f5ef", border: "1px solid #1f3a33" }
+                  : localSelectedIds.length > 0
+                    ? { background: "#f5f9f6", color: "#1f3a33", border: "1px solid #cfdbd3" }
+                    : { background: "#fff", color: "#9c9484", border: "1px solid #ece9e1" }
               }
             >
-              {localSelectedIds.length} sélectionné{localSelectedIds.length > 1 ? "s" : ""}
-            </span>
+              {isComplete && <Check className="w-3 h-3" />}
+              <span className="text-[12px] font-semibold tracking-[-0.01em] tabular-nums">
+                {localSelectedIds.length} / {numberOfSessions}
+              </span>
+              <span className="text-[10px] uppercase tracking-[0.05em] font-medium opacity-80">
+                séances
+              </span>
+            </div>
           </div>
+
+          {/* Barre de progression visuelle */}
+          {numberOfSessions > 1 && (
+            <div
+              className="h-1 w-full overflow-hidden mt-3"
+              style={{ background: "#ece9e1", borderRadius: 999 }}
+            >
+              <div
+                className="h-full transition-all duration-300"
+                style={{
+                  width: `${Math.min(100, (localSelectedIds.length / numberOfSessions) * 100)}%`,
+                  background: isComplete ? "#1f3a33" : "#cfdbd3",
+                }}
+              />
+            </div>
+          )}
+
+          {/* Bandeau "Encore N séances à choisir" — visible si incomplet */}
+          {!isComplete && localSelectedIds.length > 0 && (
+            <div
+              className="flex items-center gap-2 p-2.5 mt-3"
+              style={{
+                borderRadius: 10,
+                background: "#fdf8ec",
+                border: "1px solid #f4e6c1",
+              }}
+            >
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#c9a14a" }} />
+              <p className="text-[11.5px] m-0" style={{ color: "#7a5b1a" }}>
+                Encore <strong>{numberOfSessions - localSelectedIds.length} séance{numberOfSessions - localSelectedIds.length > 1 ? "s" : ""}</strong> à sélectionner pour valider votre réservation.
+              </p>
+            </div>
+          )}
+
+          {/* Confirmation "Toutes les séances sélectionnées" */}
+          {isComplete && (
+            <div
+              className="flex items-center gap-2 p-2.5 mt-3"
+              style={{
+                borderRadius: 10,
+                background: "#f5f9f6",
+                border: "1px solid #cfdbd3",
+              }}
+            >
+              <Check className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#1f3a33" }} />
+              <p className="text-[11.5px] m-0" style={{ color: "#3a6052" }}>
+                <strong>Parfait !</strong> Toutes vos {numberOfSessions} séances sont sélectionnées.
+              </p>
+            </div>
+          )}
 
           {/* Message intervalle */}
           {sessionInterval > 1 && (

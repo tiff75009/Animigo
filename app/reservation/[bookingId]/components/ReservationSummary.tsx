@@ -31,6 +31,7 @@ import {
   formatDistance,
   extractCity,
 } from "../utils";
+import { getCollectiveOrMultiSessionTotal, getVariantSessionPrice } from "@/app/lib/pricing";
 import type {
   PendingBookingData,
   ServiceOption,
@@ -413,8 +414,9 @@ export default function ReservationSummary({
                   ? bookingData.collectiveSlots.length
                   : numberOfSessions;
               const basePrice = isCollectiveFormula
-                ? bookingData.variant.price * actualSlots * effectiveAnimalCount
-                : bookingData.variant.price * numberOfSessions * effectiveAnimalCount;
+                ? getCollectiveOrMultiSessionTotal(bookingData.variant, actualSlots, effectiveAnimalCount)
+                : getCollectiveOrMultiSessionTotal(bookingData.variant, numberOfSessions, effectiveAnimalCount);
+              const sessionUnitPrice = getVariantSessionPrice(bookingData.variant);
 
               return (
                 <div
@@ -433,9 +435,9 @@ export default function ReservationSummary({
                     </span>
                   </div>
                   <p className="text-[11px] text-[#6d6d68]">
-                    {formatPrice(bookingData.variant.price)} ×{" "}
+                    {formatPrice(sessionUnitPrice)} ×{" "}
                     {isCollectiveFormula ? actualSlots : numberOfSessions}{" "}
-                    {isCollectiveFormula ? "créneau" : "séance"}
+                    {isCollectiveFormula ? "séance" : "séance"}
                     {(isCollectiveFormula ? actualSlots : numberOfSessions) > 1
                       ? isCollectiveFormula
                         ? "x"

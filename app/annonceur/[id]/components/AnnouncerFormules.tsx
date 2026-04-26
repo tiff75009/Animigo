@@ -10,7 +10,15 @@ import { cn } from "@/app/lib/utils";
 import { setAuthToken as storeAuthToken } from "@/app/lib/authToken";
 
 // Types pour les étapes desktop
-type DesktopStep = "formule" | "dog" | "animals" | "dates" | "location" | "options";
+type DesktopStep =
+  | "formule"
+  | "dog"
+  | "animals"
+  | "dates"
+  | "location"
+  | "options"
+  | "recap"
+  | "finalize";
 
 // Variants pour les animations de transition
 const slideVariants = {
@@ -51,6 +59,7 @@ import {
   FormuleFilters,
   getFilteredFormules,
   type BookingSelection,
+  type PriceBreakdown,
   type CalendarEntry,
   type ClientAddress,
   type GuestAddress,
@@ -63,6 +72,8 @@ import {
   DatesStep,
   LocationStep,
   OptionsStep,
+  RecapStep,
+  FinalizeStep,
   StepNav,
   slideVariants as importedSlideVariants,
 } from "./booking/steps";
@@ -150,6 +161,40 @@ interface AnnouncerFormulesProps {
   onFinalize?: () => void;
   isAnnouncer?: boolean;
   className?: string;
+
+  // ─── Wizard intégré : étapes Récap + Finalisation ───
+  // Données complémentaires nécessaires pour ces 2 nouvelles étapes
+  collectiveSlotsDetails?: Array<{
+    _id: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    availableSpots: number;
+  }>;
+  priceBreakdown?: PriceBreakdown | null;
+  announcerStatusType?: "particulier" | "micro_entrepreneur" | "professionnel";
+  announcerLastName?: string;
+  // State du formulaire de finalisation (géré par la page parent)
+  finalizeData?: {
+    guestData?: {
+      firstName: string;
+      lastName: string;
+      email: string;
+      phone: string;
+      password: string;
+      confirmPassword: string;
+    };
+    notes?: string;
+    acceptedCGV?: boolean;
+    acceptedPrivacy?: boolean;
+    acceptedCancellation?: boolean;
+    isSubmitting?: boolean;
+    submitError?: string | null;
+    fieldErrors?: Record<string, string>;
+  };
+  onFinalizeDataChange?: (data: NonNullable<AnnouncerFormulesProps["finalizeData"]>) => void;
+  // Handler appelé sur clic "Confirmer la réservation"
+  onFinalizeWizard?: () => void | Promise<void>;
 }
 
 export default function AnnouncerFormules({
@@ -216,6 +261,14 @@ export default function AnnouncerFormules({
   onFinalize,
   isAnnouncer = false,
   className,
+  // Wizard intégré
+  collectiveSlotsDetails,
+  priceBreakdown,
+  announcerStatusType,
+  announcerLastName,
+  finalizeData,
+  onFinalizeDataChange,
+  onFinalizeWizard,
 }: AnnouncerFormulesProps) {
   // État pour l'étape actuelle (desktop)
   const [desktopStep, setDesktopStep] = useState<DesktopStep>("formule");
@@ -371,6 +424,14 @@ export default function AnnouncerFormules({
   // Déterminer le serviceLocation de la formule ou du service
   const formuleServiceLocation = selectedFormule?.serviceLocation || service?.serviceLocation;
 
+  // Mapper le DesktopStep courant vers l'id utilisé par useBookingSteps
+  const currentStepIdForBar = useMemo(() => {
+    if (desktopStep === "dates") {
+      return isCollectiveFormule ? "slots" : isMultiSessionIndividual ? "sessions" : "calendar";
+    }
+    return desktopStep;
+  }, [desktopStep, isCollectiveFormule, isMultiSessionIndividual]);
+
   const steps = useBookingSteps({
     hasVariantSelected,
     hasDateSelected,
@@ -402,6 +463,8 @@ export default function AnnouncerFormules({
     guestAnimalValid,
     // Paramètre pour l'étape Lieu
     serviceLocation: formuleServiceLocation,
+    // Étape active courante pour cocher les précédentes
+    currentStepId: currentStepIdForBar,
   });
 
   // Calculer les étapes disponibles pour la version desktop
@@ -437,6 +500,10 @@ export default function AnnouncerFormules({
       steps.push("options");
     }
 
+    // Récap et Finalisation : toujours présents en fin de wizard
+    steps.push("recap");
+    steps.push("finalize");
+
     return steps;
   }, [requiresAnimalVerification, isLoggedIn, userAnimals.length, service, hasOptions]);
 
@@ -466,8 +533,10 @@ export default function AnnouncerFormules({
       case "animals":
         return hasAnimalsSelected;
       case "dates":
-        if (isCollectiveFormule) return hasSlotsSelected && selectedSlotsCount >= collectiveNumberOfSessions;
-        if (isMultiSessionIndividual) return hasSessionsSelected && selectedSessionsCount >= individualNumberOfSessions;
+        // Le client doit sélectionner EXACTEMENT le nombre de séances défini
+        // par l'annonceur — ni plus, ni moins.
+        if (isCollectiveFormule) return selectedSlotsCount === collectiveNumberOfSessions;
+        if (isMultiSessionIndividual) return selectedSessionsCount === individualNumberOfSessions;
         return hasDateSelected && hasTimeSelected;
       case "location":
         // Pour les formules collectives, l'adresse est optionnelle (c'est juste pour afficher la distance)
@@ -491,6 +560,10 @@ export default function AnnouncerFormules({
         return hasLocationSelected;
       case "options":
         return true; // Options sont optionnelles
+      case "recap":
+        return true; // Le récap est juste affichage : on peut toujours continuer
+      case "finalize":
+        return true; // La validation est faite par FinalizeStep en interne
       default:
         return false;
     }
@@ -520,19 +593,23 @@ export default function AnnouncerFormules({
   };
 
   // Automatiquement passer à l'étape suivante quand une formule est sélectionnée
+  // ⚠️ Important : on attend que `selectedFormule` soit RÉELLEMENT résolu dans
+  // `service.formules`. Sinon, si on saute trop tôt (ID dans l'URL mais formule
+  // pas encore chargée), DatesStep/LocationStep reçoivent `selectedFormule = null`
+  // et affichent un contenu vide → "je vois les étapes mais pas les forms".
   useEffect(() => {
-    if (hasVariantSelected && desktopStep === "formule") {
-      // Petit délai pour l'animation
-      const timer = setTimeout(() => {
-        const nextStep = availableDesktopSteps[1]; // L'étape après "formule"
-        if (nextStep) {
+    if (hasVariantSelected && selectedFormule && desktopStep === "formule") {
+      const nextStep = availableDesktopSteps[1];
+      if (nextStep) {
+        // Délai très court juste pour l'animation
+        const timer = setTimeout(() => {
           setSlideDirection("right");
           setDesktopStep(nextStep);
-        }
-      }, 300);
-      return () => clearTimeout(timer);
+        }, 200);
+        return () => clearTimeout(timer);
+      }
     }
-  }, [hasVariantSelected, desktopStep, availableDesktopSteps]);
+  }, [hasVariantSelected, selectedFormule, desktopStep, availableDesktopSteps]);
 
   // Revenir à l'étape formule si on désélectionne la formule
   useEffect(() => {
@@ -541,6 +618,24 @@ export default function AnnouncerFormules({
       setDesktopStep("formule");
     }
   }, [hasVariantSelected, desktopStep]);
+
+  // Garde-fou : si pour une raison quelconque on se retrouve sur une étape
+  // qui requiert une formule mais que `selectedFormule` est null, on revient
+  // à "formule" pour permettre au user de re-sélectionner.
+  useEffect(() => {
+    if (
+      hasVariantSelected &&
+      !selectedFormule &&
+      desktopStep !== "formule" &&
+      service.formules.length > 0
+    ) {
+      // selectedVariantId existe mais ne correspond à aucune formule du service
+      // → soit la formule a été supprimée, soit elle n'est plus active.
+      // On retourne à l'étape "formule" pour que le user choisisse à nouveau.
+      setSlideDirection("left");
+      setDesktopStep("formule");
+    }
+  }, [hasVariantSelected, selectedFormule, desktopStep, service.formules.length]);
 
   return (
     <section className={cn("relative", className)}>
@@ -585,7 +680,11 @@ export default function AnnouncerFormules({
               </div>
             </div>
 
-            {/* Indicateur d'étapes horizontal - style pill fin */}
+            {/* Indicateur d'étapes horizontal - style pill compact :
+                seule l'étape ACTIVE affiche son label + numéro,
+                les autres se réduisent à un cercle (avec tooltip natif).
+                Ainsi le label de l'étape courante est toujours lisible
+                quel que soit le nombre d'étapes. */}
             {hasVariantSelected && (
               <div
                 className="bg-white p-1.5 mb-5 overflow-x-auto"
@@ -609,12 +708,20 @@ export default function AnnouncerFormules({
                         case "dates": return isCollectiveFormule ? "Créneaux" : isMultiSessionIndividual ? "Séances" : "Dates";
                         case "location": return "Lieu";
                         case "options": return "Options";
+                        case "recap": return "Récapitulatif";
+                        case "finalize": return "Finaliser";
                         default: return "";
                       }
                     })();
 
                     return (
-                      <div key={step} className="flex items-center gap-1 flex-1">
+                      <div
+                        key={step}
+                        className={cn(
+                          "flex items-center gap-1",
+                          isActive ? "flex-1 min-w-0" : "flex-shrink-0"
+                        )}
+                      >
                         <button
                           onClick={() => {
                             if (isPast) {
@@ -623,36 +730,44 @@ export default function AnnouncerFormules({
                             }
                           }}
                           disabled={!isClickable}
+                          title={shortLabel}
+                          aria-label={`Étape ${stepNumber} : ${shortLabel}`}
                           className={cn(
-                            "flex-1 flex items-center justify-center gap-2 px-3 py-1.5 rounded-full text-[12px] font-medium transition-all whitespace-nowrap"
+                            "flex items-center justify-center gap-2 rounded-full text-[12px] font-medium transition-all whitespace-nowrap",
+                            isActive
+                              ? "flex-1 px-3 py-1.5"
+                              : "w-7 h-7 px-0 py-0"
                           )}
                           style={
                             isActive
                               ? { background: "#1f3a33", color: "#f7f5ef" }
                               : isPast
                                 ? { color: "#2f4a3f", background: "#eaf0ed" }
-                                : { color: "#9c9484" }
+                                : { color: "#9c9484", background: "#fff", border: "1px solid #ece9e1" }
                           }
                         >
                           <span
                             className={cn(
-                              "flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold flex-shrink-0"
+                              "flex items-center justify-center rounded-full text-[10px] font-bold flex-shrink-0",
+                              isActive ? "w-4 h-4" : "w-full h-full"
                             )}
                             style={
                               isActive
                                 ? { background: "rgba(247,245,239,0.25)", color: "#f7f5ef" }
                                 : isPast
-                                  ? { background: "rgba(47,74,63,0.15)", color: "#2f4a3f" }
-                                  : { background: "#f7f5ef", color: "#9c9484" }
+                                  ? { background: "transparent", color: "#2f4a3f" }
+                                  : { background: "transparent", color: "#9c9484" }
                             }
                           >
-                            {isPast ? <Check className="w-2.5 h-2.5" /> : stepNumber}
+                            {isPast ? <Check className="w-3 h-3" /> : stepNumber}
                           </span>
-                          <span className="hidden lg:inline">{shortLabel}</span>
+                          {isActive && (
+                            <span className="hidden lg:inline truncate">{shortLabel}</span>
+                          )}
                         </button>
                         {index < availableDesktopSteps.length - 1 && (
                           <div
-                            className="w-2 h-px flex-shrink-0"
+                            className="w-1.5 h-px flex-shrink-0"
                             style={{ background: isPast ? "#cfdbd3" : "#ece9e1" }}
                           />
                         )}
@@ -820,9 +935,102 @@ export default function AnnouncerFormules({
                     onOptionToggle={onOptionToggle}
                     commissionRate={commissionRate}
                     onPrevStep={goToPrevStep}
-                    isLastStep={currentStepIndex === availableDesktopSteps.length - 1}
+                    onNextStep={goToNextStep}
+                    isLastStep={false}
                     onBook={onBook}
                     onFinalize={onFinalize}
+                    slideVariants={slideVariants}
+                    slideDirection={slideDirection}
+                  />
+                )}
+
+                {/* ÉTAPE: Récapitulatif */}
+                {desktopStep === "recap" && selectedFormule && (
+                  <RecapStep
+                    service={service}
+                    variant={selectedFormule}
+                    bookingSelection={bookingSelection ?? ({} as BookingSelection)}
+                    isCollectiveFormule={isCollectiveFormule}
+                    isMultiSessionIndividual={isMultiSessionIndividual}
+                    collectiveSlots={collectiveSlotsDetails ?? []}
+                    selectedSessions={selectedSessions ?? []}
+                    numberOfSessions={
+                      isCollectiveFormule
+                        ? collectiveNumberOfSessions
+                        : individualNumberOfSessions
+                    }
+                    animalCount={animalCount}
+                    selectedOptions={
+                      service.options?.filter((o) =>
+                        selectedOptionIds?.includes(o.id)
+                      ) ?? []
+                    }
+                    priceBreakdown={priceBreakdown ?? null}
+                    announcerStatusType={
+                      (announcerStatusType ?? "particulier") as
+                        | "particulier"
+                        | "micro_entrepreneur"
+                        | "professionnel"
+                    }
+                    announcerFirstName={announcerFirstName}
+                    announcerLastName={announcerLastName ?? ""}
+                    onPrevStep={goToPrevStep}
+                    onNextStep={goToNextStep}
+                    slideVariants={slideVariants}
+                    slideDirection={slideDirection}
+                  />
+                )}
+
+                {/* ÉTAPE: Finalisation */}
+                {desktopStep === "finalize" && onFinalizeWizard && (
+                  <FinalizeStep
+                    isLoggedIn={isLoggedIn}
+                    guestData={
+                      finalizeData?.guestData ?? {
+                        firstName: "",
+                        lastName: "",
+                        email: "",
+                        phone: "",
+                        password: "",
+                        confirmPassword: "",
+                      }
+                    }
+                    onGuestDataChange={(d) =>
+                      onFinalizeDataChange?.({ ...finalizeData, guestData: d })
+                    }
+                    notes={finalizeData?.notes ?? ""}
+                    onNotesChange={(v) =>
+                      onFinalizeDataChange?.({ ...finalizeData, notes: v })
+                    }
+                    acceptedCGV={finalizeData?.acceptedCGV ?? false}
+                    onAcceptCGV={(v) =>
+                      onFinalizeDataChange?.({ ...finalizeData, acceptedCGV: v })
+                    }
+                    acceptedPrivacy={finalizeData?.acceptedPrivacy ?? false}
+                    onAcceptPrivacy={(v) =>
+                      onFinalizeDataChange?.({ ...finalizeData, acceptedPrivacy: v })
+                    }
+                    acceptedCancellation={finalizeData?.acceptedCancellation ?? false}
+                    onAcceptCancellation={(v) =>
+                      onFinalizeDataChange?.({
+                        ...finalizeData,
+                        acceptedCancellation: v,
+                      })
+                    }
+                    showLoginForm={showLoginForm}
+                    onShowLoginForm={setShowLoginForm}
+                    loginEmail={loginEmail}
+                    loginPassword={loginPassword}
+                    onLoginEmailChange={setLoginEmail}
+                    onLoginPasswordChange={setLoginPassword}
+                    onLogin={handleLogin}
+                    loginError={loginError}
+                    isLoggingIn={isLoggingIn}
+                    isSubmitting={finalizeData?.isSubmitting ?? false}
+                    submitError={finalizeData?.submitError ?? null}
+                    onSubmit={onFinalizeWizard}
+                    fieldErrors={finalizeData?.fieldErrors ?? {}}
+                    onPrevStep={goToPrevStep}
                     slideVariants={slideVariants}
                     slideDirection={slideDirection}
                   />

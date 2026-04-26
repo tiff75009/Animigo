@@ -3,11 +3,21 @@ export { default as AnimalsStep } from "./AnimalsStep";
 export { default as DatesStep } from "./DatesStep";
 export { default as LocationStep } from "./LocationStep";
 export { default as OptionsStep } from "./OptionsStep";
+export { default as RecapStep } from "./RecapStep";
+export { default as FinalizeStep } from "./FinalizeStep";
 export { default as StepNav } from "./StepNav";
 export { default as StepCard, StepHeader } from "./StepCard";
 
 // Types pour les étapes
-export type DesktopStep = "formule" | "dog" | "animals" | "dates" | "location" | "options";
+export type DesktopStep =
+  | "formule"
+  | "dog"
+  | "animals"
+  | "dates"
+  | "location"
+  | "options"
+  | "recap"
+  | "finalize";
 
 // Variants pour les animations de transition
 export const slideVariants = {

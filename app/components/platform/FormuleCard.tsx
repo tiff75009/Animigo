@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { formatPrice, formatDistance } from "./helpers";
+import { getVariantSessionPrice } from "@/app/lib/pricing";
 import { ANIMAL_TYPES } from "./constants";
 
 // Map rapide id → emoji
@@ -153,6 +154,8 @@ export interface FormuleResult {
   price: number;
   priceUnit: string;
   duration?: number;
+  /** Mode de tarification : "per_session" (forfait) ou "per_hour" (horaire) */
+  pricingMode?: "per_session" | "per_hour";
   sessionType: "individual" | "collective";
   serviceLocation?: "announcer_home" | "client_home" | "both";
   numberOfSessions?: number;
@@ -517,8 +520,16 @@ export function FormuleCardGrid({
   const announcerBookingUrl = buildBookingUrl(announcerBaseUrl, formule.formuleId, searchDates, selectedAnimalIds);
   const announcerPublicProfileUrl = `/profil/${formule.announcerSlug || formule.announcerId}`;
 
-  const finalPrice = getPriceWithCommission(formule.price, formule.announcerStatusType);
-  const priceLabel = priceUnitLabels[formule.priceUnit] || formule.priceUnit;
+  // Pour les formules collective/multi : le prix mis en avant est le forfait par séance
+  // (calculé selon priceUnit/duration/pricingMode), pas le prix horaire.
+  const isMultiSession = isCollective || (formule.numberOfSessions ?? 1) > 1;
+  const announcerSessionPrice = isMultiSession
+    ? getVariantSessionPrice(formule)
+    : formule.price;
+  const finalPrice = getPriceWithCommission(announcerSessionPrice, formule.announcerStatusType);
+  const priceLabel = isMultiSession
+    ? "séance"
+    : (priceUnitLabels[formule.priceUnit] || formule.priceUnit);
   const totalEstimate = computeTotalPrice(formule, searchDates);
 
   const shortDistance = formule.announcerDistance !== undefined
@@ -836,6 +847,26 @@ export function FormuleCardGrid({
                   )}
                 </>
               )}
+              {/* Total séances obligatoires (formules collectives / multi-séances)
+                  Le client doit payer toutes les séances en une fois. */}
+              {(() => {
+                const sessions = formule.numberOfSessions ?? (isCollective ? 1 : 1);
+                const showTotal =
+                  (isCollective || (formule.numberOfSessions ?? 1) > 1) && sessions >= 2;
+                if (!showTotal) return null;
+                return (
+                  <div
+                    className="text-[11px] mt-1 px-2 py-1 inline-flex items-center gap-1 rounded-full font-semibold"
+                    style={{
+                      background: "#f5f9f6",
+                      color: "#1f3a33",
+                      border: "1px solid #cfdbd3",
+                    }}
+                  >
+                    Total {sessions}× : {formatPrice(finalPrice * sessions)}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
@@ -912,8 +943,15 @@ export function FormuleCardList({
   const announcerBookingUrl = buildBookingUrl(announcerBaseUrl, formule.formuleId, searchDates, selectedAnimalIds);
   const announcerPublicProfileUrl = `/profil/${formule.announcerSlug || formule.announcerId}`;
 
-  const finalPrice = getPriceWithCommission(formule.price, formule.announcerStatusType);
-  const priceLabel = priceUnitLabels[formule.priceUnit] || formule.priceUnit;
+  // Pour les formules collective/multi : prix forfait par séance mis en avant
+  const isMultiSession = isCollective || (formule.numberOfSessions ?? 1) > 1;
+  const announcerSessionPrice = isMultiSession
+    ? getVariantSessionPrice(formule)
+    : formule.price;
+  const finalPrice = getPriceWithCommission(announcerSessionPrice, formule.announcerStatusType);
+  const priceLabel = isMultiSession
+    ? "séance"
+    : (priceUnitLabels[formule.priceUnit] || formule.priceUnit);
   const totalEstimate = computeTotalPrice(formule, searchDates);
 
   const shortDistance = formule.announcerDistance !== undefined
@@ -1206,6 +1244,25 @@ export function FormuleCardList({
                   )}
                 </>
               )}
+              {/* Total séances obligatoires (collectives / multi) */}
+              {(() => {
+                const sessions = formule.numberOfSessions ?? (isCollective ? 1 : 1);
+                const showTotal =
+                  (isCollective || (formule.numberOfSessions ?? 1) > 1) && sessions >= 2;
+                if (!showTotal) return null;
+                return (
+                  <div
+                    className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold"
+                    style={{
+                      background: "#f5f9f6",
+                      color: "#1f3a33",
+                      border: "1px solid #cfdbd3",
+                    }}
+                  >
+                    Total {sessions}× : {formatPrice(finalPrice * sessions)}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* CTA Réserver */}

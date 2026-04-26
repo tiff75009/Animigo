@@ -28,6 +28,8 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { Navbar } from "@/app/components/navbar";
 import { Footer } from "@/app/components/footer";
 import { PhotoLightbox } from "@/app/components/platform/PhotoLightbox";
+import { getVariantSessionPrice } from "@/app/lib/pricing";
+import { getPriceWithCommission } from "@/app/components/platform/FormuleCard";
 import { cn } from "@/app/lib/utils";
 
 type FormulePhoto = { url: string; order: number };
@@ -583,18 +585,63 @@ export default function FormuleDetailsPage({
               transition={{ duration: 0.4, delay: 0.15 }}
               className="bg-white rounded-2xl border border-[#ece9e1] p-5"
             >
-              <div className="flex items-baseline gap-1.5 mb-1">
-                <span className="text-3xl font-bold text-foreground tracking-tight">
-                  {formatPrice(variant.price)}
-                </span>
-                <span className="text-sm text-text-light">/ {priceLabel}</span>
-              </div>
-              {variant.numberOfSessions > 1 && (
-                <p className="text-xs text-text-light mb-3">
-                  Soit {formatPrice(variant.price * variant.numberOfSessions)} pour les{" "}
-                  {variant.numberOfSessions} séances
-                </p>
-              )}
+              {(() => {
+                // Calcule le prix d'une séance complète (selon priceUnit/duration/pricingMode)
+                const sessionPrice = getVariantSessionPrice(variant);
+                // Prix client = prix annonceur + commission + frais
+                const clientSessionPrice = getPriceWithCommission(
+                  sessionPrice,
+                  announcer.statusType
+                );
+                const sessions = variant.numberOfSessions ?? 1;
+                const isMulti =
+                  variant.sessionType === "collective" || sessions > 1;
+                return (
+                  <>
+                    <div className="flex items-baseline gap-1.5 mb-1">
+                      <span className="text-3xl font-bold text-foreground tracking-tight">
+                        {formatPrice(clientSessionPrice)}
+                      </span>
+                      <span className="text-sm text-text-light">
+                        / {sessions > 1 || variant.sessionType === "collective" ? "séance" : priceLabel}
+                      </span>
+                    </div>
+                    {isMulti && sessions > 1 && (
+                      <div
+                        className="mt-2 mb-3 p-3 rounded-xl"
+                        style={{
+                          background: "#1f3a33",
+                          color: "#f7f5ef",
+                        }}
+                      >
+                        <div
+                          className="text-[10px] font-medium uppercase tracking-[0.1em]"
+                          style={{ color: "rgba(247,245,239,0.7)" }}
+                        >
+                          Total à payer
+                        </div>
+                        <div className="flex items-baseline justify-between gap-2 mt-0.5">
+                          <span className="text-[20px] font-bold tracking-[-0.02em]">
+                            {formatPrice(clientSessionPrice * sessions)}
+                          </span>
+                          <span
+                            className="text-[10.5px]"
+                            style={{ color: "rgba(247,245,239,0.7)" }}
+                          >
+                            {sessions} séances × {formatPrice(clientSessionPrice)}
+                          </span>
+                        </div>
+                        <p
+                          className="text-[10.5px] mt-1.5 leading-[1.4]"
+                          style={{ color: "rgba(247,245,239,0.7)" }}
+                        >
+                          Le client paie l&apos;intégralité du forfait à la réservation.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
 
               <Link href={bookingUrl} className="block w-full mt-4">
                 <button

@@ -17,6 +17,7 @@ import {
 import { cn } from "@/app/lib/utils";
 import { useAuth } from "@/app/hooks/useAuth";
 import { getAuthToken as getStoredAuthToken } from "@/app/lib/authToken";
+import { getCollectiveOrMultiSessionTotal } from "@/app/lib/pricing";
 import { ShieldAlert } from "lucide-react";
 
 // Import factorized components
@@ -850,18 +851,27 @@ export default function ReserverPage({
     if (!selectedVariant) return 0;
 
     if (isCollectiveFormula) {
-      // Formule collective: prix × créneaux sélectionnés × animaux
+      // Formule collective : prix par séance (calculé selon priceUnit + duration)
+      // × nombre de créneaux × nombre d'animaux
       const actualSlots = bookingData.selectedSlotIds.length || 1;
       const collectiveAnimalCount = bookingData.selectedAnimalIds.length > 0
         ? bookingData.selectedAnimalIds.length
         : bookingData.animalCount;
-      return Math.round(selectedVariant.price * actualSlots * collectiveAnimalCount);
+      return getCollectiveOrMultiSessionTotal(
+        selectedVariant,
+        actualSlots,
+        collectiveAnimalCount
+      );
     }
 
     if (isMultiSessionIndividual) {
-      // Formule multi-séances individuelle: prix × séances × animaux
+      // Formule multi-séances individuelle : même logique avec duration
       const nSessions = selectedVariant.numberOfSessions || 1;
-      return Math.round(selectedVariant.price * nSessions * effectiveAnimalCount);
+      return getCollectiveOrMultiSessionTotal(
+        selectedVariant,
+        nSessions,
+        effectiveAnimalCount
+      );
     }
 
     // Formule uni-séance: calcul standard × animaux

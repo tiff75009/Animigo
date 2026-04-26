@@ -593,6 +593,28 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.34.0 - Wizard reservation unifie : Recap + Finalize integres + finalisation in-page
+
+- **Wizard reservation tout-en-un** (`app/annonceur/[id]/`)
+  - Etapes Recapitulatif et Finaliser integrees au wizard de la page annonceur (plus de redirection vers `/reserver/[announcerId]` ni `/reservation/[bookingId]`)
+  - `RecapStep.tsx` (nouveau) : recap service/seances/options + bloc fiscal aligne sur le recap pre-paiement
+  - `FinalizeStep.tsx` (nouveau) : section identite (signup invite ou login inline), notes complementaires, 3 acceptations CGV/RGPD/annulation, bouton "Confirmer la reservation"
+  - Suppression des CTA "Verifier" et "Finaliser" dans `OptionsStep` et `BookingSummary` : le bouton "Voir le recapitulatif" enchaine sur le wizard
+  - `handleFinalizeWizard` (in-page) : chaine `createPendingBooking` -> `finalizeBooking` (connecte) ou `finalizeBookingAsGuest` (invite avec `storeAuthToken` + redirection conditionnelle vers `/reservation/confirmation-email` ou `/dashboard?tab=missions&success=booking`)
+
+- **Pricing collectif et multi-seances renforce** (`app/lib/pricing.ts`, `convex/services/variants.ts`, `convex/public/booking.ts`)
+  - Nouveau champ `pricingMode: "per_session" | "per_hour"` sur `serviceVariants` (priorite sur `priceUnit` pour les calculs collectif/multi)
+  - Constantes `ALLOWED_SESSION_DURATIONS = [30, 60, 90, 120, 150]` et `MAX_SESSION_DURATION = 150` + helper `validateSessionDuration()`
+  - Helpers `getVariantSessionPrice()` et `getCollectiveOrMultiSessionTotal()` partages entre cards de recherche, recap booking et apercu dashboard
+  - Recalcul autoritaire de `serviceAmount` cote serveur dans `createPendingBooking` pour les formules collectives/multi-seances
+  - `CollectiveSlotPicker` et `MultiSessionCalendar` : selection forcee a exactement N seances (ni plus ni moins)
+
+- **Barre d'etapes wizard amelioree** (`AnnouncerFormules.tsx`, `BookingStepBar.tsx`)
+  - Barre horizontale compacte : seule l'etape active conserve son label, les autres deviennent des cercles `w-7 h-7` avec `title` natif (les etapes 6 et 7 tiennent desormais sans debordement)
+  - Barre verticale (mode replie) : tooltips React rendus via `createPortal` vers `document.body` (z-index 99999) pour echapper aux stacking contexts du form
+  - Hook `useBookingSteps` : nouveau parametre `currentStepId` qui marque automatiquement les etapes precedentes comme `isCompleted` (cocheurs fiables sur les etapes 4/6/7)
+  - Icone `CalendarDays` (plus reconnaissable) pour l'etape Date dans la barre verticale
+
 ### v0.33.0 - Refonte UX/UI dashboard (planning, missions, services + apercu live formule)
 
 - **Dashboard planning : statuts visuels distincts** (`components/types.ts`)

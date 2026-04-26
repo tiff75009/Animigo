@@ -1767,6 +1767,7 @@ function VariantEditForm({
     animalTypes?: string[];
     dogCategoryAcceptance?: "none" | "cat1" | "cat2" | "both";
     acceptedDogSizes?: ("small" | "medium" | "large")[];
+    price?: number;
     pricing?: Pricing;
     duration?: number;
     includedFeatures?: string[];
@@ -1977,6 +1978,17 @@ function VariantEditForm({
       // Déterminer si les restrictions chiens s'appliquent
       const acceptsDogs = selectedAnimalTypes.includes("chien");
 
+      // CRUCIAL : aligner variant.price avec la nouvelle valeur saisie
+      // (pricing.hourly pour les services standard, pricing.daily pour la garde).
+      // Sinon la BDD garde l'ancien price et getVariantSessionPrice utilise
+      // un prix obsolète sur la page détail formule / la recherche.
+      const newMainPrice =
+        pricing.hourly ??
+        pricing.daily ??
+        pricing.weekly ??
+        pricing.monthly ??
+        variant.price;
+
       await onSave({
         name,
         description: description || undefined,
@@ -1989,6 +2001,7 @@ function VariantEditForm({
         animalTypes: selectedAnimalTypes.length > 0 ? selectedAnimalTypes : undefined,
         dogCategoryAcceptance: acceptsDogs ? dogCategoryAcceptance : undefined,
         acceptedDogSizes: acceptsDogs ? acceptedDogSizes : undefined,
+        price: newMainPrice,
         pricing,
         duration,
         includedFeatures: includedFeatures.length > 0 ? includedFeatures : undefined,

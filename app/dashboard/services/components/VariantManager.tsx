@@ -108,6 +108,8 @@ export interface LocalVariant {
   priceUnit: PriceUnit;
   pricing?: Pricing;
   duration?: number;
+  /** Mode de tarification : "per_session" (forfait) ou "per_hour" (horaire) */
+  pricingMode?: "per_session" | "per_hour";
   includedFeatures?: string[];
   isFromDefault?: boolean;
   /** Photos de la formule (URLs Cloudinary, jusqu'à 3). */
@@ -694,44 +696,39 @@ function SimpleVariantCard({
             <div className="grid gap-3 sm:grid-cols-2">
               {/* Card 1: Durée + Séances */}
               <div className="p-4 bg-gray-50/50 rounded-xl border border-gray-100 space-y-4">
-                {/* Durée */}
+                {/* Durée — sélecteur en pills (multiples de 30 min, max 2h30) */}
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-2">
-                    Durée <span className="text-primary">*</span>
+                    Durée d&apos;une séance <span className="text-primary">*</span>
                   </label>
-                  <div className="flex items-center gap-2">
-                    <div className={cn(
-                      "flex items-center rounded-xl overflow-hidden transition-all",
-                      !variant.duration
-                        ? "bg-white border-2 border-primary/30"
-                        : "bg-white border border-gray-200"
-                    )}>
-                      <button
-                        type="button"
-                        onClick={() => onUpdate({ duration: Math.max(30, (variant.duration || 60) - 30) })}
-                        className="px-2.5 py-2 text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
-                      >
-                        <Minus className="w-4 h-4" />
-                      </button>
-                      <input
-                        type="number"
-                        value={variant.duration || ""}
-                        onChange={(e) => onUpdate({ duration: parseInt(e.target.value) || undefined })}
-                        min="30"
-                        step="30"
-                        placeholder="60"
-                        className="w-12 py-2 bg-transparent text-sm text-center font-semibold text-foreground focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => onUpdate({ duration: (variant.duration || 30) + 30 })}
-                        className="px-2.5 py-2 text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <span className="text-sm text-gray-500">min</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[30, 60, 90, 120, 150].map((d) => {
+                      const active = (variant.duration || 60) === d;
+                      const label = d < 60
+                        ? `${d}min`
+                        : d % 60 === 0
+                          ? `${d / 60}h`
+                          : `${Math.floor(d / 60)}h${String(d % 60).padStart(2, "0")}`;
+                      return (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => onUpdate({ duration: d })}
+                          className="px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors"
+                          style={
+                            active
+                              ? { background: "#1f3a33", color: "#f7f5ef", border: "1px solid #1f3a33" }
+                              : { background: "#fff", color: "#1f1f1d", border: "1px solid #dfdcd4" }
+                          }
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
                   </div>
+                  <p className="text-[10.5px] mt-1.5" style={{ color: "#9c9484" }}>
+                    Multiples de 30 min, max 2h30. Sert à générer automatiquement les créneaux du planning.
+                  </p>
                 </div>
 
                 {/* Séances */}
@@ -1472,9 +1469,64 @@ function SimpleVariantCard({
             </div>
           ) : (
             /* ═══ TARIFS SERVICES - MODE MANUEL ═══ */
+            <div className="space-y-3">
+              {/* Toggle Prix par séance / Prix par heure */}
+              <div
+                className="inline-flex items-center p-0.5 rounded-full"
+                style={{ background: "#fff", border: "1px solid #ece9e1" }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Switch vers "per_hour" : restaurer le price à
+                    // pricing.hourly d'origine (déposé avant le passage en per_session)
+                    const restoredHourly = variant.pricing?.hourly ?? variant.price ?? 0;
+                    onUpdate({
+                      pricingMode: "per_hour",
+                      price: restoredHourly,
+                    });
+                  }}
+                  className="px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors"
+                  style={
+                    (variant.pricingMode ?? "per_hour") === "per_hour"
+                      ? { background: "#1f3a33", color: "#f7f5ef" }
+                      : { color: "#6d6d68" }
+                  }
+                >
+                  Prix par heure
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Switch vers "per_session" : on calcule le prix forfait
+                    // mais on PRÉSERVE pricing.hourly intact pour pouvoir
+                    // re-switcher sans déformer la valeur d'origine.
+                    const currentHourly = (variant.pricing?.hourly ?? variant.price) || 0;
+                    const sessionPrice = Math.round((currentHourly * (variant.duration || 60)) / 60);
+                    onUpdate({
+                      pricingMode: "per_session",
+                      price: sessionPrice,
+                      // pricing.hourly reste l'horaire d'origine — pas de réécriture
+                    });
+                  }}
+                  className="px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors"
+                  style={
+                    variant.pricingMode === "per_session"
+                      ? { background: "#1f3a33", color: "#f7f5ef" }
+                      : { color: "#6d6d68" }
+                  }
+                >
+                  Prix par séance
+                </button>
+              </div>
+
             <div className="p-4 bg-gradient-to-br from-primary/5 to-secondary/5 rounded-xl border border-primary/10">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-foreground">Prix par heure{isVatSubject ? " TTC" : ""}</span>
+                <span className="text-sm font-medium text-foreground">
+                  {variant.pricingMode === "per_session"
+                    ? `Prix par séance${isVatSubject ? " TTC" : ""} (${variant.duration || 60}min)`
+                    : `Prix par heure${isVatSubject ? " TTC" : ""}`}
+                </span>
                 <span className="text-xs px-2 py-0.5 bg-white rounded-full text-gray-500">
                   {getHourlyPrice() <= recommendedPrice / 100 * 0.9 ? "Compétitif" :
                    getHourlyPrice() >= recommendedPrice / 100 * 1.1 ? "Premium" : "Standard"}
@@ -1569,6 +1621,7 @@ function SimpleVariantCard({
                   </div>
                 </div>
               </div>
+            </div>
             </div>
           )}
         </div>

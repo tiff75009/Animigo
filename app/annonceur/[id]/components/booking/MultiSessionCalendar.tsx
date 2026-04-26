@@ -199,6 +199,12 @@ export default memo(function MultiSessionCalendar({
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showMobileTimePicker, setShowMobileTimePicker] = useState(false);
 
+  // Vue d'affichage : "list" (sélection rapide en liste) ou "calendar" (vue calendrier)
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  // Filtres optionnels pour la vue liste
+  const [filterDayOfWeek, setFilterDayOfWeek] = useState<number | null>(null); // 0=dim … 6=sam
+  const [weeksToShow, setWeeksToShow] = useState(4);
+
   const today = new Date().toISOString().split("T")[0];
 
   // Dates des séances sélectionnées
@@ -385,27 +391,28 @@ export default memo(function MultiSessionCalendar({
       endTime,
     };
 
-    // Vérifier si ce jour est déjà sélectionné
     const existingIndex = selectedSessions.findIndex((s) => s.date === selectedDay);
 
     if (existingIndex >= 0) {
-      // Mettre à jour la séance existante
+      // Modification de l'heure d'une séance existante
       const newSessions = [...selectedSessions];
       newSessions[existingIndex] = newSession;
       onSessionsChange(newSessions);
     } else {
-      // Vérifier si on peut encore ajouter
-      if (selectedSessions.length >= numberOfSessions) {
-        return;
-      }
-      // Vérifier l'intervalle
+      if (selectedSessions.length >= numberOfSessions) return;
       if (!checkInterval(selectedDates, selectedDay, sessionInterval)) {
         alert(`L'intervalle minimum entre les séances est de ${sessionInterval} jour(s).`);
         return;
       }
-      // Ajouter la nouvelle séance
+      // Ajouter la nouvelle séance — IMPORTANT : on ne ferme PAS la vue heure
+      // (sinon l'utilisateur croit qu'il faut cliquer "Modifier" pour continuer)
       onSessionsChange([...selectedSessions, newSession]);
     }
+
+    // S'assurer qu'on n'est pas en vue collapsed après une sélection
+    setIsCollapsed(false);
+    // La vue heure reste ouverte avec un récap visible.
+    // L'utilisateur clique sur "Retour au calendrier" quand il veut un autre jour.
   };
 
   // Supprimer une séance
@@ -438,15 +445,123 @@ export default memo(function MultiSessionCalendar({
 
   const isComplete = selectedSessions.length === numberOfSessions;
 
-  // Auto-collapse when complete
-  useEffect(() => {
-    if (isComplete && selectedSessions.length > 0) {
-      const timer = setTimeout(() => {
-        setIsCollapsed(true);
-      }, 500);
-      return () => clearTimeout(timer);
+  // L'auto-collapse a été retiré pour ne pas masquer la sélection en cours.
+
+  // ─── Génération de la liste plate de tous les créneaux disponibles ───
+  // Pour chaque jour des N prochaines semaines, on liste tous les créneaux
+  // horaires dispos. L'utilisateur peut cocher directement (1 clic = 1 séance).
+  type AvailableSlot = {
+    date: string;
+    dayOfWeek: number;
+    startTime: string;
+    endTime: string;
+    label: string; // ex. "lun. 27 avril · 09:00 → 11:00"
+  };
+
+  const availableSlots = useMemo<AvailableSlot[]>(() => {
+    if (!availabilityCalendar) return [];
+    const slots: AvailableSlot[] = [];
+    // Étendre la fenêtre selon weeksToShow (4 par défaut, +4 sur demande)
+    const fromDate = new Date(calendarMonth);
+    fromDate.setHours(0, 0, 0, 0);
+
+    // Toutes les dates de la fenêtre
+    for (let d = 0; d < weeksToShow * 7; d++) {
+      const cursor = new Date(fromDate);
+      cursor.setDate(fromDate.getDate() + d);
+      const dateStr = cursor.toISOString().split("T")[0];
+      if (dateStr < today) continue;
+      if (!isDayAvailable(dateStr)) continue;
+
+      // Tester chaque créneau possible avec un step de 30 min
+      const dayStart = parseTimeToMinutes(acceptReservationsFrom);
+      const dayEnd = parseTimeToMinutes(acceptReservationsTo);
+      for (let m = dayStart; m + variantDuration <= dayEnd; m += 30) {
+        const time = minutesToTime(m);
+        if (!isTimeSlotAvailable(dateStr, time)) continue;
+        slots.push({
+          date: dateStr,
+          dayOfWeek: cursor.getDay(),
+          startTime: time,
+          endTime: minutesToTime(m + variantDuration),
+          label: `${cursor.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} · ${time} → ${minutesToTime(m + variantDuration)}`,
+        });
+      }
     }
-  }, [isComplete, selectedSessions.length]);
+    return slots;
+  }, [availabilityCalendar, calendarMonth, weeksToShow, today, variantDuration, acceptReservationsFrom, acceptReservationsTo]);
+
+  // Filtrage par jour de la semaine
+  const filteredSlots = useMemo(() => {
+    if (filterDayOfWeek === null) return availableSlots;
+    return availableSlots.filter((s) => s.dayOfWeek === filterDayOfWeek);
+  }, [availableSlots, filterDayOfWeek]);
+
+  // Vérifie si un créneau est sélectionné
+  const isSlotSelected = (slot: AvailableSlot): boolean => {
+    return selectedSessions.some(
+      (s) => s.date === slot.date && s.startTime === slot.startTime
+    );
+  };
+
+  // Toggle un créneau (ajoute ou retire)
+  const toggleSlot = (slot: AvailableSlot) => {
+    if (isSlotSelected(slot)) {
+      // Retirer
+      onSessionsChange(
+        selectedSessions.filter(
+          (s) => !(s.date === slot.date && s.startTime === slot.startTime)
+        )
+      );
+      return;
+    }
+    // Vérifier qu'on peut encore ajouter
+    if (selectedSessions.length >= numberOfSessions) return;
+    // Vérifier l'intervalle minimum
+    if (sessionInterval > 0) {
+      const tooClose = selectedSessions.some((s) => {
+        const diffDays = Math.abs(
+          (new Date(slot.date).getTime() - new Date(s.date).getTime()) /
+            (1000 * 60 * 60 * 24)
+        );
+        return diffDays < sessionInterval && diffDays !== 0;
+      });
+      if (tooClose) {
+        alert(
+          `L'intervalle minimum entre 2 séances est de ${sessionInterval} jour${sessionInterval > 1 ? "s" : ""}.`
+        );
+        return;
+      }
+    }
+    onSessionsChange([
+      ...selectedSessions,
+      { date: slot.date, startTime: slot.startTime, endTime: slot.endTime },
+    ]);
+  };
+
+  // Sélection rapide : "Hebdo lundi 9h pendant N semaines"
+  const quickSelectRecurring = (slot: AvailableSlot) => {
+    const newSessions: SelectedSession[] = [];
+    let cursor = new Date(slot.date);
+    let safety = 0;
+    while (newSessions.length < numberOfSessions && safety < 200) {
+      const dateStr = cursor.toISOString().split("T")[0];
+      if (
+        dateStr >= today &&
+        isDayAvailable(dateStr) &&
+        isTimeSlotAvailable(dateStr, slot.startTime)
+      ) {
+        newSessions.push({
+          date: dateStr,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+        });
+      }
+      cursor.setDate(cursor.getDate() + 7); // +1 semaine
+      safety++;
+    }
+    onSessionsChange(newSessions);
+  };
 
   // Trouver les jours correspondants pour l'auto-fill (même jour de semaine)
   const findMatchingDays = useMemo(() => {
@@ -512,13 +627,18 @@ export default memo(function MultiSessionCalendar({
   };
 
   // Afficher la suggestion après la première sélection
+  // (uniquement en mode manuel — en mode auto, la cadence du wizard prend le relais)
   useEffect(() => {
+    if (mode === "auto") {
+      setShowAutoFillSuggestion(false);
+      return;
+    }
     if (canAutoFill && selectedSessions.length === 1) {
       setShowAutoFillSuggestion(true);
     } else {
       setShowAutoFillSuggestion(false);
     }
-  }, [canAutoFill, selectedSessions.length]);
+  }, [canAutoFill, selectedSessions.length, mode]);
 
   // Vue horaire pour un jour spécifique
   const renderTimeView = () => {
@@ -891,6 +1011,193 @@ export default memo(function MultiSessionCalendar({
     );
   };
 
+  // ─── Vue Liste : sélection rapide (1 clic = 1 séance) ───
+  const renderQuickListView = () => {
+    // Group slots par semaine (clé = lundi de la semaine en YYYY-MM-DD)
+    const slotsByWeek = new Map<string, AvailableSlot[]>();
+    filteredSlots.forEach((slot) => {
+      const d = new Date(slot.date);
+      const day = d.getDay();
+      const monday = new Date(d);
+      monday.setDate(d.getDate() - ((day + 6) % 7));
+      const weekKey = monday.toISOString().split("T")[0];
+      if (!slotsByWeek.has(weekKey)) slotsByWeek.set(weekKey, []);
+      slotsByWeek.get(weekKey)!.push(slot);
+    });
+
+    const weekKeys = Array.from(slotsByWeek.keys()).sort();
+    const dayLabels = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
+
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="space-y-3"
+      >
+        {/* Compteur + filtre par jour de la semaine */}
+        <div
+          className="p-3 flex flex-wrap items-center justify-between gap-2"
+          style={{ borderRadius: 12, background: "#f5f9f6", border: "1px solid #cfdbd3" }}
+        >
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-3.5 h-3.5" style={{ color: "#1f3a33" }} />
+            <span className="text-[12.5px] font-semibold" style={{ color: "#1f3a33" }}>
+              Cochez {numberOfSessions} créneaux
+            </span>
+            <span
+              className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold"
+              style={
+                isComplete
+                  ? { background: "#1f3a33", color: "#f7f5ef" }
+                  : { background: "#fff", color: "#1f3a33", border: "1px solid #cfdbd3" }
+              }
+            >
+              {selectedSessions.length}/{numberOfSessions}
+            </span>
+          </div>
+          {sessionInterval > 0 && (
+            <span className="text-[10.5px]" style={{ color: "#3a6052" }}>
+              ≥ {sessionInterval}j entre 2 séances
+            </span>
+          )}
+        </div>
+
+        {/* Filtre par jour de la semaine */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-1">
+          <button
+            type="button"
+            onClick={() => setFilterDayOfWeek(null)}
+            className="px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap transition-colors"
+            style={
+              filterDayOfWeek === null
+                ? { background: "#1f3a33", color: "#f7f5ef", border: "1px solid #1f3a33" }
+                : { background: "#fff", color: "#6d6d68", border: "1px solid #ece9e1" }
+            }
+          >
+            Tous
+          </button>
+          {[1, 2, 3, 4, 5, 6, 0].map((d) => {
+            const active = filterDayOfWeek === d;
+            return (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setFilterDayOfWeek(active ? null : d)}
+                className="px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap transition-colors"
+                style={
+                  active
+                    ? { background: "#1f3a33", color: "#f7f5ef", border: "1px solid #1f3a33" }
+                    : { background: "#fff", color: "#6d6d68", border: "1px solid #ece9e1" }
+                }
+              >
+                {dayLabels[d]}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Liste des créneaux groupés par semaine */}
+        {filteredSlots.length === 0 ? (
+          <div
+            className="p-6 text-center"
+            style={{ borderRadius: 12, background: "#fcfaf4", border: "1px solid #f1ede3" }}
+          >
+            <p className="text-[12.5px]" style={{ color: "#6d6d68" }}>
+              Aucun créneau disponible avec ces filtres.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
+            {weekKeys.map((weekKey) => {
+              const weekSlots = slotsByWeek.get(weekKey) || [];
+              const monday = new Date(weekKey);
+              const sunday = new Date(monday);
+              sunday.setDate(monday.getDate() + 6);
+              const weekLabel = `Semaine du ${monday.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} au ${sunday.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}`;
+
+              return (
+                <div key={weekKey}>
+                  <div
+                    className="text-[10px] font-medium uppercase tracking-[0.1em] mb-1.5 sticky top-0 py-1"
+                    style={{ color: "#9c9484", background: "#fff" }}
+                  >
+                    {weekLabel}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {weekSlots.map((slot) => {
+                      const selected = isSlotSelected(slot);
+                      const disabled = !selected && selectedSessions.length >= numberOfSessions;
+                      return (
+                        <div key={`${slot.date}-${slot.startTime}`} className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => toggleSlot(slot)}
+                            disabled={disabled}
+                            className={cn(
+                              "flex-1 flex items-center justify-between gap-2 px-3 py-2 text-left transition-colors",
+                              !disabled && "hover:bg-[#f7f5ef]"
+                            )}
+                            style={{
+                              borderRadius: 10,
+                              background: selected ? "#1f3a33" : "#fff",
+                              border: `1px solid ${selected ? "#1f3a33" : "#dfdcd4"}`,
+                              color: selected ? "#f7f5ef" : "#1f1f1d",
+                              opacity: disabled ? 0.4 : 1,
+                              cursor: disabled ? "not-allowed" : "pointer",
+                            }}
+                          >
+                            <span className="flex items-center gap-1.5 min-w-0">
+                              <span
+                                className="w-4 h-4 rounded inline-flex items-center justify-center flex-shrink-0"
+                                style={{
+                                  background: selected ? "rgba(247,245,239,0.2)" : "#fff",
+                                  border: `1px solid ${selected ? "#f7f5ef" : "#dfdcd4"}`,
+                                }}
+                              >
+                                {selected && <Check className="w-2.5 h-2.5" />}
+                              </span>
+                              <span className="text-[12px] font-medium capitalize truncate">
+                                {slot.label}
+                              </span>
+                            </span>
+                          </button>
+                          {/* Bouton "même heure pendant N semaines" — visible si rien encore sélectionné */}
+                          {selectedSessions.length === 0 && (
+                            <button
+                              type="button"
+                              onClick={() => quickSelectRecurring(slot)}
+                              title={`Sélectionner ce créneau toutes les semaines (${numberOfSessions} fois)`}
+                              className="p-1.5 rounded-full hover:bg-[#f5f9f6] transition-colors flex-shrink-0"
+                              style={{ color: "#1f3a33" }}
+                            >
+                              <Repeat className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Charger plus de semaines */}
+            {weeksToShow < 12 && (
+              <button
+                type="button"
+                onClick={() => setWeeksToShow((n) => n + 4)}
+                className="w-full py-2 rounded-full text-[12px] font-medium transition-colors hover:bg-[#fafafa]"
+                style={{ background: "#fff", border: "1px solid #dfdcd4", color: "#1f3a33" }}
+              >
+                Voir 4 semaines de plus
+              </button>
+            )}
+          </div>
+        )}
+      </motion.div>
+    );
+  };
+
   // Vue repliée avec résumé
   const renderCollapsedView = () => (
     <motion.div
@@ -1005,12 +1312,64 @@ export default memo(function MultiSessionCalendar({
             </div>
           )}
 
-          {/* Calendrier ou vue horaire — sans wrapper coloré */}
-          <div>
-            <AnimatePresence mode="wait">
-              {selectedDay ? renderTimeView() : renderCalendarView()}
-            </AnimatePresence>
-          </div>
+          {/* ─── Toggle vue Liste / Calendrier ─── */}
+          {numberOfSessions > 1 && (
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div
+                className="inline-flex items-center p-0.5"
+                style={{ borderRadius: 999, background: "#fff", border: "1px solid #ece9e1" }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setViewMode("list")}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors"
+                  style={
+                    viewMode === "list"
+                      ? { background: "#1f3a33", color: "#f7f5ef" }
+                      : { color: "#6d6d68" }
+                  }
+                >
+                  <Sparkles className="w-3 h-3" />
+                  Sélection rapide
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("calendar")}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors"
+                  style={
+                    viewMode === "calendar"
+                      ? { background: "#1f3a33", color: "#f7f5ef" }
+                      : { color: "#6d6d68" }
+                  }
+                >
+                  <Calendar className="w-3 h-3" />
+                  Calendrier
+                </button>
+              </div>
+              {selectedSessions.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onSessionsChange([])}
+                  className="text-[11px] font-medium underline"
+                  style={{ color: "#9c9484" }}
+                >
+                  Tout effacer
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Vue Liste : sélection rapide en cochant les créneaux */}
+          {viewMode === "list" && numberOfSessions > 1 ? (
+            renderQuickListView()
+          ) : (
+            /* Vue Calendrier (existante) */
+            <div>
+              <AnimatePresence mode="wait">
+                {selectedDay ? renderTimeView() : renderCalendarView()}
+              </AnimatePresence>
+            </div>
+          )}
 
           {/* Pills séances sélectionnées */}
           {selectedSessions.length > 0 && !isComplete && (

@@ -255,12 +255,20 @@ export function ServiceCardPreview({
         )}
       </div>
 
-      {/* Décomposition du prix : "Pourquoi 16€ devient 18,88€ pour le client ?" */}
+      {/* Décomposition du prix : adaptée au type de formule
+          - Uni-séance : décomposition unitaire (prix → commission → frais → total)
+          - Collective / multi-séances : décomposition pour TOUTES les séances */}
       {previewFormule && previewFormule.price > 0 && (
         <PriceBreakdown
           announcerPrice={previewFormule.price}
           priceUnit={previewFormule.priceUnit}
           statusType={previewFormule.announcerStatusType}
+          sessionsCount={
+            previewFormule.sessionType === "collective" ||
+            (previewFormule.numberOfSessions ?? 1) > 1
+              ? previewFormule.numberOfSessions ?? 1
+              : 1
+          }
         />
       )}
 
@@ -296,16 +304,32 @@ function PriceBreakdown({
   announcerPrice,
   priceUnit,
   statusType,
+  sessionsCount = 1,
 }: {
+  /** Prix HT par séance (en centimes) */
   announcerPrice: number;
   priceUnit: string;
   statusType: "particulier" | "micro_entrepreneur" | "professionnel";
+  /** Nombre de séances obligatoires (>1 pour collectif/multi) */
+  sessionsCount?: number;
 }) {
   const commissionRate = COMMISSION_RATES[statusType] ?? 0.15;
-  const commission = Math.round(announcerPrice * commissionRate);
-  const stripeFee = Math.round(announcerPrice * STRIPE_FEE_RATE);
-  const clientTotal = announcerPrice + commission + stripeFee;
-  const unitLabel = PRICE_UNIT_LABELS[priceUnit] || priceUnit;
+  const isMulti = sessionsCount > 1;
+
+  // Calculs UNITAIRES (par séance)
+  const sessionCommission = Math.round(announcerPrice * commissionRate);
+  const sessionStripe = Math.round(announcerPrice * STRIPE_FEE_RATE);
+  const sessionClientPrice = announcerPrice + sessionCommission + sessionStripe;
+
+  // Calculs TOTAUX (toutes séances, pour les formules collectives/multi)
+  const announcerTotal = announcerPrice * sessionsCount;
+  const totalCommission = sessionCommission * sessionsCount;
+  const totalStripe = sessionStripe * sessionsCount;
+  const clientTotal = sessionClientPrice * sessionsCount;
+
+  const unitLabel = isMulti
+    ? "séance"
+    : PRICE_UNIT_LABELS[priceUnit] || priceUnit;
 
   const statusLabel =
     statusType === "professionnel"
@@ -330,7 +354,9 @@ function PriceBreakdown({
             Décomposition du prix
           </div>
           <h4 className="text-[12.5px] font-semibold text-[#1f1f1d] tracking-[-0.01em] m-0">
-            Pourquoi cette différence ?
+            {isMulti
+              ? `Total pour ${sessionsCount} séances obligatoires`
+              : "Pourquoi cette différence ?"}
           </h4>
         </div>
       </div>
@@ -338,73 +364,104 @@ function PriceBreakdown({
       <div className="space-y-1">
         {/* Tarif annonceur (vert pastel = ce que vous percevez) */}
         <div
-          className="flex items-center justify-between p-2"
+          className="p-2"
           style={{
             borderRadius: 8,
             background: "#f5f9f6",
             border: "1px solid #cfdbd3",
           }}
         >
-          <div className="min-w-0">
-            <div className="text-[10px] font-medium uppercase tracking-[0.05em]" style={{ color: "#3a6052" }}>
-              Votre tarif
+          <div className="flex items-center justify-between">
+            <div className="min-w-0">
+              <div
+                className="text-[10px] font-medium uppercase tracking-[0.05em]"
+                style={{ color: "#3a6052" }}
+              >
+                Votre tarif {isMulti ? "(total perçu)" : ""}
+              </div>
+              <p className="text-[11px] m-0" style={{ color: "#6d6d68" }}>
+                {isMulti
+                  ? `${sessionsCount} × ${formatPriceCents(announcerPrice)}/séance`
+                  : "Vous percevez 100 % de ce montant"}
+              </p>
             </div>
-            <p className="text-[11px] m-0" style={{ color: "#6d6d68" }}>
-              Vous percevez 100 % de ce montant
-            </p>
-          </div>
-          <span className="text-[14px] font-semibold tabular-nums" style={{ color: "#1f3a33" }}>
-            {formatPriceCents(announcerPrice)}
-            <span className="text-[10px] font-normal" style={{ color: "#3a6052" }}>
-              {" "}/ {unitLabel}
+            <span
+              className="text-[14px] font-semibold tabular-nums"
+              style={{ color: "#1f3a33" }}
+            >
+              {formatPriceCents(announcerTotal)}
+              {!isMulti && (
+                <span className="text-[10px] font-normal" style={{ color: "#3a6052" }}>
+                  {" "}/ {unitLabel}
+                </span>
+              )}
             </span>
-          </span>
+          </div>
         </div>
 
-        {/* Frais (à la charge du client) */}
+        {/* Frais (à la charge du client) — calculés sur le total */}
         <div
           className="px-2 py-1.5 space-y-0.5"
           style={{ background: "#fcfaf4", borderRadius: 8 }}
         >
           <BreakdownLine
             label={`Commission plateforme (${(commissionRate * 100).toFixed(0)} %, ${statusLabel})`}
-            value={`+${formatPriceCents(commission)}`}
+            value={`+${formatPriceCents(totalCommission)}`}
           />
           <BreakdownLine
             label={`Frais de paiement (${(STRIPE_FEE_RATE * 100).toFixed(0)} %)`}
-            value={`+${formatPriceCents(stripeFee)}`}
+            value={`+${formatPriceCents(totalStripe)}`}
           />
         </div>
 
-        {/* Prix client affiché */}
+        {/* Total payé par le client */}
         <div
-          className="flex items-center justify-between p-2 mt-1"
+          className="p-2 mt-1"
           style={{
             borderRadius: 8,
             background: "#1f3a33",
             color: "#f7f5ef",
           }}
         >
-          <div className="min-w-0">
-            <div className="text-[10px] font-medium uppercase tracking-[0.05em]" style={{ color: "rgba(247,245,239,0.7)" }}>
-              Prix affiché côté client
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div
+                className="text-[10px] font-medium uppercase tracking-[0.05em]"
+                style={{ color: "rgba(247,245,239,0.7)" }}
+              >
+                {isMulti ? "Total payé par le client" : "Prix affiché côté client"}
+              </div>
+              <p
+                className="text-[10.5px] m-0"
+                style={{ color: "rgba(247,245,239,0.6)" }}
+              >
+                {isMulti
+                  ? `${sessionsCount} séances × ${formatPriceCents(sessionClientPrice)}`
+                  : "C'est ce que verra l'internaute sur la recherche"}
+              </p>
             </div>
-            <p className="text-[10.5px] m-0" style={{ color: "rgba(247,245,239,0.6)" }}>
-              C&apos;est ce que verra l&apos;internaute sur la recherche
-            </p>
-          </div>
-          <span className="text-[15px] font-bold tabular-nums">
-            {formatPriceCents(clientTotal)}
-            <span className="text-[10px] font-normal" style={{ color: "rgba(247,245,239,0.7)" }}>
-              {" "}/ {unitLabel}
+            <span className="text-[15px] font-bold tabular-nums">
+              {formatPriceCents(clientTotal)}
+              {!isMulti && (
+                <span
+                  className="text-[10px] font-normal"
+                  style={{ color: "rgba(247,245,239,0.7)" }}
+                >
+                  {" "}/ {unitLabel}
+                </span>
+              )}
             </span>
-          </span>
+          </div>
         </div>
       </div>
 
-      <p className="text-[10.5px] mt-2 italic leading-[1.4]" style={{ color: "#9c9484" }}>
-        Les commissions et frais sont payés <strong>en sus</strong> par le client.
-        Votre revenu reste {formatPriceCents(announcerPrice)} par {unitLabel}.
+      <p
+        className="text-[10.5px] mt-2 italic leading-[1.4]"
+        style={{ color: "#9c9484" }}
+      >
+        {isMulti
+          ? `Le client paie l'intégralité du forfait (${sessionsCount} séances) à la réservation. Les commissions et frais sont à sa charge en sus.`
+          : `Les commissions et frais sont payés en sus par le client. Votre revenu reste ${formatPriceCents(announcerPrice)} par ${unitLabel}.`}
       </p>
     </div>
   );

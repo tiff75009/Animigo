@@ -2,6 +2,22 @@ import { v } from "convex/values";
 import { query, mutation } from "../_generated/server";
 import { Id } from "../_generated/dataModel";
 
+// Règle métier : durée d'une séance = multiple de 30 min, max 150 min (2h30)
+const MAX_SESSION_DURATION = 150;
+function validateSessionDuration(duration: number | undefined | null): number | undefined {
+  if (duration === undefined || duration === null) return undefined;
+  if (duration <= 0) {
+    throw new Error("La durée doit être positive");
+  }
+  if (duration > MAX_SESSION_DURATION) {
+    throw new Error(`La durée ne peut pas dépasser ${MAX_SESSION_DURATION} minutes (2h30)`);
+  }
+  if (duration % 30 !== 0) {
+    throw new Error("La durée doit être un multiple de 30 minutes (30, 60, 90, 120 ou 150)");
+  }
+  return duration;
+}
+
 // Helper: Valider la session et récupérer l'utilisateur
 async function validateSession(ctx: any, token: string) {
   const session = await ctx.db
@@ -195,6 +211,10 @@ export const addVariant = mutation({
       nightly: v.optional(v.number()),
     })),
     duration: v.optional(v.number()),
+    pricingMode: v.optional(v.union(
+      v.literal("per_session"),
+      v.literal("per_hour")
+    )),
     includedFeatures: v.optional(v.array(v.string())),
     isSapEligible: v.optional(v.boolean()),
     // Photos de la formule (URLs Cloudinary, max 3)
@@ -203,6 +223,9 @@ export const addVariant = mutation({
   handler: async (ctx, args) => {
     const { user } = await validateSession(ctx, args.token);
     const service = await verifyServiceOwnership(ctx, args.serviceId, user._id);
+
+    // Validation : durée multiple de 30 min, max 2h30
+    validateSessionDuration(args.duration);
 
     // Trouver l'ordre max pour mettre la nouvelle variante à la fin
     const existingVariants = await ctx.db
@@ -251,6 +274,7 @@ export const addVariant = mutation({
       priceUnit: args.priceUnit,
       pricing: args.pricing,
       duration: args.duration,
+      pricingMode: args.pricingMode ?? "per_hour",
       includedFeatures: args.includedFeatures,
       isSapEligible: sapEligible,
       photos: args.photos && args.photos.length > 0
@@ -332,6 +356,10 @@ export const updateVariant = mutation({
       nightly: v.optional(v.number()),
     })),
     duration: v.optional(v.number()),
+    pricingMode: v.optional(v.union(
+      v.literal("per_session"),
+      v.literal("per_hour")
+    )),
     includedFeatures: v.optional(v.array(v.string())),
     isActive: v.optional(v.boolean()),
     isSapEligible: v.optional(v.boolean()),
@@ -372,7 +400,11 @@ export const updateVariant = mutation({
     if (args.price !== undefined) updates.price = args.price;
     if (args.priceUnit !== undefined) updates.priceUnit = args.priceUnit;
     if (args.pricing !== undefined) updates.pricing = args.pricing;
-    if (args.duration !== undefined) updates.duration = args.duration;
+    if (args.duration !== undefined) {
+      validateSessionDuration(args.duration);
+      updates.duration = args.duration;
+    }
+    if (args.pricingMode !== undefined) updates.pricingMode = args.pricingMode;
     if (args.includedFeatures !== undefined)
       updates.includedFeatures = args.includedFeatures;
     if (args.isActive !== undefined) updates.isActive = args.isActive;
@@ -398,6 +430,34 @@ export const updateVariant = mutation({
     // Mettre à jour le basePrice si le prix, durée, séances ou isActive a changé
     if (args.price !== undefined || args.duration !== undefined || args.numberOfSessions !== undefined || args.isActive !== undefined) {
       await updateServiceBasePrice(ctx, variant.serviceId);
+    }
+
+    // Si la durée a changé, propager le nouveau endTime aux créneaux collectifs
+    // futurs et non encore réservés (préserver les créneaux passés / déjà réservés)
+    if (args.duration !== undefined && args.duration !== variant.duration) {
+      const todayStr = new Date().toISOString().split("T")[0];
+      const slots = await ctx.db
+        .query("collectiveSlots")
+        .withIndex("by_variant", (q) => q.eq("variantId", args.variantId))
+        .collect();
+
+      for (const slot of slots) {
+        if (
+          slot.date >= todayStr &&
+          slot.bookedAnimals === 0 &&
+          slot.isActive &&
+          !slot.isCancelled
+        ) {
+          const [h, m] = slot.startTime.split(":").map(Number);
+          const totalMinutes = h * 60 + m + args.duration;
+          const endHours = Math.floor(totalMinutes / 60) % 24;
+          const endMinutes = totalMinutes % 60;
+          const newEndTime = `${String(endHours).padStart(2, "0")}:${String(endMinutes).padStart(2, "0")}`;
+          if (newEndTime !== slot.endTime) {
+            await ctx.db.patch(slot._id, { endTime: newEndTime, updatedAt: now });
+          }
+        }
+      }
     }
 
     return { success: true };

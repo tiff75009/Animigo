@@ -25,6 +25,7 @@ import AnimalSection from "./components/AnimalSection";
 import OptionsSection from "./components/OptionsSection";
 import ReservationSummary from "./components/ReservationSummary";
 import { calculateSmartPrice } from "./utils";
+import { getCollectiveOrMultiSessionTotal } from "@/app/lib/pricing";
 import type { GuestData, ServiceOption, PriceCalculationResult, BillingInfo } from "./types";
 
 export default function ReservationPage({
@@ -324,10 +325,10 @@ export default function ReservationPage({
   const totalAmount = (() => {
     if (!bookingData?.variant) return 0;
     if (isCollectiveFormula) {
-      return bookingData.variant.price * actualSlotCount * effectiveAnimalCount + optionsTotal;
+      return getCollectiveOrMultiSessionTotal(bookingData.variant, actualSlotCount, effectiveAnimalCount) + optionsTotal;
     }
     if (isMultiSessionFormula) {
-      return bookingData.variant.price * numberOfSessions * effectiveAnimalCount + optionsTotal;
+      return getCollectiveOrMultiSessionTotal(bookingData.variant, numberOfSessions, effectiveAnimalCount) + optionsTotal;
     }
     const baseTotal = priceCalculation?.totalAmount ?? 0;
     return effectiveAnimalCount > 1 ? baseTotal * effectiveAnimalCount : baseTotal;

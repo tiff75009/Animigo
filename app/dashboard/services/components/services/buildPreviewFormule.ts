@@ -1,6 +1,7 @@
 import type { FormuleResult } from "@/app/components/platform/FormuleCard";
 import type { LocalVariant } from "../VariantManager";
 import type { AnnouncerPreviewData } from "./useAnnouncerPreviewData";
+import { getVariantSessionPrice } from "@/app/lib/pricing";
 
 interface ServiceCategoryLite {
   slug: string;
@@ -43,10 +44,14 @@ export function buildPreviewFormule({
       ? variant.photos.map((url, order) => ({ url, order }))
       : undefined;
 
-  // Prix & unité affichés : pour les services capacity-based (garde),
-  // on privilégie le tarif journalier (pricing.daily) — comme sur /recherche.
-  // Pour les autres : priceUnit + price tels que saisis par l'annonceur.
+  // Prix & unité affichés.
+  // - Garde (capacity-based) : prix journalier privilégié (pricing.daily)
+  // - Collective ou multi-séances : prix réel d'UNE séance (price × duration / 60 si €/h)
+  // - Standard : priceUnit + price tels que saisis
   const isGarde = !!category?.isCapacityBased;
+  const isCollectiveOrMulti =
+    variant?.sessionType === "collective" ||
+    (variant?.numberOfSessions ?? 1) > 1;
   let displayPrice: number;
   let displayUnit: string;
 
@@ -59,6 +64,14 @@ export function buildPreviewFormule({
     displayUnit = variant?.pricing?.daily
       ? "day"
       : variant?.priceUnit ?? "day";
+  } else if (isCollectiveOrMulti && variant) {
+    // Pour les formules collectives/multi-séances, afficher le prix RÉEL
+    // d'une séance complète (en tenant compte de la durée).
+    // On force priceUnit="flat" + pricingMode="per_session" sur la previewFormule
+    // pour que tout consommateur (FormuleCardGrid, etc.) qui rappelle
+    // getVariantSessionPrice retombe sur le même montant.
+    displayPrice = getVariantSessionPrice(variant);
+    displayUnit = "flat";
   } else {
     displayPrice = variant?.price ?? 0;
     displayUnit = variant?.priceUnit ?? "hour";
@@ -77,6 +90,12 @@ export function buildPreviewFormule({
     price: displayPrice,
     priceUnit: displayUnit,
     duration: variant?.duration,
+    // Si on a déjà calculé le prix par séance (collectif/multi),
+    // on marque la previewFormule comme "per_session" pour que les
+    // consommateurs aval n'appliquent pas une nouvelle fois ×duration/60.
+    pricingMode: isCollectiveOrMulti
+      ? "per_session"
+      : (variant?.pricingMode as "per_session" | "per_hour" | undefined),
     sessionType: variant?.sessionType ?? "individual",
     serviceLocation: variant?.serviceLocation === "both" ? undefined : variant?.serviceLocation,
     numberOfSessions: variant?.numberOfSessions,

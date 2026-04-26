@@ -402,7 +402,14 @@ export default defineSchema({
       monthly: v.optional(v.number()),  // Prix au mois en centimes
       nightly: v.optional(v.number()),  // Prix de la nuit en centimes
     })),
-    duration: v.optional(v.number()), // Durée en minutes
+    duration: v.optional(v.number()), // Durée en minutes (multiples de 30, max 150)
+    // Mode de tarification : "per_session" (price = prix forfait par séance)
+    // ou "per_hour" (price = prix horaire, prix séance = price × duration / 60)
+    // Par défaut "per_hour" pour rétro-compatibilité
+    pricingMode: v.optional(v.union(
+      v.literal("per_session"),
+      v.literal("per_hour")
+    )),
     includedFeatures: v.optional(v.array(v.string())), // ["Brossage", "Lavage", "Séchage"]
     order: v.number(), // Ordre d'affichage
     isActive: v.boolean(),

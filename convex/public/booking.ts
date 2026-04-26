@@ -905,9 +905,61 @@ export const finalizeBooking = mutation({
       }
     }
 
-    // Utiliser le montant mis à jour si fourni, sinon utiliser celui de la réservation
-    // Ce montant représente le prix du service (ce que l'annonceur recevra)
-    const serviceAmount = args.updatedAmount ?? pendingBooking.calculatedAmount;
+    // Recalcul autoritaire du prix côté backend pour éviter toute manipulation
+    // côté client. On ignore `args.updatedAmount` / `pendingBooking.calculatedAmount`
+    // pour les formules collectives et multi-séances et on recalcule depuis
+    // variant.price + variant.duration + variant.priceUnit.
+    function getSessionPrice(v: {
+      price: number;
+      priceUnit?: string | null;
+      duration?: number | null;
+      pricingMode?: "per_session" | "per_hour" | null;
+    }): number {
+      const duration = v.duration ?? 60;
+      // Nouveau système : pricingMode prioritaire
+      if (v.pricingMode === "per_session") return v.price;
+      if (v.pricingMode === "per_hour") return Math.round((v.price * duration) / 60);
+      // Rétro-compat
+      const unit = v.priceUnit ?? "hour";
+      switch (unit) {
+        case "hour": return Math.round((v.price * duration) / 60);
+        case "half_day": return Math.round((v.price * duration) / 240);
+        case "day": return Math.round((v.price * duration) / 480);
+        case "week": return Math.round((v.price * duration) / (60 * 24 * 7));
+        case "month": return Math.round((v.price * duration) / (60 * 24 * 30));
+        case "flat":
+        default: return v.price;
+      }
+    }
+
+    let serviceAmount: number;
+    if (isCollectiveFormule && pendingBooking.collectiveSlotIds && pendingBooking.collectiveSlotIds.length > 0) {
+      const animals = pendingBooking.effectiveAnimalCount ?? pendingBooking.animalCount ?? 1;
+      const slots = pendingBooking.collectiveSlotIds.length;
+      const sessionPrice = getSessionPrice(variant);
+      const optionsForRecalc = (args.updatedOptionIds ?? pendingBooking.optionIds ?? []) as Id<"serviceOptions">[];
+      let optionsSum = 0;
+      for (const oid of optionsForRecalc) {
+        const o = await ctx.db.get(oid);
+        if (o) optionsSum += o.price;
+      }
+      serviceAmount = sessionPrice * slots * Math.max(1, animals) + optionsSum;
+    } else if (variant.sessionType !== "collective" && (variant.numberOfSessions ?? 1) > 1) {
+      // Multi-séances individuelle
+      const animals = pendingBooking.effectiveAnimalCount ?? pendingBooking.animalCount ?? 1;
+      const nSessions = variant.numberOfSessions ?? 1;
+      const sessionPrice = getSessionPrice(variant);
+      const optionsForRecalc = (args.updatedOptionIds ?? pendingBooking.optionIds ?? []) as Id<"serviceOptions">[];
+      let optionsSum = 0;
+      for (const oid of optionsForRecalc) {
+        const o = await ctx.db.get(oid);
+        if (o) optionsSum += o.price;
+      }
+      serviceAmount = sessionPrice * nSessions * Math.max(1, animals) + optionsSum;
+    } else {
+      // Uni-séance / garde : on garde le calcul existant côté client
+      serviceAmount = args.updatedAmount ?? pendingBooking.calculatedAmount;
+    }
 
     // Récupérer l'annonceur pour déterminer le type de commission
     const announcerForCommission = await ctx.db.get(pendingBooking.announcerId);

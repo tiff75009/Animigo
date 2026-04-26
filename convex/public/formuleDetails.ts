@@ -87,6 +87,7 @@ export const getVariantDetails = query({
         priceUnit: variant.priceUnit,
         pricing: variant.pricing ?? null,
         duration: variant.duration ?? null,
+        pricingMode: variant.pricingMode ?? null,
         includedFeatures: variant.includedFeatures ?? [],
         isSapEligible: variant.isSapEligible ?? false,
         photos,

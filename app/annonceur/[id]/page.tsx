@@ -3,9 +3,10 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQueryState, parseAsString, parseAsArrayOf, parseAsBoolean, parseAsInteger, parseAsJson } from "nuqs";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import { setAuthToken as storeAuthToken } from "@/app/lib/authToken";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { useAuth } from "@/app/hooks/useAuth";
@@ -116,6 +117,42 @@ export default function AnnouncerProfilePage() {
 
   // Flag pour savoir si on a déjà initialisé depuis l'URL
   const [hasInitializedFromUrl, setHasInitializedFromUrl] = useState(false);
+
+  // ─── State du wizard intégré : étape Finalisation ───
+  // Inclut auth invité, notes, acceptations CGV, etc.
+  const [finalizeData, setFinalizeData] = useState<{
+    guestData?: {
+      firstName: string;
+      lastName: string;
+      email: string;
+      phone: string;
+      password: string;
+      confirmPassword: string;
+    };
+    notes?: string;
+    acceptedCGV?: boolean;
+    acceptedPrivacy?: boolean;
+    acceptedCancellation?: boolean;
+    isSubmitting?: boolean;
+    submitError?: string | null;
+    fieldErrors?: Record<string, string>;
+  }>({
+    guestData: {
+      firstName: "",
+      lastName: "",
+      email: "",
+      phone: "",
+      password: "",
+      confirmPassword: "",
+    },
+    notes: "",
+    acceptedCGV: false,
+    acceptedPrivacy: false,
+    acceptedCancellation: false,
+    isSubmitting: false,
+    submitError: null,
+    fieldErrors: {},
+  });
 
   // Effet pour initialiser le state depuis les paramètres URL (après retour de /reservation)
   useEffect(() => {
@@ -977,6 +1014,226 @@ export default function AnnouncerProfilePage() {
     router.push(`/reserver/${announcerData.id}${queryString ? `?${queryString}` : ""}`);
   }, [announcerData, announcer, bookingSelection, selectedAnimalIds, guestAnimalData, router]);
 
+  // ─── Mutations Convex pour la finalisation in-wizard ───
+  const createPendingBookingMutation = useMutation(api.public.booking.createPendingBooking);
+  const finalizeBookingMutation = useMutation(api.public.booking.finalizeBooking);
+  const finalizeBookingAsGuestMutation = useMutation(api.public.booking.finalizeBookingAsGuest);
+
+  // Handler de finalisation directe depuis le wizard (étape Finaliser)
+  const handleFinalizeWizard = useCallback(async () => {
+    if (isAnnouncer || !announcerData || !announcer || !bookingService || !bookingVariant) return;
+
+    // Reset des erreurs
+    setFinalizeData((prev) => ({ ...prev, isSubmitting: true, submitError: null, fieldErrors: {} }));
+
+    try {
+      const isLoggedIn = !!token;
+      const guest = finalizeData.guestData;
+
+      // ── 1. Validation pour les invités ──
+      if (!isLoggedIn) {
+        const errors: Record<string, string> = {};
+        if (!guest?.firstName?.trim()) errors.firstName = "Prénom requis";
+        if (!guest?.lastName?.trim()) errors.lastName = "Nom requis";
+        if (!guest?.email?.trim()) errors.email = "Email requis";
+        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guest.email)) errors.email = "Email invalide";
+        if (!guest?.phone?.trim()) errors.phone = "Téléphone requis";
+        if (!guest?.password || guest.password.length < 6)
+          errors.password = "Mot de passe (min. 6 caractères)";
+        if (guest?.password !== guest?.confirmPassword)
+          errors.confirmPassword = "Les mots de passe ne correspondent pas";
+        if (!guestAnimalData) errors.animal = "Veuillez vérifier votre animal";
+
+        if (Object.keys(errors).length > 0) {
+          setFinalizeData((prev) => ({
+            ...prev,
+            isSubmitting: false,
+            fieldErrors: errors,
+            submitError: "Veuillez corriger les erreurs du formulaire",
+          }));
+          return;
+        }
+      }
+
+      // ── 2. Calcul des paramètres communs ──
+      const totalAmount = priceBreakdown?.total ?? 0;
+      const isCollectiveFormula =
+        bookingVariant.sessionType === "collective" || bookingSelection.selectedSlotIds.length > 0;
+      const isMultiSessionIndividual =
+        !isCollectiveFormula && (bookingVariant.numberOfSessions || 1) > 1;
+      const effectiveAnimalCount = isCollectiveFormula
+        ? Math.max(1, bookingSelection.animalCount || 1)
+        : Math.max(1, selectedAnimalIds.length || 1);
+      const overnightAmount = nights > 0 && bookingService.overnightPrice
+        ? nights * bookingService.overnightPrice
+        : 0;
+
+      const effectiveStartDate = bookingSelection.startDate;
+      const effectiveEndDate = bookingSelection.endDate || bookingSelection.startDate;
+
+      if (!effectiveStartDate) {
+        throw new Error("Veuillez sélectionner une date");
+      }
+
+      // ── 3. Créer la réservation pending ──
+      const pendingResult = await createPendingBookingMutation({
+        announcerId: announcerData.id as Id<"users">,
+        serviceId: bookingService.id as Id<"services">,
+        variantId: bookingVariant.id,
+        optionIds: bookingSelection.selectedOptionIds as Id<"serviceOptions">[],
+        startDate: effectiveStartDate,
+        endDate: effectiveEndDate,
+        startTime: bookingSelection.startTime || undefined,
+        endTime: bookingSelection.endTime || undefined,
+        calculatedAmount: totalAmount,
+        collectiveSlotIds: isCollectiveFormula && bookingSelection.selectedSlotIds.length > 0
+          ? bookingSelection.selectedSlotIds as Id<"collectiveSlots">[]
+          : undefined,
+        animalCount: isCollectiveFormula ? bookingSelection.animalCount : undefined,
+        selectedAnimalType: isCollectiveFormula ? bookingSelection.selectedAnimalType : undefined,
+        effectiveAnimalCount,
+        selectedAnimalIds: selectedAnimalIds.length > 0 ? selectedAnimalIds : undefined,
+        sessions: isMultiSessionIndividual && bookingSelection.selectedSessions.length > 0
+          ? bookingSelection.selectedSessions
+          : undefined,
+        includeOvernightStay: bookingSelection.includeOvernightStay && nights > 0 ? true : undefined,
+        overnightNights: nights > 0 ? nights : undefined,
+        overnightAmount: overnightAmount > 0 ? overnightAmount : undefined,
+        serviceLocation: bookingSelection.serviceLocation || undefined,
+        guestAddress: bookingSelection.guestAddress ? {
+          address: bookingSelection.guestAddress.address,
+          city: bookingSelection.guestAddress.city || undefined,
+          postalCode: bookingSelection.guestAddress.postalCode || undefined,
+          coordinates: bookingSelection.guestAddress.coordinates || undefined,
+        } : undefined,
+        guestAnimalPreFill: guestAnimalData ? {
+          type: guestAnimalData.animalType,
+          breed: guestAnimalData.breed || undefined,
+          isMixedBreed: guestAnimalData.isMixedBreed || undefined,
+          primaryBreed: guestAnimalData.dogData?.dominantBreed || guestAnimalData.catData?.primaryBreed || undefined,
+          secondaryBreed: guestAnimalData.catData?.secondaryBreed || undefined,
+        } : undefined,
+        token: token || undefined,
+      });
+
+      if (!pendingResult.success || !pendingResult.bookingId) {
+        throw new Error("Impossible de créer la réservation");
+      }
+
+      // ── 4. Calcul du lieu effectif ──
+      const useAnnouncerLocation =
+        bookingSelection.serviceLocation === "announcer_home" || isCollectiveFormula;
+      const effectiveLocation = useAnnouncerLocation
+        ? (announcerData.location || "")
+        : (bookingSelection.guestAddress?.address || selectedClientAddress?.address || "");
+      const effectiveCity = useAnnouncerLocation ? undefined : (bookingSelection.guestAddress?.city || selectedClientAddress?.city || undefined);
+      const effectivePostalCode = useAnnouncerLocation ? undefined : (bookingSelection.guestAddress?.postalCode || selectedClientAddress?.postalCode || undefined);
+      const effectiveCoordinates = useAnnouncerLocation ? undefined : (bookingSelection.guestAddress?.coordinates || selectedClientAddress?.coordinates || undefined);
+
+      // ── 5. Finaliser selon le statut connexion ──
+      if (isLoggedIn && token) {
+        const animalId = selectedAnimalIds[0];
+        if (!animalId) {
+          throw new Error("Veuillez sélectionner un animal");
+        }
+
+        const result = await finalizeBookingMutation({
+          token,
+          bookingId: pendingResult.bookingId,
+          animalId: animalId as Id<"animals">,
+          animalIds: selectedAnimalIds.length > 1 ? (selectedAnimalIds as Id<"animals">[]) : undefined,
+          location: effectiveLocation,
+          city: effectiveCity,
+          postalCode: effectivePostalCode,
+          coordinates: effectiveCoordinates,
+          notes: finalizeData.notes?.trim() || undefined,
+          updatedOptionIds: bookingSelection.selectedOptionIds,
+          updatedAmount: totalAmount,
+        });
+
+        if (result.success) {
+          router.push(`/dashboard?tab=missions&success=booking`);
+        }
+      } else {
+        // Invité — créer le compte + finaliser
+        const animalType = guestAnimalData?.animalType || "chien";
+        const result = await finalizeBookingAsGuestMutation({
+          bookingId: pendingResult.bookingId,
+          userData: {
+            firstName: guest!.firstName.trim(),
+            lastName: guest!.lastName.trim(),
+            email: guest!.email.trim().toLowerCase(),
+            phone: guest!.phone.trim(),
+            password: guest!.password,
+          },
+          animalData: {
+            name: guest!.firstName.trim(), // Nom de l'animal par défaut = prénom de l'utilisateur (à compléter plus tard)
+            type: animalType,
+            gender: "unknown",
+            breed: guestAnimalData?.breed || undefined,
+          },
+          location: effectiveLocation.trim(),
+          city: effectiveCity,
+          postalCode: effectivePostalCode,
+          coordinates: effectiveCoordinates,
+          notes: finalizeData.notes?.trim() || undefined,
+          updatedOptionIds: bookingSelection.selectedOptionIds,
+          updatedAmount: totalAmount,
+        });
+
+        if (result.success && result.token) {
+          await storeAuthToken(result.token);
+          if (result.requiresEmailVerification) {
+            router.push(`/reservation/confirmation-email?email=${encodeURIComponent(guest!.email.trim().toLowerCase())}`);
+          } else {
+            router.push(`/dashboard?tab=missions&success=booking`);
+          }
+        }
+      }
+    } catch (err: unknown) {
+      let errorMessage = "Erreur lors de la réservation";
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      } else if (typeof err === "object" && err !== null && "data" in err) {
+        const convexErr = err as { data?: string | { message?: string } };
+        if (typeof convexErr.data === "string") errorMessage = convexErr.data;
+        else if (convexErr.data?.message) errorMessage = convexErr.data.message;
+      }
+      const fieldErrors: Record<string, string> = {};
+      if (errorMessage.toLowerCase().includes("email") || errorMessage.toLowerCase().includes("compte existe")) {
+        fieldErrors.email = errorMessage;
+      }
+      setFinalizeData((prev) => ({
+        ...prev,
+        isSubmitting: false,
+        submitError: errorMessage,
+        fieldErrors,
+      }));
+      return;
+    }
+
+    setFinalizeData((prev) => ({ ...prev, isSubmitting: false }));
+  }, [
+    isAnnouncer,
+    announcerData,
+    announcer,
+    bookingService,
+    bookingVariant,
+    bookingSelection,
+    selectedAnimalIds,
+    selectedClientAddress,
+    nights,
+    priceBreakdown,
+    token,
+    finalizeData.guestData,
+    finalizeData.notes,
+    guestAnimalData,
+    createPendingBookingMutation,
+    finalizeBookingMutation,
+    finalizeBookingAsGuestMutation,
+    router,
+  ]);
+
   // Early returns APRÈS tous les hooks
   if (announcerData === undefined) {
     return (
@@ -1111,6 +1368,25 @@ export default function AnnouncerProfilePage() {
                 onBook={isAnnouncer ? undefined : handleBook}
                 onFinalize={isAnnouncer ? undefined : handleFinalize}
                 isAnnouncer={isAnnouncer}
+                // ─── Wizard intégré : props pour étapes Récap + Finalisation ───
+                collectiveSlotsDetails={collectiveSlots.map((s) => ({
+                  _id: String(s._id),
+                  date: s.date,
+                  startTime: s.startTime,
+                  endTime: s.endTime,
+                  availableSpots: s.maxAnimals - s.bookedAnimals,
+                }))}
+                priceBreakdown={priceBreakdown ?? null}
+                announcerStatusType={
+                  (announcer.statusType ?? "particulier") as
+                    | "particulier"
+                    | "micro_entrepreneur"
+                    | "professionnel"
+                }
+                announcerLastName={announcer.lastName ?? ""}
+                finalizeData={finalizeData}
+                onFinalizeDataChange={setFinalizeData}
+                onFinalizeWizard={isAnnouncer ? undefined : handleFinalizeWizard}
               />
             )}
 
