@@ -187,6 +187,15 @@ export const markPaymentPaid = internalMutation({
           receiptEmailSent: true,
         });
       }
+
+      // Générer le reçu PDF client (template configurable depuis admin/pdf-templates)
+      // en background (n'attend pas la fin pour répondre au webhook Stripe)
+      await ctx.scheduler.runAfter(0, internal.api.clientReceipt.generateClientReceipt, {
+        missionId: payment.missionId,
+        paymentIntentId: args.paymentIntentId,
+        cardBrand: args.cardBrand,
+        cardLast4: args.cardLast4,
+      });
     }
 
     return { paymentId: payment._id, missionId: payment.missionId };

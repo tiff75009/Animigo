@@ -57,30 +57,123 @@ export default function ClientFacturesPage() {
         </div>
       </div>
 
-      {/* Liste */}
-      {!invoices ? (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-6 h-6 text-primary animate-spin" />
+      {/* Section Reçus de paiement (générés automatiquement par Animigo) */}
+      <ClientReceiptsSection token={token} />
+
+      {/* Section Factures (émises par les annonceurs) */}
+      <div>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-text-light mb-3 mt-6">
+          Factures
+        </h2>
+        {!invoices ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="w-6 h-6 text-primary animate-spin" />
+          </div>
+        ) : invoices.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-foreground/10 p-12 text-center">
+            <Receipt className="w-12 h-12 text-text-light/50 mx-auto mb-4" />
+            <h3 className="font-semibold text-foreground mb-2">Aucune facture</h3>
+            <p className="text-sm text-text-light">
+              Vous recevrez des factures une fois que vos prestataires en auront émis pour vos réservations terminées.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {invoices.map((invoice: any) => (
+              <ClientInvoiceRow
+                key={invoice._id}
+                invoice={invoice}
+                token={token!}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Section Reçus de paiement (auto-générés au paiement Stripe) ───
+function ClientReceiptsSection({ token }: { token: string | null }) {
+  const receipts = useQuery(
+    api.api.clientReceiptQueries.getMyReceipts,
+    token ? { token } : "skip"
+  );
+
+  return (
+    <div>
+      <h2 className="text-sm font-semibold uppercase tracking-wider text-text-light mb-3">
+        Reçus de paiement
+      </h2>
+      {!receipts ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="w-5 h-5 text-primary animate-spin" />
         </div>
-      ) : invoices.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-foreground/10 p-12 text-center">
-          <Receipt className="w-12 h-12 text-text-light/50 mx-auto mb-4" />
-          <h3 className="font-semibold text-foreground mb-2">Aucune facture</h3>
-          <p className="text-sm text-text-light">
-            Vous recevrez des factures une fois que vos prestataires en auront émis pour vos réservations terminées.
+      ) : receipts.length === 0 ? (
+        <div className="bg-emerald-50 rounded-2xl border border-emerald-100 p-6 text-center">
+          <Receipt className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
+          <p className="text-sm text-emerald-800 font-medium">
+            Aucun reçu de paiement disponible
+          </p>
+          <p className="text-xs text-emerald-700/80 mt-1">
+            Un reçu sera automatiquement généré et disponible ici après chaque paiement.
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {invoices.map((invoice: any) => (
-            <ClientInvoiceRow
-              key={invoice._id}
-              invoice={invoice}
-              token={token!}
-            />
+        <div className="space-y-2">
+          {receipts.map((r: any) => (
+            <ClientReceiptRow key={r.missionId} receipt={r} token={token!} />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function ClientReceiptRow({
+  receipt,
+  token,
+}: {
+  receipt: { missionId: string; serviceName: string; missionDate: string; amount: number; receiptGeneratedAt?: number };
+  token: string;
+}) {
+  const data = useQuery(api.api.clientReceiptQueries.getClientReceiptUrl, {
+    token,
+    missionId: receipt.missionId as Id<"missions">,
+  });
+
+  const handleDownload = () => {
+    if (data?.url) window.open(data.url, "_blank");
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-foreground/10 p-4 flex items-center gap-3 hover:border-emerald-200 transition-colors">
+      <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+        <Receipt className="w-5 h-5 text-emerald-600" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[14px] font-semibold text-foreground truncate m-0">
+          {receipt.serviceName}
+        </p>
+        <p className="text-[12px] text-text-light m-0 mt-0.5 flex items-center gap-2">
+          <span className="inline-flex items-center gap-1">
+            <Calendar className="w-3 h-3" />
+            {formatServiceDate(receipt.missionDate)}
+          </span>
+          <span>·</span>
+          <span className="font-semibold text-emerald-700">{formatPrice(receipt.amount)}</span>
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={handleDownload}
+        disabled={!data?.url}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold bg-emerald-500 text-white hover:bg-emerald-600 transition-colors disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed"
+        title={data?.url ? "Télécharger le reçu PDF" : "Reçu indisponible"}
+      >
+        <Download className="w-3 h-3" />
+        Télécharger
+      </button>
     </div>
   );
 }

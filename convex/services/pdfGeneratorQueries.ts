@@ -40,7 +40,11 @@ export const getUserForPdf = internalQuery({
 
 export const getDefaultPdfTemplate = internalQuery({
   args: {
-    documentType: v.union(v.literal("invoice"), v.literal("receipt")),
+    documentType: v.union(
+      v.literal("invoice"),
+      v.literal("client_receipt"),
+      v.literal("receipt"), // déprécié, kept pour compat
+    ),
     companyType: v.string(),
   },
   handler: async (ctx, args) => {

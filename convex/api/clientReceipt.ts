@@ -1,0 +1,163 @@
+// @ts-nocheck
+"use node";
+
+/**
+ * Génération automatique du reçu de paiement CLIENT après paiement Stripe réussi.
+ *
+ * Pipeline :
+ *   1. payment_intent.succeeded webhook (stripeWebhook.ts)
+ *      → markPaymentPaid (stripePaymentLifecycle.ts)
+ *      → ctx.scheduler.runAfter(0, internal.api.clientReceipt.generateClientReceipt, { missionId, paymentIntentId, cardBrand, cardLast4 })
+ *
+ *   2. generateClientReceipt (cette action) :
+ *      - charge la mission, le paiement, l'annonceur, le client
+ *      - charge le template par défaut "client_receipt"
+ *      - génère le PDF via pdfme avec les balises de paiement (paymentDate, transactionId, etc.)
+ *      - stocke le PDF dans Convex storage
+ *      - patch la mission avec clientReceiptStorageId
+ *      - envoie un email au client avec le lien de download
+ *
+ *   3. Le client peut télécharger depuis son dashboard via getClientReceiptUrl (clientReceiptQueries.ts)
+ */
+
+import { internalAction } from "../_generated/server";
+import { v } from "convex/values";
+import { internal } from "../_generated/api";
+
+const formatPrice = (cents: number) =>
+  (cents / 100).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
+
+const formatDateTimeFR = (timestamp: number) => {
+  const d = new Date(timestamp);
+  return `${d.toLocaleDateString("fr-FR")} à ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`;
+};
+
+const formatDateFR = (dateStr: string) => {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString("fr-FR");
+};
+
+export const generateClientReceipt = internalAction({
+  args: {
+    missionId: v.id("missions"),
+    paymentIntentId: v.string(),
+    cardBrand: v.optional(v.string()),
+    cardLast4: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; storageId?: string; error?: string }> => {
+    console.log("[generateClientReceipt] Démarrage pour mission:", args.missionId);
+
+    try {
+      // 1. Charger la mission, le paiement, le client, l'annonceur
+      const data = await ctx.runQuery(internal.api.clientReceiptQueries.getReceiptData, {
+        missionId: args.missionId,
+      });
+
+      if (!data) {
+        console.error("[generateClientReceipt] Données introuvables");
+        return { success: false, error: "Mission ou paiement introuvable" };
+      }
+
+      // 2. Charger le template par défaut "client_receipt"
+      const template = await ctx.runQuery(internal.services.pdfGeneratorQueries.getDefaultPdfTemplate, {
+        documentType: "client_receipt",
+        companyType: "all",
+      });
+
+      if (!template) {
+        console.warn("[generateClientReceipt] Aucun template par défaut configuré pour client_receipt");
+        return { success: false, error: "Template par défaut manquant" };
+      }
+
+      // 3. Construire les inputs pdfme avec les balises de paiement
+      const paymentMethod = args.cardBrand && args.cardLast4
+        ? `${args.cardBrand.charAt(0).toUpperCase() + args.cardBrand.slice(1)} •••• ${args.cardLast4}`
+        : "Carte bancaire";
+
+      const inputs = [
+        {
+          documentType: "REÇU DE PAIEMENT",
+          receiptNumber: `REC-${new Date(data.paymentDate).getFullYear()}-${String(args.missionId).slice(-6).toUpperCase()}`,
+          bookingNumber: `RES-${String(args.missionId).slice(-6).toUpperCase()}`,
+          date: formatDateFR(new Date().toISOString().split("T")[0]),
+          paymentDate: formatDateTimeFR(data.paymentDate),
+          paymentMethod,
+          transactionId: args.paymentIntentId,
+          paidAmount: formatPrice(data.totalAmount),
+          paymentStatus: "PAYÉ",
+          bookingDate: data.missionDateRange,
+          serviceProvider: data.announcerName,
+          platformName: "Animigo",
+          platformFee: data.platformFee ? `Commission Animigo : ${formatPrice(data.platformFee)}` : "",
+          thankYouMessage: "Merci pour votre confiance ! Votre paiement a bien été reçu.",
+          // Balises communes
+          clientName: data.clientName,
+          clientEmail: data.clientEmail,
+          clientAddress: data.clientAddress || "",
+          serviceName: data.serviceName,
+          missionDate: data.missionDateRange,
+          animalDetails: data.animalDetails || "",
+          itemsTable: "[]", // Pas de détail comptable côté client
+          totalsTable: "[]",
+        },
+      ];
+
+      // 4. Appeler pdfme via l'helper existant (réutilise la même infra que generatePdfFromTemplate)
+      const pdfBuffer = await ctx.runAction(internal.api.clientReceipt.renderPdfBuffer, {
+        templateJson: template.templateJson,
+        inputs: JSON.stringify(inputs),
+      });
+
+      if (!pdfBuffer) {
+        return { success: false, error: "Échec génération PDF" };
+      }
+
+      // 5. Stocker le PDF dans Convex storage
+      const blob = new Blob([new Uint8Array(pdfBuffer as any)], { type: "application/pdf" });
+      const storageId = await ctx.storage.store(blob);
+
+      // 6. Patch la mission avec le storageId du reçu
+      await ctx.runMutation(internal.api.clientReceiptQueries.attachReceiptToMission, {
+        missionId: args.missionId,
+        storageId,
+      });
+
+      console.log(`[generateClientReceipt] PDF généré et stocké : ${storageId}`);
+      return { success: true, storageId };
+    } catch (err) {
+      console.error("[generateClientReceipt] Erreur:", err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : "Erreur inconnue",
+      };
+    }
+  },
+});
+
+/**
+ * Action interne dédiée au rendu pdfme (séparée pour pouvoir tester / réutiliser).
+ * Reçoit le template JSON + inputs JSON et retourne un Buffer PDF.
+ */
+export const renderPdfBuffer = internalAction({
+  args: {
+    templateJson: v.string(),
+    inputs: v.string(),
+  },
+  handler: async (_ctx, args): Promise<ArrayBuffer | null> => {
+    try {
+      const { generate } = await import("@pdfme/generator");
+      const { text, image, table, line, rectangle } = await import("@pdfme/schemas");
+      const template = JSON.parse(args.templateJson);
+      const inputs = JSON.parse(args.inputs);
+      const pdf = await generate({
+        template,
+        inputs,
+        plugins: { text, image, table, line, rectangle },
+      });
+      return pdf.buffer as ArrayBuffer;
+    } catch (err) {
+      console.error("[renderPdfBuffer] Erreur:", err);
+      return null;
+    }
+  },
+});

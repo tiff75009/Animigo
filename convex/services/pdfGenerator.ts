@@ -172,7 +172,11 @@ export const generatePdfFromTemplate = internalAction({
       const inputs = [
         {
           invoiceNumber: invoice.invoiceNumber,
-          documentType: documentType === "invoice" ? "FACTURE" : "REÇU",
+          documentType: documentType === "invoice"
+            ? "FACTURE"
+            : documentType === "client_receipt"
+            ? "REÇU DE PAIEMENT"
+            : "REÇU",
           date: formatDateFR(new Date().toISOString().split("T")[0]),
           clientName: data.clientName || "",
           clientEmail: data.clientEmail || "",

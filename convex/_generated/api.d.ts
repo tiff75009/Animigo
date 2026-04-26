@@ -41,6 +41,8 @@ import type * as admin_transfers from "../admin/transfers.js";
 import type * as admin_users from "../admin/users.js";
 import type * as admin_utils from "../admin/utils.js";
 import type * as animals from "../animals.js";
+import type * as api_clientReceipt from "../api/clientReceipt.js";
+import type * as api_clientReceiptQueries from "../api/clientReceiptQueries.js";
 import type * as api_email from "../api/email.js";
 import type * as api_emailInternal from "../api/emailInternal.js";
 import type * as api_geminiTextAnalysis from "../api/geminiTextAnalysis.js";
@@ -192,6 +194,8 @@ declare const fullApi: ApiFromModules<{
   "admin/users": typeof admin_users;
   "admin/utils": typeof admin_utils;
   animals: typeof animals;
+  "api/clientReceipt": typeof api_clientReceipt;
+  "api/clientReceiptQueries": typeof api_clientReceiptQueries;
   "api/email": typeof api_email;
   "api/emailInternal": typeof api_emailInternal;
   "api/geminiTextAnalysis": typeof api_geminiTextAnalysis;

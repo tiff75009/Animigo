@@ -782,6 +782,10 @@ export default defineSchema({
     disputeId: v.optional(v.id("disputes")),
     invoiceId: v.optional(v.id("invoices")),
 
+    // Reçu de paiement client (généré automatiquement après paiement Stripe)
+    clientReceiptStorageId: v.optional(v.id("_storage")),
+    clientReceiptGeneratedAt: v.optional(v.number()),
+
     // Archivage (soft-delete)
     isArchived: v.optional(v.boolean()),
     archivedAt: v.optional(v.number()),
