@@ -307,7 +307,6 @@ export function getDefaultClientReceiptTemplate() {
         height: 12,
         fontSize: 22,
         fontColor: "#10b981",
-        fontName: "Helvetica-Bold",
       },
       {
         name: "platformName",
@@ -319,7 +318,6 @@ export function getDefaultClientReceiptTemplate() {
         fontSize: 14,
         fontColor: "#1f3a33",
         alignment: "right",
-        fontName: "Helvetica-Bold",
       },
       {
         name: "receiptNumber",
@@ -355,7 +353,6 @@ export function getDefaultClientReceiptTemplate() {
         fontColor: "#10b981",
         backgroundColor: "#d1fae5",
         alignment: "center",
-        fontName: "Helvetica-Bold",
       },
       {
         name: "bookingNumber",
@@ -378,7 +375,6 @@ export function getDefaultClientReceiptTemplate() {
         height: 4,
         fontSize: 8,
         fontColor: "#9c9484",
-        fontName: "Helvetica-Bold",
       },
       {
         name: "clientName",
@@ -388,7 +384,7 @@ export function getDefaultClientReceiptTemplate() {
         width: 80,
         height: 6,
         fontSize: 11,
-        fontName: "Helvetica-Bold",
+
         fontColor: "#1f1f1d",
       },
       {
@@ -423,7 +419,6 @@ export function getDefaultClientReceiptTemplate() {
         fontSize: 8,
         fontColor: "#9c9484",
         alignment: "right",
-        fontName: "Helvetica-Bold",
       },
       {
         name: "platformLegalName",
@@ -433,7 +428,7 @@ export function getDefaultClientReceiptTemplate() {
         width: 70,
         height: 6,
         fontSize: 11,
-        fontName: "Helvetica-Bold",
+
         alignment: "right",
         fontColor: "#1f1f1d",
       },
@@ -469,7 +464,7 @@ export function getDefaultClientReceiptTemplate() {
         height: 5,
         fontSize: 9,
         fontColor: "#1f3a33",
-        fontName: "Helvetica-Bold",
+
         backgroundColor: "#f5f9f6",
       },
       {
@@ -480,7 +475,7 @@ export function getDefaultClientReceiptTemplate() {
         width: 178,
         height: 6,
         fontSize: 11,
-        fontName: "Helvetica-Bold",
+
         fontColor: "#1f1f1d",
       },
       {
@@ -533,7 +528,6 @@ export function getDefaultClientReceiptTemplate() {
         height: 5,
         fontSize: 9,
         fontColor: "#1f1f1d",
-        fontName: "Helvetica-Bold",
       },
       {
         name: "providerStatus",
@@ -566,7 +560,7 @@ export function getDefaultClientReceiptTemplate() {
         height: 5,
         fontSize: 9,
         fontColor: "#1f3a33",
-        fontName: "Helvetica-Bold",
+
         backgroundColor: "#f5f9f6",
       },
       {
@@ -588,7 +582,6 @@ export function getDefaultClientReceiptTemplate() {
         height: 5,
         fontSize: 9,
         fontColor: "#1f1f1d",
-        fontName: "Helvetica-Bold",
       },
       {
         name: "_label_paymentMethod",
@@ -609,7 +602,6 @@ export function getDefaultClientReceiptTemplate() {
         height: 5,
         fontSize: 9,
         fontColor: "#1f1f1d",
-        fontName: "Helvetica-Bold",
       },
       {
         name: "_label_transaction",
@@ -630,7 +622,6 @@ export function getDefaultClientReceiptTemplate() {
         height: 5,
         fontSize: 8,
         fontColor: "#1f1f1d",
-        fontName: "Courier",
       },
 
       // ─── MONTANT TOTAL ───
@@ -644,7 +635,6 @@ export function getDefaultClientReceiptTemplate() {
         fontSize: 8,
         fontColor: "#9c9484",
         alignment: "right",
-        fontName: "Helvetica-Bold",
       },
       {
         name: "paidAmount",
@@ -656,7 +646,6 @@ export function getDefaultClientReceiptTemplate() {
         fontSize: 22,
         fontColor: "#10b981",
         alignment: "right",
-        fontName: "Helvetica-Bold",
       },
 
       // ─── DÉCOMPOSITION ───
@@ -715,7 +704,6 @@ export function getDefaultClientReceiptTemplate() {
         height: 5,
         fontSize: 8,
         fontColor: "#9c9484",
-        fontName: "Helvetica-Bold",
       },
       {
         name: "intermediaryMention",
@@ -756,7 +744,6 @@ export function getDefaultClientReceiptTemplate() {
         height: 8,
         fontSize: 7,
         fontColor: "#64748b",
-        fontName: "Helvetica-Oblique",
       },
       {
         name: "cgvMention",
@@ -780,7 +767,6 @@ export function getDefaultClientReceiptTemplate() {
         fontSize: 10,
         fontColor: "#1f3a33",
         alignment: "center",
-        fontName: "Helvetica-Oblique",
       },
       {
         name: "platformContact",
