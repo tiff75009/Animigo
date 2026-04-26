@@ -43,6 +43,7 @@ import type * as admin_utils from "../admin/utils.js";
 import type * as animals from "../animals.js";
 import type * as api_email from "../api/email.js";
 import type * as api_emailInternal from "../api/emailInternal.js";
+import type * as api_geminiTextAnalysis from "../api/geminiTextAnalysis.js";
 import type * as api_googleMaps from "../api/googleMaps.js";
 import type * as api_savedCards from "../api/savedCards.js";
 import type * as api_savedCardsActions from "../api/savedCardsActions.js";
@@ -193,6 +194,7 @@ declare const fullApi: ApiFromModules<{
   animals: typeof animals;
   "api/email": typeof api_email;
   "api/emailInternal": typeof api_emailInternal;
+  "api/geminiTextAnalysis": typeof api_geminiTextAnalysis;
   "api/googleMaps": typeof api_googleMaps;
   "api/savedCards": typeof api_savedCards;
   "api/savedCardsActions": typeof api_savedCardsActions;

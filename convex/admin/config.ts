@@ -486,6 +486,57 @@ export const testVisionConnection = action({
   },
 });
 
+// Action: Tester la connexion Gemini (analyse de texte)
+// Envoie un texte avec un numéro de téléphone "obfusqué en lettres" pour
+// valider que le pipeline fonctionne ET que le modèle est assez précis.
+export const testGeminiConnection = action({
+  args: {
+    token: v.string(),
+    apiKey: v.string(),
+  },
+  handler: async (ctx, args): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+    detected?: { hasPhone: boolean; hasEmail: boolean; reason?: string };
+  }> => {
+    await requireAdminAction(ctx, args.token);
+
+    if (!args.apiKey) {
+      return {
+        success: false,
+        error: "Aucune clé API fournie. Renseignez la clé Gemini ou Google Maps.",
+      };
+    }
+
+    const { performGeminiAnalysis } = await import("../api/geminiTextAnalysis");
+    const testText =
+      "Bonjour, contactez-moi au zéro six douze trente quatre cinquante six soixante dix huit.";
+    const result = await performGeminiAnalysis(args.apiKey, testText);
+
+    if (result.error) {
+      return {
+        success: false,
+        error: `Gemini API : ${result.error}`,
+      };
+    }
+
+    if (!result.hasPhone) {
+      return {
+        success: false,
+        error: `Gemini a répondu mais n'a pas détecté le numéro de test obfusqué. Réponse : "${result.reason || "(vide)"}". Le modèle fonctionne mais sa précision est dégradée.`,
+        detected: { hasPhone: result.hasPhone, hasEmail: result.hasEmail, reason: result.reason },
+      };
+    }
+
+    return {
+      success: true,
+      message: `Gemini OK — détection correcte du numéro obfusqué : "${result.reason || "détecté"}"`,
+      detected: { hasPhone: result.hasPhone, hasEmail: result.hasEmail, reason: result.reason },
+    };
+  },
+});
+
 // ==========================================
 // VERIFICATION D'IDENTITE
 // ==========================================

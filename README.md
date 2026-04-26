@@ -593,6 +593,37 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.37.0 - Detection IA des coordonnees dissimulees via Gemini 2.5 Flash
+
+- **Action publique `analyzeTextForContact`** (`convex/api/geminiTextAnalysis.ts`)
+  - Appelle Gemini 2.5 Flash via REST API (`generativelanguage.googleapis.com/v1beta`)
+  - Prompt structure + `responseSchema` JSON pour forcer le format `{hasPhone, hasEmail, reason}`
+  - Detecte les contournements creatifs que la regex rate :
+    - Numeros entierement en lettres ("zero six douze trente quatre cinquante six soixante dix huit")
+    - Phrases imbriquees ("mon numero est le zero six suivi de un deux trois...")
+    - Substituts d'arobase / point ecrits naturellement dans une phrase
+    - Caracteres inhabituels et melanges complexes
+  - `getGeminiConfig` (internal query) : toggle `gemini_enabled` + cle `gemini_api_key` (fallback Maps)
+  - Helper `performGeminiAnalysis()` exporte pour reutilisation par testGeminiConnection
+  - Skip automatique si texte < 8 chars, toggle off, ou pas de cle (fail-open)
+  - Cout : free tier 15 req/min + 1500/jour, ensuite ~0,0001 $ / 1000 chars
+
+- **Hook `useContactInfoCheck(text)`** (`app/hooks/useContactInfoCheck.ts`)
+  - Architecture en cascade : regex en premiere ligne (gratuit, instant) + Gemini en complement (debounce 1s)
+  - Si regex detecte → verdict immediat, pas d'appel Gemini (economise les requetes)
+  - Si regex passe → Gemini appele en background apres 1s de pause de frappe
+  - Retourne `{hasViolation, message, source: "regex" | "gemini", isCheckingGemini}`
+  - `ContactInfoWarning` dans `ServiceCard.tsx` affiche un loader "Analyse IA en cours..." pendant le check + tag "(detecte par l'IA)" quand Gemini trouve
+
+- **Admin : configuration Gemini** (`app/admin/(dashboard)/integrations/page.tsx`, `convex/admin/config.ts`)
+  - Nouvelle section "Gemini AI (analyse de texte)" avec icone `Sparkles` (violet)
+  - Champs : `gemini_enabled` (toggle texte) + `gemini_api_key` (optionnel, fallback Maps)
+  - Action `testGeminiConnection` envoie le texte test "Bonjour, contactez-moi au zero six douze..." et verifie que Gemini detecte bien le telephone obfusque
+  - Resultat detaille : `success/error` + `detected: {hasPhone, hasEmail, reason}`
+  - Info box : guide AI Studio, free tier explique, comportement hybride regex+IA
+
+- **Note** : modele utilise = `gemini-2.5-flash` (l'ancien `gemini-2.0-flash` n'est plus disponible pour les nouveaux comptes Google AI Studio)
+
 ### v0.36.0 - Securite : filtre coordonnees + OCR Google Vision sur photos de formules
 
 - **Detection telephone/email dans les descriptions** (`convex/lib/contentFilter.ts`, `app/lib/contentFilter.ts`)

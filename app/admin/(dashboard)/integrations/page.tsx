@@ -29,6 +29,7 @@ import {
   Bell,
   MessageSquare,
   ScanEye,
+  Sparkles,
 } from "lucide-react";
 
 interface ConfigItem {
@@ -158,6 +159,33 @@ const integrations: IntegrationSection[] = [
         label: "API Key (optionnel)",
         description:
           "Clé Google Cloud avec 'Cloud Vision API' activée. Si vide, on réutilise la clé Google Maps ci-dessus (même projet GCP).",
+        isSecret: true,
+        placeholder: "AIza... (vide = utilise Google Maps)",
+      },
+    ],
+  },
+  {
+    id: "gemini",
+    name: "Gemini AI (analyse de texte)",
+    description:
+      "Détection avancée de coordonnées dans les descriptions (numéros écrits en lettres, contournements créatifs)",
+    icon: Sparkles,
+    color: "bg-purple-500",
+    docsUrl: "https://aistudio.google.com/app/apikey",
+    fields: [
+      {
+        key: "gemini_enabled",
+        label: "Analyse Gemini activée",
+        description:
+          "Mettez 'true' pour activer l'analyse IA des descriptions en complément de la regex. 'false' = regex seule (gratuit, instantané).",
+        isSecret: false,
+        placeholder: "false",
+      },
+      {
+        key: "gemini_api_key",
+        label: "API Key (optionnel)",
+        description:
+          "Clé Gemini depuis aistudio.google.com (free tier 15 req/min). Si vide, fallback sur la clé Google Maps (si Generative Language API activée sur le projet).",
         isSecret: true,
         placeholder: "AIza... (vide = utilise Google Maps)",
       },
@@ -432,6 +460,13 @@ export default function IntegrationsPage() {
     message?: string;
     error?: string;
   } | null>(null);
+  const [testingGemini, setTestingGemini] = useState(false);
+  const [geminiTestResult, setGeminiTestResult] = useState<{
+    success: boolean;
+    message?: string;
+    error?: string;
+    detected?: { hasPhone: boolean; hasEmail: boolean; reason?: string };
+  } | null>(null);
 
   const configs = useQuery(
     api.admin.config.getAllConfigs,
@@ -444,6 +479,7 @@ export default function IntegrationsPage() {
   const testRedisConnection = useAction(api.admin.config.testRedisConnection);
   const testOctopushConnection = useAction(api.admin.config.testOctopushConnection);
   const testVisionConnection = useAction(api.admin.config.testVisionConnection);
+  const testGeminiConnection = useAction(api.admin.config.testGeminiConnection);
   const getConfigValue = (key: string) => {
     if (values[key] !== undefined) return values[key];
     const config = configs?.find((c: ConfigItem) => c.key === key);
@@ -621,6 +657,35 @@ export default function IntegrationsPage() {
       });
     } finally {
       setTestingVision(false);
+    }
+  };
+
+  const handleTestGemini = async () => {
+    if (!token) return;
+    const geminiKey = getConfigValue("gemini_api_key");
+    const mapsKey = getConfigValue("google_maps_api_key");
+    const apiKey = geminiKey || mapsKey;
+
+    if (!apiKey) {
+      setGeminiTestResult({
+        success: false,
+        error: "Aucune clé API trouvée. Renseignez la clé Gemini ou la clé Google Maps.",
+      });
+      return;
+    }
+
+    setTestingGemini(true);
+    setGeminiTestResult(null);
+    try {
+      const result = await testGeminiConnection({ token, apiKey });
+      setGeminiTestResult(result);
+    } catch (error) {
+      setGeminiTestResult({
+        success: false,
+        error: error instanceof Error ? error.message : "Erreur inconnue",
+      });
+    } finally {
+      setTestingGemini(false);
     }
   };
 
@@ -1110,6 +1175,100 @@ export default function IntegrationsPage() {
                       manquante, les photos sont approuvées par défaut (&quot;fail-open&quot;) pour ne pas
                       bloquer les annonceurs. La modération admin reste un filet de sécurité.
                     </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Test Connection Section - Gemini */}
+            {integration.id === "gemini" && (
+              <div className="p-6 border-t border-slate-800">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-purple-400" />
+                    <h3 className="text-lg font-semibold text-white">Tester Gemini</h3>
+                  </div>
+                  <button
+                    onClick={handleTestGemini}
+                    disabled={testingGemini}
+                    className="px-4 py-2 rounded-lg font-medium flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white transition-colors disabled:opacity-50"
+                  >
+                    {testingGemini ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Test en cours...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4" />
+                        Tester l&apos;API
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {geminiTestResult && (
+                  <div className={`mt-4 p-4 rounded-lg border ${
+                    geminiTestResult.success
+                      ? "bg-green-500/10 border-green-500/30"
+                      : "bg-red-500/10 border-red-500/30"
+                  }`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      {geminiTestResult.success ? (
+                        <>
+                          <CheckCircle className="w-5 h-5 text-green-400" />
+                          <span className="text-green-400 font-medium">Test réussi</span>
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="w-5 h-5 text-red-400" />
+                          <span className="text-red-400 font-medium">Test échoué</span>
+                        </>
+                      )}
+                    </div>
+                    {geminiTestResult.success ? (
+                      <p className="text-sm text-slate-300">{geminiTestResult.message}</p>
+                    ) : (
+                      <p className="text-sm text-red-300 whitespace-pre-line leading-relaxed">{geminiTestResult.error}</p>
+                    )}
+                    {geminiTestResult.detected && (
+                      <p className="mt-2 text-xs text-slate-400">
+                        Détection : phone={String(geminiTestResult.detected.hasPhone)}, email={String(geminiTestResult.detected.hasEmail)}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Info box */}
+                <div className="mt-4 p-4 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <Info className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm">
+                      <p className="text-purple-300 font-medium mb-2">Configuration Gemini :</p>
+                      <ol className="text-purple-300/80 space-y-1 list-decimal list-inside">
+                        <li>
+                          Allez sur{" "}
+                          <a
+                            href="https://aistudio.google.com/app/apikey"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline hover:text-purple-200"
+                          >
+                            Google AI Studio → API Keys
+                          </a>
+                        </li>
+                        <li>Créez une clé API (gratuit, pas besoin de billing pour le free tier)</li>
+                        <li>Free tier : 15 requêtes/minute, 1500/jour sur gemini-2.0-flash</li>
+                        <li>
+                          Au-delà : ~0,0001 $ / 1000 caractères (extrêmement bon marché)
+                        </li>
+                        <li>
+                          Comportement : la regex reste en première ligne (gratuite, instantanée).
+                          Gemini est appelé en complément depuis le client AVANT le submit, pour
+                          attraper les contournements créatifs (numéros écrits en lettres, etc.)
+                        </li>
+                      </ol>
+                    </div>
                   </div>
                 </div>
               </div>

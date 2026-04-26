@@ -7,17 +7,37 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { getContactInfoWarning } from "@/app/lib/contentFilter";
+import { useContactInfoCheck } from "@/app/hooks/useContactInfoCheck";
 
 // Composant : message d'avertissement quand un téléphone/email est détecté.
+// Utilise le hook qui combine regex (instant) + Gemini (debounce 1s) pour
+// catcher les contournements créatifs (numéros écrits en lettres, etc.).
 function ContactInfoWarning({ text }: { text: string }) {
-  const warning = getContactInfoWarning(text);
-  if (!warning) return null;
+  const check = useContactInfoCheck(text);
+  if (!check.hasViolation) {
+    if (check.isCheckingGemini) {
+      return (
+        <p className="mt-1.5 text-[11.5px] flex items-center gap-1.5 px-2.5 py-1 rounded-md"
+          style={{ background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" }}
+        >
+          <Loader2 className="w-3 h-3 flex-shrink-0 animate-spin" />
+          <span>Analyse IA en cours...</span>
+        </p>
+      );
+    }
+    return null;
+  }
   return (
     <p className="mt-1.5 text-[12px] flex items-start gap-1.5 px-2.5 py-1.5 rounded-md"
       style={{ background: "#fdf0f0", color: "#8a3a3a", border: "1px solid #f1cdcd" }}
     >
       <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-      <span>{warning}</span>
+      <span>
+        {check.message}
+        {check.source === "gemini" && (
+          <span className="ml-1 text-[10px] font-semibold opacity-70">(détecté par l&apos;IA)</span>
+        )}
+      </span>
     </p>
   );
 }
