@@ -79,6 +79,14 @@ export const generateClientReceipt = internalAction({
         ? args.cardBrand.charAt(0).toUpperCase() + args.cardBrand.slice(1)
         : "Carte";
 
+      // ─── Log debug : confirme que les vraies données Stripe sont propagées ───
+      console.log(`[generateClientReceipt] Données paiement Stripe :
+        - transactionId (Payment Intent) : ${args.paymentIntentId}
+        - paymentDate (capturedAt) : ${new Date(data.paymentDate).toISOString()}
+        - cardBrand : ${args.cardBrand || "(non fourni)"}
+        - cardLast4 : ${args.cardLast4 || "(non fourni)"}
+        - paymentMethod final : ${paymentMethod}`);
+
       const inputs = [
         {
           documentType: "REÇU DE PAIEMENT",

@@ -1236,11 +1236,20 @@ export default function PdfTemplateEditorPage() {
         inputs[field.key] = field.example;
       }
       // Tableaux (JSON stringifié pour generate) - utiliser la config de colonnes
-      // Les balises globales (inputs) sont passées pour résoudre les {{balise}} dans les contentTemplate
+      // ⚠️ N'envoyer les inputs `itemsTable`/`totalsTable` QUE si le template les contient
+      // (pdfme crash avec "Cannot read properties of undefined (reading 'push')" si on
+      //  envoie des inputs de table sans schema correspondant)
       const itemsCols = tableColumnsConfig.itemsTable || getDefaultItemsColumns();
       const totalsCols = tableColumnsConfig.totalsTable || getDefaultTotalsColumns();
-      inputs[ITEMS_TABLE.key] = JSON.stringify(generateExampleData("itemsTable", itemsCols, inputs));
-      inputs[TOTALS_TABLE.key] = JSON.stringify(generateExampleData("totalsTable", totalsCols, inputs));
+      const allSchemas = template.schemas.flat();
+      const hasItemsTableSchema = allSchemas.some((s: any) => s.name === ITEMS_TABLE.key);
+      const hasTotalsTableSchema = allSchemas.some((s: any) => s.name === TOTALS_TABLE.key);
+      if (hasItemsTableSchema) {
+        inputs[ITEMS_TABLE.key] = JSON.stringify(generateExampleData("itemsTable", itemsCols, inputs));
+      }
+      if (hasTotalsTableSchema) {
+        inputs[TOTALS_TABLE.key] = JSON.stringify(generateExampleData("totalsTable", totalsCols, inputs));
+      }
 
       // Images dynamiques : générer un placeholder PNG pour l'aperçu
       const knownImageKeys = new Set(IMAGE_FIELDS.map(f => f.key));

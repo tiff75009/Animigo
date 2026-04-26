@@ -351,7 +351,6 @@ export function getDefaultClientReceiptTemplate() {
         height: 7,
         fontSize: 11,
         fontColor: "#10b981",
-        backgroundColor: "#d1fae5",
         alignment: "center",
       },
       {
@@ -465,7 +464,6 @@ export function getDefaultClientReceiptTemplate() {
         fontSize: 9,
         fontColor: "#1f3a33",
 
-        backgroundColor: "#f5f9f6",
       },
       {
         name: "serviceName",
@@ -561,7 +559,6 @@ export function getDefaultClientReceiptTemplate() {
         fontSize: 9,
         fontColor: "#1f3a33",
 
-        backgroundColor: "#f5f9f6",
       },
       {
         name: "labelPaymentDate",
