@@ -22,21 +22,25 @@ export const getReceiptData = internalQuery({
 
     const client = await ctx.db.get(mission.clientId);
     const announcer = await ctx.db.get(mission.announcerId);
-    const clientProfile = await ctx.db
-      .query("clientProfiles")
-      .withIndex("by_user", (q: any) => q.eq("userId", mission.clientId))
-      .first();
 
-    // Récupérer le paiement Stripe associé
+    // Profil annonceur pour SIRET, statut, adresse
+    const announcerProfile = announcer
+      ? await ctx.db
+          .query("profiles")
+          .withIndex("by_user", (q: any) => q.eq("userId", announcer._id))
+          .first()
+      : null;
+
+    // Paiement Stripe associé
     const payment = await ctx.db
       .query("stripePayments")
       .withIndex("by_mission", (q: any) => q.eq("missionId", args.missionId))
       .first();
 
-    // Adresse client (depuis clientAddresses ou mission.location)
+    // Adresse client (mission.location)
     const clientAddress = mission.location || "";
 
-    // Détails animaux (compact pour le reçu)
+    // Détail animaux
     let animalDetails = "";
     if (mission.animalIds && mission.animalIds.length > 0) {
       const animals = await Promise.all(
@@ -56,24 +60,78 @@ export const getReceiptData = internalQuery({
       missionDateRange = `${formatDateFR(mission.startDate)} → ${formatDateFR(mission.endDate)}`;
     }
 
+    // ─── Statut & SIRET prestataire ───
+    let providerStatus = "Particulier";
+    let providerSiretLine = ""; // Vide si particulier
+    if (announcer?.accountType === "annonceur_pro") {
+      if (announcer.companyType === "micro_enterprise") {
+        providerStatus = "Micro-entrepreneur";
+      } else {
+        providerStatus = announcer.companyType === "regular_company" ? "Société" : "Professionnel";
+      }
+      if (announcer.siret) {
+        providerSiretLine = `SIRET : ${announcer.siret}`;
+      }
+    }
+
+    // Adresse prestataire (depuis profile)
+    let providerAddress = "";
+    if (announcerProfile?.location) {
+      providerAddress = announcerProfile.location;
+    } else if (announcerProfile?.city) {
+      providerAddress = `${announcerProfile.postalCode || ""} ${announcerProfile.city}`.trim();
+    }
+
+    // ─── Lieu de prestation ───
+    let serviceLocation = "";
+    if (mission.serviceLocation === "client_home") {
+      serviceLocation = "Au domicile du client";
+    } else if (mission.serviceLocation === "announcer_home") {
+      serviceLocation = "Au domicile du prestataire";
+    }
+
+    // ─── Configs plateforme depuis systemConfig ───
+    const cfgKeys = [
+      "platform_legal_name", "platform_address", "platform_siret",
+      "platform_capital", "platform_contact",
+    ];
+    const cfgs = await Promise.all(
+      cfgKeys.map((k) =>
+        ctx.db
+          .query("systemConfig")
+          .filter((q: any) => q.eq(q.field("key"), k))
+          .first()
+      )
+    );
+    const [legalCfg, addrCfg, siretCfg, capitalCfg, contactCfg] = cfgs;
+
     return {
       missionId: mission._id,
-      // Client
+      // ─── Client ───
       clientName: client ? `${client.firstName} ${client.lastName}` : "",
       clientEmail: client?.email || "",
       clientAddress,
-      // Annonceur (juste le nom, pas de SIRET car c'est Animigo qui émet)
-      announcerName: announcer
-        ? `${announcer.firstName} ${announcer.lastName}`
-        : "",
-      // Service
+      // ─── Prestataire ───
+      announcerName: announcer ? `${announcer.firstName} ${announcer.lastName}` : "",
+      providerStatus,
+      providerSiretLine,
+      providerAddress,
+      // ─── Service ───
       serviceName: mission.serviceName || "Prestation",
       missionDateRange,
       animalDetails,
-      // Paiement
+      serviceLocation,
+      // ─── Paiement ───
       paymentDate: payment?.capturedAt || Date.now(),
       totalAmount: payment?.amount || mission.amount || 0,
       platformFee: mission.platformFee || 0,
+      providerEarnings: mission.announcerEarnings || ((payment?.amount || mission.amount || 0) - (mission.platformFee || 0)),
+      // ─── Plateforme (depuis systemConfig avec fallbacks) ───
+      platformLegalName: legalCfg?.value || "Animigo SAS",
+      platformAddress: addrCfg?.value || "Adresse à configurer (Admin > Paramètres)",
+      platformSiret: siretCfg?.value ? `SIRET : ${siretCfg.value}` : "",
+      platformCapital: capitalCfg?.value ? `Capital social : ${capitalCfg.value}` : "",
+      platformContact: contactCfg?.value || "support@animigo.fr",
     };
   },
 });

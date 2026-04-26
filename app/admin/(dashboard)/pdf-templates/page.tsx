@@ -67,7 +67,7 @@ export default function PdfTemplatesPage() {
             Gérez les modèles de factures et reçus générés automatiquement
           </p>
         </div>
-        <Link href="/admin/pdf-templates/new">
+        <Link href={filterType === "client_receipt" ? "/admin/pdf-templates/new?type=client_receipt" : "/admin/pdf-templates/new"}>
           <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-medium transition-colors">
             <Plus className="w-4 h-4" />
             Nouveau template
@@ -115,7 +115,7 @@ export default function PdfTemplatesPage() {
         <div className="text-center py-20">
           <FileText className="w-12 h-12 text-slate-600 mx-auto mb-3" />
           <p className="text-slate-400">Aucun template trouvé</p>
-          <Link href="/admin/pdf-templates/new">
+          <Link href={filterType === "client_receipt" ? "/admin/pdf-templates/new?type=client_receipt" : "/admin/pdf-templates/new"}>
             <button className="mt-4 px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors">
               Créer le premier template
             </button>

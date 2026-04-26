@@ -74,30 +74,59 @@ export const generateClientReceipt = internalAction({
         ? `${args.cardBrand.charAt(0).toUpperCase() + args.cardBrand.slice(1)} •••• ${args.cardLast4}`
         : "Carte bancaire";
 
+      const cardLast4Display = args.cardLast4 ? `•••• ${args.cardLast4}` : "—";
+      const cardBrandDisplay = args.cardBrand
+        ? args.cardBrand.charAt(0).toUpperCase() + args.cardBrand.slice(1)
+        : "Carte";
+
       const inputs = [
         {
           documentType: "REÇU DE PAIEMENT",
           receiptNumber: `REC-${new Date(data.paymentDate).getFullYear()}-${String(args.missionId).slice(-6).toUpperCase()}`,
           bookingNumber: `RES-${String(args.missionId).slice(-6).toUpperCase()}`,
-          date: formatDateFR(new Date().toISOString().split("T")[0]),
+          date: `Émis le ${formatDateFR(new Date().toISOString().split("T")[0])}`,
+          paymentStatus: "PAYÉ",
+          // ─── Paiement Stripe ───
           paymentDate: formatDateTimeFR(data.paymentDate),
           paymentMethod,
+          cardBrand: cardBrandDisplay,
+          cardLast4: cardLast4Display,
           transactionId: args.paymentIntentId,
           paidAmount: formatPrice(data.totalAmount),
-          paymentStatus: "PAYÉ",
+          paidAmountInWords: "",
+          // ─── Service ───
           bookingDate: data.missionDateRange,
+          serviceLocation: data.serviceLocation || "",
+          // ─── Prestataire ───
           serviceProvider: data.announcerName,
+          providerStatus: data.providerStatus,
+          providerAddress: data.providerAddress,
+          providerSiret: data.providerSiretLine,
+          // ─── Plateforme (Animigo) ───
           platformName: "Animigo",
-          platformFee: data.platformFee ? `Commission Animigo : ${formatPrice(data.platformFee)}` : "",
-          thankYouMessage: "Merci pour votre confiance ! Votre paiement a bien été reçu.",
-          // Balises communes
+          platformLegalName: data.platformLegalName,
+          platformAddress: data.platformAddress,
+          platformSiret: data.platformSiret,
+          platformCapital: data.platformCapital,
+          platformContact: data.platformContact,
+          // ─── Décomposition ───
+          platformFee: formatPrice(data.platformFee),
+          providerEarnings: formatPrice(data.providerEarnings),
+          // ─── Mentions légales ───
+          intermediaryMention: "Animigo agit en tant que plateforme de mise en relation entre les particuliers et les prestataires de services animaliers. La présente preuve de paiement n'est pas une facture commerciale.",
+          stripeMention: "Paiement sécurisé traité par Stripe Payments Europe Ltd, prestataire de services de paiement agréé.",
+          escrowMention: "Les fonds sont conservés sur le compte séquestre Animigo jusqu'à confirmation par le client de la réalisation du service, puis reversés au prestataire conformément à nos CGV.",
+          cgvMention: "Document établi conformément aux Conditions Générales de Vente acceptées lors de la réservation.",
+          thankYouMessage: "Merci pour votre confiance — l'équipe Animigo",
+          _legal_note: "Ce reçu n'est pas une facture commerciale. Pour toute facture comptable détaillée (TVA, mentions légales du prestataire), veuillez vous référer à la facture émise par votre prestataire.",
+          // ─── Balises communes ───
           clientName: data.clientName,
           clientEmail: data.clientEmail,
           clientAddress: data.clientAddress || "",
           serviceName: data.serviceName,
           missionDate: data.missionDateRange,
           animalDetails: data.animalDetails || "",
-          itemsTable: "[]", // Pas de détail comptable côté client
+          itemsTable: "[]",
           totalsTable: "[]",
         },
       ];

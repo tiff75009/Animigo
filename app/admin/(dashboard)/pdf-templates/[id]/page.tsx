@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAdminAuth } from "@/app/hooks/useAdminAuth";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Id } from "@/convex/_generated/dataModel";
 import {
   ArrowLeft, Save, Eye, FileText, Tag, Info, Table2, Type,
@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import TableColumnsPanel from "./TableColumnsPanel";
-import { filterFieldsByDocumentType, type DocumentType as DocType, type FieldDef } from "./constants";
+import { filterFieldsByDocumentType, getDefaultClientReceiptTemplate, type DocumentType as DocType, type FieldDef } from "./constants";
 
 // ============================================
 // BALISES DYNAMIQUES
@@ -569,6 +569,9 @@ export default function PdfTemplateEditorPage() {
   const { token } = useAdminAuth();
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Type souhaité depuis l'URL (?type=client_receipt) pour pré-remplir un nouveau template
+  const presetType = searchParams.get("type") as "invoice" | "client_receipt" | "receipt" | null;
   const designerRef = useRef<HTMLDivElement>(null);
   const designerInstance = useRef<any>(null);
   const pdfmeModules = useRef<any>(null);
@@ -585,7 +588,9 @@ export default function PdfTemplateEditorPage() {
 
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
-  const [documentType, setDocumentType] = useState<"invoice" | "client_receipt" | "receipt">("invoice");
+  const [documentType, setDocumentType] = useState<"invoice" | "client_receipt" | "receipt">(
+    presetType === "client_receipt" ? "client_receipt" : "invoice"
+  );
   const [targetCompanyType, setTargetCompanyType] = useState<"micro_enterprise" | "regular_company" | "all">("all");
   const [isDefault, setIsDefault] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -734,6 +739,10 @@ export default function PdfTemplateEditorPage() {
           if (!templateData.basePdf || typeof templateData.basePdf === "string") {
             templateData.basePdf = DYNAMIC_BASE_PDF;
           }
+        } else if (presetType === "client_receipt") {
+          // Nouveau template avec ?type=client_receipt → utiliser le modèle pré-rempli
+          // (header + bloc client/prestataire/plateforme + paiement + mentions légales)
+          templateData = getDefaultClientReceiptTemplate();
         } else {
           templateData = getDefaultTemplate();
         }
