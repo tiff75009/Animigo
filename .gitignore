@@ -41,3 +41,6 @@ yarn-error.log*
 next-env.d.ts
 animigo-video
 nul
+
+# claude code (local agent state)
+.claude/
