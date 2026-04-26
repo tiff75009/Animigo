@@ -1552,7 +1552,11 @@ export default defineSchema({
       total: v.number(),
     })),
     vatRate: v.optional(v.number()), // Taux TVA appliqué (10 ou 20)
-    documentType: v.optional(v.union(v.literal("invoice"), v.literal("receipt"))),
+    documentType: v.optional(v.union(
+      v.literal("invoice"),
+      v.literal("client_receipt"),
+      v.literal("receipt"), // déprécié, kept pour compat
+    )),
     pdfStorageId: v.optional(v.id("_storage")), // ID du PDF stocké
     pdfUrl: v.optional(v.string()),        // URL du PDF généré
     sentAt: v.optional(v.number()),
@@ -2167,10 +2171,17 @@ export default defineSchema({
     .index("by_created", ["createdAt"]),
 
   // Templates PDF pour factures/reçus (éditeur admin pdfme)
+  // - "invoice"        : facture émise par l'annonceur, destinée à son client (B2B / pro)
+  // - "client_receipt" : reçu de paiement émis par Animigo, destiné au client après paiement Stripe réussi
+  // (Ancien "receipt" déprécié — kept pour compat des templates existants)
   pdfTemplates: defineTable({
-    name: v.string(),           // "Facture Pro", "Reçu Particulier"
-    slug: v.string(),           // "invoice_pro", "receipt_particulier"
-    documentType: v.union(v.literal("invoice"), v.literal("receipt")),
+    name: v.string(),           // "Facture Pro", "Reçu paiement client"
+    slug: v.string(),           // "invoice_pro", "client_receipt_default"
+    documentType: v.union(
+      v.literal("invoice"),
+      v.literal("client_receipt"),
+      v.literal("receipt"), // déprécié — conservé pour compatibilité ascendante
+    ),
     // Type d'annonceur ciblé : micro-entreprise, société, ou tous
     targetCompanyType: v.optional(v.union(
       v.literal("micro_enterprise"),

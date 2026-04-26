@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAdminAuth } from "@/app/hooks/useAdminAuth";
@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import TableColumnsPanel from "./TableColumnsPanel";
+import { filterFieldsByDocumentType, type DocumentType as DocType, type FieldDef } from "./constants";
 
 // ============================================
 // BALISES DYNAMIQUES
@@ -584,7 +585,7 @@ export default function PdfTemplateEditorPage() {
 
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
-  const [documentType, setDocumentType] = useState<"invoice" | "receipt">("invoice");
+  const [documentType, setDocumentType] = useState<"invoice" | "client_receipt" | "receipt">("invoice");
   const [targetCompanyType, setTargetCompanyType] = useState<"micro_enterprise" | "regular_company" | "all">("all");
   const [isDefault, setIsDefault] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -610,6 +611,69 @@ export default function PdfTemplateEditorPage() {
     designerRef.current = node;
     if (node) setContainerReady(true);
   }, []);
+
+  // ─── Listes de balises filtrées par type de document (memoisées pour perf) ───
+  // Évite de recalculer à chaque render et masque les balises non pertinentes
+  // (ex : SIRET caché pour client_receipt, paymentDate caché pour invoice).
+  const visibleTextFields = useMemo(
+    () => filterFieldsByDocumentType(TEXT_FIELDS as FieldDef[], documentType as DocType),
+    [documentType]
+  );
+  const visibleImageFields = useMemo(
+    () => filterFieldsByDocumentType(IMAGE_FIELDS as FieldDef[], documentType as DocType),
+    [documentType]
+  );
+
+  // ─── Throttle RAF des updates designer pour réduire la latence sur drag/resize ───
+  // pdfme.updateTemplate() est coûteux (re-render canvas complet). On bufferise
+  // les appels rapides via requestAnimationFrame pour ne committer qu'une fois par frame.
+  const designerUpdateRafRef = useRef<number | null>(null);
+  const pendingTemplateRef = useRef<any>(null);
+  const scheduleDesignerUpdate = useCallback((template: any) => {
+    pendingTemplateRef.current = template;
+    if (designerUpdateRafRef.current !== null) return;
+    designerUpdateRafRef.current = requestAnimationFrame(() => {
+      designerUpdateRafRef.current = null;
+      const t = pendingTemplateRef.current;
+      pendingTemplateRef.current = null;
+      if (t && designerInstance.current) {
+        designerInstance.current.updateTemplate(t);
+      }
+    });
+  }, []);
+
+  // ─── Handlers TableColumnsPanel mémorisés (sinon recréés à chaque render) ───
+  const handleItemsTableChange = useCallback((newConfig: TableColumnsConfig) => {
+    setTableColumnsConfig(newConfig);
+    if (!designerInstance.current) return;
+    const template = designerInstance.current.getTemplate();
+    const activeCols = (newConfig.itemsTable || []).filter((c) => c.enabled);
+    for (const page of template.schemas) {
+      const tableSchema = page.find((s: any) => s.name === "itemsTable");
+      if (tableSchema) {
+        tableSchema.head = activeCols.map((c: TableColumnDef) => c.headerText);
+        tableSchema.headWidthPercentages = activeCols.map((c: TableColumnDef) => c.widthPercent);
+        tableSchema.content = JSON.stringify(generateExampleData("itemsTable", newConfig.itemsTable!));
+      }
+    }
+    scheduleDesignerUpdate(template);
+  }, [scheduleDesignerUpdate]);
+
+  const handleTotalsTableChange = useCallback((newConfig: TableColumnsConfig) => {
+    setTableColumnsConfig(newConfig);
+    if (!designerInstance.current) return;
+    const template = designerInstance.current.getTemplate();
+    const activeCols = (newConfig.totalsTable || []).filter((c) => c.enabled);
+    for (const page of template.schemas) {
+      const tableSchema = page.find((s: any) => s.name === "totalsTable");
+      if (tableSchema) {
+        tableSchema.head = activeCols.map((c: TableColumnDef) => c.headerText);
+        tableSchema.headWidthPercentages = activeCols.map((c: TableColumnDef) => c.widthPercent);
+        tableSchema.content = JSON.stringify(generateExampleData("totalsTable", newConfig.totalsTable!));
+      }
+    }
+    scheduleDesignerUpdate(template);
+  }, [scheduleDesignerUpdate]);
 
   // Charger les données existantes
   useEffect(() => {
@@ -1439,28 +1503,56 @@ export default function PdfTemplateEditorPage() {
                   <label className="block text-xs text-slate-500 mb-1">Type de document</label>
                   <select
                     value={documentType}
-                    onChange={(e) => setDocumentType(e.target.value as any)}
+                    onChange={(e) => {
+                      const next = e.target.value as "invoice" | "client_receipt" | "receipt";
+                      setDocumentType(next);
+                      // Reçu client = émis par Animigo, pas pertinent par companyType
+                      if (next === "client_receipt") setTargetCompanyType("all");
+                    }}
                     className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-rose-500/50"
                   >
-                    <option value="invoice">Facture</option>
-                    <option value="receipt">Reçu</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">Type d&apos;annonceur ciblé</label>
-                  <select
-                    value={targetCompanyType}
-                    onChange={(e) => setTargetCompanyType(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-rose-500/50"
-                  >
-                    <option value="all">Tous les types</option>
-                    <option value="micro_enterprise">Micro-entreprise</option>
-                    <option value="regular_company">Société (SARL, SAS...)</option>
+                    <option value="invoice">📄 Facture annonceur (B2B)</option>
+                    <option value="client_receipt">🧾 Reçu paiement client</option>
+                    {documentType === "receipt" && <option value="receipt">📃 Reçu (déprécié)</option>}
                   </select>
                   <p className="text-[10px] text-slate-500 mt-1">
-                    Le template sera utilisé pour ce type d&apos;annonceur. Si aucun template spécifique n&apos;existe, le template &quot;Tous types&quot; sera utilisé.
+                    {documentType === "invoice"
+                      ? "Facture émise par l'annonceur, destinée à son client (avec SIRET, mentions légales)."
+                      : documentType === "client_receipt"
+                      ? "Reçu de paiement émis par Animigo, automatiquement généré au paiement Stripe et envoyé au client."
+                      : "Format déprécié — bascule vers \"Reçu paiement client\" recommandée."}
                   </p>
                 </div>
+                {/* Type d'annonceur ciblé : pertinent uniquement pour les factures
+                    (qui dépendent du SIRET / régime fiscal de l'annonceur).
+                    Un reçu client est émis par Animigo (pas par l'annonceur) → forcé à "all". */}
+                {documentType === "invoice" ? (
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Type d&apos;annonceur ciblé</label>
+                    <select
+                      value={targetCompanyType}
+                      onChange={(e) => setTargetCompanyType(e.target.value as any)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-rose-500/50"
+                    >
+                      <option value="all">Tous les types</option>
+                      <option value="micro_enterprise">Micro-entreprise</option>
+                      <option value="regular_company">Société (SARL, SAS...)</option>
+                    </select>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Le template sera utilisé pour ce type d&apos;annonceur. Si aucun template spécifique n&apos;existe, le template &quot;Tous types&quot; sera utilisé.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="px-3 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
+                    <p className="text-[10px] text-emerald-400 font-medium uppercase tracking-wider">
+                      Reçu plateforme
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Ce reçu est émis par Animigo (pas par l&apos;annonceur). Il s&apos;applique à tous les
+                      paiements clients, sans distinction de régime fiscal du prestataire.
+                    </p>
+                  </div>
+                )}
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -1799,7 +1891,7 @@ export default function PdfTemplateEditorPage() {
                   Champs texte
                 </h4>
                 <div className="space-y-1">
-                  {TEXT_FIELDS
+                  {visibleTextFields
                     .filter((f) => {
                       if (!fieldSearch) return true;
                       const q = fieldSearch.toLowerCase();
@@ -1841,45 +1933,14 @@ export default function PdfTemplateEditorPage() {
                 <TableColumnsPanel
                   tableKey="itemsTable"
                   config={tableColumnsConfig}
-                  onChange={(newConfig) => {
-                    setTableColumnsConfig(newConfig);
-                    // Synchroniser le designer en temps réel
-                    if (designerInstance.current) {
-                      const template = designerInstance.current.getTemplate();
-                      const activeCols = (newConfig.itemsTable || []).filter(c => c.enabled);
-                      for (const page of template.schemas) {
-                        const tableSchema = page.find((s: any) => s.name === "itemsTable");
-                        if (tableSchema) {
-                          tableSchema.head = activeCols.map((c: TableColumnDef) => c.headerText);
-                          tableSchema.headWidthPercentages = activeCols.map((c: TableColumnDef) => c.widthPercent);
-                          tableSchema.content = JSON.stringify(generateExampleData("itemsTable", newConfig.itemsTable!));
-                        }
-                      }
-                      designerInstance.current.updateTemplate(template);
-                    }
-                  }}
+                  onChange={handleItemsTableChange}
                 />
 
                 {/* Tableau des totaux - Configuration colonnes */}
                 <TableColumnsPanel
                   tableKey="totalsTable"
                   config={tableColumnsConfig}
-                  onChange={(newConfig) => {
-                    setTableColumnsConfig(newConfig);
-                    if (designerInstance.current) {
-                      const template = designerInstance.current.getTemplate();
-                      const activeCols = (newConfig.totalsTable || []).filter(c => c.enabled);
-                      for (const page of template.schemas) {
-                        const tableSchema = page.find((s: any) => s.name === "totalsTable");
-                        if (tableSchema) {
-                          tableSchema.head = activeCols.map((c: TableColumnDef) => c.headerText);
-                          tableSchema.headWidthPercentages = activeCols.map((c: TableColumnDef) => c.widthPercent);
-                          tableSchema.content = JSON.stringify(generateExampleData("totalsTable", newConfig.totalsTable!));
-                        }
-                      }
-                      designerInstance.current.updateTemplate(template);
-                    }
-                  }}
+                  onChange={handleTotalsTableChange}
                 />
 
                 {/* Champs image */}
@@ -1887,13 +1948,13 @@ export default function PdfTemplateEditorPage() {
                   <ImageIcon className="w-3 h-3" />
                   Images dynamiques
                 </h4>
-                {IMAGE_FIELDS.map((field) => (
+                {visibleImageFields.map((field) => (
                   <div
                     key={field.key}
                     className="p-3 rounded-xl bg-orange-500/10 border border-orange-500/20"
                   >
                     <p className="text-xs font-semibold text-orange-400">{field.label}</p>
-                    <p className="text-[10px] text-slate-400 mt-1">{field.description}</p>
+                    <p className="text-[10px] text-slate-400 mt-1">{(field as any).description || field.example}</p>
                     <p className="text-[10px] text-slate-500 mt-1.5 font-mono">Clé : {field.key}</p>
                   </div>
                 ))}
@@ -1986,7 +2047,7 @@ export default function PdfTemplateEditorPage() {
               </button>
               <div className="mx-2 my-1 h-px bg-slate-800" />
               <p className="px-3 py-1 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Images dynamiques</p>
-              {IMAGE_FIELDS.map((field) => (
+              {visibleImageFields.map((field) => (
                 <button
                   key={field.key}
                   onClick={() => {
@@ -2046,7 +2107,7 @@ export default function PdfTemplateEditorPage() {
                       </div>
                     </div>
                     <div className="overflow-y-auto flex-1">
-                    {TEXT_FIELDS.filter((field) => {
+                    {visibleTextFields.filter((field) => {
                       if (!ctxFieldSearch) return true;
                       const q = ctxFieldSearch.toLowerCase();
                       return field.label.toLowerCase().includes(q) || field.key.toLowerCase().includes(q);

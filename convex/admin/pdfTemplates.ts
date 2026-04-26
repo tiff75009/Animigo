@@ -66,7 +66,11 @@ export const savePdfTemplate = mutation({
     templateId: v.optional(v.id("pdfTemplates")),
     name: v.string(),
     slug: v.string(),
-    documentType: v.union(v.literal("invoice"), v.literal("receipt")),
+    documentType: v.union(
+      v.literal("invoice"),
+      v.literal("client_receipt"),
+      v.literal("receipt"), // déprécié, kept pour compat
+    ),
     targetCompanyType: v.optional(v.union(
       v.literal("micro_enterprise"),
       v.literal("regular_company"),

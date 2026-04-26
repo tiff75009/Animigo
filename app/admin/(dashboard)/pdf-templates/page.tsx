@@ -19,14 +19,16 @@ export default function PdfTemplatesPage() {
   const saveTemplate = useMutation(api.admin.pdfTemplates.savePdfTemplate);
 
   const [search, setSearch] = useState("");
-  const [filterType, setFilterType] = useState<"all" | "invoice" | "receipt">("all");
+  const [filterType, setFilterType] = useState<"all" | "invoice" | "client_receipt">("all");
 
   if (!token) return null;
 
   const filtered = templates?.filter((t: { name: string; slug: string; documentType: string; _id: Id<"pdfTemplates">; isDefault: boolean; templateJson: string; updatedAt: number; createdAt: number }) => {
     const matchSearch = t.name.toLowerCase().includes(search.toLowerCase()) ||
       t.slug.toLowerCase().includes(search.toLowerCase());
-    const matchType = filterType === "all" || t.documentType === filterType;
+    // Mappe l'ancien "receipt" déprécié vers "client_receipt" pour l'affichage
+    const effectiveType = t.documentType === "receipt" ? "client_receipt" : t.documentType;
+    const matchType = filterType === "all" || effectiveType === filterType;
     return matchSearch && matchType;
   });
 
@@ -88,8 +90,8 @@ export default function PdfTemplatesPage() {
         <div className="flex gap-1 bg-slate-800 rounded-xl p-1 border border-slate-700">
           {[
             { value: "all", label: "Tous" },
-            { value: "invoice", label: "Factures" },
-            { value: "receipt", label: "Reçus" },
+            { value: "invoice", label: "Factures annonceur" },
+            { value: "client_receipt", label: "Reçus client" },
           ].map((f) => (
             <button
               key={f.value}
@@ -132,7 +134,9 @@ export default function PdfTemplatesPage() {
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
                 template.documentType === "invoice"
                   ? "bg-blue-500/20 text-blue-400"
-                  : "bg-emerald-500/20 text-emerald-400"
+                  : template.documentType === "client_receipt"
+                  ? "bg-emerald-500/20 text-emerald-400"
+                  : "bg-slate-500/20 text-slate-400"
               }`}>
                 <FileText className="w-5 h-5" />
               </div>
@@ -145,9 +149,18 @@ export default function PdfTemplatesPage() {
                       Par défaut
                     </span>
                   )}
+                  {template.documentType === "receipt" && (
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-orange-500/20 text-orange-400 rounded-md uppercase">
+                      Déprécié
+                    </span>
+                  )}
                 </div>
                 <p className="text-slate-500 text-sm">
-                  {template.documentType === "invoice" ? "Facture" : "Reçu"}
+                  {template.documentType === "invoice"
+                    ? "Facture annonceur"
+                    : template.documentType === "client_receipt"
+                    ? "Reçu paiement client"
+                    : "Reçu (ancien format)"}
                   {template.targetCompanyType === "micro_enterprise" ? " — Micro-entreprise" :
                    template.targetCompanyType === "regular_company" ? " — Société" :
                    " — Tous types"}
