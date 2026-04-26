@@ -160,6 +160,24 @@ export const generateClientReceipt = internalAction({
       });
 
       console.log(`[generateClientReceipt] PDF généré et stocké : ${storageId}`);
+
+      // 7. Envoyer l'email au client AVEC le PDF en pièce jointe
+      try {
+        const pdfBase64 = Buffer.from(pdfBuffer as ArrayBuffer).toString("base64");
+        const filename = `recu-paiement-${String(args.missionId).slice(-6).toUpperCase()}.pdf`;
+        await ctx.runAction(internal.api.clientReceipt.sendReceiptEmailWithAttachment, {
+          missionId: args.missionId,
+          paymentIntentId: args.paymentIntentId,
+          cardBrand: args.cardBrand,
+          cardLast4: args.cardLast4,
+          pdfBase64,
+          filename,
+        });
+        console.log(`[generateClientReceipt] Email envoyé au client avec PDF en PJ`);
+      } catch (emailErr) {
+        console.error("[generateClientReceipt] Erreur envoi email (PDF généré OK) :", emailErr);
+      }
+
       return { success: true, storageId };
     } catch (err) {
       console.error("[generateClientReceipt] Erreur:", err);
@@ -168,6 +186,62 @@ export const generateClientReceipt = internalAction({
         error: err instanceof Error ? err.message : "Erreur inconnue",
       };
     }
+  },
+});
+
+/**
+ * Action interne dédiée à l'envoi de l'email "reçu de paiement" avec le PDF en PJ.
+ * Charge mission/client/annonceur et appelle sendPaymentReceiptEmail.
+ */
+export const sendReceiptEmailWithAttachment = internalAction({
+  args: {
+    missionId: v.id("missions"),
+    paymentIntentId: v.string(),
+    cardBrand: v.optional(v.string()),
+    cardLast4: v.optional(v.string()),
+    pdfBase64: v.string(),
+    filename: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const data = await ctx.runQuery(internal.api.clientReceipt.getEmailReceiptData, {
+      missionId: args.missionId,
+    });
+    if (!data || !data.clientEmail) {
+      console.warn("[sendReceiptEmailWithAttachment] Email client introuvable");
+      return;
+    }
+
+    if (!data.emailConfig) {
+      console.warn("[sendReceiptEmailWithAttachment] Config email manquante");
+      return;
+    }
+
+    await ctx.runAction(internal.api.email.sendPaymentReceiptEmail, {
+      clientEmail: data.clientEmail,
+      clientName: data.clientName,
+      serviceName: data.serviceName,
+      announcerName: data.announcerName,
+      announcerStatus: data.announcerStatus,
+      announcerCompany: data.announcerCompany,
+      announcerSiret: data.announcerSiret,
+      startDate: data.startDate,
+      endDate: data.endDate,
+      announcerEarnings: data.announcerEarnings,
+      vatRate: data.vatRate,
+      isSapApplied: data.isSapApplied,
+      platformFee: data.platformFee,
+      commissionRate: data.commissionRate,
+      stripeFee: data.stripeFee,
+      stripeFeeRate: data.stripeFeeRate,
+      totalAmount: data.totalAmount,
+      paymentRef: args.paymentIntentId,
+      cardBrand: args.cardBrand,
+      cardLast4: args.cardLast4,
+      pdfAttachmentBase64: args.pdfBase64,
+      pdfAttachmentFilename: args.filename,
+      emailConfig: data.emailConfig,
+      appUrl: data.appUrl,
+    });
   },
 });
 

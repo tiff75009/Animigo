@@ -139,63 +139,21 @@ export const markPaymentPaid = internalMutation({
         });
       }
 
-      // Envoyer le reçu de paiement par email au client
-      // Vérifier si le reçu n'a pas déjà été envoyé par confirmPaymentSuccess (frontend)
+      // Générer le reçu PDF client + envoyer l'email avec PDF en pièce jointe
+      // (l'email d'avant a été déplacé dans generateClientReceipt pour pouvoir
+      //  attacher le PDF généré — ne plus envoyer ici)
       const freshPayment = await ctx.db.get(payment._id);
       const receiptAlreadySent = freshPayment?.receiptEmailSent === true;
-
-      const announcer = await ctx.db.get(mission.announcerId);
-      const { emailConfig: receiptEmailConfig, appUrl: receiptAppUrl } = await getEmailConfigFromDb(ctx.db);
-
-      if (receiptEmailConfig && client?.email && !receiptAlreadySent) {
-        const isPro = announcer?.accountType === "annonceur_pro" && !!announcer?.siret;
-        const announcerDisplayName = announcer
-          ? `${announcer.firstName} ${announcer.lastName.charAt(0)}.`
-          : "Le prestataire";
-
-        await ctx.scheduler.runAfter(
-          0,
-          internal.api.email.sendPaymentReceiptEmail,
-          {
-            clientEmail: client.email,
-            clientName: client.firstName,
-            serviceName: mission.serviceName,
-            announcerName: announcerDisplayName,
-            announcerStatus: isPro ? "Professionnel" : "Particulier",
-            announcerCompany: isPro && announcer?.companyName ? announcer.companyName : "",
-            announcerSiret: isPro && announcer?.siret ? announcer.siret : "",
-            startDate: mission.startDate,
-            endDate: mission.endDate,
-            announcerEarnings: mission.announcerEarnings || mission.amount || 0,
-            vatRate: mission.vatRate || 0,
-            isSapApplied: mission.isSapApplied || false,
-            platformFee: mission.platformFee || 0,
-            commissionRate: mission.commissionRate || 0,
-            stripeFee: mission.stripeFee || 0,
-            stripeFeeRate: mission.stripeFeeRate || 0,
-            totalAmount: payment.amount || mission.amount || 0,
-            paymentRef: args.paymentIntentId,
-            cardBrand: args.cardBrand || "",
-            cardLast4: args.cardLast4 || "",
-            emailConfig: receiptEmailConfig || { apiKey: "" },
-            appUrl: receiptAppUrl,
-          }
-        );
-
-        // Marquer que le reçu a été envoyé pour éviter un double envoi
-        await ctx.db.patch(payment._id, {
-          receiptEmailSent: true,
+      if (!receiptAlreadySent) {
+        await ctx.scheduler.runAfter(0, internal.api.clientReceipt.generateClientReceipt, {
+          missionId: payment.missionId,
+          paymentIntentId: args.paymentIntentId,
+          cardBrand: args.cardBrand,
+          cardLast4: args.cardLast4,
         });
+        // Pre-marquer comme envoyé pour éviter un double envoi
+        await ctx.db.patch(payment._id, { receiptEmailSent: true });
       }
-
-      // Générer le reçu PDF client (template configurable depuis admin/pdf-templates)
-      // en background (n'attend pas la fin pour répondre au webhook Stripe)
-      await ctx.scheduler.runAfter(0, internal.api.clientReceipt.generateClientReceipt, {
-        missionId: payment.missionId,
-        paymentIntentId: args.paymentIntentId,
-        cardBrand: args.cardBrand,
-        cardLast4: args.cardLast4,
-      });
     }
 
     return { paymentId: payment._id, missionId: payment.missionId };

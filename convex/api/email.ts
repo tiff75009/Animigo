@@ -54,26 +54,40 @@ async function safeLogEmail(ctx: any, logData: {
   }
 }
 
-async function sendEmailViaProvider(params: EmailSendParams): Promise<EmailSendResult> {
-  const { to, from, subject, html, resendApiKey } = params;
+interface EmailAttachment {
+  filename: string;
+  content: string; // base64
+  contentType?: string; // ex: "application/pdf"
+}
+
+async function sendEmailViaProvider(params: EmailSendParams & { attachments?: EmailAttachment[] }): Promise<EmailSendResult> {
+  const { to, from, subject, html, resendApiKey, attachments } = params;
 
   if (!resendApiKey) {
     return { success: false, error: "No email provider configured (Resend API key missing)" };
   }
 
   try {
+    const body: any = {
+      from,
+      to: [to],
+      subject,
+      html,
+    };
+    if (attachments && attachments.length > 0) {
+      // Format Resend : { filename, content (base64) }
+      body.attachments = attachments.map((a) => ({
+        filename: a.filename,
+        content: a.content,
+      }));
+    }
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${resendApiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        from,
-        to: [to],
-        subject,
-        html,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (response.ok) {
@@ -1051,11 +1065,20 @@ const DEFAULT_TEMPLATES: Record<string, { subject: string; html: string }> = {
             <td style="padding:15px 20px;color:#1e293b;font-size:18px;font-weight:bold;text-align:right;background-color:#f0fdf4;">{{totalAmount}}</td>
           </tr>
         </table>
+        <!-- PDF en pièce jointe + accès dashboard -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+          <tr>
+            <td style="padding:18px 20px;background-color:#ecfdf5;border-left:4px solid #10b981;border-radius:8px;">
+              <p style="margin:0 0 6px 0;font-weight:bold;color:#065f46;font-size:14px;">📎 Votre reçu PDF est joint à cet email</p>
+              <p style="margin:0;color:#047857;font-size:13px;line-height:1.5;">Vous pouvez également le retrouver à tout moment dans votre espace personnel, section <strong>Mes factures &gt; Reçus de paiement</strong>.</p>
+            </td>
+          </tr>
+        </table>
         <!-- Mention légale -->
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
           <tr>
             <td style="padding:15px 20px;background-color:#fef3c7;border-left:4px solid #f59e0b;border-radius:8px;">
-              <p style="margin:0;color:#92400e;font-size:13px;">Ce document est un reçu de paiement émis par {{siteName}}, plateforme intermédiaire de mise en relation. Il ne constitue pas une facture. La facture sera générée une fois la prestation terminée.</p>
+              <p style="margin:0;color:#92400e;font-size:13px;">Ce document est un reçu de paiement émis par {{siteName}}, plateforme intermédiaire de mise en relation. Il ne constitue pas une facture commerciale. La facture comptable sera émise par votre prestataire une fois la prestation terminée.</p>
             </td>
           </tr>
         </table>
@@ -1063,8 +1086,8 @@ const DEFAULT_TEMPLATES: Record<string, { subject: string; html: string }> = {
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
           <tr>
             <td align="center" style="padding:30px 0;">
-              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{reservationsUrl}}" style="height:52px;width:250px;v-text-anchor:middle;" arcsize="50%" fillcolor="#4ECDC4" stroke="false"><v:textbox><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Voir mes réservations</center></v:textbox></v:roundrect><![endif]-->
-              <!--[if !mso]><!--><a href="{{reservationsUrl}}" style="display:inline-block;background-color:#4ECDC4;color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:bold;font-size:16px;">Voir mes réservations</a><!--<![endif]-->
+              <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{reservationsUrl}}" style="height:52px;width:250px;v-text-anchor:middle;" arcsize="50%" fillcolor="#4ECDC4" stroke="false"><v:textbox><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">Télécharger mes reçus</center></v:textbox></v:roundrect><![endif]-->
+              <!--[if !mso]><!--><a href="{{reservationsUrl}}" style="display:inline-block;background-color:#4ECDC4;color:#ffffff;text-decoration:none;padding:16px 40px;border-radius:50px;font-weight:bold;font-size:16px;">Télécharger mes reçus</a><!--<![endif]-->
             </td>
           </tr>
         </table>
@@ -2077,6 +2100,9 @@ export const sendPaymentReceiptEmail = internalAction({
     paymentRef: v.string(),
     cardBrand: v.optional(v.string()),
     cardLast4: v.optional(v.string()),
+    // Reçu PDF en pièce jointe (base64) — généré par generateClientReceipt
+    pdfAttachmentBase64: v.optional(v.string()),
+    pdfAttachmentFilename: v.optional(v.string()),
     emailConfig: v.object({
       apiKey: v.string(),
       fromEmail: v.optional(v.string()),
@@ -2140,7 +2166,7 @@ export const sendPaymentReceiptEmail = internalAction({
         paymentRef: args.paymentRef,
         paymentMethod,
         siteName,
-        reservationsUrl: `${appUrl}/client/reservations`,
+        reservationsUrl: `${appUrl}/client/factures`,
       };
 
       const subject = replaceVariables(template.subject, variables);
@@ -2148,12 +2174,23 @@ export const sendPaymentReceiptEmail = internalAction({
 
       const fromStr = `${fromName} <${fromEmail}>`;
 
+      // Construction des attachments : PDF du reçu si fourni
+      const attachments: EmailAttachment[] = [];
+      if (args.pdfAttachmentBase64) {
+        attachments.push({
+          filename: args.pdfAttachmentFilename || "recu-paiement-animigo.pdf",
+          content: args.pdfAttachmentBase64,
+          contentType: "application/pdf",
+        });
+      }
+
       const result = await sendEmailViaProvider({
         to: args.clientEmail,
         from: fromStr,
         subject,
         html,
         resendApiKey: args.emailConfig.apiKey,
+        attachments: attachments.length > 0 ? attachments : undefined,
       });
 
       if (!result.success) {

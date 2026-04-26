@@ -9,6 +9,7 @@
 
 import { internalQuery, internalMutation, query } from "../_generated/server";
 import { v, ConvexError } from "convex/values";
+import { getEmailConfigFromDb } from "./emailInternal";
 
 // ============================================
 // INTERNAL : pour la génération PDF
@@ -132,6 +133,57 @@ export const getReceiptData = internalQuery({
       platformSiret: siretCfg?.value ? `SIRET : ${siretCfg.value}` : "",
       platformCapital: capitalCfg?.value ? `Capital social : ${capitalCfg.value}` : "",
       platformContact: contactCfg?.value || "support@animigo.fr",
+    };
+  },
+});
+
+/**
+ * Internal query : agrège toutes les données nécessaires pour envoyer
+ * l'email "reçu de paiement" avec PDF en pièce jointe.
+ * Réutilise les données existantes (mission, client, annonceur, payment, config email).
+ */
+export const getEmailReceiptData = internalQuery({
+  args: { missionId: v.id("missions") },
+  handler: async (ctx, args) => {
+    const mission = await ctx.db.get(args.missionId);
+    if (!mission) return null;
+
+    const client = await ctx.db.get(mission.clientId);
+    const announcer = await ctx.db.get(mission.announcerId);
+
+    const payment = await ctx.db
+      .query("stripePayments")
+      .withIndex("by_mission", (q: any) => q.eq("missionId", args.missionId))
+      .first();
+
+    // Récupérer la config email + URL app depuis systemConfig
+    const emailCfg = await getEmailConfigFromDb(ctx.db);
+
+    const isPro = announcer?.accountType === "annonceur_pro" && !!announcer?.siret;
+    const announcerDisplayName = announcer
+      ? `${announcer.firstName} ${announcer.lastName.charAt(0)}.`
+      : "Le prestataire";
+
+    return {
+      clientEmail: client?.email || "",
+      clientName: client?.firstName || "",
+      serviceName: mission.serviceName,
+      announcerName: announcerDisplayName,
+      announcerStatus: isPro ? "Professionnel" : "Particulier",
+      announcerCompany: isPro && announcer?.companyName ? announcer.companyName : "",
+      announcerSiret: isPro && announcer?.siret ? announcer.siret : "",
+      startDate: mission.startDate,
+      endDate: mission.endDate,
+      announcerEarnings: mission.announcerEarnings || mission.amount || 0,
+      vatRate: mission.vatRate || 0,
+      isSapApplied: mission.isSapApplied || false,
+      platformFee: mission.platformFee || 0,
+      commissionRate: mission.commissionRate || 0,
+      stripeFee: mission.stripeFee || 0,
+      stripeFeeRate: mission.stripeFeeRate || 0,
+      totalAmount: payment?.amount || mission.amount || 0,
+      emailConfig: emailCfg.emailConfig,
+      appUrl: emailCfg.appUrl,
     };
   },
 });
