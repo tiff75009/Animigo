@@ -1723,10 +1723,14 @@ export const searchFormules = query({
             providesFood: profile.providesFood,
             allowOvernightStay: service.allowOvernightStay,
           } : undefined,
-          // Photos de la FORMULE (max 3) pour la mini-galerie dans la carte
+          // Photos de la FORMULE (max 3) pour la mini-galerie dans la carte.
+          // On exclut les photos rejetées par la modération OCR.
+          // Les photos "pending" restent affichées (par défaut visible — l'OCR ne fait que
+          // bloquer en cas de violation détectée).
           servicePhotos: variant.photos
             ? variant.photos
                 .slice()
+                .filter((p: { moderationStatus?: string }) => p.moderationStatus !== "rejected")
                 .sort((a: { order: number }, b: { order: number }) => a.order - b.order)
                 .map((p: { url: string; order: number }) => ({ url: p.url, order: p.order }))
             : undefined,
@@ -2354,10 +2358,14 @@ export const searchFormulesInternal = query({
             providesFood: profile.providesFood,
             allowOvernightStay: service.allowOvernightStay,
           } : undefined,
-          // Photos de la FORMULE (max 3) pour la mini-galerie dans la carte
+          // Photos de la FORMULE (max 3) pour la mini-galerie dans la carte.
+          // On exclut les photos rejetées par la modération OCR.
+          // Les photos "pending" restent affichées (par défaut visible — l'OCR ne fait que
+          // bloquer en cas de violation détectée).
           servicePhotos: variant.photos
             ? variant.photos
                 .slice()
+                .filter((p: { moderationStatus?: string }) => p.moderationStatus !== "rejected")
                 .sort((a: { order: number }, b: { order: number }) => a.order - b.order)
                 .map((p: { url: string; order: number }) => ({ url: p.url, order: p.order }))
             : undefined,

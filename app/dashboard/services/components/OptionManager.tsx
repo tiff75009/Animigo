@@ -18,9 +18,25 @@ import {
   ChevronUp,
   Zap,
   Hash,
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import ConfirmModal from "./shared/ConfirmModal";
+import { getContactInfoWarning } from "@/app/lib/contentFilter";
+
+function ContactInfoWarning({ text }: { text: string | undefined }) {
+  const warning = getContactInfoWarning(text);
+  if (!warning) return null;
+  return (
+    <p
+      className="mt-1.5 text-[11.5px] flex items-start gap-1.5 px-2 py-1 rounded-md"
+      style={{ background: "#fdf0f0", color: "#8a3a3a", border: "1px solid #f1cdcd" }}
+    >
+      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+      <span>{warning}</span>
+    </p>
+  );
+}
 
 type PriceType = "flat" | "per_day" | "per_unit";
 
@@ -484,6 +500,7 @@ export default function OptionManager({
                         placeholder="Description courte de l'option"
                         className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/50"
                       />
+                      <ContactInfoWarning text={formData.description} />
                     </div>
                   </div>
 

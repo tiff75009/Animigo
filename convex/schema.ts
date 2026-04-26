@@ -419,9 +419,24 @@ export default defineSchema({
     isSapEligible: v.optional(v.boolean()),
     // Photos de la formule (jusqu'à 3) affichées dans les résultats de recherche.
     // URLs hébergées sur Cloudinary (même infra que profileImageUrl).
+    // Modération automatique (OCR Google Vision) :
+    //   moderationStatus: "pending" (vient d'être uploadée, scan en cours)
+    //                   | "approved" (scan OK ou non requis)
+    //                   | "rejected" (téléphone/email détecté dans l'image)
+    //   extractedText : texte OCR brut (debug + audit)
+    //   rejectionReason : motif lisible (FR) si rejected
+    //   scannedAt : timestamp du dernier scan
     photos: v.optional(v.array(v.object({
       url: v.string(),
       order: v.number(),
+      moderationStatus: v.optional(v.union(
+        v.literal("pending"),
+        v.literal("approved"),
+        v.literal("rejected"),
+      )),
+      extractedText: v.optional(v.string()),
+      rejectionReason: v.optional(v.string()),
+      scannedAt: v.optional(v.number()),
     }))),
     createdAt: v.number(),
     updatedAt: v.number(),

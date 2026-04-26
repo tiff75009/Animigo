@@ -593,6 +593,45 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.36.0 - Securite : filtre coordonnees + OCR Google Vision sur photos de formules
+
+- **Detection telephone/email dans les descriptions** (`convex/lib/contentFilter.ts`, `app/lib/contentFilter.ts`)
+  - Helper `detectContactInfo(text, mode)` partage serveur + client (logique identique)
+  - Normalisation agressive AVANT matching : strip accents, NFKD (fullwidth -> ASCII), mots-chiffres FR/EN (`zero|six|two` -> `0|6|2`), substituts d'arobase (`arobase`, `at`, `chez`, `(at)`, `[at]`...) et de point (`point`, `dot`, `(dot)`...), compression des separateurs entre chiffres (espaces, ponctuation, emojis) sur 3 passes
+  - Regex telephone FR `(?:+33|0033|0)[1-9]\d{8}` + fallback `(?<!\d)\d{9,13}(?!\d)` (exclut SIRET 14 chiffres et codes postaux 5)
+  - Mode `"aggressive"` pour OCR : substitution caracteres ambigus (`O->0`, `l->1`, `B->8`, `S->5`...) sur les "mots" qui contiennent deja >= 6 chiffres + regex `\d{9,}` sans limite haute
+  - `assertNoContactInfo()` throw `ConvexError` (et non `Error`) pour que le message remonte intact au client
+  - Validation cote serveur dans `addVariant` / `updateVariant` (description + nom de formule)
+  - Composant `<ContactInfoWarning />` co-localise dans `ServiceCard.tsx`, `VariantManager.tsx`, `OptionManager.tsx` : warning live sous chaque champ + bouton submit grise quand violation detectee
+  - `ServiceForm.tsx` : `canProceed()` bloque la transition entre etapes du wizard si une violation est detectee (description service / variantes / options) + bandeau d'erreur recapitulatif en haut
+
+- **Moderation OCR des photos de formules via Google Vision API** (`convex/api/visionOcr.ts`)
+  - Schema etendu : `serviceVariants.photos` inclut `moderationStatus` (`pending`/`approved`/`rejected`), `extractedText`, `rejectionReason`, `scannedAt`
+  - Action publique `scanPhotoUrl(url)` appelable depuis le client : retourne `{status, rejectionReason, extractedText}` sans toucher la DB (utilise pour le scan SYNCHRONE a l'upload)
+  - Action interne `scanVariantPhoto(variantId, photoUrl)` : scheduler async qui patch le `moderationStatus` dans le tableau `photos` (sceurite serveur en double-check)
+  - Helper partage `performOcrScan()` : appel `vision.googleapis.com/v1/images:annotate` avec `TEXT_DETECTION` puis `detectContactInfo` mode aggressive
+  - `getVisionConfig` (internal query) : lit le toggle `vision_ocr_enabled` + cle dediee `google_vision_api_key` (fallback sur `google_maps_api_key`)
+  - `addVariant` / `updateVariant` : nouvelles photos marquees `moderationStatus: "pending"` + `ctx.scheduler.runAfter(0, ...)` pour scan async ; preservation des statuts existants par URL
+  - Filtrage public : `convex/public/search.ts` et `convex/public/formuleDetails.ts` excluent les photos `rejected` du retour (invisibles cote client)
+  - Fail-open : si Vision API en erreur (cle manquante, billing inactif, quota), photo approuvee par defaut
+
+- **UX : scan synchrone a l'upload** (`ServicePhotosUploader.tsx`)
+  - `useAction(api.api.visionOcr.scanPhotoUrl)` declenche EN BACKGROUND apres chaque upload Cloudinary reussi
+  - State local `scanStates` Record<url, {status, rejectionReason}> : feedback immediat sans attendre la mutation
+  - Helper `getEffectiveStatus(photo)` : merge scan live + status persiste en DB
+  - Animation **scanline** CSS (`@keyframes ocr-scanline` + `ocr-scan-glow`) : ligne lumineuse bleue qui balaie la photo de haut en bas (1.6s loop) + pulsation du contour pendant le scan
+  - Badges repositionnes (z-index ordonnes) : bouton supprimer top-right `z-20`, badge "Analyse" top-left avec `right-12` (laisse place au bouton supprimer), badge "Refusee" bottom-left `z-10`, index numero bottom-right
+  - Prop `onValidityChange(isValid)` : remontee au parent pour bloquer le submit si une photo est rejetee
+  - Recap erreurs en bas de l'uploader liste les photos refusees + motif
+
+- **Admin : configuration Google Vision** (`app/admin/(dashboard)/integrations/page.tsx`, `convex/admin/config.ts`)
+  - Nouvelle section "Google Vision (OCR photos)" avec icone `ScanEye` (ambre)
+  - Champs configurables : `vision_ocr_enabled` (toggle texte) + `google_vision_api_key` (optionnel, fallback Maps)
+  - Action `testVisionConnection(token, apiKey)` : envoie un PNG 1x1 base64 et parse la reponse Google
+  - Detection avancee des erreurs 403 : extraction du `error.message` JSON Google + 4 causes les plus frequentes documentees (cle restreinte par API, restriction HTTP referrer, billing inactif, mauvais projet GCP)
+  - Affichage `whitespace-pre-line` pour les messages d'erreur multilignes
+  - Info boxes : guide pas-a-pas configuration GCP + comportement fail-open
+
 ### v0.34.0 - Wizard reservation unifie : Recap + Finalize integres + finalisation in-page
 
 - **Wizard reservation tout-en-un** (`app/annonceur/[id]/`)

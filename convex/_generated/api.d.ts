@@ -62,6 +62,7 @@ import type * as api_stripePaymentLifecycle from "../api/stripePaymentLifecycle.
 import type * as api_stripeRefund from "../api/stripeRefund.js";
 import type * as api_stripeTransfer from "../api/stripeTransfer.js";
 import type * as api_stripeWebhook from "../api/stripeWebhook.js";
+import type * as api_visionOcr from "../api/visionOcr.js";
 import type * as auth_login from "../auth/login.js";
 import type * as auth_register from "../auth/register.js";
 import type * as auth_session from "../auth/session.js";
@@ -79,6 +80,7 @@ import type * as dashboard_payments from "../dashboard/payments.js";
 import type * as http from "../http.js";
 import type * as lib_batchLoaders from "../lib/batchLoaders.js";
 import type * as lib_capacityUtils from "../lib/capacityUtils.js";
+import type * as lib_contentFilter from "../lib/contentFilter.js";
 import type * as lib_formatting from "../lib/formatting.js";
 import type * as lib_geoUtils from "../lib/geoUtils.js";
 import type * as lib_notificationTemplates from "../lib/notificationTemplates.js";
@@ -210,6 +212,7 @@ declare const fullApi: ApiFromModules<{
   "api/stripeRefund": typeof api_stripeRefund;
   "api/stripeTransfer": typeof api_stripeTransfer;
   "api/stripeWebhook": typeof api_stripeWebhook;
+  "api/visionOcr": typeof api_visionOcr;
   "auth/login": typeof auth_login;
   "auth/register": typeof auth_register;
   "auth/session": typeof auth_session;
@@ -227,6 +230,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "lib/batchLoaders": typeof lib_batchLoaders;
   "lib/capacityUtils": typeof lib_capacityUtils;
+  "lib/contentFilter": typeof lib_contentFilter;
   "lib/formatting": typeof lib_formatting;
   "lib/geoUtils": typeof lib_geoUtils;
   "lib/notificationTemplates": typeof lib_notificationTemplates;

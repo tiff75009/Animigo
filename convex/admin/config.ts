@@ -375,6 +375,117 @@ export const testOctopushConnection = action({
   },
 });
 
+// Action: Tester la connexion Google Vision (OCR)
+// Envoie une mini-image base64 pour valider que la clé API est active
+// et que l'API Vision est bien activée sur le projet GCP.
+export const testVisionConnection = action({
+  args: {
+    token: v.string(),
+    apiKey: v.string(),
+  },
+  handler: async (ctx, args): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+  }> => {
+    await requireAdminAction(ctx, args.token);
+
+    if (!args.apiKey) {
+      return {
+        success: false,
+        error: "Aucune clé API fournie. Renseignez la clé Google Vision (ou Google Maps si partagée).",
+      };
+    }
+
+    try {
+      // PNG 1x1 pixel transparent en base64 (suffisant pour valider le pipeline)
+      const tinyPng =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
+      const response = await fetch(
+        `https://vision.googleapis.com/v1/images:annotate?key=${args.apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            requests: [
+              {
+                image: { content: tinyPng },
+                features: [{ type: "TEXT_DETECTION", maxResults: 1 }],
+              },
+            ],
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        // Tente d'extraire le message structuré de Google (souvent très explicite)
+        let googleMessage = "";
+        try {
+          const parsed = JSON.parse(errorText);
+          googleMessage = parsed?.error?.message || "";
+        } catch {
+          // pas du JSON, garder le texte brut tronqué
+        }
+        const detail = googleMessage || errorText.slice(0, 300);
+
+        if (response.status === 403) {
+          // Causes typiques d'un 403 Vision avec API pourtant activée :
+          // - clé restreinte à des APIs (Maps uniquement, sans Vision)
+          // - clé restreinte par HTTP referrer (Convex appelle sans referer)
+          // - clé restreinte par IP (les IPs Convex ne sont pas whitelistées)
+          // - billing pas activé sur le projet GCP
+          // - mauvais projet GCP (clé d'un projet, Vision activée sur un autre)
+          return {
+            success: false,
+            error:
+              `API refusée (403) — message Google : "${detail}".\n\n` +
+              `Causes les plus fréquentes :\n` +
+              `1. La clé est restreinte à certaines APIs (ex : Maps seulement). ` +
+              `Aller dans Google Cloud Console → Credentials → cliquer sur la clé → "API restrictions" : ` +
+              `mettre "Don't restrict key" OU ajouter "Cloud Vision API" à la liste.\n` +
+              `2. La clé a une restriction "HTTP referrers" : Convex appelle l'API côté serveur (sans referer), ` +
+              `donc la clé est rejetée. Solution : créer une clé serveur séparée sans restriction de referrer ` +
+              `(ou utiliser "IP addresses" avec les IPs Convex, ou aucune restriction).\n` +
+              `3. Le billing n'est pas activé sur le projet GCP (Vision exige un compte facturation, même pour le tier gratuit).\n` +
+              `4. La clé appartient à un projet GCP différent de celui où Vision API est activée.`,
+          };
+        }
+        if (response.status === 400) {
+          return {
+            success: false,
+            error: `Clé API invalide ou requête mal formée (400) : ${detail}`,
+          };
+        }
+        return {
+          success: false,
+          error: `Erreur API (${response.status}) : ${detail}`,
+        };
+      }
+
+      const data = await response.json();
+      const r = data.responses?.[0];
+      if (r?.error) {
+        return {
+          success: false,
+          error: `Vision API : ${r.error.message}`,
+        };
+      }
+
+      return {
+        success: true,
+        message: "Connexion Google Vision OK — l'OCR est opérationnel.",
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Erreur inconnue",
+      };
+    }
+  },
+});
+
 // ==========================================
 // VERIFICATION D'IDENTITE
 // ==========================================

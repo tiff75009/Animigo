@@ -21,6 +21,7 @@ import VariantManager, { LocalVariant } from "../VariantManager";
 import OptionManager, { LocalOption } from "../OptionManager";
 import { ServiceCardPreview } from "./ServiceCardPreview";
 import { cn } from "@/app/lib/utils";
+import { detectContactInfo, getContactInfoWarning } from "@/app/lib/contentFilter";
 
 type ServiceLocation = "announcer_home" | "client_home" | "both";
 type PriceUnit = "hour" | "half_day" | "day" | "week" | "month";
@@ -155,6 +156,8 @@ export default function ServiceForm({
   const [description, setDescription] = useState("");
   const [localVariants, setLocalVariants] = useState<LocalVariant[]>([]);
   const [localOptions, setLocalOptions] = useState<LocalOption[]>([]);
+  // Erreur de validation (téléphone/email détecté) — bloque le submit
+  const [contactValidationError, setContactValidationError] = useState<string | null>(null);
 
   // Garde de nuit
   const [allowOvernightStay, setAllowOvernightStay] = useState(false);
@@ -178,17 +181,48 @@ export default function ServiceForm({
   // On affiche un indicateur visuel pour les catégories déjà utilisées
   const availableCategories = categories;
 
+  // ─── Validation : téléphone/email dans description service + variantes ───
+  // Calculé en live pour griser le bouton Submit dès qu'une violation est détectée.
+  const contactViolations = (() => {
+    const issues: { field: string; message: string }[] = [];
+    const serviceWarn = getContactInfoWarning(description);
+    if (serviceWarn) issues.push({ field: "Description du service", message: serviceWarn });
+    localVariants.forEach((v, idx) => {
+      const w = getContactInfoWarning(v.description);
+      if (w) issues.push({ field: `Description de la formule "${v.name || `#${idx + 1}`}"`, message: w });
+      const wn = getContactInfoWarning(v.name);
+      if (wn) issues.push({ field: `Nom de la formule "${v.name || `#${idx + 1}`}"`, message: wn });
+    });
+    localOptions.forEach((o, idx) => {
+      const w = getContactInfoWarning(o.description);
+      if (w) issues.push({ field: `Description de l'option "${o.name || `#${idx + 1}`}"`, message: w });
+    });
+    return issues;
+  })();
+  const hasContactViolations = contactViolations.length > 0;
+
   const canProceed = () => {
     switch (currentStep) {
       case 1:
-        return !!category;
+        // Bloqué si la description du service contient un email/téléphone
+        return !!category && !detectContactInfo(description).hasPhone && !detectContactInfo(description).hasEmail;
       case 2:
-        // Au moins une formule avec une durée définie ET des animaux définis
-        return localVariants.length > 0 && localVariants.every(v =>
-          v.duration && v.duration > 0 && v.animalTypes && v.animalTypes.length > 0
+        // Bloqué si une formule contient un email/téléphone (description ou nom)
+        const variantsHaveContact = localVariants.some(
+          (v) =>
+            getContactInfoWarning(v.description) !== null ||
+            getContactInfoWarning(v.name) !== null
+        );
+        return (
+          localVariants.length > 0 &&
+          localVariants.every(
+            (v) => v.duration && v.duration > 0 && v.animalTypes && v.animalTypes.length > 0
+          ) &&
+          !variantsHaveContact
         );
       case 3:
-        return true; // Options are optional
+        // Bloqué si une option contient un email/téléphone
+        return !localOptions.some((o) => getContactInfoWarning(o.description) !== null);
       default:
         return false;
     }
@@ -207,6 +241,22 @@ export default function ServiceForm({
   };
 
   const handleSubmit = async () => {
+    // Garde-fou : revérifier la détection contact info avant d'envoyer au serveur
+    if (hasContactViolations) {
+      const summary = contactViolations
+        .map((iss) => `• ${iss.field} : ${iss.message}`)
+        .join("\n");
+      setContactValidationError(
+        `Impossible de soumettre — coordonnées détectées :\n${summary}`
+      );
+      // Scroll en haut pour montrer l'erreur
+      if (typeof window !== "undefined") {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+      return;
+    }
+    setContactValidationError(null);
+
     const initialVariants = localVariants.map((v) => ({
       name: v.name,
       description: v.description,
@@ -432,6 +482,50 @@ export default function ServiceForm({
                 >
                   <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <p className="m-0">{error}</p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Bandeau de validation : coordonnées détectées (téléphone / email) */}
+          <AnimatePresence>
+            {(contactValidationError || hasContactViolations) && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="px-5"
+              >
+                <div
+                  className="mt-4 p-3 flex items-start gap-2.5 text-[12px]"
+                  style={{
+                    borderRadius: 12,
+                    background: "#fdf0f0",
+                    border: "1px solid #f1cdcd",
+                    color: "#8a3a3a",
+                  }}
+                >
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="m-0 font-semibold mb-1">
+                      Coordonnées détectées — la soumission est bloquée
+                    </p>
+                    {contactViolations.length > 0 ? (
+                      <ul className="m-0 pl-4 list-disc space-y-0.5">
+                        {contactViolations.map((iss, i) => (
+                          <li key={i}>
+                            <strong>{iss.field}</strong> : {iss.message}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="m-0 whitespace-pre-line">{contactValidationError}</p>
+                    )}
+                    <p className="mt-1.5 text-[11.5px] opacity-80 m-0">
+                      Pour la sécurité de tous, les emails et numéros de téléphone doivent
+                      rester sur la plateforme.
+                    </p>
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -814,15 +908,16 @@ export default function ServiceForm({
               ) : (
                 <motion.button
                   onClick={handleSubmit}
-                  disabled={isSubmitting || localVariants.length === 0}
+                  disabled={isSubmitting || localVariants.length === 0 || hasContactViolations}
+                  title={hasContactViolations ? "Retirez les coordonnées détectées avant de soumettre" : undefined}
                   className="inline-flex items-center gap-2 px-5 py-2 rounded-full text-[13px] font-medium transition-opacity hover:opacity-90"
                   style={
-                    !isSubmitting && localVariants.length > 0
+                    !isSubmitting && localVariants.length > 0 && !hasContactViolations
                       ? { background: "#1f3a33", color: "#f7f5ef" }
                       : { background: "#ece9e1", color: "#9c9484", cursor: "not-allowed" }
                   }
-                  whileHover={{ scale: !isSubmitting ? 1.005 : 1 }}
-                  whileTap={{ scale: !isSubmitting ? 0.995 : 1 }}
+                  whileHover={{ scale: !isSubmitting && !hasContactViolations ? 1.005 : 1 }}
+                  whileTap={{ scale: !isSubmitting && !hasContactViolations ? 0.995 : 1 }}
                 >
                   {isSubmitting ? (
                     <>

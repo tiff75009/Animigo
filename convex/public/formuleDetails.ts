@@ -64,9 +64,10 @@ export const getVariantDetails = query({
           : "professionnel";
     }
 
-    // Photos triées par ordre
+    // Photos triées par ordre — on exclut les photos rejetées par la modération OCR
     const photos = (variant.photos ?? [])
       .slice()
+      .filter((p: { moderationStatus?: string }) => p.moderationStatus !== "rejected")
       .sort((a, b) => a.order - b.order);
 
     return {

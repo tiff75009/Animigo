@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import { getContactInfoWarning } from "@/app/lib/contentFilter";
 import {
   Plus,
   Minus,
@@ -24,10 +25,26 @@ import {
   Moon,
   Home,
   MapPin,
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { useAuth } from "@/app/hooks/useAuth";
 import ConfirmModal from "./shared/ConfirmModal";
+
+// Mini composant : message d'avertissement quand téléphone/email détecté.
+function ContactInfoWarning({ text }: { text: string | undefined }) {
+  const warning = getContactInfoWarning(text);
+  if (!warning) return null;
+  return (
+    <p
+      className="mt-1.5 text-[11.5px] flex items-start gap-1.5 px-2 py-1 rounded-md"
+      style={{ background: "#fdf0f0", color: "#8a3a3a", border: "1px solid #f1cdcd" }}
+    >
+      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+      <span>{warning}</span>
+    </p>
+  );
+}
 
 /**
  * En-tête de section dans le formulaire d'ajout/modification de formule.
@@ -596,6 +613,7 @@ function SimpleVariantCard({
                 className="w-full px-3 py-2.5 text-[13px] text-[#1f1f1d] focus:outline-none focus:ring-2 focus:ring-[#1f3a33]/20 transition-all placeholder:text-[#cdc9c0]"
                 style={{ borderRadius: 10, border: "1px solid #ece9e1", background: "#fff" }}
               />
+              <ContactInfoWarning text={variant.name} />
             </div>
 
             {/* Description */}
@@ -611,6 +629,7 @@ function SimpleVariantCard({
                 className="w-full px-3 py-2.5 text-[13px] text-[#1f1f1d] focus:outline-none focus:ring-2 focus:ring-[#1f3a33]/20 transition-all placeholder:text-[#cdc9c0]"
                 style={{ borderRadius: 10, border: "1px solid #ece9e1", background: "#fff" }}
               />
+              <ContactInfoWarning text={variant.description} />
             </div>
           </div>
 

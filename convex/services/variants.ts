@@ -1,6 +1,8 @@
 import { v } from "convex/values";
 import { query, mutation } from "../_generated/server";
 import { Id } from "../_generated/dataModel";
+import { internal } from "../_generated/api";
+import { assertNoContactInfo } from "../lib/contentFilter";
 
 // Règle métier : durée d'une séance = multiple de 30 min, max 150 min (2h30)
 const MAX_SESSION_DURATION = 150;
@@ -227,6 +229,11 @@ export const addVariant = mutation({
     // Validation : durée multiple de 30 min, max 2h30
     validateSessionDuration(args.duration);
 
+    // Sécurité : interdire téléphone/email dans la description
+    assertNoContactInfo(args.description, "La description");
+    // Et dans le nom de la formule (par sécurité)
+    assertNoContactInfo(args.name, "Le nom de la formule");
+
     // Trouver l'ordre max pour mettre la nouvelle variante à la fin
     const existingVariants = await ctx.db
       .query("serviceVariants")
@@ -278,7 +285,12 @@ export const addVariant = mutation({
       includedFeatures: args.includedFeatures,
       isSapEligible: sapEligible,
       photos: args.photos && args.photos.length > 0
-        ? args.photos.slice(0, 3).map((url, order) => ({ url, order }))
+        ? args.photos.slice(0, 3).map((url, order) => ({
+            url,
+            order,
+            // Nouvelles photos : en attente de scan OCR
+            moderationStatus: "pending" as const,
+          }))
         : undefined,
       order: maxOrder + 1,
       isActive: !isCollective, // Désactivé par défaut si collective (pas de créneaux)
@@ -286,6 +298,16 @@ export const addVariant = mutation({
       createdAt: now,
       updatedAt: now,
     });
+
+    // Scheduler le scan OCR de chaque photo (background, async)
+    if (args.photos && args.photos.length > 0) {
+      for (const photoUrl of args.photos.slice(0, 3)) {
+        await ctx.scheduler.runAfter(0, internal.api.visionOcr.scanVariantPhoto, {
+          variantId,
+          photoUrl,
+        });
+      }
+    }
 
     // Activer le mode variantes sur le service si pas déjà fait
     if (!service.hasVariants) {
@@ -377,6 +399,14 @@ export const updateVariant = mutation({
 
     await verifyServiceOwnership(ctx, variant.serviceId, user._id);
 
+    // Sécurité : interdire téléphone/email dans la description et le nom
+    if (args.description !== undefined) {
+      assertNoContactInfo(args.description, "La description");
+    }
+    if (args.name !== undefined) {
+      assertNoContactInfo(args.name, "Le nom de la formule");
+    }
+
     const now = Date.now();
     const updates: Record<string, unknown> = { updatedAt: now };
 
@@ -421,11 +451,47 @@ export const updateVariant = mutation({
         updates.isSapEligible = false;
       }
     }
+    // Photos : préserver le moderationStatus des URLs déjà scannées,
+    // marquer "pending" + scheduler le scan pour les nouvelles URLs.
+    let newPhotoUrlsToScan: string[] = [];
     if (args.photos !== undefined) {
-      updates.photos = args.photos.slice(0, 3).map((url, order) => ({ url, order }));
+      const previousPhotos = (variant.photos || []) as Array<{
+        url: string;
+        moderationStatus?: "pending" | "approved" | "rejected";
+        extractedText?: string;
+        rejectionReason?: string;
+        scannedAt?: number;
+      }>;
+      const previousByUrl = new Map(previousPhotos.map((p) => [p.url, p]));
+      const trimmed = args.photos.slice(0, 3);
+      updates.photos = trimmed.map((url, order) => {
+        const prev = previousByUrl.get(url);
+        if (prev) {
+          // Photo déjà connue → on garde son status (pas de re-scan)
+          return {
+            url,
+            order,
+            moderationStatus: prev.moderationStatus,
+            extractedText: prev.extractedText,
+            rejectionReason: prev.rejectionReason,
+            scannedAt: prev.scannedAt,
+          };
+        }
+        // Nouvelle photo → pending + scan à scheduler
+        newPhotoUrlsToScan.push(url);
+        return { url, order, moderationStatus: "pending" as const };
+      });
     }
 
     await ctx.db.patch(args.variantId, updates);
+
+    // Scheduler le scan OCR des nouvelles photos (background)
+    for (const photoUrl of newPhotoUrlsToScan) {
+      await ctx.scheduler.runAfter(0, internal.api.visionOcr.scanVariantPhoto, {
+        variantId: args.variantId,
+        photoUrl,
+      });
+    }
 
     // Mettre à jour le basePrice si le prix, durée, séances ou isActive a changé
     if (args.price !== undefined || args.duration !== undefined || args.numberOfSessions !== undefined || args.isActive !== undefined) {

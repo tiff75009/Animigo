@@ -6,6 +6,21 @@ import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { getContactInfoWarning } from "@/app/lib/contentFilter";
+
+// Composant : message d'avertissement quand un téléphone/email est détecté.
+function ContactInfoWarning({ text }: { text: string }) {
+  const warning = getContactInfoWarning(text);
+  if (!warning) return null;
+  return (
+    <p className="mt-1.5 text-[12px] flex items-start gap-1.5 px-2.5 py-1.5 rounded-md"
+      style={{ background: "#fdf0f0", color: "#8a3a3a", border: "1px solid #f1cdcd" }}
+    >
+      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+      <span>{warning}</span>
+    </p>
+  );
+}
 import {
   Edit2,
   Trash2,
@@ -107,7 +122,12 @@ interface Variant {
   needsSlotConfiguration?: boolean; // true si service collective sans créneaux
   slotsCount?: number; // Nombre de créneaux futurs configurés
   isSapEligible?: boolean;
-  photos?: Array<{ url: string; order: number }>;
+  photos?: Array<{
+    url: string;
+    order: number;
+    moderationStatus?: "pending" | "approved" | "rejected";
+    rejectionReason?: string;
+  }>;
 }
 
 interface Option {
@@ -2111,6 +2131,7 @@ function VariantEditForm({
           onChange={(e) => setName(e.target.value)}
           className="w-full px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none"
         />
+        <ContactInfoWarning text={name} />
       </div>
 
       {/* Description */}
@@ -2122,12 +2143,21 @@ function VariantEditForm({
           rows={2}
           className="w-full px-3 py-2 bg-white border border-foreground/10 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none resize-none"
         />
+        <ContactInfoWarning text={description} />
       </div>
 
       {/* Photos de la formule — affichées dans les résultats de recherche */}
       <div className="pt-3 border-t border-primary/10">
         <ServicePhotosUploader
-          photos={photoUrls.map((url, i) => ({ url, order: i }))}
+          photos={photoUrls.map((url, i) => {
+            const original = variant.photos?.find((p) => p.url === url);
+            return {
+              url,
+              order: i,
+              moderationStatus: original?.moderationStatus,
+              rejectionReason: original?.rejectionReason,
+            };
+          })}
           onChange={(urls) => setPhotoUrls(urls)}
         />
       </div>
@@ -2766,20 +2796,33 @@ function VariantEditForm({
         >
           Annuler
         </button>
-        <motion.button
-          onClick={handleSave}
-          disabled={isSaving || !name}
-          className="inline-flex items-center gap-2 px-5 py-2 rounded-full text-[13px] font-medium transition-opacity hover:opacity-90"
-          style={
-            !isSaving && name
-              ? { background: "#1f3a33", color: "#f7f5ef" }
-              : { background: "#ece9e1", color: "#9c9484", cursor: "not-allowed" }
-          }
-          whileTap={{ scale: !isSaving && name ? 0.98 : 1 }}
-        >
-          {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-          Enregistrer
-        </motion.button>
+        {(() => {
+          const hasContactViolation = Boolean(
+            getContactInfoWarning(name) || getContactInfoWarning(description)
+          );
+          const canSave = !isSaving && name && !hasContactViolation;
+          return (
+            <motion.button
+              onClick={handleSave}
+              disabled={!canSave}
+              title={
+                hasContactViolation
+                  ? "Retirez les coordonnées (téléphone / email) avant de sauvegarder"
+                  : undefined
+              }
+              className="inline-flex items-center gap-2 px-5 py-2 rounded-full text-[13px] font-medium transition-opacity hover:opacity-90"
+              style={
+                canSave
+                  ? { background: "#1f3a33", color: "#f7f5ef" }
+                  : { background: "#ece9e1", color: "#9c9484", cursor: "not-allowed" }
+              }
+              whileTap={{ scale: canSave ? 0.98 : 1 }}
+            >
+              {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+              Enregistrer
+            </motion.button>
+          );
+        })()}
       </div>
       </div>
       {/* Fin de la colonne gauche (formulaire) */}
@@ -3139,6 +3182,7 @@ function VariantAddForm({
               className="w-full px-3 py-2.5 text-[13px] text-[#1f1f1d] focus:outline-none focus:ring-2 focus:ring-[#1f3a33]/20 transition-all placeholder:text-[#cdc9c0]"
               style={{ borderRadius: 10, border: "1px solid #ece9e1", background: "#fff" }}
             />
+            <ContactInfoWarning text={name} />
           </div>
 
           {/* Description */}
@@ -3153,6 +3197,7 @@ function VariantAddForm({
               className="w-full px-3 py-2.5 text-[13px] text-[#1f1f1d] focus:outline-none focus:ring-2 focus:ring-[#1f3a33]/20 transition-all resize-none placeholder:text-[#cdc9c0]"
               style={{ borderRadius: 10, border: "1px solid #ece9e1", background: "#fff" }}
             />
+            <ContactInfoWarning text={description} />
           </div>
 
           {/* Photos */}
@@ -3768,37 +3813,58 @@ function VariantAddForm({
           {currentStep === 1 ? "Annuler" : "Retour"}
         </button>
 
-        {currentStep < 3 ? (
-          <motion.button
-            onClick={() => setCurrentStep((currentStep + 1) as 1 | 2 | 3)}
-            disabled={currentStep === 1 && !name}
-            className="inline-flex items-center gap-2 px-5 py-2 rounded-full text-[13px] font-medium transition-opacity hover:opacity-90"
-            style={
-              !(currentStep === 1 && !name)
-                ? { background: "#1f3a33", color: "#f7f5ef" }
-                : { background: "#ece9e1", color: "#9c9484", cursor: "not-allowed" }
-            }
-            whileTap={{ scale: !(currentStep === 1 && !name) ? 0.98 : 1 }}
-          >
-            Suivant
-            <ChevronRight className="w-3.5 h-3.5" />
-          </motion.button>
-        ) : (
-          <motion.button
-            onClick={handleSave}
-            disabled={isSaving || !name}
-            className="inline-flex items-center gap-2 px-5 py-2 rounded-full text-[13px] font-medium transition-opacity hover:opacity-90"
-            style={
-              !isSaving && name
-                ? { background: "#1f3a33", color: "#f7f5ef" }
-                : { background: "#ece9e1", color: "#9c9484", cursor: "not-allowed" }
-            }
-            whileTap={{ scale: !isSaving && name ? 0.98 : 1 }}
-          >
-            {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-            Créer la formule
-          </motion.button>
-        )}
+        {(() => {
+          const hasContactViolation = Boolean(
+            getContactInfoWarning(name) || getContactInfoWarning(description)
+          );
+          if (currentStep < 3) {
+            // Bouton Suivant : bloqué à l'étape 1 si name vide OU coordonnées détectées
+            const blocked = (currentStep === 1 && !name) || (currentStep === 1 && hasContactViolation);
+            return (
+              <motion.button
+                onClick={() => setCurrentStep((currentStep + 1) as 1 | 2 | 3)}
+                disabled={blocked}
+                title={
+                  hasContactViolation
+                    ? "Retirez les coordonnées (téléphone / email) avant de continuer"
+                    : undefined
+                }
+                className="inline-flex items-center gap-2 px-5 py-2 rounded-full text-[13px] font-medium transition-opacity hover:opacity-90"
+                style={
+                  !blocked
+                    ? { background: "#1f3a33", color: "#f7f5ef" }
+                    : { background: "#ece9e1", color: "#9c9484", cursor: "not-allowed" }
+                }
+                whileTap={{ scale: !blocked ? 0.98 : 1 }}
+              >
+                Suivant
+                <ChevronRight className="w-3.5 h-3.5" />
+              </motion.button>
+            );
+          }
+          const canSave = !isSaving && name && !hasContactViolation;
+          return (
+            <motion.button
+              onClick={handleSave}
+              disabled={!canSave}
+              title={
+                hasContactViolation
+                  ? "Retirez les coordonnées (téléphone / email) avant de créer la formule"
+                  : undefined
+              }
+              className="inline-flex items-center gap-2 px-5 py-2 rounded-full text-[13px] font-medium transition-opacity hover:opacity-90"
+              style={
+                canSave
+                  ? { background: "#1f3a33", color: "#f7f5ef" }
+                  : { background: "#ece9e1", color: "#9c9484", cursor: "not-allowed" }
+              }
+              whileTap={{ scale: canSave ? 0.98 : 1 }}
+            >
+              {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+              Créer la formule
+            </motion.button>
+          );
+        })()}
       </div>
     </div>
   );

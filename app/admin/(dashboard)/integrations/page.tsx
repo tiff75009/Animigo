@@ -28,6 +28,7 @@ import {
   Cloud,
   Bell,
   MessageSquare,
+  ScanEye,
 } from "lucide-react";
 
 interface ConfigItem {
@@ -132,6 +133,33 @@ const integrations: IntegrationSection[] = [
         description: "Clé API Google Maps Platform",
         isSecret: true,
         placeholder: "AIza...",
+      },
+    ],
+  },
+  {
+    id: "google_vision",
+    name: "Google Vision (OCR photos)",
+    description:
+      "Modération automatique des photos de formules : détection de téléphones / emails affichés sur les images",
+    icon: ScanEye,
+    color: "bg-amber-500",
+    docsUrl: "https://console.cloud.google.com/apis/library/vision.googleapis.com",
+    fields: [
+      {
+        key: "vision_ocr_enabled",
+        label: "Modération OCR activée",
+        description:
+          "Mettez 'true' pour activer le scan automatique, 'false' pour le désactiver (les nouvelles photos passeront direct en 'approved').",
+        isSecret: false,
+        placeholder: "true",
+      },
+      {
+        key: "google_vision_api_key",
+        label: "API Key (optionnel)",
+        description:
+          "Clé Google Cloud avec 'Cloud Vision API' activée. Si vide, on réutilise la clé Google Maps ci-dessus (même projet GCP).",
+        isSecret: true,
+        placeholder: "AIza... (vide = utilise Google Maps)",
       },
     ],
   },
@@ -398,6 +426,12 @@ export default function IntegrationsPage() {
     balance?: string;
     error?: string;
   } | null>(null);
+  const [testingVision, setTestingVision] = useState(false);
+  const [visionTestResult, setVisionTestResult] = useState<{
+    success: boolean;
+    message?: string;
+    error?: string;
+  } | null>(null);
 
   const configs = useQuery(
     api.admin.config.getAllConfigs,
@@ -409,6 +443,7 @@ export default function IntegrationsPage() {
   const testQStashConnection = useAction(api.admin.config.testQStashConnection);
   const testRedisConnection = useAction(api.admin.config.testRedisConnection);
   const testOctopushConnection = useAction(api.admin.config.testOctopushConnection);
+  const testVisionConnection = useAction(api.admin.config.testVisionConnection);
   const getConfigValue = (key: string) => {
     if (values[key] !== undefined) return values[key];
     const config = configs?.find((c: ConfigItem) => c.key === key);
@@ -555,6 +590,37 @@ export default function IntegrationsPage() {
       });
     } finally {
       setTestingOctopush(false);
+    }
+  };
+
+  const handleTestVision = async () => {
+    if (!token) return;
+    // Utilise la clé Vision dédiée OU fallback sur la clé Maps
+    const visionKey = getConfigValue("google_vision_api_key");
+    const mapsKey = getConfigValue("google_maps_api_key");
+    const apiKey = visionKey || mapsKey;
+
+    if (!apiKey) {
+      setVisionTestResult({
+        success: false,
+        error:
+          "Aucune clé API trouvée. Renseignez la clé Google Vision ou la clé Google Maps ci-dessus.",
+      });
+      return;
+    }
+
+    setTestingVision(true);
+    setVisionTestResult(null);
+    try {
+      const result = await testVisionConnection({ token, apiKey });
+      setVisionTestResult(result);
+    } catch (error) {
+      setVisionTestResult({
+        success: false,
+        error: error instanceof Error ? error.message : "Erreur inconnue",
+      });
+    } finally {
+      setTestingVision(false);
     }
   };
 
@@ -943,6 +1009,107 @@ export default function IntegrationsPage() {
                         <li>Executez la migration : <code className="bg-slate-800 px-1 rounded">npx convex run migrations/migrateProfilesToRedis:migrate</code></li>
                       </ol>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Test Connection Section - Google Vision */}
+            {integration.id === "google_vision" && (
+              <div className="p-6 border-t border-slate-800">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-amber-400" />
+                    <h3 className="text-lg font-semibold text-white">Tester la connexion</h3>
+                  </div>
+                  <button
+                    onClick={handleTestVision}
+                    disabled={testingVision}
+                    className="px-4 py-2 rounded-lg font-medium flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white transition-colors disabled:opacity-50"
+                  >
+                    {testingVision ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Test en cours...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4" />
+                        Tester l&apos;API
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {visionTestResult && (
+                  <div className={`mt-4 p-4 rounded-lg border ${
+                    visionTestResult.success
+                      ? "bg-green-500/10 border-green-500/30"
+                      : "bg-red-500/10 border-red-500/30"
+                  }`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      {visionTestResult.success ? (
+                        <>
+                          <CheckCircle className="w-5 h-5 text-green-400" />
+                          <span className="text-green-400 font-medium">Connexion réussie</span>
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="w-5 h-5 text-red-400" />
+                          <span className="text-red-400 font-medium">Erreur de connexion</span>
+                        </>
+                      )}
+                    </div>
+                    {visionTestResult.success ? (
+                      <p className="text-sm text-slate-300">{visionTestResult.message}</p>
+                    ) : (
+                      <p className="text-sm text-red-300 whitespace-pre-line leading-relaxed">{visionTestResult.error}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Info box */}
+                <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <Info className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm">
+                      <p className="text-amber-300 font-medium mb-2">Configuration Google Vision :</p>
+                      <ol className="text-amber-300/80 space-y-1 list-decimal list-inside">
+                        <li>
+                          Allez sur{" "}
+                          <a
+                            href="https://console.cloud.google.com/apis/library/vision.googleapis.com"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline hover:text-amber-200"
+                          >
+                            Google Cloud Console → API Vision
+                          </a>
+                        </li>
+                        <li>Activez &quot;Cloud Vision API&quot; sur votre projet GCP (le même que Google Maps)</li>
+                        <li>
+                          Vous pouvez réutiliser la clé Google Maps existante (laissez le champ
+                          API Key Vision vide), ou créer une clé dédiée
+                        </li>
+                        <li>Tarif : ~1.50&euro; / 1000 images analysées (1500 gratuits/mois)</li>
+                        <li>
+                          Comportement : photo uploadée → status &quot;En attente&quot; → scan OCR
+                          automatique → &quot;Vérifiée&quot; ou &quot;Refusée&quot; (si email/téléphone détecté)
+                        </li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Avertissement fail-open */}
+                <div className="mt-3 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <Info className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-blue-300">
+                      <strong>Comportement par défaut :</strong> en cas d&apos;erreur API ou si la clé est
+                      manquante, les photos sont approuvées par défaut (&quot;fail-open&quot;) pour ne pas
+                      bloquer les annonceurs. La modération admin reste un filet de sécurité.
+                    </p>
                   </div>
                 </div>
               </div>
