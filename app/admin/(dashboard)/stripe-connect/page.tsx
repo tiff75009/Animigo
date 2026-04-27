@@ -16,6 +16,18 @@ import { ConfirmModal } from "./confirm-modal";
 
 type StatusFilter = "all" | "verified" | "pending" | "restricted" | "disabled";
 
+type StripeAccount = {
+  userId: Id<"users">;
+  firstName: string;
+  lastName: string;
+  email: string;
+  stripeAccountId: string;
+  stripeAccountStatus: "verified" | "pending" | "restricted" | "disabled" | string;
+  stripeAccountUpdatedAt: number | null;
+  monthEarnings: number;
+  pendingPayout: number;
+};
+
 export default function StripeConnectPage() {
   const { token } = useAdminAuth();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -25,7 +37,7 @@ export default function StripeConnectPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDisabling, setIsDisabling] = useState(false);
 
-  const accounts = useQuery(api.admin.stripeConnect.listConnectAccounts, token ? { token } : "skip");
+  const accounts = useQuery(api.admin.stripeConnect.listConnectAccounts, token ? { token } : "skip") as StripeAccount[] | undefined;
   const deleteAccount = useMutation(api.admin.stripeConnect.adminDeleteStripeAccount);
   const rejectAccount = useMutation(api.admin.stripeConnect.adminRejectStripeAccount);
   const deleteStripeAction = useAction(api.api.stripeConnect.deleteStripeAccount);

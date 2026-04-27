@@ -972,7 +972,7 @@ export default function AnnouncerFormules({
                         | "micro_entrepreneur"
                         | "professionnel"
                     }
-                    announcerFirstName={announcerFirstName}
+                    announcerFirstName={announcerFirstName ?? ""}
                     announcerLastName={announcerLastName ?? ""}
                     onPrevStep={goToPrevStep}
                     onNextStep={goToNextStep}

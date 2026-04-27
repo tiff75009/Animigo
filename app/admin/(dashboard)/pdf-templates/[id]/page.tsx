@@ -54,8 +54,8 @@ const TEXT_FIELDS = [
   { key: "amountTTC", label: "Total TTC (texte)", example: "Total TTC : 90,00 €" },
 ];
 
-const IMAGE_FIELDS = [
-  { key: "companyLogo", label: "Logo entreprise", description: "Logo de l'annonceur (défini dans Paramètres > Informations)" },
+const IMAGE_FIELDS: FieldDef[] = [
+  { key: "companyLogo", label: "Logo entreprise", example: "https://example.com/logo.png" },
 ];
 
 // ============================================
@@ -625,7 +625,7 @@ export default function PdfTemplateEditorPage() {
     [documentType]
   );
   const visibleImageFields = useMemo(
-    () => filterFieldsByDocumentType(IMAGE_FIELDS as FieldDef[], documentType as DocType),
+    () => filterFieldsByDocumentType(IMAGE_FIELDS, documentType as DocType),
     [documentType]
   );
 

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { getAuthToken, getAdminToken, clearAuthTokens } from "@/app/lib/authToken";
+import { initAuthTokens, clearAuthTokens, getAuthToken, getAdminToken } from "@/app/lib/authToken";
 
 export type User = {
   id: string;
@@ -25,6 +25,7 @@ export type AuthState = {
   isAuthenticated: boolean;
   isAdmin: boolean;
   user: User | null;
+  token: string | null;
 };
 
 /**
@@ -32,16 +33,30 @@ export type AuthState = {
  * Vérifie le token en localStorage et valide côté Convex
  */
 export function useAuthState() {
-  const [token, setToken] = useState<string | null>(null);
-  const [hasCheckedToken, setHasCheckedToken] = useState(false);
+  // Lecture synchrone du cache mémoire (déjà rempli après le 1er init de la session)
+  // → pas de flash "déconnecté" lors des navigations entre pages.
+  const [token, setToken] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return getAuthToken() || getAdminToken() || null;
+  });
+  const [hasCheckedToken, setHasCheckedToken] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return (getAuthToken() || getAdminToken()) !== null;
+  });
 
-  // Vérifier le token au montage
+  // Si le cache est vide (1er chargement après refresh), aller chercher le cookie httpOnly
   useEffect(() => {
-    const authToken = getAuthToken();
-    const adminToken = getAdminToken();
-    setToken(authToken || adminToken || null);
-    setHasCheckedToken(true);
-  }, []);
+    if (hasCheckedToken) return;
+    let cancelled = false;
+    initAuthTokens().then(({ authToken, adminToken }) => {
+      if (cancelled) return;
+      setToken(authToken || adminToken || null);
+      setHasCheckedToken(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasCheckedToken]);
 
   // Query Convex pour valider la session
   const sessionData = useQuery(
@@ -62,6 +77,9 @@ export function useAuthState() {
     }
     await clearAuthTokens("all");
     setToken(null);
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("user_avatar_url");
+    }
     // Forcer le rechargement pour nettoyer l'état
     window.location.href = "/";
   }, [token, logoutMutation]);
@@ -94,5 +112,6 @@ export function useAuthState() {
     isAdmin,
     user,
     logout,
+    token,
   };
 }

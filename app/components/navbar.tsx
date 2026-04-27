@@ -39,7 +39,6 @@ import Image from "next/image";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useActiveConversation } from "@/app/contexts/MessagingContext";
-import { getAuthToken } from "@/app/lib/authToken";
 
 // Helper : détermine le mode de recherche selon le slug de la catégorie
 // (cohérent avec hero-section.tsx — "garde/pension/sitting" → mode=garde, sinon services)
@@ -120,11 +119,14 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<string[]>([]);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
 
   // Catégories dynamiques depuis l'admin (cohérent avec /admin/services/prestations)
   // — on n'affiche QUE les sous-catégories actives marquées comme "prestations".
-  const homepageCategories = useQuery(api.public.homepageCategories.getHomepageCategories, {});
-  const serviceCategories = useMemo(
+  type HomepageCategory = { slug: string; name: string; icon?: string | null };
+  type ServiceCategory = { slug: string; label: string; emoji: string; href: string };
+  const homepageCategories = useQuery(api.public.homepageCategories.getHomepageCategories, {}) as HomepageCategory[] | undefined;
+  const serviceCategories = useMemo<ServiceCategory[]>(
     () =>
       (homepageCategories ?? []).map((c) => ({
         slug: c.slug,
@@ -139,15 +141,8 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
   const visibleServices = serviceCategories.slice(0, DESKTOP_VISIBLE_COUNT);
   const moreServices = serviceCategories.slice(DESKTOP_VISIBLE_COUNT);
 
-  const { isLoading, isAuthenticated, isAdmin, user, logout } = useAuthState();
+  const { isLoading, isAuthenticated, isAdmin, user, logout, token: authToken } = useAuthState();
   const { unreadCount } = useNotifications(50);
-
-  // Token pour les queries
-  const [authToken, setAuthToken] = useState<string | null>(null);
-  useEffect(() => {
-    const t = getAuthToken();
-    setAuthToken(t);
-  }, []);
 
   // Compteur de messages non lus
   const { activeConversationId } = useActiveConversation();
@@ -178,10 +173,34 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
     api.client.profile.getClientProfile,
     authToken ? { token: authToken } : "skip"
   );
-  const avatarUrl =
+
+  // Avatar persisté dans sessionStorage : évite le flash entre les navigations
+  // (les queries Convex se réhydratent en quelques ms après remount).
+  const [cachedAvatarUrl, setCachedAvatarUrl] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return sessionStorage.getItem("user_avatar_url");
+  });
+  const freshAvatarUrl =
     announcerProfile?.profile?.profileImageUrl ||
     clientProfile?.profileImageUrl ||
     null;
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (freshAvatarUrl && freshAvatarUrl !== cachedAvatarUrl) {
+      sessionStorage.setItem("user_avatar_url", freshAvatarUrl);
+      setCachedAvatarUrl(freshAvatarUrl);
+    } else if (
+      announcerProfile !== undefined &&
+      clientProfile !== undefined &&
+      !freshAvatarUrl &&
+      cachedAvatarUrl
+    ) {
+      // Profils chargés mais sans avatar → l'utilisateur l'a retiré
+      sessionStorage.removeItem("user_avatar_url");
+      setCachedAvatarUrl(null);
+    }
+  }, [freshAvatarUrl, cachedAvatarUrl, announcerProfile, clientProfile]);
+  const avatarUrl = freshAvatarUrl || cachedAvatarUrl;
 
   // Statut de vérification d'identité (annonceur)
   const verificationStatus = useQuery(
@@ -369,9 +388,9 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
                   </Tooltip>
 
                   {/* Notifications */}
-                  <Tooltip content="Notifications">
+                  <Tooltip content="Notifications" disabled={isNotifOpen}>
                     <div>
-                      <NotificationDropdown />
+                      <NotificationDropdown onOpenChange={setIsNotifOpen} />
                     </div>
                   </Tooltip>
 

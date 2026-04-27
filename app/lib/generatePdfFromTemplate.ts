@@ -110,7 +110,7 @@ export async function generatePdfFromTemplate(
 
   const genOpts: any = { template: genTemplate, inputs: [inputs], plugins };
   if (Object.keys(font).length > 0) genOpts.options = { font };
-  let pdfBytes = await generate(genOpts);
+  let pdfBytes: Uint8Array<ArrayBufferLike> = await generate(genOpts);
 
   // Post-traitement : en-tête / pied de page (AVANT numérotation)
   if (hfConfig?.header?.enabled || hfConfig?.footer?.enabled) {
@@ -149,7 +149,7 @@ export async function generatePdfFromTemplate(
     pdfBytes = await pdfDoc.save();
   }
 
-  return new Blob([pdfBytes], { type: "application/pdf" });
+  return new Blob([pdfBytes as BlobPart], { type: "application/pdf" });
 }
 
 function shouldApplyToPage(repeat: string, pageIndex: number): boolean {

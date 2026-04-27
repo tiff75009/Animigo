@@ -152,6 +152,7 @@ export interface AnnouncerResult {
   accountType: string;
   companyType?: string;
   statusType: "particulier" | "micro_entrepreneur" | "professionnel";
+  isIdentityVerified?: boolean;
 }
 
 // Type pour les résultats de recherche par formule
@@ -931,6 +932,9 @@ export function useServiceSearchWithParams(token: string | null | undefined, url
     startDate: urlParams.startDate,
     endDate: urlParams.endDate,
     endTime: null,
+    gardeStartTime: null,
+    gardeEndTime: null,
+    numberOfAnimals: 1,
     includeUnavailable: false,
     searchMode: urlParams.searchMode,
   }), [category, urlParams, location]);

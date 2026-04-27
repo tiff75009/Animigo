@@ -45,7 +45,7 @@ export interface BrushDef {
   label: string;
 }
 
-export const BRUSH_PRESETS: Record<Exclude<BrushKind, "custom">, BrushDef> = {
+export const BRUSH_PRESETS: Record<Exclude<BrushKind, "custom" | "periods">, BrushDef> = {
   available: {
     kind: "available",
     status: "available",

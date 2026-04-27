@@ -46,12 +46,18 @@ const notificationIcons: Record<string, { icon: React.ElementType; color: string
 
 interface NotificationDropdownProps {
   className?: string;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function NotificationDropdown({ className }: NotificationDropdownProps) {
+export function NotificationDropdown({ className, onOpenChange }: NotificationDropdownProps) {
   const router = useRouter();
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+
+  // Notifie le parent lorsque l'état d'ouverture change (en effet, pas pendant le render)
+  useEffect(() => {
+    onOpenChange?.(showNotifications);
+  }, [showNotifications, onOpenChange]);
 
   const { notifications, unreadCount, markAsRead, markAllAsRead, deleteNotification } = useNotifications(50);
 

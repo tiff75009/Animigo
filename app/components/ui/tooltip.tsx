@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, ReactNode } from "react";
+import { useState, useEffect, ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/app/lib/utils";
 
@@ -10,6 +10,7 @@ interface TooltipProps {
   position?: "top" | "bottom" | "left" | "right";
   className?: string;
   delay?: number;
+  disabled?: boolean;
 }
 
 export function Tooltip({
@@ -18,11 +19,14 @@ export function Tooltip({
   position = "bottom",
   className,
   delay = 200,
+  disabled = false,
 }: TooltipProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [timeoutId, setTimeoutId] = useState<NodeJS.Timeout | null>(null);
+  const [suppressed, setSuppressed] = useState(false);
 
   const showTooltip = () => {
+    if (suppressed || disabled) return;
     const id = setTimeout(() => setIsVisible(true), delay);
     setTimeoutId(id);
   };
@@ -33,7 +37,28 @@ export function Tooltip({
       setTimeoutId(null);
     }
     setIsVisible(false);
+    setSuppressed(false);
   };
+
+  const handleClick = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      setTimeoutId(null);
+    }
+    setIsVisible(false);
+    setSuppressed(true);
+  };
+
+  // Force hide quand on bascule en disabled (ex : ouverture d'un dropdown)
+  useEffect(() => {
+    if (disabled) {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        setTimeoutId(null);
+      }
+      setIsVisible(false);
+    }
+  }, [disabled, timeoutId]);
 
   const positionClasses = {
     top: "bottom-full left-1/2 -translate-x-1/2 mb-2",
@@ -63,6 +88,7 @@ export function Tooltip({
       onMouseLeave={hideTooltip}
       onFocus={showTooltip}
       onBlur={hideTooltip}
+      onClick={handleClick}
     >
       {children}
       <AnimatePresence>

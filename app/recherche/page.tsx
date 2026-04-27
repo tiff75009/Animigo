@@ -216,10 +216,11 @@ export default function RecherchePage() {
   );
 
   // Récupérer les animaux de l'utilisateur connecté
+  type UserAnimal = { id: string; name: string; emoji?: string | null; type?: string };
   const userAnimals = useQuery(
     api.animals.getUserAnimals,
     token ? { token } : "skip"
-  );
+  ) as UserAnimal[] | undefined;
 
   // Animaux sélectionnés par l'utilisateur dans la barre de recherche
   const [selectedAnimalIds, setSelectedAnimalIds] = useState<string[]>([]);
@@ -229,7 +230,7 @@ export default function RecherchePage() {
     if (!userAnimals || selectedAnimalIds.length === 0) return null;
     const types = new Set<string>();
     for (const animal of userAnimals) {
-      if (selectedAnimalIds.includes(animal.id)) {
+      if (selectedAnimalIds.includes(animal.id) && animal.type) {
         types.add(animal.type);
       }
     }

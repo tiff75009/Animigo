@@ -918,9 +918,10 @@ export function FormuleCardGrid({
 }
 
 /** Pill outline style référence : padding 2-7px, radius 999, fontSize 10, weight 500 */
-function InfoPill({ children }: { children: React.ReactNode }) {
+function InfoPill({ children, title }: { children: React.ReactNode; title?: string }) {
   return (
     <span
+      title={title}
       className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium text-[#3a3a38]"
       style={{ border: "1px solid #dfdcd4" }}
     >

@@ -618,6 +618,7 @@ function InlineLocationPill({
         predictions={predictions}
         onSelect={handleSelectPrediction}
         pos={dropdownPos}
+        dropdownRef={dropdownRef}
       />
     </div>
   );

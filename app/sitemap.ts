@@ -73,14 +73,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       fetchQuery(api.seo.sitemapQueries.getActiveCityPageSlugs),
     ]);
 
-    servicePages = serviceSlugs.map((service) => ({
+    servicePages = serviceSlugs.map((service: { slug: string; updatedAt: number }) => ({
       url: `${siteUrl}/services/${service.slug}`,
       lastModified: new Date(service.updatedAt),
       changeFrequency: "weekly" as const,
       priority: 0.9,
     }));
 
-    cityPages = cityPageSlugs.map((page) => ({
+    cityPages = cityPageSlugs.map((page: { serviceSlug: string; citySlug: string; updatedAt: number }) => ({
       url: `${siteUrl}/services/${page.serviceSlug}/${page.citySlug}`,
       lastModified: new Date(page.updatedAt),
       changeFrequency: "weekly" as const,

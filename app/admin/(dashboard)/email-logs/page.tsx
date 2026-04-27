@@ -154,7 +154,7 @@ export default function EmailLogsPage() {
               </tr>
             </thead>
             <tbody>
-              {logs?.map((log) => {
+              {logs?.map((log: { _id: string; status: string; createdAt: number; to: string; template: string; provider?: string; subject: string }) => {
                 const config = STATUS_CONFIG[log.status] || STATUS_CONFIG.pending;
                 const StatusIcon = config.icon;
                 return (

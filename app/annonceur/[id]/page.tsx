@@ -1369,7 +1369,7 @@ export default function AnnouncerProfilePage() {
                 onFinalize={isAnnouncer ? undefined : handleFinalize}
                 isAnnouncer={isAnnouncer}
                 // ─── Wizard intégré : props pour étapes Récap + Finalisation ───
-                collectiveSlotsDetails={collectiveSlots.map((s) => ({
+                collectiveSlotsDetails={collectiveSlots.map((s: { _id: string; date: string; startTime: string; endTime: string; maxAnimals: number; bookedAnimals: number }) => ({
                   _id: String(s._id),
                   date: s.date,
                   startTime: s.startTime,

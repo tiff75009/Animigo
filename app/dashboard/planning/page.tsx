@@ -1232,7 +1232,7 @@ export default function PlanningPage() {
             }}
           >
             <span className="text-[12px]">
-              {BRUSH_PRESETS[brushKind as Exclude<BrushKind, "custom">]?.label ?? "Statut"} appliqué
+              {BRUSH_PRESETS[brushKind as Exclude<BrushKind, "custom" | "periods">]?.label ?? "Statut"} appliqué
             </span>
             <button
               onClick={async () => {

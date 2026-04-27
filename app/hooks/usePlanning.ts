@@ -224,7 +224,7 @@ export function usePlanning({
   const categoryTypes = useQuery(
     api.public.categoryTypes.listActiveTypes,
     token ? { token } : "skip"
-  );
+  ) as CategoryType[] | undefined;
 
   // Mutations
   const acceptMissionMut = useMutation(api.planning.missions.acceptMission);

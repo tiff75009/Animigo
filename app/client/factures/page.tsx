@@ -201,10 +201,18 @@ function ClientReceiptRow({
 
 // ─── Section Bons de remboursement (générés après annulation avec refund) ───
 function ClientRefundReceiptsSection({ token }: { token: string | null }) {
+  type RefundRow = {
+    missionId: string;
+    serviceName: string;
+    missionDate: string;
+    refundAmount: number;
+    cancelledAt?: number;
+    receiptGeneratedAt?: number;
+  };
   const refunds = useQuery(
     api.api.refundReceiptQueries.getMyRefundReceipts,
     token ? { token } : "skip"
-  );
+  ) as RefundRow[] | undefined;
 
   return (
     <div>

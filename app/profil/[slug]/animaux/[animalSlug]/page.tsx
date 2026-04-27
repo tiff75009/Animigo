@@ -512,11 +512,13 @@ export default function AnimalProfilePage() {
       </div>
 
       {/* Lightbox */}
-      {lightboxOpen && allPhotos.length > 0 && (
+      {allPhotos.length > 0 && (
         <ImageLightbox
           images={allPhotos}
-          initialIndex={lightboxIndex}
+          currentIndex={lightboxIndex}
+          isOpen={lightboxOpen}
           onClose={() => setLightboxOpen(false)}
+          onNavigate={setLightboxIndex}
         />
       )}
     </div>

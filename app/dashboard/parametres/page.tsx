@@ -232,13 +232,13 @@ function CompanyInfoSection({
   // Détection des changements (uniquement sur champs éditables)
   const hasChanges = useMemo(() => {
     if (!user) return false;
-    for (const key of Object.keys(editableFields) as (keyof typeof editableFields)[]) {
+    for (const key of Object.keys(editableFields) as Array<keyof typeof editableFields & keyof typeof formData>) {
       if (!editableFields[key]) continue;
       if (key === "capital") {
         const original = user.capital !== undefined && user.capital !== null ? String(user.capital) : "";
         if (formData.capital !== original) return true;
       } else {
-        const original = (user as Record<string, unknown>)[key] ?? "";
+        const original = (user as Record<string, unknown>)[key as string] ?? "";
         if (formData[key] !== original) return true;
       }
     }
@@ -283,7 +283,7 @@ function CompanyInfoSection({
       const payload: Record<string, unknown> = { sessionToken: token };
 
       // N'envoyer que les champs éditables
-      for (const key of Object.keys(editableFields) as (keyof typeof editableFields)[]) {
+      for (const key of Object.keys(editableFields) as Array<keyof typeof editableFields & keyof typeof formData>) {
         if (!editableFields[key]) continue;
         if (key === "capital") {
           const val = formData.capital.trim() ? parseFloat(formData.capital) : undefined;
@@ -294,7 +294,7 @@ function CompanyInfoSection({
           }
           payload.capital = val;
         } else {
-          payload[key] = formData[key];
+          payload[key as string] = formData[key];
         }
       }
 

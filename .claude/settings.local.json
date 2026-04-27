@@ -37,7 +37,17 @@
       "Bash(cd C:/Users/anton/Documents/siteanimau && node -e \"\nconst fs = require\\('fs'\\);\nconst dir = 'node_modules/@pdfme/common/dist/cjs/src/';\nconst files = fs.readdirSync\\(dir\\);\nconsole.log\\('files:', files\\);\nfor \\(const f of files\\) {\n  const content = fs.readFileSync\\(dir + f, 'utf8'\\);\n  if \\(content.includes\\('processDynamicPage'\\)\\) {\n    console.log\\('FOUND in', f\\);\n    const idx = content.indexOf\\('processDynamicPage'\\);\n    console.log\\(content.substring\\(idx, idx + 1500\\)\\);\n    break;\n  }\n}\n\" 2>&1)",
       "Bash(find \"C:/Users/anton/Documents/siteanimau/app/components\" -type f -name \"*.tsx\" | xargs wc -l | tail -1)",
       "Bash(awk '{print $NF}')",
-      "Bash(xargs wc *)"
+      "Bash(xargs wc *)",
+      "Bash(bun --version)",
+      "Bash(tee /tmp/tsc-output.txt)",
+      "Read(//private/tmp/**)",
+      "Bash(npx eslint *)",
+      "Bash(tee /tmp/eslint-output.txt)",
+      "Bash(awk '{for\\(i=1;i<=NF;i++\\) if\\($i ~ /@typescript|^no-|^react|^prefer|^import|^jsx/\\) print $i}')",
+      "Bash(awk NR>=450 && NR<=470 *)",
+      "Bash(awk NR>=430 && NR<=468 *)",
+      "Bash(git stash *)",
+      "Bash(git pull *)"
     ]
   }
 }
