@@ -47,6 +47,8 @@ import type * as api_email from "../api/email.js";
 import type * as api_emailInternal from "../api/emailInternal.js";
 import type * as api_geminiTextAnalysis from "../api/geminiTextAnalysis.js";
 import type * as api_googleMaps from "../api/googleMaps.js";
+import type * as api_refundReceipt from "../api/refundReceipt.js";
+import type * as api_refundReceiptQueries from "../api/refundReceiptQueries.js";
 import type * as api_savedCards from "../api/savedCards.js";
 import type * as api_savedCardsActions from "../api/savedCardsActions.js";
 import type * as api_savedCardsInternal from "../api/savedCardsInternal.js";
@@ -200,6 +202,8 @@ declare const fullApi: ApiFromModules<{
   "api/emailInternal": typeof api_emailInternal;
   "api/geminiTextAnalysis": typeof api_geminiTextAnalysis;
   "api/googleMaps": typeof api_googleMaps;
+  "api/refundReceipt": typeof api_refundReceipt;
+  "api/refundReceiptQueries": typeof api_refundReceiptQueries;
   "api/savedCards": typeof api_savedCards;
   "api/savedCardsActions": typeof api_savedCardsActions;
   "api/savedCardsInternal": typeof api_savedCardsInternal;

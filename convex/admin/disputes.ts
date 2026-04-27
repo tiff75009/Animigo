@@ -370,7 +370,12 @@ export const addAdminNote = mutation({
 export const getOpenDisputesCount = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    await requireAdmin(ctx, args.token);
+    // Tolérant aux sessions expirées : retourne 0 au lieu de throw (sidebar badge)
+    try {
+      await requireAdmin(ctx, args.token);
+    } catch {
+      return 0;
+    }
 
     const openDisputes = await ctx.db
       .query("disputes")

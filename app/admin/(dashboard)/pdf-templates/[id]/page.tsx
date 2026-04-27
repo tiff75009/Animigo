@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import TableColumnsPanel from "./TableColumnsPanel";
-import { filterFieldsByDocumentType, getDefaultClientReceiptTemplate, COMMON_FIELDS, INVOICE_FIELDS, CLIENT_RECEIPT_FIELDS, type DocumentType as DocType, type FieldDef } from "./constants";
+import { filterFieldsByDocumentType, getDefaultClientReceiptTemplate, getDefaultRefundReceiptTemplate, COMMON_FIELDS, INVOICE_FIELDS, CLIENT_RECEIPT_FIELDS, REFUND_RECEIPT_FIELDS, type DocumentType as DocType, type FieldDef } from "./constants";
 
 // ============================================
 // BALISES DYNAMIQUES
@@ -571,7 +571,7 @@ export default function PdfTemplateEditorPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   // Type souhaité depuis l'URL (?type=client_receipt) pour pré-remplir un nouveau template
-  const presetType = searchParams.get("type") as "invoice" | "client_receipt" | "receipt" | null;
+  const presetType = searchParams.get("type") as "invoice" | "client_receipt" | "refund_receipt" | "receipt" | null;
   const designerRef = useRef<HTMLDivElement>(null);
   const designerInstance = useRef<any>(null);
   const pdfmeModules = useRef<any>(null);
@@ -588,8 +588,8 @@ export default function PdfTemplateEditorPage() {
 
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
-  const [documentType, setDocumentType] = useState<"invoice" | "client_receipt" | "receipt">(
-    presetType === "client_receipt" ? "client_receipt" : "invoice"
+  const [documentType, setDocumentType] = useState<"invoice" | "client_receipt" | "refund_receipt" | "receipt">(
+    presetType === "client_receipt" || presetType === "refund_receipt" ? presetType : "invoice"
   );
   const [targetCompanyType, setTargetCompanyType] = useState<"micro_enterprise" | "regular_company" | "all">("all");
   const [isDefault, setIsDefault] = useState(false);
@@ -741,25 +741,39 @@ export default function PdfTemplateEditorPage() {
           }
         } else if (presetType === "client_receipt") {
           // Nouveau template avec ?type=client_receipt → utiliser le modèle pré-rempli
-          // (header + bloc client/prestataire/plateforme + paiement + mentions légales)
           templateData = getDefaultClientReceiptTemplate();
+        } else if (presetType === "refund_receipt") {
+          // Nouveau template avec ?type=refund_receipt → utiliser le modèle pré-rempli
+          templateData = getDefaultRefundReceiptTemplate();
         } else {
           templateData = getDefaultTemplate();
         }
 
         // Pré-remplir les champs dynamiques vides avec leurs exemples
         // pour que l'admin puisse les voir, les positionner et les styler dans l'éditeur.
-        // La balise `documentType` est dynamique selon le type sélectionné.
-        const dynamicDocTypeLabel = documentType === "invoice"
+        // La balise `documentType` est dynamique : on utilise la source la plus fiable
+        // (existingTemplate.documentType > presetType > state) pour éviter le décalage
+        // au load initial où `documentType` state peut être encore "invoice" (default).
+        const effectiveDocType =
+          existingTemplate?.documentType || presetType || documentType;
+        const dynamicDocTypeLabel = effectiveDocType === "invoice"
           ? "FACTURE"
-          : documentType === "client_receipt"
+          : effectiveDocType === "client_receipt"
           ? "REÇU DE PAIEMENT"
+          : effectiveDocType === "refund_receipt"
+          ? "BON DE REMBOURSEMENT"
           : "REÇU";
         const fieldExamples = new Map(TEXT_FIELDS.map(f =>
           f.key === "documentType" ? [f.key, dynamicDocTypeLabel] : [f.key, f.example]
         ));
         for (const page of templateData.schemas) {
           for (const schema of page) {
+            // Force override du libellé documentType (peu importe ce qui était sauvé)
+            // pour que l'aperçu reflète toujours le bon type.
+            if (schema.type === "text" && schema.name === "documentType") {
+              schema.content = dynamicDocTypeLabel;
+              continue;
+            }
             if (schema.type === "text" && !schema.content && fieldExamples.has(schema.name)) {
               schema.content = fieldExamples.get(schema.name);
             }
@@ -843,22 +857,30 @@ export default function PdfTemplateEditorPage() {
   }, [margins, designerLoaded]);
 
   // ─── Sync de la balise documentType dans l'aperçu en temps réel ───
-  // Quand l'admin change le type (Facture / Reçu client) dans la sidebar,
-  // on met à jour le `content` du schéma `documentType` dans le designer
-  // pour que l'aperçu reflète immédiatement le bon libellé.
+  // Sync du label "documentType" sur l'aperçu quand admin change le type ou ouvre un template.
+  // Override systématique si le content actuel correspond à UN autre label connu (FACTURE,
+  // REÇU DE PAIEMENT, BON DE REMBOURSEMENT, REÇU) — sinon on respecte le content custom.
   useEffect(() => {
     if (!designerInstance.current || !designerLoaded) return;
     const documentTypeLabels: Record<string, string> = {
       invoice: "FACTURE",
       client_receipt: "REÇU DE PAIEMENT",
+      refund_receipt: "BON DE REMBOURSEMENT",
       receipt: "REÇU",
     };
+    const knownLabels = new Set(Object.values(documentTypeLabels));
     const newLabel = documentTypeLabels[documentType] || "DOCUMENT";
     const template = designerInstance.current.getTemplate();
     let changed = false;
     for (const page of template.schemas) {
       const docTypeSchema = page.find((s: any) => s.name === "documentType");
-      if (docTypeSchema && docTypeSchema.content !== newLabel) {
+      if (!docTypeSchema) continue;
+      const current = docTypeSchema.content;
+      // Override si :
+      //   - le content actuel est un label connu (synced auto)
+      //   - OU le content matche un ancien label après changement de type
+      // On NE force PAS si le user a écrit un label custom (non reconnu).
+      if (knownLabels.has(current) && current !== newLabel) {
         docTypeSchema.content = newLabel;
         changed = true;
       }
@@ -1235,6 +1257,16 @@ export default function PdfTemplateEditorPage() {
       for (const field of TEXT_FIELDS) {
         inputs[field.key] = field.example;
       }
+      // Override : documentType doit refléter le type sélectionné dans la sidebar
+      // (sinon l'aperçu PDF affiche toujours "FACTURE" — exemple générique).
+      const previewDocTypeLabel = documentType === "invoice"
+        ? "FACTURE"
+        : documentType === "client_receipt"
+        ? "REÇU DE PAIEMENT"
+        : documentType === "refund_receipt"
+        ? "BON DE REMBOURSEMENT"
+        : "REÇU";
+      inputs.documentType = previewDocTypeLabel;
       // Tableaux (JSON stringifié pour generate) - utiliser la config de colonnes
       // ⚠️ N'envoyer les inputs `itemsTable`/`totalsTable` QUE si le template les contient
       // (pdfme crash avec "Cannot read properties of undefined (reading 'push')" si on
@@ -1565,6 +1597,7 @@ export default function PdfTemplateEditorPage() {
                   >
                     <option value="invoice">📄 Facture annonceur (B2B)</option>
                     <option value="client_receipt">🧾 Reçu paiement client</option>
+                    <option value="refund_receipt">↩️ Bon de remboursement</option>
                     {documentType === "receipt" && <option value="receipt">📃 Reçu (déprécié)</option>}
                   </select>
                   <p className="text-[10px] text-slate-500 mt-1">
@@ -1572,6 +1605,8 @@ export default function PdfTemplateEditorPage() {
                       ? "Facture émise par l'annonceur, destinée à son client (avec SIRET, mentions légales)."
                       : documentType === "client_receipt"
                       ? "Reçu de paiement émis par Animigo, automatiquement généré au paiement Stripe et envoyé au client."
+                      : documentType === "refund_receipt"
+                      ? "Bon de remboursement émis par Animigo, généré automatiquement après une annulation client avec remboursement."
                       : "Format déprécié — bascule vers \"Reçu paiement client\" recommandée."}
                   </p>
                 </div>

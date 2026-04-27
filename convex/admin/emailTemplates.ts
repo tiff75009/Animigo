@@ -317,6 +317,56 @@ const DEFAULT_TEMPLATES = [
     ],
     isSystem: true,
   },
+  {
+    slug: "service_completed_invoice",
+    name: "Facture suite à validation prestation",
+    description: "Email envoyé au client après confirmation (manuelle ou auto) de la fin de prestation. La facture/reçu PDF est joint en pièce jointe. Déclenché par la mission validée par le client OU par auto-confirmation après le délai admin.",
+    subject: "✓ Prestation terminée · Votre facture {{invoiceNumber}} en pièce jointe",
+    availableVariables: [
+      { key: "clientName", description: "Prénom du client", example: "Jean" },
+      { key: "serviceName", description: "Nom du service", example: "Garde de chien" },
+      { key: "announcerName", description: "Nom du prestataire", example: "Marie D." },
+      { key: "invoiceNumber", description: "Numéro de la facture/reçu", example: "FA-2026-0042" },
+      { key: "documentTypeLabel", description: "Type document (Facture / Reçu)", example: "Facture" },
+      { key: "totalAmount", description: "Montant total TTC (formaté)", example: "90,00 €" },
+      { key: "amountHT", description: "Montant HT (formaté, si TVA)", example: "75,00 €" },
+      { key: "tva", description: "Montant TVA (formaté, si TVA)", example: "15,00 €" },
+      { key: "vatRate", description: "Taux TVA appliqué", example: "20" },
+      { key: "startDate", description: "Date de début prestation", example: "15/03/2026" },
+      { key: "endDate", description: "Date de fin prestation", example: "17/03/2026" },
+      { key: "validationType", description: "Type de validation (Confirmée par vous / Auto-confirmée)", example: "Confirmée par vous" },
+      { key: "siteName", description: "Nom du site", example: "Animigo" },
+      { key: "reservationsUrl", description: "Lien vers les réservations client", example: "https://..." },
+      { key: "facturesUrl", description: "Lien vers /client/factures", example: "https://..." },
+    ],
+    isSystem: true,
+  },
+  {
+    slug: "refund_confirmation",
+    name: "Bon de remboursement",
+    description: "Confirmation de remboursement envoyée au client après une annulation. Le PDF du bon de remboursement est joint en pièce jointe. Détaille le motif, les frais retenus et le délai bancaire estimé.",
+    subject: "↩ Remboursement confirmé · {{refundAmount}} · {{serviceName}}",
+    availableVariables: [
+      { key: "clientName", description: "Prénom du client", example: "Jean" },
+      { key: "serviceName", description: "Nom du service annulé", example: "Garde de chien" },
+      { key: "refundAmount", description: "Montant remboursé (formaté)", example: "73,80 €" },
+      { key: "originalAmount", description: "Montant payé initialement (formaté)", example: "90,00 €" },
+      { key: "platformFeeRetained", description: "Frais de service retenus (formaté)", example: "13,50 €" },
+      { key: "stripeFeeRetained", description: "Frais bancaires retenus (formaté)", example: "2,70 €" },
+      { key: "announcerRetained", description: "Pénalité d'annulation conservée (formaté)", example: "0,00 €" },
+      { key: "refundReason", description: "Motif du remboursement", example: "1ère annulation : remboursement intégral hors frais" },
+      { key: "cancellationCount", description: "Niveau d'annulation", example: "1ère annulation" },
+      { key: "cardBrand", description: "Marque de la CB de remboursement", example: "Visa" },
+      { key: "cardLast4", description: "4 derniers chiffres CB", example: "•••• 4242" },
+      { key: "transactionId", description: "ID transaction Stripe (paiement original)", example: "pi_3OqXyz1abc..." },
+      { key: "refundStripeId", description: "ID remboursement Stripe", example: "re_3OqXyz1abc..." },
+      { key: "refundDelay", description: "Délai bancaire estimé", example: "3 à 5 jours ouvrés" },
+      { key: "refundReference", description: "Numéro de bon de remboursement", example: "REM-2026-0042" },
+      { key: "siteName", description: "Nom du site", example: "Animigo" },
+      { key: "reservationsUrl", description: "Lien vers les réservations", example: "https://..." },
+    ],
+    isSystem: true,
+  },
 ];
 
 // HTML par défaut pour les templates
@@ -1037,6 +1087,220 @@ const getDefaultHtmlContent = (slug: string): string => {
         <p style="margin:8px 0;color:#9c9484;font-size:11px;line-height:1.6;">{{siteName}} agit en tant que <strong>plateforme de mise en relation</strong> entre les particuliers et les prestataires de services animaliers. Le présent document est un reçu de paiement et <strong>ne constitue pas une facture commerciale</strong>.</p>
         <p style="margin:8px 0;color:#9c9484;font-size:11px;line-height:1.6;">La facture comptable détaillée (avec TVA, mentions légales du prestataire) sera émise par votre prestataire une fois la prestation terminée.</p>
         <p style="margin:8px 0 0 0;color:#9c9484;font-size:11px;line-height:1.6;">Paiement sécurisé traité par <strong>Stripe Payments Europe Ltd</strong>, prestataire de services de paiement agréé.</p>
+      </td>
+    </tr>
+    <!-- Footer -->
+    <tr>
+      <td align="center" style="background-color:#fcfaf4;padding:24px 32px;border-top:1px solid #f1ede3;">
+        <p style="margin:0;color:#1f3a33;font-size:13px;font-weight:600;">{{siteName}}</p>
+        <p style="margin:6px 0 0 0;color:#9c9484;font-size:11px;">Plateforme de services animaliers</p>
+        <p style="margin:12px 0 0 0;color:#cdc9c0;font-size:10px;">© 2026 {{siteName}}. Tous droits réservés.</p>
+      </td>
+    </tr>
+  </table>
+</td></tr>
+</table>
+</body>
+</html>`;
+
+    case "service_completed_invoice":
+      // Facture envoyée après validation prestation (manuelle ou auto-confirmation)
+      // Palette vert/crème, badge ✓ TERMINÉE, PDF en PJ mis en avant.
+      return `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Prestation terminée — Facture</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#fcfaf4;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;-webkit-font-smoothing:antialiased;color:#1f1f1d;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fcfaf4;">
+<tr><td align="center" style="padding:32px 16px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #ece9e1;">
+    <!-- HEADER -->
+    <tr>
+      <td style="padding:32px;background-color:#f5f9f6;border-bottom:1px solid #cfdbd3;">
+        <span style="display:inline-block;padding:6px 14px;background-color:#10b981;color:#ffffff;font-size:11px;font-weight:bold;letter-spacing:1px;border-radius:99px;">✓ PRESTATION TERMINÉE</span>
+        <h1 style="margin:14px 0 0 0;color:#1f3a33;font-size:24px;letter-spacing:-0.5px;">Votre facture est disponible</h1>
+        <p style="margin:6px 0 0 0;color:#6d6d68;font-size:12px;">{{documentTypeLabel}} N° <span style="font-family:'Courier New',monospace;color:#1f3a33;">{{invoiceNumber}}</span></p>
+        <p style="margin:14px 0 0 0;color:#9c9484;font-size:10px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;">Montant total payé</p>
+        <p style="margin:4px 0 0 0;color:#10b981;font-size:28px;font-weight:bold;">{{totalAmount}}</p>
+      </td>
+    </tr>
+    <!-- Salutation -->
+    <tr>
+      <td style="padding:28px 32px 8px 32px;">
+        <p style="margin:0;color:#1f1f1d;font-size:15px;line-height:1.5;">Bonjour <strong>{{clientName}}</strong>,</p>
+        <p style="margin:12px 0 0 0;color:#6d6d68;font-size:14px;line-height:1.6;">La prestation <strong style="color:#1f3a33;">{{serviceName}}</strong> avec <strong>{{announcerName}}</strong> a été marquée comme terminée ({{validationType}}).</p>
+        <p style="margin:12px 0 0 0;color:#6d6d68;font-size:14px;line-height:1.6;">Votre {{documentTypeLabel}} est désormais disponible — elle est jointe à cet email et téléchargeable depuis votre espace.</p>
+      </td>
+    </tr>
+    <!-- PDF en PJ -->
+    <tr>
+      <td style="padding:8px 32px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#ecfdf5;border:1px solid #a7f3d0;border-radius:12px;">
+          <tr>
+            <td style="padding:18px 20px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="vertical-align:middle;width:42px;font-size:24px;">📎</td>
+                  <td style="vertical-align:middle;">
+                    <p style="margin:0;color:#065f46;font-size:14px;font-weight:bold;">Votre {{documentTypeLabel}} PDF est jointe à cet email</p>
+                    <p style="margin:4px 0 0 0;color:#047857;font-size:12.5px;line-height:1.5;">Téléchargeable à tout moment depuis<br/><strong>Mes factures</strong> dans votre espace client</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <!-- Détail prestation -->
+    <tr>
+      <td style="padding:8px 32px 16px 32px;">
+        <p style="margin:0 0 8px 0;color:#9c9484;font-size:10px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;">Détail de la prestation</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fcfaf4;border:1px solid #ece9e1;border-radius:10px;">
+          <tr><td style="padding:14px 16px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr><td style="padding:4px 0;color:#9c9484;font-size:12.5px;width:140px;">Service</td><td style="padding:4px 0;color:#1f1f1d;font-size:13px;font-weight:600;text-align:right;">{{serviceName}}</td></tr>
+              <tr><td style="padding:4px 0;color:#9c9484;font-size:12.5px;">Période</td><td style="padding:4px 0;color:#1f1f1d;font-size:13px;font-weight:600;text-align:right;">{{startDate}} → {{endDate}}</td></tr>
+              <tr><td style="padding:4px 0;color:#9c9484;font-size:12.5px;">Prestataire</td><td style="padding:4px 0;color:#1f1f1d;font-size:13px;font-weight:600;text-align:right;">{{announcerName}}</td></tr>
+              <tr><td style="padding:8px 0 4px 0;color:#9c9484;font-size:12.5px;border-top:1px solid #ece9e1;">Total TTC</td><td style="padding:8px 0 4px 0;color:#10b981;font-size:15px;font-weight:bold;text-align:right;border-top:1px solid #ece9e1;">{{totalAmount}}</td></tr>
+            </table>
+          </td></tr>
+        </table>
+      </td>
+    </tr>
+    <!-- CTA -->
+    <tr>
+      <td align="center" style="padding:8px 32px 20px 32px;">
+        <a href="{{facturesUrl}}" style="display:inline-block;background-color:#1f3a33;color:#f7f5ef;text-decoration:none;padding:14px 32px;border-radius:99px;font-weight:bold;font-size:14px;letter-spacing:0.3px;">Voir mes factures →</a>
+      </td>
+    </tr>
+    <!-- Mentions -->
+    <tr>
+      <td style="padding:16px 32px 8px 32px;border-top:1px solid #f1ede3;">
+        <p style="margin:0 0 10px 0;color:#9c9484;font-size:10px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;">À noter</p>
+        <p style="margin:8px 0;color:#9c9484;font-size:11px;line-height:1.6;">Cette facture est émise par votre prestataire <strong>{{announcerName}}</strong> via la plateforme {{siteName}}. Conservez-la pour vos archives comptables.</p>
+        <p style="margin:8px 0 0 0;color:#9c9484;font-size:11px;line-height:1.6;">En cas de litige sur cette prestation, contactez notre support depuis votre espace client.</p>
+      </td>
+    </tr>
+    <!-- Footer -->
+    <tr>
+      <td align="center" style="background-color:#fcfaf4;padding:24px 32px;border-top:1px solid #f1ede3;">
+        <p style="margin:0;color:#1f3a33;font-size:13px;font-weight:600;">{{siteName}}</p>
+        <p style="margin:6px 0 0 0;color:#9c9484;font-size:11px;">Plateforme de services animaliers</p>
+        <p style="margin:12px 0 0 0;color:#cdc9c0;font-size:10px;">© 2026 {{siteName}}. Tous droits réservés.</p>
+      </td>
+    </tr>
+  </table>
+</td></tr>
+</table>
+</body>
+</html>`;
+
+    case "refund_confirmation":
+      // Bon de remboursement (palette ambre/vert) — PDF en PJ + détail des frais retenus
+      return `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Remboursement confirmé</title>
+<!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important}</style><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#fcfaf4;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;-webkit-font-smoothing:antialiased;color:#1f1f1d;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fcfaf4;">
+<tr><td align="center" style="padding:32px 16px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #ece9e1;">
+    <!-- HEADER -->
+    <tr>
+      <td style="padding:32px;background-color:#fef3c7;border-bottom:1px solid #fde68a;">
+        <span style="display:inline-block;padding:6px 14px;background-color:#f59e0b;color:#ffffff;font-size:11px;font-weight:bold;letter-spacing:1px;border-radius:99px;">↩ REMBOURSEMENT</span>
+        <h1 style="margin:14px 0 0 0;color:#78350f;font-size:24px;letter-spacing:-0.5px;">Bon de remboursement</h1>
+        <p style="margin:6px 0 0 0;color:#92400e;font-size:12px;">Réf. : <span style="font-family:'Courier New',monospace;color:#78350f;">{{refundReference}}</span></p>
+        <p style="margin:14px 0 0 0;color:#9c9484;font-size:10px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;">Montant remboursé</p>
+        <p style="margin:4px 0 0 0;color:#10b981;font-size:28px;font-weight:bold;">{{refundAmount}}</p>
+      </td>
+    </tr>
+    <!-- Salutation -->
+    <tr>
+      <td style="padding:28px 32px 8px 32px;">
+        <p style="margin:0;color:#1f1f1d;font-size:15px;line-height:1.5;">Bonjour <strong>{{clientName}}</strong>,</p>
+        <p style="margin:12px 0 0 0;color:#6d6d68;font-size:14px;line-height:1.6;">Suite à l'annulation de votre réservation <strong style="color:#1f3a33;">{{serviceName}}</strong>, un remboursement de <strong style="color:#10b981;">{{refundAmount}}</strong> a été effectué sur votre carte bancaire d'origine.</p>
+        <p style="margin:12px 0 0 0;color:#6d6d68;font-size:14px;line-height:1.6;">Le remboursement apparaîtra sur votre compte sous <strong>{{refundDelay}}</strong> selon votre banque.</p>
+      </td>
+    </tr>
+    <!-- PDF en PJ -->
+    <tr>
+      <td style="padding:8px 32px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#ecfdf5;border:1px solid #a7f3d0;border-radius:12px;">
+          <tr>
+            <td style="padding:18px 20px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="vertical-align:middle;width:42px;font-size:24px;">📎</td>
+                  <td style="vertical-align:middle;">
+                    <p style="margin:0;color:#065f46;font-size:14px;font-weight:bold;">Votre bon de remboursement PDF est joint à cet email</p>
+                    <p style="margin:4px 0 0 0;color:#047857;font-size:12.5px;line-height:1.5;">Document officiel détaillant le motif et les frais retenus</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <!-- Carte de remboursement -->
+    <tr>
+      <td style="padding:8px 32px;">
+        <p style="margin:0 0 8px 0;color:#9c9484;font-size:10px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;">Méthode de remboursement</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fcfaf4;border:1px solid #ece9e1;border-radius:10px;">
+          <tr><td style="padding:14px 16px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr><td style="padding:4px 0;color:#9c9484;font-size:12.5px;width:55%;">Carte de remboursement</td><td style="padding:4px 0;color:#1f1f1d;font-size:13px;font-weight:600;text-align:right;">{{cardBrand}} {{cardLast4}}</td></tr>
+              <tr><td style="padding:4px 0;color:#9c9484;font-size:12.5px;">Délai estimé</td><td style="padding:4px 0;color:#10b981;font-size:13px;font-weight:600;text-align:right;">{{refundDelay}}</td></tr>
+              <tr><td style="padding:4px 0;color:#9c9484;font-size:11.5px;">Réf. paiement Stripe</td><td style="padding:4px 0;color:#475569;font-size:10.5px;font-family:'Courier New',monospace;text-align:right;">{{transactionId}}</td></tr>
+              <tr><td style="padding:4px 0;color:#9c9484;font-size:11.5px;">Réf. remboursement Stripe</td><td style="padding:4px 0;color:#475569;font-size:10.5px;font-family:'Courier New',monospace;text-align:right;">{{refundStripeId}}</td></tr>
+            </table>
+          </td></tr>
+        </table>
+      </td>
+    </tr>
+    <!-- Détail du remboursement -->
+    <tr>
+      <td style="padding:8px 32px 16px 32px;">
+        <p style="margin:0 0 8px 0;color:#9c9484;font-size:10px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;">Détail du remboursement</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fcfaf4;border:1px solid #ece9e1;border-radius:10px;">
+          <tr><td style="padding:14px 16px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr><td style="padding:4px 0;color:#9c9484;font-size:12.5px;width:140px;">Niveau d'annulation</td><td style="padding:4px 0;color:#1f1f1d;font-size:13px;font-weight:600;text-align:right;">{{cancellationCount}}</td></tr>
+              <tr><td style="padding:4px 0;color:#9c9484;font-size:12.5px;">Montant payé initialement</td><td style="padding:4px 0;color:#1f1f1d;font-size:13px;font-weight:600;text-align:right;">{{originalAmount}}</td></tr>
+              <tr><td style="padding:4px 0;color:#9c9484;font-size:12.5px;">Frais de service retenus</td><td style="padding:4px 0;color:#dc2626;font-size:13px;font-weight:600;text-align:right;">−{{platformFeeRetained}}</td></tr>
+              <tr><td style="padding:4px 0;color:#9c9484;font-size:12.5px;">Frais bancaires retenus</td><td style="padding:4px 0;color:#dc2626;font-size:13px;font-weight:600;text-align:right;">−{{stripeFeeRetained}}</td></tr>
+              <tr><td style="padding:4px 0;color:#9c9484;font-size:12.5px;">Pénalité d'annulation</td><td style="padding:4px 0;color:#dc2626;font-size:13px;font-weight:600;text-align:right;">−{{announcerRetained}}</td></tr>
+              <tr><td style="padding:8px 0 4px 0;color:#9c9484;font-size:12.5px;border-top:1px solid #ece9e1;">Remboursement net</td><td style="padding:8px 0 4px 0;color:#10b981;font-size:15px;font-weight:bold;text-align:right;border-top:1px solid #ece9e1;">{{refundAmount}}</td></tr>
+            </table>
+          </td></tr>
+        </table>
+        <p style="margin:8px 0 0 0;color:#9c9484;font-size:11px;line-height:1.5;font-style:italic;">{{refundReason}}</p>
+      </td>
+    </tr>
+    <!-- CTA -->
+    <tr>
+      <td align="center" style="padding:8px 32px 20px 32px;">
+        <a href="{{reservationsUrl}}" style="display:inline-block;background-color:#1f3a33;color:#f7f5ef;text-decoration:none;padding:14px 32px;border-radius:99px;font-weight:bold;font-size:14px;letter-spacing:0.3px;">Voir mes réservations →</a>
+      </td>
+    </tr>
+    <!-- Mentions légales -->
+    <tr>
+      <td style="padding:16px 32px 8px 32px;border-top:1px solid #f1ede3;">
+        <p style="margin:0 0 10px 0;color:#9c9484;font-size:10px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;">Mentions légales</p>
+        <p style="margin:8px 0;color:#9c9484;font-size:11px;line-height:1.6;">Conformément à nos Conditions Générales de Vente, les frais de service {{siteName}} et les frais de gestion bancaire sont conservés par la plateforme dans tous les cas d'annulation.</p>
+        <p style="margin:8px 0 0 0;color:#9c9484;font-size:11px;line-height:1.6;">Remboursement traité par <strong>Stripe Payments Europe Ltd</strong>, prestataire de services de paiement agréé.</p>
       </td>
     </tr>
     <!-- Footer -->

@@ -115,6 +115,9 @@ export const markPaymentPaid = internalMutation({
       paymentIntentId: args.paymentIntentId,
       stripeCustomerId: args.stripeCustomerId,
       capturedAt: now, // paidAt serait mieux mais on garde capturedAt pour compatibilité
+      // Persister card details pour réutilisation lors du remboursement (refund_receipt PDF)
+      ...(args.cardBrand && { cardBrand: args.cardBrand }),
+      ...(args.cardLast4 && { cardLast4: args.cardLast4 }),
       updatedAt: now,
     });
 

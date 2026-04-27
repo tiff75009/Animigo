@@ -135,6 +135,10 @@ export default function FinancesPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <PayoutsCard payouts={data.payouts} />
+            <CancellationsCard cancellations={data.cancellations} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6">
             <CreditsCard credits={data.credits} />
           </div>
 
@@ -343,12 +347,27 @@ function MonthlyChart({ breakdown }: { breakdown: any[] }) {
 }
 
 function PayoutsCard({ payouts }: { payouts: any }) {
+  const nextPayoutLabel = payouts.nextPayoutDate
+    ? new Date(payouts.nextPayoutDate).toLocaleDateString("fr-FR", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+      })
+    : null;
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
-      <h2 className="text-sm font-semibold text-white mb-5 flex items-center gap-2">
-        <Banknote className="w-4 h-4 text-blue-400" />
-        Versements annonceurs
-      </h2>
+      <div className="flex items-center justify-between mb-5">
+        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+          <Banknote className="w-4 h-4 text-blue-400" />
+          Versements annonceurs
+        </h2>
+        {nextPayoutLabel && (
+          <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
+            <Calendar className="w-3 h-3" />
+            Prochain virement : <span className="text-slate-200 font-medium capitalize">{nextPayoutLabel}</span>
+          </span>
+        )}
+      </div>
       <div className="grid grid-cols-2 gap-3 mb-5">
         <div className="bg-slate-800 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-1">
@@ -375,6 +394,60 @@ function PayoutsCard({ payouts }: { payouts: any }) {
           <PayoutStatusRow label="Échoués" count={payouts.byStatusCount.failed} amount={payouts.byStatus.failed} color="text-red-400" />
         )}
       </div>
+    </motion.div>
+  );
+}
+
+function CancellationsCard({ cancellations }: { cancellations: any }) {
+  const totalKept = (cancellations?.commissions || 0) + (cancellations?.stripeFees || 0);
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.1 }}
+      className="bg-slate-800/50 border border-slate-700 rounded-xl p-6"
+    >
+      <h2 className="text-sm font-semibold text-white mb-5 flex items-center gap-2">
+        <X className="w-4 h-4 text-orange-400" />
+        Annulations — revenus retenus
+        <span className="text-xs text-slate-500 font-normal ml-1">({cancellations?.count || 0})</span>
+      </h2>
+      {(!cancellations || cancellations.count === 0) ? (
+        <div className="py-8 text-center text-slate-500 text-sm">Aucune annulation sur la période</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div className="bg-slate-800 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Percent className="w-3.5 h-3.5 text-blue-400" />
+                <span className="text-xs text-slate-400">Commissions retenues</span>
+              </div>
+              <p className="text-lg font-bold text-blue-400">{formatMoney(cancellations.commissions)}</p>
+            </div>
+            <div className="bg-slate-800 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <CreditCard className="w-3.5 h-3.5 text-blue-400" />
+                <span className="text-xs text-slate-400">Frais Stripe retenus</span>
+              </div>
+              <p className="text-lg font-bold text-blue-400">{formatMoney(cancellations.stripeFees)}</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between py-1">
+              <span className="text-xs text-slate-400">Annonceurs (pénalités 3ème/4ème)</span>
+              <span className="text-sm font-semibold text-emerald-400">{formatMoney(cancellations.announcerRetained || 0)}</span>
+            </div>
+            <div className="flex items-center justify-between py-1">
+              <span className="text-xs text-slate-400">Remboursés clients</span>
+              <span className="text-sm font-semibold text-slate-300">{formatMoney(cancellations.refunded || 0)}</span>
+            </div>
+            <div className="pt-3 border-t border-slate-700 flex items-center justify-between">
+              <span className="text-sm font-semibold text-slate-300">Total revenus plateforme (annulations)</span>
+              <span className="text-base font-bold text-emerald-400">{formatMoney(totalKept)}</span>
+            </div>
+          </div>
+        </>
+      )}
     </motion.div>
   );
 }

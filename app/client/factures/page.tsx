@@ -9,6 +9,7 @@ import {
   Receipt,
   Calendar,
   User,
+  Undo2,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { useQuery } from "convex/react";
@@ -59,6 +60,9 @@ export default function ClientFacturesPage() {
 
       {/* Section Reçus de paiement (générés automatiquement par Animigo) */}
       <ClientReceiptsSection token={token} />
+
+      {/* Section Bons de remboursement (générés après annulation avec refund) */}
+      <ClientRefundReceiptsSection token={token} />
 
       {/* Section Factures (émises par les annonceurs) */}
       <div>
@@ -187,6 +191,112 @@ function ClientReceiptRow({
         disabled={!data?.url}
         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold bg-emerald-500 text-white hover:bg-emerald-600 transition-colors disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed"
         title={data?.url ? "Télécharger le reçu PDF" : "Reçu indisponible"}
+      >
+        <Download className="w-3 h-3" />
+        Télécharger
+      </button>
+    </div>
+  );
+}
+
+// ─── Section Bons de remboursement (générés après annulation avec refund) ───
+function ClientRefundReceiptsSection({ token }: { token: string | null }) {
+  const refunds = useQuery(
+    api.api.refundReceiptQueries.getMyRefundReceipts,
+    token ? { token } : "skip"
+  );
+
+  return (
+    <div>
+      <h2 className="text-sm font-semibold uppercase tracking-wider text-text-light mb-3 mt-6">
+        Bons de remboursement
+      </h2>
+      {!refunds ? (
+        <div className="flex items-center justify-center py-6">
+          <Loader2 className="w-5 h-5 text-amber-500 animate-spin" />
+        </div>
+      ) : refunds.length === 0 ? (
+        <div className="bg-amber-50/40 rounded-2xl border border-amber-200/50 p-6 text-center">
+          <Undo2 className="w-8 h-8 text-amber-400/70 mx-auto mb-2" />
+          <p className="text-xs text-amber-700/80">
+            Vos bons de remboursement apparaîtront ici en cas d&apos;annulation avec remboursement.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {refunds.map((r) => (
+            <ClientRefundReceiptRow key={r.missionId} refund={r} token={token!} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ClientRefundReceiptRow({
+  refund,
+  token,
+}: {
+  refund: {
+    missionId: string;
+    serviceName: string;
+    missionDate: string;
+    refundAmount: number;
+    cancelledAt?: number;
+    receiptGeneratedAt?: number;
+  };
+  token: string;
+}) {
+  const data = useQuery(api.api.refundReceiptQueries.getRefundReceiptUrl, {
+    token,
+    missionId: refund.missionId as Id<"missions">,
+  });
+
+  const handleDownload = () => {
+    if (!data?.url) return;
+    if (data.url.startsWith("data:application/pdf;base64,")) {
+      const base64 = data.url.split(",")[1];
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: "application/pdf" });
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = data.filename || `bon-remboursement-${String(refund.missionId).slice(-6).toUpperCase()}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } else {
+      window.open(data.url, "_blank");
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-foreground/10 p-4 flex items-center gap-3 hover:border-amber-200 transition-colors">
+      <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+        <Undo2 className="w-5 h-5 text-amber-600" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[14px] font-semibold text-foreground truncate m-0">
+          {refund.serviceName}
+        </p>
+        <p className="text-[12px] text-text-light m-0 mt-0.5 flex items-center gap-2 flex-wrap">
+          <span className="inline-flex items-center gap-1">
+            <Calendar className="w-3 h-3" />
+            {formatServiceDate(refund.missionDate)}
+          </span>
+          <span>·</span>
+          <span className="font-semibold text-amber-700">
+            Remboursé {formatPrice(refund.refundAmount)}
+          </span>
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={handleDownload}
+        disabled={!data?.url}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold bg-amber-500 text-white hover:bg-amber-600 transition-colors disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed"
+        title={data?.url ? "Télécharger le bon de remboursement PDF" : "Bon indisponible"}
       >
         <Download className="w-3 h-3" />
         Télécharger

@@ -125,7 +125,12 @@ export const getAllServicesForModeration = query({
 export const getModerationStats = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    await requireAdmin(ctx, args.token);
+    // Tolérant aux sessions expirées : retourne stats vides (badge sidebar)
+    try {
+      await requireAdmin(ctx, args.token);
+    } catch {
+      return { total: 0, pending: 0, approved: 0, rejected: 0 };
+    }
 
     const allServices = await ctx.db.query("services").collect();
 

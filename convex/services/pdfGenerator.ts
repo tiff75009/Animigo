@@ -432,6 +432,96 @@ export const generatePdfFromTemplate = internalAction({
       });
 
       console.log(`PDF généré et stocké pour facture ${invoice.invoiceNumber}`);
+
+      // 15. Envoi email "Facture suite à validation prestation" au client AVEC PDF en PJ
+      //     Conditions :
+      //       - destinataire = client (recipientType="client")
+      //       - mission liée existe et est confirmée (clientConfirmedAt OU autoConfirmedAt)
+      //     Le PDF est encodé base64 et envoyé via Resend HTTP direct (pattern client_receipt).
+      try {
+        if (invoice.recipientType === "client" && invoice.missionId) {
+          const emailCtx = await ctx.runQuery(
+            internal.services.pdfGeneratorQueries.getInvoiceEmailContext,
+            { invoiceId: args.invoiceId }
+          );
+
+          if (emailCtx && emailCtx.clientEmail && emailCtx.emailConfig?.apiKey) {
+            const pdfBase64 = Buffer.from(pdfBytes).toString("base64");
+            const filename = `facture-${invoice.invoiceNumber}.pdf`;
+
+            // Récupérer template email (BDD prio, fallback HTML inline)
+            const emailTemplate = emailCtx.emailTemplate; // {subject, htmlContent} ou null
+            const totalStr = (invoice.amount / 100).toLocaleString("fr-FR", {
+              style: "currency",
+              currency: "EUR",
+            });
+            const documentTypeLabel = invoice.documentType === "invoice" ? "Facture" : "Reçu";
+            const validationType = emailCtx.autoConfirmed
+              ? "auto-confirmée après le délai"
+              : "confirmée par vous";
+            const vars: Record<string, string> = {
+              clientName: emailCtx.clientFirstName || "",
+              serviceName: emailCtx.serviceName || "",
+              announcerName: emailCtx.announcerName || "",
+              invoiceNumber: invoice.invoiceNumber,
+              documentTypeLabel,
+              totalAmount: totalStr,
+              amountHT: invoice.amountHT
+                ? (invoice.amountHT / 100).toLocaleString("fr-FR", { style: "currency", currency: "EUR" })
+                : totalStr,
+              tva: invoice.tva
+                ? (invoice.tva / 100).toLocaleString("fr-FR", { style: "currency", currency: "EUR" })
+                : "0,00 €",
+              vatRate: String(invoice.vatRate ?? 0),
+              startDate: emailCtx.startDate || "",
+              endDate: emailCtx.endDate || emailCtx.startDate || "",
+              validationType,
+              siteName: "Animigo",
+              reservationsUrl: `${emailCtx.appUrl || ""}/client/reservations`,
+              facturesUrl: `${emailCtx.appUrl || ""}/client/factures`,
+            };
+            const replaceVars = (str: string) =>
+              str.replace(/\{\{(\w+)\}\}/g, (_m, k) => vars[k] ?? "");
+
+            const subject = emailTemplate?.subject
+              ? replaceVars(emailTemplate.subject)
+              : `✓ Prestation terminée · Votre ${documentTypeLabel.toLowerCase()} ${invoice.invoiceNumber} en pièce jointe`;
+            const html = emailTemplate?.htmlContent
+              ? replaceVars(emailTemplate.htmlContent)
+              : `<p>Bonjour ${vars.clientName},</p><p>Votre ${documentTypeLabel.toLowerCase()} <strong>${invoice.invoiceNumber}</strong> pour ${vars.serviceName} (${totalStr}) est jointe à cet email.</p><p>— l'équipe Animigo</p>`;
+
+            const fromEmail = emailCtx.emailConfig.fromEmail || "onboarding@resend.dev";
+            const fromName = emailCtx.emailConfig.fromName || "Animigo";
+
+            const resendResp = await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${emailCtx.emailConfig.apiKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                from: `${fromName} <${fromEmail}>`,
+                to: emailCtx.clientEmail,
+                subject,
+                html,
+                attachments: [{ filename, content: pdfBase64 }],
+              }),
+            });
+            if (resendResp.ok) {
+              const j = await resendResp.json();
+              console.log(`[generatePdfFromTemplate] Email facture envoyé : id=${j.id} to=${emailCtx.clientEmail}`);
+            } else {
+              const errText = await resendResp.text();
+              console.warn(`[generatePdfFromTemplate] Échec envoi email facture (${resendResp.status}): ${errText.slice(0, 200)}`);
+            }
+          } else {
+            console.log("[generatePdfFromTemplate] Email facture non envoyé (clientEmail ou apiKey manquant)");
+          }
+        }
+      } catch (emailErr) {
+        console.warn("[generatePdfFromTemplate] Erreur envoi email facture (PDF généré OK):", emailErr);
+      }
+
       return { success: true, storageId };
     } catch (error) {
       console.error("Erreur génération PDF:", error);

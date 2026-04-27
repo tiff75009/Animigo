@@ -791,6 +791,12 @@ export default defineSchema({
     clientReceiptPdfBase64: v.optional(v.string()),
     clientReceiptFilename: v.optional(v.string()),
 
+    // Bon de remboursement client (généré automatiquement après refund Stripe)
+    refundReceiptStorageId: v.optional(v.id("_storage")),
+    refundReceiptGeneratedAt: v.optional(v.number()),
+    refundReceiptPdfBase64: v.optional(v.string()),
+    refundReceiptFilename: v.optional(v.string()),
+
     // Archivage (soft-delete)
     isArchived: v.optional(v.boolean()),
     archivedAt: v.optional(v.number()),
@@ -1290,6 +1296,10 @@ export default defineSchema({
     // Métadonnées Stripe
     stripeCustomerId: v.optional(v.string()),
     receiptUrl: v.optional(v.string()),
+
+    // Carte utilisée — utile pour le bon de remboursement (sur quelle CB le client est remboursé)
+    cardBrand: v.optional(v.string()),
+    cardLast4: v.optional(v.string()),
 
     // Flag pour éviter double envoi du reçu (frontend + webhook)
     receiptEmailSent: v.optional(v.boolean()),
@@ -2189,6 +2199,7 @@ export default defineSchema({
     documentType: v.union(
       v.literal("invoice"),
       v.literal("client_receipt"),
+      v.literal("refund_receipt"),  // bon de remboursement client
       v.literal("receipt"), // déprécié — conservé pour compatibilité ascendante
     ),
     // Type d'annonceur ciblé : micro-entreprise, société, ou tous

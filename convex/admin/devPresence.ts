@@ -112,10 +112,16 @@ export const getAllDevKeys = query({
 });
 
 // Récupérer uniquement les développeurs en ligne (pour sidebar/indicateur)
+// Tolérant aux sessions expirées : retourne [] au lieu de throw, pour que la
+// sidebar ne casse pas avec un Server Error quand la session admin a expiré.
 export const getOnlineDevs = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    await requireAdmin(ctx, args.token);
+    try {
+      await requireAdmin(ctx, args.token);
+    } catch {
+      return [];
+    }
 
     const now = Date.now();
     const presences = await ctx.db.query("devPresence").collect();

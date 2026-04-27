@@ -19,7 +19,7 @@ export default function PdfTemplatesPage() {
   const saveTemplate = useMutation(api.admin.pdfTemplates.savePdfTemplate);
 
   const [search, setSearch] = useState("");
-  const [filterType, setFilterType] = useState<"all" | "invoice" | "client_receipt">("all");
+  const [filterType, setFilterType] = useState<"all" | "invoice" | "client_receipt" | "refund_receipt">("all");
 
   if (!token) return null;
 
@@ -67,7 +67,7 @@ export default function PdfTemplatesPage() {
             Gérez les modèles de factures et reçus générés automatiquement
           </p>
         </div>
-        <Link href={filterType === "client_receipt" ? "/admin/pdf-templates/new?type=client_receipt" : "/admin/pdf-templates/new"}>
+        <Link href={filterType !== "all" ? `/admin/pdf-templates/new?type=${filterType}` : "/admin/pdf-templates/new"}>
           <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-medium transition-colors">
             <Plus className="w-4 h-4" />
             Nouveau template
@@ -92,6 +92,7 @@ export default function PdfTemplatesPage() {
             { value: "all", label: "Tous" },
             { value: "invoice", label: "Factures annonceur" },
             { value: "client_receipt", label: "Reçus client" },
+            { value: "refund_receipt", label: "Remboursements" },
           ].map((f) => (
             <button
               key={f.value}
@@ -115,7 +116,7 @@ export default function PdfTemplatesPage() {
         <div className="text-center py-20">
           <FileText className="w-12 h-12 text-slate-600 mx-auto mb-3" />
           <p className="text-slate-400">Aucun template trouvé</p>
-          <Link href={filterType === "client_receipt" ? "/admin/pdf-templates/new?type=client_receipt" : "/admin/pdf-templates/new"}>
+          <Link href={filterType !== "all" ? `/admin/pdf-templates/new?type=${filterType}` : "/admin/pdf-templates/new"}>
             <button className="mt-4 px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors">
               Créer le premier template
             </button>
@@ -136,6 +137,8 @@ export default function PdfTemplatesPage() {
                   ? "bg-blue-500/20 text-blue-400"
                   : template.documentType === "client_receipt"
                   ? "bg-emerald-500/20 text-emerald-400"
+                  : template.documentType === "refund_receipt"
+                  ? "bg-amber-500/20 text-amber-400"
                   : "bg-slate-500/20 text-slate-400"
               }`}>
                 <FileText className="w-5 h-5" />
@@ -160,6 +163,8 @@ export default function PdfTemplatesPage() {
                     ? "Facture annonceur"
                     : template.documentType === "client_receipt"
                     ? "Reçu paiement client"
+                    : template.documentType === "refund_receipt"
+                    ? "Bon de remboursement"
                     : "Reçu (ancien format)"}
                   {template.targetCompanyType === "micro_enterprise" ? " — Micro-entreprise" :
                    template.targetCompanyType === "regular_company" ? " — Société" :

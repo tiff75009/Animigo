@@ -617,6 +617,21 @@ export const cancelMissionByClient = mutation({
               refundedAmount: refundResult.refundAmount,
               updatedAt: now,
             });
+
+            // Génération du bon de remboursement PDF + email (pattern client_receipt)
+            await ctx.scheduler.runAfter(
+              0,
+              internal.api.refundReceiptQueries.prepareAndDispatchRefundReceipt,
+              {
+                missionId: args.missionId,
+                refundAmount: refundResult.refundAmount,
+                platformFeeRetained: refundResult.platformFeeRetained,
+                stripeFeeRetained: refundResult.stripeFeeRetained,
+                announcerRetained: refundResult.announcerRetained,
+                refundReason: refundResult.reason,
+                cancellationCount: refundResult.cancellationCount,
+              }
+            );
           }
         } else if (payment.status === "authorized") {
           // Paiement marqué "authorized" en base

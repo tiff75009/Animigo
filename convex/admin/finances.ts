@@ -29,6 +29,24 @@ export const getFinanceDashboard = query({
       .first();
     const configuredStripeFeeRate = stripeFeeRateConfig ? parseFloat(stripeFeeRateConfig.value) : 3;
 
+    // Date du virement mensuel programmé (admin/paiements)
+    const payoutDayConfig = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "payout_scheduled_day"))
+      .first();
+    const payoutScheduledDay = payoutDayConfig ? parseInt(payoutDayConfig.value, 10) : 25;
+
+    // Calcul de la prochaine date effective de virement (Europe/Paris)
+    const nowDate = new Date();
+    const todayDay = parseInt(
+      new Date(nowDate).toLocaleDateString("fr-CA", { timeZone: "Europe/Paris" }).split("-")[2],
+      10
+    );
+    const nextPayoutMonth = todayDay >= payoutScheduledDay
+      ? new Date(nowDate.getFullYear(), nowDate.getMonth() + 1, payoutScheduledDay)
+      : new Date(nowDate.getFullYear(), nowDate.getMonth(), payoutScheduledDay);
+    const nextPayoutDateISO = nextPayoutMonth.toISOString().split("T")[0];
+
     // Taux de commission par type d'annonceur
     const commissionTypes = ["particulier", "micro_entrepreneur", "professionnel"] as const;
     const configuredCommissionRates: Record<string, number> = {};
@@ -145,6 +163,33 @@ export const getFinanceDashboard = query({
       "platformFee"
     );
     const commissionsPaid = periodRevenue;
+
+    // ═══ REVENUS PÉNALITÉS (annulations) ═══
+    // Quand une mission est cancelled après paiement capturé, la plateforme garde
+    // la commission ET les frais Stripe (politique 2026 : commission TOUJOURS retenue).
+    // On les comptabilise séparément pour donner de la visibilité.
+    const cancelledWithPayment = missionsByStatus.cancelled.filter(
+      (m) =>
+        // Le paiement a été capturé (puis remboursé partiellement OU pas du tout)
+        m.paymentStatus === "paid" ||
+        m.paymentStatus === "refunded" ||
+        // Cas où la mission était `paid` puis annulée → status passe à "cancelled" mais
+        // paymentStatus peut rester "paid" ou avoir refundAmount > 0
+        (m.refundAmount !== undefined && m.refundAmount >= 0 && m.platformFee !== undefined)
+    );
+    const cancellationCommissions = sumField(cancelledWithPayment, "platformFee");
+    const cancellationStripeFees = sumField(cancelledWithPayment, "stripeFee");
+    const cancellationCount = cancelledWithPayment.length;
+    // Montant retenu par les annonceurs sur annulations (selon le compteur 3ème/4ème)
+    const cancellationAnnouncerRetained = cancelledWithPayment.reduce(
+      (sum, m) => sum + (m.announcerRetainedAmount || 0),
+      0
+    );
+    // Remboursements clients sur ces annulations
+    const cancellationRefundsTotal = cancelledWithPayment.reduce(
+      (sum, m) => sum + (m.refundAmount || 0),
+      0
+    );
 
     // ═══ VERSEMENTS ANNONCEURS ═══
     const readyForPayout = periodMissions.filter(
@@ -370,6 +415,8 @@ export const getFinanceDashboard = query({
         pendingPayoutMissions: readyForPayout.length,
         paidOutAmount,
         paidOutMissions: alreadyPaid.length,
+        scheduledDay: payoutScheduledDay,
+        nextPayoutDate: nextPayoutDateISO,
         byStatus: payoutAmounts,
         byStatusCount: {
           pending: payoutsByStatus.pending.length,
@@ -377,6 +424,14 @@ export const getFinanceDashboard = query({
           completed: payoutsByStatus.completed.length,
           failed: payoutsByStatus.failed.length,
         },
+      },
+      // Revenus pénalités (annulations qui rapportent à la plateforme)
+      cancellations: {
+        commissions: cancellationCommissions,
+        stripeFees: cancellationStripeFees,
+        announcerRetained: cancellationAnnouncerRetained,
+        refunded: cancellationRefundsTotal,
+        count: cancellationCount,
       },
       // Avoirs
       credits: {

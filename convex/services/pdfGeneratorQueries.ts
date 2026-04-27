@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { query, internalQuery, internalMutation } from "../_generated/server";
 import { v } from "convex/values";
+import { getEmailConfigFromDb } from "../api/emailInternal";
 
 // ============================================
 // QUERIES / MUTATIONS internes pour pdfGenerator (action Node.js)
@@ -455,5 +456,48 @@ export const updateInvoicePdf = internalMutation({
       pdfStorageId: args.pdfStorageId,
       pdfUrl: url || undefined,
     });
+  },
+});
+
+/**
+ * Contexte pour l'email "facture suite à validation prestation".
+ * Lit emailTemplate `service_completed_invoice` (BDD prio + DEFAULT_TEMPLATES fallback),
+ * emailConfig, infos client, infos mission. Utilisé par generatePdfFromTemplate.
+ */
+export const getInvoiceEmailContext = internalQuery({
+  args: { invoiceId: v.id("invoices") },
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice || !invoice.missionId) return null;
+
+    const mission = await ctx.db.get(invoice.missionId);
+    if (!mission) return null;
+
+    const client = await ctx.db.get(invoice.recipientId);
+    const announcer = await ctx.db.get(mission.announcerId);
+    const emailCfg = await getEmailConfigFromDb(ctx.db);
+
+    // Charger le template depuis BDD si existe (sinon fallback inline côté action)
+    const dbTemplate = await ctx.db
+      .query("emailTemplates")
+      .withIndex("by_slug", (q: any) => q.eq("slug", "service_completed_invoice"))
+      .first();
+
+    return {
+      clientEmail: client?.email || "",
+      clientFirstName: client?.firstName || "",
+      announcerName: announcer
+        ? `${announcer.firstName} ${announcer.lastName.charAt(0)}.`
+        : "Le prestataire",
+      serviceName: mission.serviceName || "",
+      startDate: mission.startDate,
+      endDate: mission.endDate,
+      autoConfirmed: !!mission.autoConfirmedAt,
+      emailConfig: emailCfg.emailConfig,
+      appUrl: emailCfg.appUrl,
+      emailTemplate: dbTemplate
+        ? { subject: dbTemplate.subject, htmlContent: dbTemplate.htmlContent }
+        : null,
+    };
   },
 });
