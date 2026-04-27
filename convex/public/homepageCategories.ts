@@ -31,18 +31,12 @@ export const getHomepageCategories = query({
 
     const byId = new Map(allCategories.map((c) => [c._id, c]));
 
-    // 2. Identifier les parents qui ont au moins un enfant actif : on les
-    //    exclura de l'affichage (c'est juste un regroupement).
-    const parentIdsWithChildren = new Set<string>();
-    for (const c of allCategories) {
-      if (c.parentCategoryId) parentIdsWithChildren.add(c.parentCategoryId);
-    }
-
-    // 3. "Feuilles" : catégories affichables comme type de service concret.
-    //    - sous-catégorie (parentCategoryId présent)
-    //    - OU catégorie sans enfant
+    // 2. On affiche UNIQUEMENT les "prestations" — c'est-à-dire les sous-catégories
+    //    avec parentCategoryId défini. Cohérent avec /admin/services/prestations qui
+    //    n'expose que ces entrées (les catégories parentes sans enfant ne doivent PAS
+    //    apparaître dans le menu — elles ne sont pas gérées comme des prestations).
     const leaves = allCategories
-      .filter((c) => !parentIdsWithChildren.has(c._id))
+      .filter((c) => !!c.parentCategoryId)
       .sort((a, b) => a.order - b.order);
 
     // 4. Types de catégories pour enrichir la réponse

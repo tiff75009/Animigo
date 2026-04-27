@@ -29,7 +29,7 @@ import {
   Clock,
   Receipt,
 } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { usePathname } from "next/navigation";
 import { useAuthState } from "@/app/hooks/useAuthState";
 import { useNotifications } from "@/app/hooks/useNotifications";
@@ -41,18 +41,14 @@ import { api } from "@/convex/_generated/api";
 import { useActiveConversation } from "@/app/contexts/MessagingContext";
 import { getAuthToken } from "@/app/lib/authToken";
 
-// Services/Categories pour la navigation
-const serviceCategories = [
-  { slug: "garde", label: "Garde", emoji: "🏠", href: "/recherche?mode=garde" },
-  { slug: "toilettage", label: "Toilettage", emoji: "✂️", href: "/recherche?mode=services&category=toilettage" },
-  { slug: "dressage", label: "Dressage", emoji: "🎓", href: "/recherche?mode=services&category=dressage" },
-  { slug: "promenade", label: "Promenade", emoji: "🚶", href: "/recherche?mode=services&category=promenade" },
-  { slug: "transport", label: "Transport", emoji: "🚗", href: "/recherche?mode=services&category=transport" },
-  { slug: "pension", label: "Pension", emoji: "🏨", href: "/recherche?mode=services&category=pension" },
-  { slug: "visite", label: "Visite à domicile", emoji: "👀", href: "/recherche?mode=services&category=visite" },
-  { slug: "veterinaire", label: "Vétérinaire", emoji: "🩺", href: "/recherche?mode=services&category=veterinaire" },
-  { slug: "comportementaliste", label: "Comportementaliste", emoji: "🧠", href: "/recherche?mode=services&category=comportementaliste" },
-];
+// Helper : détermine le mode de recherche selon le slug de la catégorie
+// (cohérent avec hero-section.tsx — "garde/pension/sitting" → mode=garde, sinon services)
+function hrefForCategory(slug: string): string {
+  if (/(garde|pension|sitting)/.test(slug.toLowerCase())) {
+    return `/recherche?mode=garde&category=${encodeURIComponent(slug)}`;
+  }
+  return `/recherche?mode=services&category=${encodeURIComponent(slug)}`;
+}
 
 // Desktop: 5 premiers services affichés, le reste dans "Plus"
 const DESKTOP_VISIBLE_COUNT = 5;
@@ -124,6 +120,20 @@ export function Navbar({ hideSpacers = false }: NavbarProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<string[]>([]);
+
+  // Catégories dynamiques depuis l'admin (cohérent avec /admin/services/prestations)
+  // — on n'affiche QUE les sous-catégories actives marquées comme "prestations".
+  const homepageCategories = useQuery(api.public.homepageCategories.getHomepageCategories, {});
+  const serviceCategories = useMemo(
+    () =>
+      (homepageCategories ?? []).map((c) => ({
+        slug: c.slug,
+        label: c.name,
+        emoji: c.icon || "📋",
+        href: hrefForCategory(c.slug),
+      })),
+    [homepageCategories]
+  );
 
   // Services visibles et cachés sur desktop
   const visibleServices = serviceCategories.slice(0, DESKTOP_VISIBLE_COUNT);

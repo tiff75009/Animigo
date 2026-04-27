@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { action, mutation, query } from "../_generated/server";
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { requireAdmin, requireAdminAction } from "./utils";
 import { internal } from "../_generated/api";
 
@@ -718,6 +718,17 @@ export const updateAcceptanceDeadlineSettings = mutation({
   handler: async (ctx, args) => {
     const { user } = await requireAdmin(ctx, args.token);
 
+    // Seul garde-fou strict : la zone "Mission normale" doit exister.
+    // Les délais d'acceptation peuvent dépasser le temps disponible avant la
+    // mission — le cron auto-refus s'occupe d'expirer naturellement les
+    // deadlines, donc pas besoin de bloquer ici.
+    if (args.intervalShortDays >= args.intervalLongDays) {
+      throw new ConvexError(
+        `Le seuil "Mission urgente" (${args.intervalShortDays}j) doit être strictement inférieur ` +
+          `au seuil "Mission lointaine" (${args.intervalLongDays}j) pour laisser une plage à "Mission normale".`
+      );
+    }
+
     const configsToUpdate = [
       { key: "acceptance_deadline_enabled", value: args.enabled ? "true" : "false" },
       { key: "acceptance_interval_short_days", value: args.intervalShortDays.toString() },
@@ -885,11 +896,15 @@ export const getPayoutSettings = query({
     const configs = await ctx.db.query("systemConfig").collect();
     const configMap = new Map(configs.map((c) => [c.key, c.value]));
 
+    // Frais désormais centralisé sur stripe_fee_rate (admin/commissions) — exposé ici aussi
+    // pour info à l'UI (libellé "Frais retenus").
+    const stripeFeeRate = parseFloat(configMap.get("stripe_fee_rate") || "") || 3;
     return {
       scheduledDay: parseInt(configMap.get("payout_scheduled_day") || "") || 25,
-      monthlyFeePercent: parseFloat(configMap.get("payout_monthly_fee_percent") || "") || 0,
-      perMissionFeePercent: parseFloat(configMap.get("payout_per_mission_fee_percent") || "") || 2,
       confirmationHours: parseInt(configMap.get("mission_confirmation_hours") || "") || 48,
+      stripeFeeRate, // source unique
+      scheduledModeEnabled: configMap.get("payout_mode_scheduled_enabled") !== "false",
+      instantModeEnabled: configMap.get("payout_mode_instant_enabled") !== "false",
     };
   },
 });
@@ -901,39 +916,57 @@ export const getPayoutSettingsPublic = query({
     const configs = await ctx.db.query("systemConfig").collect();
     const configMap = new Map(configs.map((c) => [c.key, c.value]));
 
+    const stripeFeeRate = parseFloat(configMap.get("stripe_fee_rate") || "") || 3;
     return {
       scheduledDay: parseInt(configMap.get("payout_scheduled_day") || "") || 25,
-      monthlyFeePercent: parseFloat(configMap.get("payout_monthly_fee_percent") || "") || 0,
-      perMissionFeePercent: parseFloat(configMap.get("payout_per_mission_fee_percent") || "") || 2,
       confirmationHours: parseInt(configMap.get("mission_confirmation_hours") || "") || 48,
+      stripeFeeRate,
+      scheduledModeEnabled: configMap.get("payout_mode_scheduled_enabled") !== "false",
+      instantModeEnabled: configMap.get("payout_mode_instant_enabled") !== "false",
     };
   },
 });
 
 // Mutation: Mettre à jour les paramètres de versements
+// Note : les frais (`monthlyFeePercent`, `perMissionFeePercent`) ont été retirés
+// — la source unique est désormais `stripe_fee_rate` (configuré dans /admin/commissions).
+// Args gardés optionnels en signature pour rétrocompat des appelants existants mais
+// **non sauvegardés en BDD** (les anciennes clés sont obsolètes).
 export const updatePayoutSettings = mutation({
   args: {
     token: v.string(),
     scheduledDay: v.number(),
-    monthlyFeePercent: v.number(),
-    perMissionFeePercent: v.number(),
+    monthlyFeePercent: v.optional(v.number()), // déprécié — ignoré
+    perMissionFeePercent: v.optional(v.number()), // déprécié — ignoré
     confirmationHours: v.number(),
+    scheduledModeEnabled: v.optional(v.boolean()),
+    instantModeEnabled: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const { user } = await requireAdmin(ctx, args.token);
 
     // Validation des valeurs
     const scheduledDay = Math.min(28, Math.max(1, args.scheduledDay));
-    const monthlyFeePercent = Math.min(10, Math.max(0, args.monthlyFeePercent));
-    const perMissionFeePercent = Math.min(10, Math.max(0, args.perMissionFeePercent));
     const confirmationHours = Math.min(168, Math.max(12, args.confirmationHours));
 
-    const configsToUpdate = [
+    // Garde-fou : interdire de désactiver les deux modes en même temps (sinon
+    // aucun annonceur ne pourrait être payé).
+    if (args.scheduledModeEnabled === false && args.instantModeEnabled === false) {
+      throw new ConvexError(
+        "Au moins un mode de versement doit rester activé (sinon aucun annonceur ne peut être payé)."
+      );
+    }
+
+    const configsToUpdate: Array<{ key: string; value: string }> = [
       { key: "payout_scheduled_day", value: scheduledDay.toString() },
-      { key: "payout_monthly_fee_percent", value: monthlyFeePercent.toString() },
-      { key: "payout_per_mission_fee_percent", value: perMissionFeePercent.toString() },
       { key: "mission_confirmation_hours", value: confirmationHours.toString() },
     ];
+    if (args.scheduledModeEnabled !== undefined) {
+      configsToUpdate.push({ key: "payout_mode_scheduled_enabled", value: args.scheduledModeEnabled ? "true" : "false" });
+    }
+    if (args.instantModeEnabled !== undefined) {
+      configsToUpdate.push({ key: "payout_mode_instant_enabled", value: args.instantModeEnabled ? "true" : "false" });
+    }
 
     for (const config of configsToUpdate) {
       const existing = await ctx.db
@@ -962,8 +995,6 @@ export const updatePayoutSettings = mutation({
     return {
       success: true,
       scheduledDay,
-      monthlyFeePercent,
-      perMissionFeePercent,
       confirmationHours,
     };
   },
@@ -1131,14 +1162,14 @@ export const getCancellationSettings = query({
     const configs = await ctx.db.query("systemConfig").collect();
     const configMap = new Map(configs.map((c) => [c.key, c.value]));
 
+    // Refonte 2026 : politique simplifiée + niveaux 3ème/4ème distincts.
+    // Anciennes clés grace/lastMinute conservées en BDD pour rétrocompat mais
+    // NON utilisées par cancellation.ts.
     return {
-      gracePeriodHours: parseInt(configMap.get("cancellation_grace_period_hours") || "") || 24,
-      thresholdHours: parseInt(configMap.get("cancellation_threshold_hours") || "") || 48,
-      secondCancellationAnnouncerPercent: parseInt(configMap.get("cancellation_2nd_announcer_percent") || "") || 50,
-      thirdCancellationAnnouncerPercent: parseInt(configMap.get("cancellation_3rd_announcer_percent") || "") || 100,
+      thresholdHours: parseInt(configMap.get("cancellation_threshold_hours") || "") || 36,
+      thirdCancellationAnnouncerPercent: parseInt(configMap.get("cancellation_3rd_announcer_percent") || "") || 50,
+      fourthCancellationAnnouncerPercent: parseInt(configMap.get("cancellation_4th_announcer_percent") || "") || 100,
       counterPeriodMonths: parseInt(configMap.get("cancellation_counter_period_months") || "") || 12,
-      lastMinuteThresholdHours: parseInt(configMap.get("cancellation_last_minute_threshold_hours") || "") || 24,
-      lastMinuteGraceHours: parseInt(configMap.get("cancellation_last_minute_grace_hours") || "") || 6,
     };
   },
 });
@@ -1146,33 +1177,29 @@ export const getCancellationSettings = query({
 export const updateCancellationSettings = mutation({
   args: {
     token: v.string(),
-    gracePeriodHours: v.number(),
     thresholdHours: v.number(),
-    secondCancellationAnnouncerPercent: v.number(),
     thirdCancellationAnnouncerPercent: v.number(),
+    fourthCancellationAnnouncerPercent: v.number(),
     counterPeriodMonths: v.number(),
-    lastMinuteThresholdHours: v.number(),
-    lastMinuteGraceHours: v.number(),
+    // Args dépréciés gardés optionnels en signature pour rétrocompat
+    secondCancellationAnnouncerPercent: v.optional(v.number()),
+    gracePeriodHours: v.optional(v.number()),
+    lastMinuteThresholdHours: v.optional(v.number()),
+    lastMinuteGraceHours: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const { user } = await requireAdmin(ctx, args.token);
 
-    const gracePeriodHours = Math.min(72, Math.max(1, args.gracePeriodHours));
     const thresholdHours = Math.min(168, Math.max(1, args.thresholdHours));
-    const secondPercent = Math.min(100, Math.max(0, args.secondCancellationAnnouncerPercent));
     const thirdPercent = Math.min(100, Math.max(0, args.thirdCancellationAnnouncerPercent));
+    const fourthPercent = Math.min(100, Math.max(0, args.fourthCancellationAnnouncerPercent));
     const counterPeriodMonths = Math.min(24, Math.max(1, args.counterPeriodMonths));
-    const lastMinuteThresholdHours = Math.min(72, Math.max(1, args.lastMinuteThresholdHours));
-    const lastMinuteGraceHours = Math.min(24, Math.max(1, args.lastMinuteGraceHours));
 
     const configsToUpdate = [
-      { key: "cancellation_grace_period_hours", value: gracePeriodHours.toString() },
       { key: "cancellation_threshold_hours", value: thresholdHours.toString() },
-      { key: "cancellation_2nd_announcer_percent", value: secondPercent.toString() },
       { key: "cancellation_3rd_announcer_percent", value: thirdPercent.toString() },
+      { key: "cancellation_4th_announcer_percent", value: fourthPercent.toString() },
       { key: "cancellation_counter_period_months", value: counterPeriodMonths.toString() },
-      { key: "cancellation_last_minute_threshold_hours", value: lastMinuteThresholdHours.toString() },
-      { key: "cancellation_last_minute_grace_hours", value: lastMinuteGraceHours.toString() },
     ];
 
     for (const config of configsToUpdate) {
@@ -1201,13 +1228,10 @@ export const updateCancellationSettings = mutation({
 
     return {
       success: true,
-      gracePeriodHours,
       thresholdHours,
-      secondCancellationAnnouncerPercent: secondPercent,
       thirdCancellationAnnouncerPercent: thirdPercent,
+      fourthCancellationAnnouncerPercent: fourthPercent,
       counterPeriodMonths,
-      lastMinuteThresholdHours,
-      lastMinuteGraceHours,
     };
   },
 });

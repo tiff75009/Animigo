@@ -13,18 +13,40 @@ export const processStripeRefund = internalAction({
     paymentIntentId: v.string(),
     refundAmount: v.number(),
     stripeSecretKey: v.string(),
+    // Conservé pour compat — la valeur est ignorée : politique plateforme = commission
+    // toujours retenue, peu importe le scénario d'annulation (cf. demande user).
+    refundApplicationFee: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     try {
       const stripe = createStripeClient(args.stripeSecretKey);
 
-      // Tenter le remboursement avec reverse_transfer pour inverser
-      // le transfert Connect automatique (transfer_data.destination)
+      // Refund destination charge avec garanties :
+      // - reverse_transfer: true → Stripe pull back le solde annonceur depuis son
+      //   compte Connect pour financer le refund. Le montant pulled back = refundAmount
+      //   exactement (puisque application_fee n'est pas remboursé).
+      // - refund_application_fee: false → la plateforme garde 100% de sa commission
+      //   (frais service + frais Stripe), peu importe le scénario.
+      //
+      // Conséquence sur les balances finales :
+      //   - Client reçoit : refundAmount
+      //   - Plateforme garde : application_fee (commission + Stripe) — INCHANGÉ
+      //   - Compte Connect annonceur : earnings - refundAmount = announcerRetained
+      console.log(
+        `[processStripeRefund] PI=${args.paymentIntentId} refund=${args.refundAmount}c. ` +
+          `Stripe va pull-back ${args.refundAmount}c du compte Connect annonceur ` +
+          `(commission plateforme conservée).`
+      );
       const refund = await stripe.refunds.create({
         payment_intent: args.paymentIntentId,
         amount: args.refundAmount,
         reverse_transfer: true,
+        refund_application_fee: false,
       });
+      console.log(
+        `[processStripeRefund] OK refund=${refund.id} status=${refund.status} ` +
+          `transfer_reversal=${(refund as any).transfer_reversal || "n/a"}`
+      );
 
       // NE PAS appeler ctx.runMutation ici — le runtime Node.js de Convex
       // self-hosted a un bug qui retourne le HTML du dashboard au lieu de la réponse.
@@ -76,6 +98,8 @@ export const cancelStripePaymentIntent = internalAction({
     stripeSecretKey: v.string(),
     missionId: v.optional(v.id("missions")),
     refundAmount: v.optional(v.number()),
+    // Voir processStripeRefund pour la sémantique
+    refundApplicationFee: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     try {
@@ -92,11 +116,13 @@ export const cancelStripePaymentIntent = internalAction({
       } else if (pi.status === "succeeded") {
         // PI déjà capturé (paiement immédiat) → créer un remboursement
         const refundAmount = args.refundAmount || pi.amount;
-        // reverse_transfer: true car transfer_data.destination crée un transfert auto
+        // Politique : la plateforme garde TOUJOURS la commission (refund_application_fee=false)
+        // peu importe que le refund soit total ou partiel.
         const refund = await stripe.refunds.create({
           payment_intent: args.paymentIntentId,
           amount: refundAmount,
           reverse_transfer: true,
+          refund_application_fee: false,
         });
         console.log("Refund créé (PI succeeded):", refund.id, "montant:", refundAmount);
         // L'appelant gère les mises à jour Convex (pas de ctx.runMutation ici)

@@ -95,6 +95,37 @@ export const validateAnnouncerSession = internalQuery({
   },
 });
 
+/**
+ * Internal query : retourne stripeAccountId + stripeSecretKey pour permettre
+ * à l'action getMyStripeBalance d'appeler Stripe sans passer par ctx.runQuery
+ * (qui est cassé sur self-hosted depuis une action). Vérifie session + role.
+ */
+export const getMyStripeAccountForBalance = internalQuery({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q) => q.eq("token", args.sessionToken))
+      .first();
+    if (!session || session.expiresAt < Date.now()) return null;
+
+    const user = await ctx.db.get(session.userId);
+    if (!user || !user.isActive) return null;
+    if (user.accountType !== "annonceur_pro" && user.accountType !== "annonceur_particulier") return null;
+    if (!user.stripeAccountId) return null;
+
+    const cfg = await ctx.db
+      .query("systemConfig")
+      .withIndex("by_key", (q) => q.eq("key", "stripe_secret_key"))
+      .first();
+
+    return {
+      stripeAccountId: user.stripeAccountId,
+      stripeSecretKey: cfg?.value || null,
+    };
+  },
+});
+
 // ============================================
 // MUTATIONS (base de données)
 // ============================================
@@ -176,6 +207,19 @@ export const updatePayoutMode = mutation({
     // Vérifier que c'est un annonceur
     if (user.accountType !== "annonceur_pro" && user.accountType !== "annonceur_particulier") {
       throw new ConvexError("Réservé aux annonceurs");
+    }
+
+    // Refuser si le mode demandé est désactivé par l'admin
+    const cfg = await ctx.db.query("systemConfig").collect();
+    const cfgMap = new Map(cfg.map((c) => [c.key, c.value]));
+    const scheduledEnabled = cfgMap.get("payout_mode_scheduled_enabled") !== "false";
+    const instantEnabled = cfgMap.get("payout_mode_instant_enabled") !== "false";
+
+    if (args.payoutMode === "scheduled" && !scheduledEnabled) {
+      throw new ConvexError("Le virement mensuel groupé est désactivé par la plateforme.");
+    }
+    if (args.payoutMode === "instant" && !instantEnabled) {
+      throw new ConvexError("Le virement instantané par mission est désactivé par la plateforme.");
     }
 
     await ctx.db.patch(session.userId, {

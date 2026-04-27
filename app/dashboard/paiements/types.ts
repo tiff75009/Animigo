@@ -93,7 +93,9 @@ export interface PayoutDetail {
   amount: number;
   grossAmount?: number;
   commissionAmount?: number;
-  status: string;
+  status: string; // "pending" | "processing" | "completed" | "failed"
+  failureReason?: string;
+  stripePayoutId?: string;
   missionsCount: number;
   missionNames: string[];
 }

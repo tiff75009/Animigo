@@ -321,6 +321,8 @@ export const getAnnouncerPaymentsData = query({
             ? centsToEuros(payout.commissionAmount)
             : undefined,
           status: payout.status,
+          failureReason: payout.failureReason,
+          stripePayoutId: payout.stripePayoutId,
           missionsCount: payout.missions.length,
           missionNames: missionDetails.filter(Boolean) as string[],
         };

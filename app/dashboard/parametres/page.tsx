@@ -1712,15 +1712,17 @@ function PaymentTab() {
               {/* Mode scheduled */}
               <motion.button
                 type="button"
-                onClick={() => handlePayoutModeChange("scheduled")}
+                onClick={() => payoutSettings?.scheduledModeEnabled !== false && handlePayoutModeChange("scheduled")}
+                disabled={payoutSettings?.scheduledModeEnabled === false}
                 className={cn(
                   "w-full p-4 rounded-xl border-2 text-left transition-colors",
                   selectedPayoutMode === "scheduled"
                     ? "border-primary bg-primary/5"
-                    : "border-gray-200 hover:border-gray-300"
+                    : "border-gray-200 hover:border-gray-300",
+                  payoutSettings?.scheduledModeEnabled === false && "opacity-50 cursor-not-allowed hover:border-gray-200"
                 )}
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
+                whileHover={payoutSettings?.scheduledModeEnabled !== false ? { scale: 1.01 } : {}}
+                whileTap={payoutSettings?.scheduledModeEnabled !== false ? { scale: 0.99 } : {}}
               >
                 <div className="flex items-start gap-3">
                   <div className={cn(
@@ -1733,9 +1735,9 @@ function PaymentTab() {
                     <div className="flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-blue-500" />
                       <p className="font-semibold text-foreground">Virement mensuel</p>
-                      {(payoutSettings?.monthlyFeePercent ?? 0) > 0 ? (
+                      {(payoutSettings?.stripeFeeRate ?? 3) > 0 ? (
                         <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
-                          {payoutSettings?.monthlyFeePercent}% de frais
+                          {payoutSettings?.stripeFeeRate}% de frais
                         </span>
                       ) : (
                         <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">
@@ -1744,7 +1746,9 @@ function PaymentTab() {
                       )}
                     </div>
                     <p className="text-sm text-text-light mt-1">
-                      Vos gains sont versés le {payoutSettings?.scheduledDay || 25} de chaque mois
+                      {payoutSettings?.scheduledModeEnabled === false
+                        ? "Désactivé par la plateforme"
+                        : `Vos gains sont versés le ${payoutSettings?.scheduledDay || 25} de chaque mois`}
                     </p>
                   </div>
                 </div>
@@ -1753,15 +1757,17 @@ function PaymentTab() {
               {/* Mode par mission */}
               <motion.button
                 type="button"
-                onClick={() => handlePayoutModeChange("instant")}
+                onClick={() => payoutSettings?.instantModeEnabled !== false && handlePayoutModeChange("instant")}
+                disabled={payoutSettings?.instantModeEnabled === false}
                 className={cn(
                   "w-full p-4 rounded-xl border-2 text-left transition-colors",
                   selectedPayoutMode === "instant"
                     ? "border-primary bg-primary/5"
-                    : "border-gray-200 hover:border-gray-300"
+                    : "border-gray-200 hover:border-gray-300",
+                  payoutSettings?.instantModeEnabled === false && "opacity-50 cursor-not-allowed hover:border-gray-200"
                 )}
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
+                whileHover={payoutSettings?.instantModeEnabled !== false ? { scale: 1.01 } : {}}
+                whileTap={payoutSettings?.instantModeEnabled !== false ? { scale: 0.99 } : {}}
               >
                 <div className="flex items-start gap-3">
                   <div className={cn(
@@ -1774,9 +1780,9 @@ function PaymentTab() {
                     <div className="flex items-center gap-2">
                       <Zap className="w-4 h-4 text-amber-500" />
                       <p className="font-semibold text-foreground">Virement par mission</p>
-                      {(payoutSettings?.perMissionFeePercent ?? 2) > 0 ? (
+                      {(payoutSettings?.stripeFeeRate ?? 3) > 0 ? (
                         <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
-                          {payoutSettings?.perMissionFeePercent ?? 2}% de frais
+                          {payoutSettings?.stripeFeeRate}% de frais
                         </span>
                       ) : (
                         <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">
@@ -1785,7 +1791,9 @@ function PaymentTab() {
                       )}
                     </div>
                     <p className="text-sm text-text-light mt-1">
-                      Recevez vos gains après chaque mission confirmée par le client
+                      {payoutSettings?.instantModeEnabled === false
+                        ? "Désactivé par la plateforme"
+                        : "Recevez vos gains après chaque mission confirmée par le client"}
                     </p>
                   </div>
                 </div>
@@ -1810,8 +1818,8 @@ function PaymentTab() {
                 <li className="flex items-start gap-2">
                   <span className="text-primary font-bold">3.</span>
                   {selectedPayoutMode === "instant"
-                    ? `Virement après confirmation${(payoutSettings?.perMissionFeePercent ?? 2) > 0 ? " (frais déduits)" : ""}`
-                    : `Virement groupé le ${payoutSettings?.scheduledDay || 25} du mois${(payoutSettings?.monthlyFeePercent ?? 0) > 0 ? " (frais déduits)" : ""}`
+                    ? `Virement après confirmation${(payoutSettings?.stripeFeeRate ?? 3) > 0 ? " (frais déduits)" : ""}`
+                    : `Virement groupé le ${payoutSettings?.scheduledDay || 25} du mois${(payoutSettings?.stripeFeeRate ?? 3) > 0 ? " (frais déduits)" : ""}`
                   }
                 </li>
               </ul>
@@ -1819,9 +1827,7 @@ function PaymentTab() {
 
             {/* Exemple de calcul selon le mode */}
             {(() => {
-              const feePercent = selectedPayoutMode === "instant"
-                ? (payoutSettings?.perMissionFeePercent ?? 2)
-                : (payoutSettings?.monthlyFeePercent ?? 0);
+              const feePercent = payoutSettings?.stripeFeeRate ?? 3;
 
               if (feePercent > 0) {
                 return (

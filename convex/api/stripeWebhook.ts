@@ -338,32 +338,32 @@ export const handleStripeWebhook = internalAction({
       }
 
       case "transfer.created": {
+        // En mode "destination charge" (transfer_data sur le PaymentIntent),
+        // Stripe émet automatiquement un transfer.created sans metadata.missionId.
+        // On log uniquement pour audit — pas d'action métier nécessaire ici.
         const transfer = event.data.object as Stripe.Transfer;
-        console.log(`Transfert créé: ${transfer.id} - ${transfer.amount / 100}€`);
-
-        const missionId = transfer.metadata?.missionId;
-        if (missionId) {
-          await ctx.runMutation(internal.api.stripeInternal.markTransferCreated, {
-            missionId: missionId as any,
-            transferId: transfer.id,
-            amount: transfer.amount,
-          });
-        }
+        console.log(`[transfer.created] ${transfer.id} → ${transfer.destination} : ${transfer.amount / 100}€ (no-op)`);
         break;
       }
 
       case "payout.paid": {
         const payout = event.data.object as Stripe.Payout;
-        console.log(`Virement effectué: ${payout.id} - ${payout.amount / 100}€`);
-        // Les payouts sont au niveau du compte Connect, pas directement liés à une mission
-        // TODO: Mettre à jour le statut de virement si nécessaire
+        console.log(`[payout.paid] ${payout.id} - ${payout.amount / 100}€ → ${payout.destination}`);
+        await ctx.runMutation(internal.planning.payouts.handlePayoutPaidWebhook, {
+          stripePayoutId: payout.id,
+          paidAt: payout.arrival_date ? payout.arrival_date * 1000 : Date.now(),
+        });
         break;
       }
 
       case "payout.failed": {
         const payout = event.data.object as Stripe.Payout;
-        console.error(`Échec virement: ${payout.id} - ${payout.failure_message}`);
-        // TODO: Notifier l'annonceur et l'admin
+        const reason = payout.failure_message || payout.failure_code || "Échec inconnu";
+        console.error(`[payout.failed] ${payout.id} : ${reason}`);
+        await ctx.runMutation(internal.planning.payouts.handlePayoutFailedWebhook, {
+          stripePayoutId: payout.id,
+          failureReason: reason,
+        });
         break;
       }
 

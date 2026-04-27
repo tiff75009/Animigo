@@ -15,6 +15,7 @@ import { MonthlyChart } from "./components/MonthlyChart";
 import { MissionTabs } from "./components/MissionTabs";
 import { MissionList } from "./components/MissionList";
 import { PayoutSection } from "./components/PayoutSection";
+import { StripeBalanceWidget } from "./components/StripeBalanceWidget";
 
 export default function PaiementsPage() {
   const [activeTab, setActiveTab] = useState<PaymentTab>("paid");
@@ -93,6 +94,9 @@ export default function PaiementsPage() {
         tab={activeTab}
         isPro={data.userInfo.isVatSubject}
       />
+
+      {/* Solde Stripe Connect (live depuis Stripe API) */}
+      <StripeBalanceWidget token={token} />
 
       {/* Section virements */}
       <PayoutSection

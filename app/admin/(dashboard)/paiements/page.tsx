@@ -49,18 +49,16 @@ export default function PaiementsPage() {
 
   // États pour les versements annonceurs
   const [payoutScheduledDay, setPayoutScheduledDay] = useState(25);
-  const [payoutMonthlyFeePercent, setPayoutMonthlyFeePercent] = useState(0);
-  const [payoutPerMissionFeePercent, setPayoutPerMissionFeePercent] = useState(2);
+  const [stripeFeeRate, setStripeFeeRate] = useState(3); // lecture seule ici, modifié dans /admin/commissions
   const [missionConfirmationHours, setMissionConfirmationHours] = useState(48);
+  const [scheduledModeEnabled, setScheduledModeEnabled] = useState(true);
+  const [instantModeEnabled, setInstantModeEnabled] = useState(true);
 
-  // États pour la politique d'annulation
-  const [cancellationGracePeriodHours, setCancellationGracePeriodHours] = useState(24);
-  const [cancellationThresholdHours, setCancellationThresholdHours] = useState(48);
-  const [cancellation2ndAnnouncerPercent, setCancellation2ndAnnouncerPercent] = useState(50);
-  const [cancellation3rdAnnouncerPercent, setCancellation3rdAnnouncerPercent] = useState(100);
+  // États pour la politique d'annulation (refonte 2026 : seuils unifiés + 3ème/4ème distincts)
+  const [cancellationThresholdHours, setCancellationThresholdHours] = useState(36);
+  const [cancellation3rdAnnouncerPercent, setCancellation3rdAnnouncerPercent] = useState(50);
+  const [cancellation4thAnnouncerPercent, setCancellation4thAnnouncerPercent] = useState(100);
   const [cancellationCounterPeriodMonths, setCancellationCounterPeriodMonths] = useState(12);
-  const [lastMinuteThresholdHours, setLastMinuteThresholdHours] = useState(24);
-  const [lastMinuteGraceHours, setLastMinuteGraceHours] = useState(6);
 
   // Queries
   const deadlineSettings = useQuery(
@@ -111,29 +109,30 @@ export default function PaiementsPage() {
   useEffect(() => {
     if (payoutSettings) {
       setPayoutScheduledDay(payoutSettings.scheduledDay);
-      setPayoutMonthlyFeePercent(payoutSettings.monthlyFeePercent);
-      setPayoutPerMissionFeePercent(payoutSettings.perMissionFeePercent);
+      setStripeFeeRate(payoutSettings.stripeFeeRate ?? 3);
       setMissionConfirmationHours(payoutSettings.confirmationHours);
+      setScheduledModeEnabled(payoutSettings.scheduledModeEnabled ?? true);
+      setInstantModeEnabled(payoutSettings.instantModeEnabled ?? true);
     }
   }, [payoutSettings]);
 
   // Charger les paramètres d'annulation
   useEffect(() => {
     if (cancellationSettings) {
-      setCancellationGracePeriodHours(cancellationSettings.gracePeriodHours);
       setCancellationThresholdHours(cancellationSettings.thresholdHours);
-      setCancellation2ndAnnouncerPercent(cancellationSettings.secondCancellationAnnouncerPercent);
       setCancellation3rdAnnouncerPercent(cancellationSettings.thirdCancellationAnnouncerPercent);
+      setCancellation4thAnnouncerPercent(cancellationSettings.fourthCancellationAnnouncerPercent);
       setCancellationCounterPeriodMonths(cancellationSettings.counterPeriodMonths);
-      setLastMinuteThresholdHours(cancellationSettings.lastMinuteThresholdHours);
-      setLastMinuteGraceHours(cancellationSettings.lastMinuteGraceHours);
     }
   }, [cancellationSettings]);
+
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleSaveAll = async () => {
     if (!token) return;
     setIsSaving(true);
     setSaveSuccess(false);
+    setSaveError(null);
 
     try {
       await updateDeadlineSettings({
@@ -156,26 +155,30 @@ export default function PaiementsPage() {
       await updatePayoutSettings({
         token,
         scheduledDay: payoutScheduledDay,
-        monthlyFeePercent: payoutMonthlyFeePercent,
-        perMissionFeePercent: payoutPerMissionFeePercent,
         confirmationHours: missionConfirmationHours,
+        scheduledModeEnabled,
+        instantModeEnabled,
       });
 
       await updateCancellationSettings({
         token,
-        gracePeriodHours: cancellationGracePeriodHours,
         thresholdHours: cancellationThresholdHours,
-        secondCancellationAnnouncerPercent: cancellation2ndAnnouncerPercent,
         thirdCancellationAnnouncerPercent: cancellation3rdAnnouncerPercent,
+        fourthCancellationAnnouncerPercent: cancellation4thAnnouncerPercent,
         counterPeriodMonths: cancellationCounterPeriodMonths,
-        lastMinuteThresholdHours,
-        lastMinuteGraceHours,
       });
 
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erreur lors de la sauvegarde:", error);
+      // Extraire le message ConvexError si disponible (sinon fallback générique)
+      const msg =
+        error?.data?.message ||
+        (typeof error?.data === "string" ? error.data : null) ||
+        error?.message ||
+        "Erreur inconnue lors de la sauvegarde";
+      setSaveError(msg);
     } finally {
       setIsSaving(false);
     }
@@ -270,6 +273,9 @@ export default function PaiementsPage() {
                     <div className="flex items-center gap-2 mb-1">
                       <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
                       <h3 className="text-sm font-semibold text-green-300">Mission urgente</h3>
+                      <span className="ml-auto text-[11px] text-green-400/70">
+                        0 → {intervalShortDays - 1}j
+                      </span>
                     </div>
                     <p className="text-xs text-green-400/60 mb-4">
                       La mission commence bientôt, l&apos;annonceur doit répondre rapidement.
@@ -283,7 +289,7 @@ export default function PaiementsPage() {
                           <input
                             type="range"
                             min={1}
-                            max={14}
+                            max={Math.max(1, intervalLongDays - 1)}
                             value={intervalShortDays}
                             onChange={(e) => setIntervalShortDays(Number(e.target.value))}
                             className="flex-1 accent-green-500"
@@ -314,14 +320,17 @@ export default function PaiementsPage() {
                     </div>
                   </div>
 
-                  {/* Niveau 2 : Mission normale */}
+                  {/* Niveau 2 : Mission normale (plage déduite : entre urgente et lointaine) */}
                   <div className="p-5 bg-orange-500/10 border border-orange-500/30 rounded-lg">
                     <div className="flex items-center gap-2 mb-1">
                       <div className="w-2.5 h-2.5 rounded-full bg-orange-400" />
                       <h3 className="text-sm font-semibold text-orange-300">Mission normale</h3>
+                      <span className="ml-auto text-[11px] text-orange-400/70">
+                        {intervalShortDays} → {intervalLongDays}j
+                      </span>
                     </div>
                     <p className="text-xs text-orange-400/60 mb-4">
-                      La mission est dans {intervalShortDays} à {intervalLongDays} jours, délai de réponse standard.
+                      Plage automatique entre &quot;urgente&quot; et &quot;lointaine&quot; — délai de réponse standard.
                     </p>
                     <div>
                       <label className="block text-xs text-slate-400 mb-2">
@@ -348,6 +357,9 @@ export default function PaiementsPage() {
                     <div className="flex items-center gap-2 mb-1">
                       <div className="w-2.5 h-2.5 rounded-full bg-blue-400" />
                       <h3 className="text-sm font-semibold text-blue-300">Mission lointaine</h3>
+                      <span className="ml-auto text-[11px] text-blue-400/70">
+                        {intervalLongDays + 1}j et +
+                      </span>
                     </div>
                     <p className="text-xs text-blue-400/60 mb-4">
                       La mission est loin, l&apos;annonceur a plus de temps pour répondre.
@@ -360,7 +372,7 @@ export default function PaiementsPage() {
                         <div className="flex items-center gap-3">
                           <input
                             type="range"
-                            min={14}
+                            min={Math.max(intervalShortDays + 1, 2)}
                             max={90}
                             value={intervalLongDays}
                             onChange={(e) => setIntervalLongDays(Number(e.target.value))}
@@ -547,16 +559,28 @@ export default function PaiementsPage() {
             </div>
 
             {/* Mode 1 : Mensuel */}
-            <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+            <div className={`p-4 border rounded-lg transition-opacity ${scheduledModeEnabled ? "bg-blue-500/10 border-blue-500/30" : "bg-slate-800/30 border-slate-700 opacity-60"}`}>
               <div className="flex items-center gap-2 mb-4">
-                <Calendar className="w-5 h-5 text-blue-400" />
-                <h3 className="font-semibold text-blue-300">Mode mensuel</h3>
-                <span className="ml-auto px-2 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded-full">
+                <Calendar className={`w-5 h-5 ${scheduledModeEnabled ? "text-blue-400" : "text-slate-500"}`} />
+                <h3 className={`font-semibold ${scheduledModeEnabled ? "text-blue-300" : "text-slate-400"}`}>Mode mensuel</h3>
+                <span className={`ml-auto px-2 py-0.5 text-xs rounded-full ${scheduledModeEnabled ? "bg-blue-500/20 text-blue-400" : "bg-slate-700 text-slate-400"}`}>
                   Virement groupé
                 </span>
+                {/* Toggle activation */}
+                <button
+                  type="button"
+                  onClick={() => setScheduledModeEnabled((v) => !v)}
+                  disabled={!instantModeEnabled && scheduledModeEnabled}
+                  title={!instantModeEnabled && scheduledModeEnabled ? "Au moins un mode doit rester actif" : ""}
+                  className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${scheduledModeEnabled ? "bg-blue-500" : "bg-slate-600"}`}
+                >
+                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${scheduledModeEnabled ? "translate-x-5" : "translate-x-1"}`} />
+                </button>
               </div>
-              <p className="text-sm text-blue-300/70 mb-4">
-                Tous les gains sont versés en une fois à une date fixe du mois.
+              <p className={`text-sm mb-4 ${scheduledModeEnabled ? "text-blue-300/70" : "text-slate-500"}`}>
+                {scheduledModeEnabled
+                  ? "Tous les gains sont versés en une fois à une date fixe du mois."
+                  : "Mode désactivé — les annonceurs ne peuvent plus le choisir et le cron mensuel est neutralisé."}
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -575,55 +599,45 @@ export default function PaiementsPage() {
                     </div>
                   </div>
                 </div>
-                <div>
-                  <label className="block text-xs text-blue-400 mb-2">Frais appliqués</label>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="range"
-                      min={0}
-                      max={5}
-                      step={0.5}
-                      value={payoutMonthlyFeePercent}
-                      onChange={(e) => setPayoutMonthlyFeePercent(Number(e.target.value))}
-                      className="flex-1 accent-blue-500"
-                    />
-                    <div className="w-14 px-2 py-1.5 bg-blue-500/20 rounded-lg text-center font-semibold text-blue-400 text-sm">
-                      {payoutMonthlyFeePercent}%
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
 
             {/* Mode 2 : Par mission */}
-            <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+            <div className={`p-4 border rounded-lg transition-opacity ${instantModeEnabled ? "bg-amber-500/10 border-amber-500/30" : "bg-slate-800/30 border-slate-700 opacity-60"}`}>
               <div className="flex items-center gap-2 mb-4">
-                <Zap className="w-5 h-5 text-amber-400" />
-                <h3 className="font-semibold text-amber-300">Mode par mission</h3>
-                <span className="ml-auto px-2 py-0.5 text-xs bg-amber-500/20 text-amber-400 rounded-full">
+                <Zap className={`w-5 h-5 ${instantModeEnabled ? "text-amber-400" : "text-slate-500"}`} />
+                <h3 className={`font-semibold ${instantModeEnabled ? "text-amber-300" : "text-slate-400"}`}>Mode par mission</h3>
+                <span className={`ml-auto px-2 py-0.5 text-xs rounded-full ${instantModeEnabled ? "bg-amber-500/20 text-amber-400" : "bg-slate-700 text-slate-400"}`}>
                   Virement immédiat
                 </span>
+                <button
+                  type="button"
+                  onClick={() => setInstantModeEnabled((v) => !v)}
+                  disabled={!scheduledModeEnabled && instantModeEnabled}
+                  title={!scheduledModeEnabled && instantModeEnabled ? "Au moins un mode doit rester actif" : ""}
+                  className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${instantModeEnabled ? "bg-amber-500" : "bg-slate-600"}`}
+                >
+                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${instantModeEnabled ? "translate-x-5" : "translate-x-1"}`} />
+                </button>
               </div>
-              <p className="text-sm text-amber-300/70 mb-4">
-                Chaque mission est versée individuellement dès que le client confirme.
+              <p className={`text-sm mb-4 ${instantModeEnabled ? "text-amber-300/70" : "text-slate-500"}`}>
+                {instantModeEnabled
+                  ? "Chaque mission est versée individuellement dès que le client confirme."
+                  : "Mode désactivé — les annonceurs sur ce mode bascule automatiquement en mensuel."}
               </p>
-              <div>
-                <label className="block text-xs text-amber-400 mb-2">Frais appliqués</label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={0}
-                    max={10}
-                    step={0.5}
-                    value={payoutPerMissionFeePercent}
-                    onChange={(e) => setPayoutPerMissionFeePercent(Number(e.target.value))}
-                    className="flex-1 accent-amber-500"
-                  />
-                  <div className="w-14 px-2 py-1.5 bg-amber-500/20 rounded-lg text-center font-semibold text-amber-400 text-sm">
-                    {payoutPerMissionFeePercent}%
-                  </div>
-                </div>
-              </div>
+            </div>
+
+            {/* Note centralisation des frais */}
+            <div className="p-3 bg-slate-800/40 border border-slate-700 rounded-lg flex items-start gap-2">
+              <Info className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-slate-400">
+                Les frais retenus à l&apos;annonceur sur chaque virement (mensuel ou par mission) suivent
+                le <strong className="text-slate-200">Taux de prélèvement Stripe</strong> configuré dans{" "}
+                <a href="/admin/commissions" className="text-indigo-400 hover:text-indigo-300 underline">
+                  /admin/commissions
+                </a>
+                .
+              </p>
             </div>
 
             {/* Récapitulatif */}
@@ -649,10 +663,10 @@ export default function PaiementsPage() {
                       </td>
                       <td className="py-2 px-3">Le {payoutScheduledDay} de chaque mois</td>
                       <td className="py-2 px-3 font-medium">
-                        {payoutMonthlyFeePercent === 0 ? (
+                        {stripeFeeRate === 0 ? (
                           <span className="text-green-400">Gratuit</span>
                         ) : (
-                          <span className="text-blue-400">{payoutMonthlyFeePercent}%</span>
+                          <span className="text-blue-400">{stripeFeeRate}%</span>
                         )}
                       </td>
                     </tr>
@@ -663,10 +677,10 @@ export default function PaiementsPage() {
                       </td>
                       <td className="py-2 px-3">Après confirmation client</td>
                       <td className="py-2 px-3 font-medium">
-                        {payoutPerMissionFeePercent === 0 ? (
+                        {stripeFeeRate === 0 ? (
                           <span className="text-green-400">Gratuit</span>
                         ) : (
-                          <span className="text-amber-400">{payoutPerMissionFeePercent}%</span>
+                          <span className="text-amber-400">{stripeFeeRate}%</span>
                         )}
                       </td>
                     </tr>
@@ -679,14 +693,10 @@ export default function PaiementsPage() {
               <Banknote className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-green-300">
                 Les annonceurs choisissent leur mode de versement dans leurs paramètres.
-                {payoutMonthlyFeePercent === 0 && payoutPerMissionFeePercent > 0 && (
-                  <> Le mode mensuel est gratuit, le mode par mission applique {payoutPerMissionFeePercent}% de frais.</>
-                )}
-                {payoutMonthlyFeePercent > 0 && payoutPerMissionFeePercent > 0 && (
-                  <> Mode mensuel : {payoutMonthlyFeePercent}%, mode par mission : {payoutPerMissionFeePercent}%.</>
-                )}
-                {payoutMonthlyFeePercent === 0 && payoutPerMissionFeePercent === 0 && (
-                  <> Les deux modes sont actuellement gratuits.</>
+                {stripeFeeRate === 0 ? (
+                  <> Aucun frais retenu (taux Stripe à 0%).</>
+                ) : (
+                  <> Frais retenus : {stripeFeeRate}% (taux Stripe configuré dans /admin/commissions).</>
                 )}
               </p>
             </div>
@@ -708,80 +718,50 @@ export default function PaiementsPage() {
           </div>
 
           <div className="space-y-6">
-            {/* Grâce et seuil */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                <label className="block text-sm font-medium text-blue-300 mb-3">
-                  Délai de grâce post-paiement
-                </label>
-                <div className="flex items-center gap-4">
-                  <input
-                    type="range"
-                    min={1}
-                    max={72}
-                    value={cancellationGracePeriodHours}
-                    onChange={(e) => setCancellationGracePeriodHours(Number(e.target.value))}
-                    className="flex-1 accent-blue-500"
-                  />
-                  <div className="w-16 px-3 py-2 bg-blue-500/20 rounded-lg text-center font-semibold text-blue-400">
-                    {cancellationGracePeriodHours}h
-                  </div>
-                </div>
-                <p className="text-xs text-blue-400/70 mt-2">
-                  Remboursement 100% dans ce délai après paiement
-                </p>
-              </div>
-
-              <div className="p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
-                <label className="block text-sm font-medium text-cyan-300 mb-3">
-                  Seuil avant début de mission
-                </label>
-                <div className="flex items-center gap-4">
-                  <input
-                    type="range"
-                    min={1}
-                    max={168}
-                    value={cancellationThresholdHours}
-                    onChange={(e) => setCancellationThresholdHours(Number(e.target.value))}
-                    className="flex-1 accent-cyan-500"
-                  />
-                  <div className="w-16 px-3 py-2 bg-cyan-500/20 rounded-lg text-center font-semibold text-cyan-400">
-                    {formatHoursDisplay(cancellationThresholdHours)}
-                  </div>
-                </div>
-                <p className="text-xs text-cyan-400/70 mt-2">
-                  Au-delà : remboursement total moins commission
-                </p>
-              </div>
+            {/* Rappel principe */}
+            <div className="p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
+              <p className="text-sm text-cyan-200 leading-relaxed">
+                <strong>Règle principale :</strong> au-delà du seuil défini ci-dessous, le client peut être remboursé selon
+                son historique. En-dessous, aucun remboursement (l&apos;annonceur a bloqué son créneau, la plateforme conserve les frais).
+              </p>
             </div>
 
-            {/* Pénalités progressives */}
+            {/* Seuil critique */}
+            <div className="p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
+              <label className="block text-sm font-medium text-cyan-300 mb-3">
+                Seuil critique avant début de mission
+              </label>
+              <div className="flex items-center gap-4">
+                <input
+                  type="range"
+                  min={6}
+                  max={168}
+                  value={cancellationThresholdHours}
+                  onChange={(e) => setCancellationThresholdHours(Number(e.target.value))}
+                  className="flex-1 accent-cyan-500"
+                />
+                <div className="w-16 px-3 py-2 bg-cyan-500/20 rounded-lg text-center font-semibold text-cyan-400">
+                  {formatHoursDisplay(cancellationThresholdHours)}
+                </div>
+              </div>
+              <p className="text-xs text-cyan-400/70 mt-2">
+                Si la mission est <strong>réservée</strong> ou <strong>annulée</strong> à moins de
+                {" "}{cancellationThresholdHours}h du début → aucun remboursement.
+              </p>
+            </div>
+
+            {/* Pénalité 3ème+ annulation (1ère et 2ème toujours remboursées hors frais) */}
+            <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
+              <p className="text-sm text-green-200">
+                <strong>1ère et 2ème annulation</strong> : le client est remboursé intégralement, sauf les frais
+                de service et Stripe (toujours conservés par la plateforme).
+              </p>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-lg">
                 <label className="block text-sm font-medium text-orange-300 mb-3">
-                  Part annonceur - 2ème annulation
-                </label>
-                <div className="flex items-center gap-4">
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={cancellation2ndAnnouncerPercent}
-                    onChange={(e) => setCancellation2ndAnnouncerPercent(Number(e.target.value))}
-                    className="flex-1 accent-orange-500"
-                  />
-                  <div className="w-16 px-3 py-2 bg-orange-500/20 rounded-lg text-center font-semibold text-orange-400">
-                    {cancellation2ndAnnouncerPercent}%
-                  </div>
-                </div>
-                <p className="text-xs text-orange-400/70 mt-2">
-                  L&apos;annonceur conserve cette part (&lt;{formatHoursDisplay(cancellationThresholdHours)} avant début)
-                </p>
-              </div>
-
-              <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-                <label className="block text-sm font-medium text-red-300 mb-3">
-                  Part annonceur - 3ème+ annulation
+                  Part annonceur — 3ème annulation
                 </label>
                 <div className="flex items-center gap-4">
                   <input
@@ -790,19 +770,41 @@ export default function PaiementsPage() {
                     max={100}
                     value={cancellation3rdAnnouncerPercent}
                     onChange={(e) => setCancellation3rdAnnouncerPercent(Number(e.target.value))}
-                    className="flex-1 accent-red-500"
+                    className="flex-1 accent-orange-500"
                   />
-                  <div className="w-16 px-3 py-2 bg-red-500/20 rounded-lg text-center font-semibold text-red-400">
+                  <div className="w-16 px-3 py-2 bg-orange-500/20 rounded-lg text-center font-semibold text-orange-400">
                     {cancellation3rdAnnouncerPercent}%
                   </div>
                 </div>
+                <p className="text-xs text-orange-400/70 mt-2">
+                  3ème annulation : annonceur conserve {cancellation3rdAnnouncerPercent}%, client remboursé à {100 - cancellation3rdAnnouncerPercent}% (hors frais).
+                </p>
+              </div>
+
+              <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                <label className="block text-sm font-medium text-red-300 mb-3">
+                  Part annonceur — 4ème annulation et au-delà
+                </label>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={cancellation4thAnnouncerPercent}
+                    onChange={(e) => setCancellation4thAnnouncerPercent(Number(e.target.value))}
+                    className="flex-1 accent-red-500"
+                  />
+                  <div className="w-16 px-3 py-2 bg-red-500/20 rounded-lg text-center font-semibold text-red-400">
+                    {cancellation4thAnnouncerPercent}%
+                  </div>
+                </div>
                 <p className="text-xs text-red-400/70 mt-2">
-                  L&apos;annonceur conserve cette part à partir de la 3ème annulation
+                  4ème annulation et + : annonceur conserve {cancellation4thAnnouncerPercent}%, client remboursé à {100 - cancellation4thAnnouncerPercent}% (hors frais).
                 </p>
               </div>
             </div>
 
-            {/* Compteur et last-minute */}
+            {/* Compteur */}
             <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
               <label className="block text-sm font-medium text-purple-300 mb-3">
                 Période du compteur d&apos;annulations
@@ -821,61 +823,26 @@ export default function PaiementsPage() {
                 </div>
               </div>
               <p className="text-xs text-purple-400/70 mt-2">
-                Le compteur d&apos;annulations est calculé sur {cancellationCounterPeriodMonths} mois glissants
+                Le nombre d&apos;annulations du client est compté sur {cancellationCounterPeriodMonths} mois glissants
+                (au-delà, ses anciennes annulations ne pénalisent plus).
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                <label className="block text-sm font-medium text-amber-300 mb-3">
-                  Seuil réservation last-minute
-                </label>
-                <div className="flex items-center gap-4">
-                  <input
-                    type="range"
-                    min={6}
-                    max={72}
-                    value={lastMinuteThresholdHours}
-                    onChange={(e) => setLastMinuteThresholdHours(Number(e.target.value))}
-                    className="flex-1 accent-amber-500"
-                  />
-                  <div className="w-16 px-3 py-2 bg-amber-500/20 rounded-lg text-center font-semibold text-amber-400">
-                    {lastMinuteThresholdHours}h
-                  </div>
-                </div>
-                <p className="text-xs text-amber-400/70 mt-2">
-                  Réservation &lt;{lastMinuteThresholdHours}h avant le début = last-minute
-                </p>
-              </div>
-
-              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                <label className="block text-sm font-medium text-amber-300 mb-3">
-                  Grâce réduite last-minute
-                </label>
-                <div className="flex items-center gap-4">
-                  <input
-                    type="range"
-                    min={1}
-                    max={24}
-                    value={lastMinuteGraceHours}
-                    onChange={(e) => setLastMinuteGraceHours(Number(e.target.value))}
-                    className="flex-1 accent-amber-500"
-                  />
-                  <div className="w-16 px-3 py-2 bg-amber-500/20 rounded-lg text-center font-semibold text-amber-400">
-                    {lastMinuteGraceHours}h
-                  </div>
-                </div>
-                <p className="text-xs text-amber-400/70 mt-2">
-                  Au lieu de {cancellationGracePeriodHours}h pour les réservations last-minute
-                </p>
-              </div>
+            {/* Note séances collectives */}
+            <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-start gap-2">
+              <Info className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-blue-200">
+                <strong>Séances collectives</strong> : la politique d&apos;annulation est définie par chaque annonceur dans
+                <span className="text-blue-300"> /dashboard/parametres → menu Annulation</span>.
+                Cette page admin ne couvre que les missions individuelles.
+              </p>
             </div>
 
             {/* Tableau récapitulatif */}
             <div className="p-4 bg-slate-800/50 rounded-lg">
               <div className="flex items-center gap-2 mb-3">
                 <Info className="w-4 h-4 text-red-400" />
-                <span className="font-medium text-slate-200">Règles d&apos;annulation actives</span>
+                <span className="font-medium text-slate-200">Règles d&apos;annulation actives (missions individuelles)</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -888,36 +855,46 @@ export default function PaiementsPage() {
                   </thead>
                   <tbody className="text-slate-300">
                     <tr className="border-b border-slate-700/50">
-                      <td className="py-2 px-3">Grâce post-paiement (&lt;{cancellationGracePeriodHours}h)</td>
-                      <td className="py-2 px-3 text-blue-400 font-medium">100%</td>
+                      <td className="py-2 px-3 text-amber-400">
+                        Réservation faite ≤{cancellationThresholdHours}h avant début
+                      </td>
+                      <td className="py-2 px-3 text-amber-400 font-medium">Aucun</td>
+                      <td className="py-2 px-3 text-amber-400 font-medium">100%</td>
+                    </tr>
+                    <tr className="border-b border-slate-700/50">
+                      <td className="py-2 px-3 text-amber-400">
+                        Annulation à ≤{cancellationThresholdHours}h du début
+                      </td>
+                      <td className="py-2 px-3 text-amber-400 font-medium">Aucun</td>
+                      <td className="py-2 px-3 text-amber-400 font-medium">100%</td>
+                    </tr>
+                    <tr className="border-b border-slate-700/50">
+                      <td className="py-2 px-3 text-green-400">
+                        1ère &amp; 2ème annulation (&gt;{cancellationThresholdHours}h du début)
+                      </td>
+                      <td className="py-2 px-3 text-green-400 font-medium">Total − frais</td>
                       <td className="py-2 px-3 text-slate-500">0%</td>
                     </tr>
                     <tr className="border-b border-slate-700/50">
-                      <td className="py-2 px-3">&gt;{formatHoursDisplay(cancellationThresholdHours)} avant début</td>
-                      <td className="py-2 px-3 text-cyan-400 font-medium">Total - commission</td>
-                      <td className="py-2 px-3 text-slate-500">0%</td>
-                    </tr>
-                    <tr className="border-b border-slate-700/50">
-                      <td className="py-2 px-3">1ère annulation &lt;{formatHoursDisplay(cancellationThresholdHours)}</td>
-                      <td className="py-2 px-3 text-green-400 font-medium">Total - commission</td>
-                      <td className="py-2 px-3 text-slate-500">0%</td>
-                    </tr>
-                    <tr className="border-b border-slate-700/50">
-                      <td className="py-2 px-3">2ème annulation &lt;{formatHoursDisplay(cancellationThresholdHours)}</td>
-                      <td className="py-2 px-3 text-orange-400 font-medium">Partiel</td>
-                      <td className="py-2 px-3 text-orange-400 font-medium">{cancellation2ndAnnouncerPercent}%</td>
-                    </tr>
-                    <tr className="border-b border-slate-700/50">
-                      <td className="py-2 px-3">3ème+ annulation &lt;{formatHoursDisplay(cancellationThresholdHours)}</td>
-                      <td className="py-2 px-3 text-red-400 font-medium">{cancellation3rdAnnouncerPercent < 100 ? "Partiel" : "Aucun"}</td>
-                      <td className="py-2 px-3 text-red-400 font-medium">{cancellation3rdAnnouncerPercent}%</td>
+                      <td className="py-2 px-3 text-orange-400">
+                        3ème annulation (&gt;{cancellationThresholdHours}h du début)
+                      </td>
+                      <td className="py-2 px-3 text-orange-400 font-medium">{100 - cancellation3rdAnnouncerPercent}% − frais</td>
+                      <td className="py-2 px-3 text-orange-400 font-medium">{cancellation3rdAnnouncerPercent}%</td>
                     </tr>
                     <tr>
-                      <td className="py-2 px-3 text-amber-400">Last-minute (&lt;{lastMinuteThresholdHours}h)</td>
-                      <td className="py-2 px-3 text-amber-400 font-medium" colSpan={2}>Grâce réduite à {lastMinuteGraceHours}h</td>
+                      <td className="py-2 px-3 text-red-400">
+                        4ème+ annulation (&gt;{cancellationThresholdHours}h du début)
+                      </td>
+                      <td className="py-2 px-3 text-red-400 font-medium">{cancellation4thAnnouncerPercent < 100 ? `${100 - cancellation4thAnnouncerPercent}% − frais` : "Aucun"}</td>
+                      <td className="py-2 px-3 text-red-400 font-medium">{cancellation4thAnnouncerPercent}%</td>
                     </tr>
                   </tbody>
                 </table>
+                <p className="text-[11px] text-slate-500 mt-2">
+                  Dans tous les cas où le client n&apos;est pas remboursé intégralement, la plateforme conserve les frais
+                  de service et les frais Stripe.
+                </p>
               </div>
             </div>
 
@@ -925,7 +902,8 @@ export default function PaiementsPage() {
               <Ban className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-red-300">
                 Le compteur d&apos;annulations se calcule sur {cancellationCounterPeriodMonths} mois glissants.
-                Les pénalités progressives s&apos;appliquent uniquement pour les annulations à moins de {formatHoursDisplay(cancellationThresholdHours)} du début de la mission.
+                Au-delà du seuil critique de {cancellationThresholdHours}h, la pénalité progresse selon le nombre d&apos;annulations
+                déjà effectuées par le client sur la période.
               </p>
             </div>
           </div>
@@ -951,6 +929,16 @@ export default function PaiementsPage() {
           >
             <Check className="w-4 h-4" />
             Enregistré
+          </motion.div>
+        )}
+        {saveError && (
+          <motion.div
+            initial={{ opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="max-w-md px-4 py-3 bg-red-500/15 text-red-300 rounded-xl backdrop-blur-sm border border-red-500/30 text-sm"
+          >
+            <p className="font-semibold mb-1">❌ Échec sauvegarde</p>
+            <p className="text-red-200/90 text-xs">{saveError}</p>
           </motion.div>
         )}
         <button

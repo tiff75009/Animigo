@@ -1170,11 +1170,18 @@ export const forcePayout = mutation({
       .first();
     if (!stripeSecretKeyConfig?.value) throw new ConvexError("Clé Stripe manquante");
 
-    const feeConfig = await ctx.db
+    // Lit la nouvelle clé admin en priorité, fallback sur l'ancienne (rétrocompat)
+    const newCfg = await ctx.db
       .query("systemConfig")
-      .withIndex("by_key", (q: any) => q.eq("key", "payout_instant_fee_percent"))
+      .withIndex("by_key", (q: any) => q.eq("key", "payout_per_mission_fee_percent"))
       .first();
-    const feePercent = parseFloat(feeConfig?.value || "0");
+    const legacyCfg = newCfg?.value
+      ? null
+      : await ctx.db
+          .query("systemConfig")
+          .withIndex("by_key", (q: any) => q.eq("key", "payout_instant_fee_percent"))
+          .first();
+    const feePercent = parseFloat(newCfg?.value || legacyCfg?.value || "0");
     const fee = Math.round((mission.announcerEarnings || 0) * feePercent / 100);
     const amount = (mission.announcerEarnings || 0) - fee;
 

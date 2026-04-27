@@ -550,3 +550,37 @@ export const deleteStripeAccount = action({
     }
   },
 });
+
+/**
+ * Récupère le solde Stripe (available + pending) d'un compte Connect.
+ * Action publique : check session puis renvoie le solde du compte de l'annonceur connecté.
+ * Utilisée par le widget "Solde Stripe" du dashboard /dashboard/paiements.
+ */
+export const getMyStripeBalance = action({
+  args: { sessionToken: v.string() },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ available: number; pending: number; currency: string } | null> => {
+    // Récupérer l'utilisateur via runQuery (action HTTP API ok pour query côté self-hosted)
+    const data: any = await ctx.runQuery(internal.api.stripeConnectQueries.getMyStripeAccountForBalance, {
+      sessionToken: args.sessionToken,
+    });
+    if (!data?.stripeAccountId || !data?.stripeSecretKey) return null;
+
+    try {
+      const stripe = createStripeClient(data.stripeSecretKey);
+      const balance = await stripe.balance.retrieve({}, { stripeAccount: data.stripeAccountId });
+      // Balance EUR uniquement (centimes)
+      const eur = (arr: any[]) => arr.find((b) => b.currency === "eur")?.amount || 0;
+      return {
+        available: eur(balance.available),
+        pending: eur(balance.pending),
+        currency: "EUR",
+      };
+    } catch (error) {
+      console.error("[getMyStripeBalance] erreur Stripe:", error);
+      return null;
+    }
+  },
+});

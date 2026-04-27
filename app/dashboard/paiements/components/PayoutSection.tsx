@@ -8,6 +8,7 @@ import {
   Banknote,
   ChevronDown,
   ChevronUp,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import type { PayoutDetail, NextPayoutInfo } from "../types";
@@ -20,35 +21,36 @@ interface PayoutSectionProps {
 
 function PayoutCard({ payout }: { payout: PayoutDetail }) {
   const [expanded, setExpanded] = useState(false);
+  const isFailed = payout.status === "failed";
+  const isCompleted = payout.status === "completed";
+
+  const statusBg = isFailed ? "bg-red-100" : isCompleted ? "bg-green-100" : "bg-amber-100";
+  const statusText = isFailed ? "text-red-600" : isCompleted ? "text-green-600" : "text-amber-600";
+  const statusLabel = isFailed
+    ? "Échec virement"
+    : isCompleted
+      ? "Virement reçu"
+      : "En traitement";
 
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-100 bg-white">
+    <div className={cn(
+      "overflow-hidden rounded-xl border bg-white",
+      isFailed ? "border-red-200" : "border-gray-100"
+    )}>
       <button
         onClick={() => setExpanded(!expanded)}
         className="flex w-full items-center justify-between p-3 text-left transition-colors hover:bg-gray-50"
       >
         <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              "flex h-9 w-9 items-center justify-center rounded-full",
-              payout.status === "completed" ? "bg-green-100" : "bg-amber-100"
+          <div className={cn("flex h-9 w-9 items-center justify-center rounded-full", statusBg)}>
+            {isFailed ? (
+              <AlertTriangle className={cn("h-4 w-4", statusText)} />
+            ) : (
+              <Banknote className={cn("h-4 w-4", statusText)} />
             )}
-          >
-            <Banknote
-              className={cn(
-                "h-4 w-4",
-                payout.status === "completed"
-                  ? "text-green-600"
-                  : "text-amber-600"
-              )}
-            />
           </div>
           <div>
-            <p className="text-sm font-semibold text-foreground">
-              {payout.status === "completed"
-                ? "Virement reçu"
-                : "En traitement"}
-            </p>
+            <p className="text-sm font-semibold text-foreground">{statusLabel}</p>
             <p className="text-xs text-gray-500">
               {formatTimestamp(payout.date)} · {payout.missionsCount} mission
               {payout.missionsCount > 1 ? "s" : ""}
@@ -57,15 +59,8 @@ function PayoutCard({ payout }: { payout: PayoutDetail }) {
         </div>
 
         <div className="flex items-center gap-2">
-          <span
-            className={cn(
-              "text-base font-bold",
-              payout.status === "completed"
-                ? "text-green-600"
-                : "text-amber-600"
-            )}
-          >
-            +{formatPrice(payout.amount)}
+          <span className={cn("text-base font-bold", statusText)}>
+            {isFailed ? "" : "+"}{formatPrice(payout.amount)}
           </span>
           {expanded ? (
             <ChevronUp className="h-4 w-4 text-gray-400" />
@@ -84,6 +79,16 @@ function PayoutCard({ payout }: { payout: PayoutDetail }) {
             className="border-t border-gray-100 bg-gray-50/50 px-4 py-3"
           >
             <div className="space-y-1.5 text-sm">
+              {isFailed && payout.failureReason && (
+                <div className="mb-2 rounded-lg border border-red-200 bg-red-50 p-2.5">
+                  <p className="text-xs font-semibold text-red-700">Motif de l&apos;échec</p>
+                  <p className="text-xs text-red-600 mt-0.5">{payout.failureReason}</p>
+                  <p className="text-[11px] text-red-500 mt-1.5">
+                    Vérifiez votre IBAN et le statut KYC dans vos paramètres Stripe Connect.
+                    Une nouvelle tentative sera planifiée automatiquement.
+                  </p>
+                </div>
+              )}
               {payout.grossAmount !== undefined && (
                 <div className="flex justify-between">
                   <span className="text-gray-500">Montant brut</span>

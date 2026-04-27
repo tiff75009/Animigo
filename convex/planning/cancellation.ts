@@ -246,38 +246,47 @@ export async function calculateRefund(
     };
   }
 
-  const gracePeriodHours = parseInt(
-    await getConfigValue(ctx, "cancellation_grace_period_hours", "24"), 10
-  );
+  // ════════════════════════════════════════════════════════════════════════
+  // POLITIQUE D'ANNULATION (MISSIONS INDIVIDUELLES)
+  //
+  // Spec :
+  //   - Réservation minimum 24h avant le début (géré ailleurs : minimumBookingAdvanceHours)
+  //
+  //   - SI réservation ≤ THRESHOLD (default 36h) avant début → JAMAIS remboursable
+  //     → annonceur garde 100% earnings, plateforme garde frais service+Stripe
+  //
+  //   - SI annulation ≤ THRESHOLD avant début (même si réservation faite plus tôt) → idem
+  //     → annonceur garde 100% earnings, plateforme garde frais
+  //
+  //   - SI annulation > THRESHOLD avant début → selon compteur d'annulations client :
+  //       1ère : remboursé sauf frais (service + Stripe gardés par plateforme)
+  //       2ème : remboursé 50% des earnings ; annonceur garde 50% ; frais retenus
+  //       3ème+ : 0% remboursé ; annonceur 100% ; frais retenus
+  //
+  //   - Séances COLLECTIVES : politique annonceur (gérée plus haut dans cette fonction
+  //     via announcerPolicy — voir bloc collective au-dessus)
+  // ════════════════════════════════════════════════════════════════════════
   const thresholdHours = parseInt(
-    await getConfigValue(ctx, "cancellation_threshold_hours", "48"), 10
+    await getConfigValue(ctx, "cancellation_threshold_hours", "36"), 10
   );
-  const secondPercent = parseInt(
-    await getConfigValue(ctx, "cancellation_2nd_announcer_percent", "50"), 10
-  );
+  // 3ème annulation : annonceur garde X% (default 50%, le reste est remboursé hors frais)
   const thirdPercent = parseInt(
-    await getConfigValue(ctx, "cancellation_3rd_announcer_percent", "100"), 10
+    await getConfigValue(ctx, "cancellation_3rd_announcer_percent", "50"), 10
+  );
+  // 4ème+ annulation : annonceur garde Y% (default 100%, aucun remboursement)
+  const fourthPercent = parseInt(
+    await getConfigValue(ctx, "cancellation_4th_announcer_percent", "100"), 10
   );
   const counterPeriodMonths = parseInt(
     await getConfigValue(ctx, "cancellation_counter_period_months", "12"), 10
   );
-  const lastMinuteThresholdHours = parseInt(
-    await getConfigValue(ctx, "cancellation_last_minute_threshold_hours", "24"), 10
-  );
-  const lastMinuteGraceHours = parseInt(
-    await getConfigValue(ctx, "cancellation_last_minute_grace_hours", "6"), 10
-  );
 
   const now = simulationOptions?.simulatedNow ?? Date.now();
   const paidAt = payment.paidAt || payment.capturedAt || payment.authorizedAt || payment.createdAt;
-  const hoursSincePaid = (now - paidAt) / (1000 * 60 * 60);
 
   const startDateTime = new Date(`${mission.startDate}T${mission.startTime || "00:00"}`).getTime();
   const hoursBeforeStart = (startDateTime - now) / (1000 * 60 * 60);
-
-  // Déterminer si réservation last-minute (payé < Xh avant le début)
   const hoursBeforeStartAtBooking = (startDateTime - paidAt) / (1000 * 60 * 60);
-  const isLastMinuteBooking = hoursBeforeStartAtBooking <= lastMinuteThresholdHours;
 
   const cancellationCount = simulationOptions?.overrideCancellationCount ??
     await getClientCancellationCount(ctx, mission.clientId, counterPeriodMonths);
@@ -287,37 +296,41 @@ export async function calculateRefund(
   const stripeFee = mission.stripeFee || 0;
   const announcerEarnings = mission.announcerEarnings || payment.announcerEarnings || 0;
 
-  // 1. Réservation last-minute (mission commence ≤ 24h après paiement)
-  //    → Aucun remboursement : l'annonceur a bloqué son créneau, le client s'est engagé
-  //    L'annonceur perçoit 100% de ses gains, la plateforme conserve ses commissions
-  if (isLastMinuteBooking) {
+  // ─── Cas 1 : Réservation last-minute (faite ≤ THRESHOLD avant début) ───
+  // Le client a réservé en sachant que c'était engageant → aucun remboursement
+  if (hoursBeforeStartAtBooking <= thresholdHours) {
     return {
       canCancel: true,
       refundAmount: 0,
       platformFeeRetained: platformFee,
       stripeFeeRetained: stripeFee,
       announcerRetained: announcerEarnings,
-      reason: `Annulation non remboursable (mission réservée moins de ${lastMinuteThresholdHours}h avant le début)`,
+      reason: `Aucun remboursement : réservation effectuée moins de ${thresholdHours}h avant le début (engagement)`,
       cancellationCount,
     };
   }
 
-  // 2. Grâce post-paiement → remboursement 100% (plateforme absorbe les frais Stripe)
-  //    Applicable uniquement si la mission ne commence PAS dans les prochaines 24h
-  if (hoursSincePaid <= gracePeriodHours) {
+  // ─── Cas 2 : Annulation tardive (≤ THRESHOLD avant début) ───
+  // Même règle : annonceur a bloqué son créneau, plateforme garde tout
+  if (hoursBeforeStart <= thresholdHours) {
     return {
       canCancel: true,
-      refundAmount: totalAmount,
-      platformFeeRetained: 0,
-      stripeFeeRetained: 0,
-      announcerRetained: 0,
-      reason: `Remboursement intégral (dans les ${gracePeriodHours}h après paiement)`,
+      refundAmount: 0,
+      platformFeeRetained: platformFee,
+      stripeFeeRetained: stripeFee,
+      announcerRetained: announcerEarnings,
+      reason: `Aucun remboursement : annulation à moins de ${thresholdHours}h du début`,
       cancellationCount,
     };
   }
 
-  // 3. Plus de 48h avant le début → remboursement total - commission - frais Stripe
-  if (hoursBeforeStart > thresholdHours) {
+  // ─── Cas 3 : Annulation > THRESHOLD avant début → selon compteur client ───
+  // Politique progressive :
+  //   - 1ère et 2ème : remboursement intégral hors frais
+  //   - 3ème : annonceur conserve thirdPercent% (default 50%)
+  //   - 4ème+ : annonceur conserve fourthPercent% (default 100%)
+  // Les frais service+Stripe restent à la plateforme dans tous les cas.
+  if (cancellationCount <= 1) {
     const refund = Math.max(0, totalAmount - platformFee - stripeFee);
     return {
       canCancel: true,
@@ -325,27 +338,14 @@ export async function calculateRefund(
       platformFeeRetained: platformFee,
       stripeFeeRetained: stripeFee,
       announcerRetained: 0,
-      reason: `Remboursement moins commission et frais Stripe (plus de ${thresholdHours}h avant le début)`,
+      reason: `${cancellationCount + 1}ère/ème annulation : remboursement intégral hors frais de service et Stripe`,
       cancellationCount,
     };
   }
 
-  // 4. Moins de 48h → selon compteur
-  if (cancellationCount === 0) {
-    const refund = Math.max(0, totalAmount - platformFee - stripeFee);
-    return {
-      canCancel: true,
-      refundAmount: refund,
-      platformFeeRetained: platformFee,
-      stripeFeeRetained: stripeFee,
-      announcerRetained: 0,
-      reason: "Première annulation : remboursement moins commission et frais Stripe",
-      cancellationCount,
-    };
-  }
-
-  if (cancellationCount === 1) {
-    const announcerRetained = Math.round(announcerEarnings * (secondPercent / 100));
+  if (cancellationCount === 2) {
+    // 3ème annulation : annonceur garde thirdPercent% des earnings, frais retenus
+    const announcerRetained = Math.round(announcerEarnings * (thirdPercent / 100));
     const refund = Math.max(0, totalAmount - platformFee - stripeFee - announcerRetained);
     return {
       canCancel: true,
@@ -353,21 +353,21 @@ export async function calculateRefund(
       platformFeeRetained: platformFee,
       stripeFeeRetained: stripeFee,
       announcerRetained,
-      reason: `2ème annulation : l'annonceur conserve ${secondPercent}% de ses gains (frais Stripe retenus)`,
+      reason: `3ème annulation : annonceur conserve ${thirdPercent}% (remboursement partiel hors frais)`,
       cancellationCount,
     };
   }
 
-  // 3ème+ annulation → annonceur conserve thirdPercent% de ses gains
-  const announcerRetained3rd = Math.round(announcerEarnings * (thirdPercent / 100));
-  const refund3rd = Math.max(0, totalAmount - platformFee - stripeFee - announcerRetained3rd);
+  // 4ème+ annulation : annonceur garde fourthPercent% (default 100%)
+  const announcerRetained4th = Math.round(announcerEarnings * (fourthPercent / 100));
+  const refund4th = Math.max(0, totalAmount - platformFee - stripeFee - announcerRetained4th);
   return {
     canCancel: true,
-    refundAmount: refund3rd,
+    refundAmount: refund4th,
     platformFeeRetained: platformFee,
     stripeFeeRetained: stripeFee,
-    announcerRetained: announcerRetained3rd,
-    reason: `${cancellationCount + 1}ème annulation : l'annonceur conserve ${thirdPercent}% de ses gains (frais Stripe retenus)`,
+    announcerRetained: announcerRetained4th,
+    reason: `${cancellationCount + 1}ème annulation : ${fourthPercent === 100 ? "aucun remboursement" : "remboursement partiel"} (annonceur conserve ${fourthPercent}%, frais retenus)`,
     cancellationCount,
   };
 }

@@ -593,6 +593,65 @@ Utilisation de Framer Motion avec des variants predefinies :
 
 ## Changelog recent
 
+### v0.39.0 - Refonte Stripe Connect + politique d'annulation + admin paiements
+
+- **Pipeline reçu PDF client après paiement Stripe (workarounds Convex self-hosted)**
+  - Refonte complete : `confirmPaymentSuccess` → `prepareAndDispatchClientReceipt` (mutation, lit BDD) → `renderClientReceiptPdf` (action "use node" pdfme)
+  - Workarounds : `ctx.runQuery` / `runMutation` / `scheduler.runAfter` / `storage.store` cassés depuis action self-hosted → bypass via HTTP API Convex (admin key) + appels Resend HTTP direct + fallback base64 stocké sur la mission (champ `clientReceiptPdfBase64`)
+  - pdfme : tous les plugins enregistrés (text, image, table, line, rectangle, ellipse, svg, dateTime, barcodes…), require() au lieu d'import dynamique pour bypass bundler
+  - Auto-fill des inputs avec le `content` par défaut des schémas du template (gère labels statiques `labelPaymentDate`, `sectionService`, etc.)
+  - Card details (brand/last4) récupérés depuis Stripe API si manquants
+  - Fuseau Europe/Paris forcé sur toutes les dates du PDF
+  - `/client/factures` : décode base64 → Blob → trigger download via anchor
+
+- **Stripe Connect — corrections + monitoring**
+  - Webhook `payout.paid` : passe `mission.announcerPaymentStatus` → `paid` + notif annonceur
+  - Webhook `payout.failed` : revert statut + log motif d'échec dans `announcerPayouts.failureReason` (visible côté annonceur)
+  - Webhook `transfer.created` cleané (no-op explicite, destination charge n'a pas de missionId metadata)
+  - Refund commission : `refund_application_fee: false` forcé partout (plateforme garde toujours la commission)
+  - Action `getMyStripeBalance` (Stripe API direct) + widget `StripeBalanceWidget` dans /dashboard/paiements (available + pending)
+  - Section virements : statut "Échec" rouge avec motif si payout failed
+
+- **Modes de versement annonceur — admin toggles**
+  - `/admin/paiements` : 2 toggles "Mode mensuel groupé" / "Mode par mission" (default ON)
+  - Garde-fou : impossible de désactiver les deux modes simultanément
+  - `updatePayoutMode` (mutation annonceur) refuse si mode désactivé par admin
+  - Fallback runtime : si annonceur a `payoutMode="instant"` mais admin désactive `instant` → bascule scheduled
+  - Cron mensuel skippe entièrement si mode scheduled désactivé
+
+- **Cron versement mensuel — date dynamique**
+  - Avant : `crons.monthly(day: 25)` jour codé en dur, ignorait le `payout_scheduled_day` admin
+  - Après : `crons.daily(hourUTC: 9)` + le handler vérifie `dayOfMonth === payout_scheduled_day` (Europe/Paris) → skip si ce n'est pas le bon jour
+  - Le réglage admin "Jour du virement" est désormais effectif
+
+- **Frais de payout — source unique**
+  - Suppression du doublon : avant 3 sliders (`stripe_fee_rate` admin/commissions + `payout_monthly_fee_percent` + `payout_per_mission_fee_percent` admin/paiements) → désormais 1 seule source `stripe_fee_rate`
+  - `getInstantFeePercent` et `getMonthlyFeePercent` aliasés sur `getStripeFeePercent`
+  - UI admin/paiements : sliders frais retirés, encart info renvoie vers /admin/commissions
+  - UI annonceur (`/dashboard/parametres`) : badges "% de frais" lisent désormais `stripeFeeRate`
+
+- **Délais d'acceptation — chaînage cohérent + bornes dynamiques**
+  - Garde-fou backend : `intervalShortDays < intervalLongDays` (sinon "Mission normale" disparaît)
+  - Sliders interconnectés : `Mission urgente.max = intervalLongDays - 1`, `Mission lointaine.min = intervalShortDays + 1`
+  - Labels enrichis : badges plages `0 → 6j` / `7 → 30j` / `31j et +` à droite de chaque card
+
+- **Politique d'annulation refondue (4 niveaux progressifs)**
+  - Réservation ≤ 36h avant début → 0% remboursement (engagement client)
+  - Annulation ≤ 36h du début → 0% remboursement
+  - 1ère & 2ème annulation (>36h) : remboursement intégral hors frais
+  - 3ème annulation : annonceur conserve 50% (configurable) ; remboursement client à 50% hors frais
+  - 4ème+ annulation : annonceur conserve 100% (configurable) ; aucun remboursement
+  - **Frais de service plateforme TOUJOURS conservés** (`refund_application_fee: false` partout)
+  - Suppression des paramètres legacy : `cancellation_grace_period_hours`, `cancellation_last_minute_*` (rétrocompat préservée en signature)
+  - UI admin simplifiée : 1 seuil + 2 sliders pourcentage (3ème + 4ème+) + tableau récap + note explicite séances collectives → politique annonceur
+
+- **Affichage erreur sauvegarde admin/paiements**
+  - Composant `saveError` qui décode `ConvexError.data` au lieu d'afficher "Server Error" générique
+
+- **Homepage menu navbar — fix doublons catégories**
+  - Avant : liste hardcodée 9 services dans `navbar.tsx` (Pension, Visite à domicile, Vétérinaire, Comportementaliste invisibles dans /admin/services/prestations)
+  - Après : fetch dynamique via `getHomepageCategories` qui filtre `parentCategoryId` défini → cohérent avec `/admin/services/prestations`
+
 ### v0.38.0 - Refonte dashboard/profil en widgets + securite IA descriptions/photos + zone d'intervention
 
 - **Refonte page dashboard/profil en widgets compacts** (style Google Calendar / Outlook / iCloud)

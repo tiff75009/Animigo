@@ -95,12 +95,17 @@ crons.hourly(
 
 /**
  * Versements mensuels planifiés
- * Exécuté le 25 de chaque mois à 9h UTC pour déclencher
- * les versements groupés aux annonceurs (mode scheduled)
+ * Exécuté CHAQUE JOUR à 9h UTC. Le handler interne vérifie si la date du jour
+ * correspond au `payout_scheduled_day` configuré dans /admin/paiements et
+ * traite les versements seulement ce jour-là.
+ *
+ * Pourquoi pas crons.monthly ? Convex impose une config statique pour
+ * crons.monthly (day fixé à la déclaration), donc impossible de respecter
+ * dynamiquement le jour configuré côté admin. La parade : daily + check.
  */
-crons.monthly(
+crons.daily(
   "process-scheduled-payouts",
-  { day: 25, hourUTC: 9, minuteUTC: 0 },
+  { hourUTC: 9, minuteUTC: 0 },
   internal.planning.payouts.processScheduledPayouts
 );
 
