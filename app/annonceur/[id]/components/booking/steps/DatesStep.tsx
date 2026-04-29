@@ -69,6 +69,18 @@ interface DatesStepProps {
   // Animation
   slideVariants: Record<string, { x: number; opacity: number }>;
   slideDirection: "left" | "right";
+
+  // Conflits animal (autres missions/pendings du client pour les animaux sélectionnés)
+  animalBookedSlots?: Array<{
+    date: string;
+    startTime?: string;
+    endTime?: string;
+    animalName?: string;
+  }>;
+  onWeeksToShowChange?: (weeks: number) => void;
+  // Indique si un animal est requis mais pas encore sélectionné
+  // (utilisateur connecté avec animaux mais aucune sélection)
+  needsAnimalSelection?: boolean;
 }
 
 export default function DatesStep({
@@ -116,6 +128,9 @@ export default function DatesStep({
   isLastStep,
   slideVariants,
   slideDirection,
+  animalBookedSlots,
+  onWeeksToShowChange,
+  needsAnimalSelection,
 }: DatesStepProps) {
   return (
     <motion.div
@@ -126,6 +141,31 @@ export default function DatesStep({
       variants={slideVariants}
       transition={{ duration: 0.3, ease: "easeInOut" }}
     >
+      {/* Bandeau d'avertissement : aucun animal sélectionné */}
+      {needsAnimalSelection && (
+        <div
+          className="mb-4 p-3 flex items-start gap-2.5 rounded-xl"
+          style={{ background: "#fdf3f3", border: "1px solid #f1cdcd" }}
+        >
+          <span
+            className="w-5 h-5 rounded-full inline-flex items-center justify-center flex-shrink-0 text-[12px] font-bold"
+            style={{ background: "#c45656", color: "#fff" }}
+          >
+            !
+          </span>
+          <div className="text-[12.5px] leading-[1.45]" style={{ color: "#7a3a3a" }}>
+            <p className="font-semibold mb-0.5" style={{ color: "#1f1f1d" }}>
+              Sélectionnez un animal d&apos;abord
+            </p>
+            <p>
+              Revenez à l&apos;étape précédente pour choisir l&apos;animal concerné par cette
+              réservation. Cela permet aussi de bloquer les créneaux où il a déjà une
+              autre mission.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Créneaux collectifs */}
       {isCollectiveFormule && selectedFormule && onSlotsSelected && (
         <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100">
@@ -137,6 +177,8 @@ export default function DatesStep({
             animalType={selectedAnimalType}
             onSlotsSelected={onSlotsSelected}
             selectedSlotIds={selectedSlotIds}
+            animalBookedSlots={animalBookedSlots}
+            minimumBookingAdvanceHours={minimumBookingAdvanceHours}
           />
         </div>
       )}
@@ -156,6 +198,9 @@ export default function DatesStep({
           acceptReservationsFrom={acceptReservationsFrom}
           acceptReservationsTo={acceptReservationsTo}
           onMonthChange={onMonthChange}
+          animalBookedSlots={animalBookedSlots}
+          onWeeksToShowChange={onWeeksToShowChange}
+          minimumBookingAdvanceHours={minimumBookingAdvanceHours}
         />
       )}
 
@@ -191,6 +236,7 @@ export default function DatesStep({
           onEndTimeSelect={onEndTimeSelect}
           onOvernightChange={onOvernightChange}
           onMonthChange={onMonthChange}
+          animalBookedSlots={animalBookedSlots}
         />
       )}
 

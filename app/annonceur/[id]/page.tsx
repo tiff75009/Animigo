@@ -3,13 +3,14 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQueryState, parseAsString, parseAsArrayOf, parseAsBoolean, parseAsInteger, parseAsJson } from "nuqs";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { setAuthToken as storeAuthToken } from "@/app/lib/authToken";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { useAuth } from "@/app/hooks/useAuth";
+import { useSessionStorageState } from "@/app/hooks/useSessionStorageState";
 
 import {
   AnnouncerHero,
@@ -112,15 +113,60 @@ export default function AnnouncerProfilePage() {
   const [urlAnimalType, setUrlAnimalType] = useQueryState("animalType");
   const [urlAnimalIds, setUrlAnimalIds] = useQueryState("animalIds");
 
-  // État de la réservation (formule, options, dates, heures)
-  const [bookingSelection, setBookingSelection] = useState<BookingSelection>(DEFAULT_BOOKING_SELECTION);
+  // État de la réservation (formule, options, dates, heures).
+  // Approche hybride : useState comme source de vérité (rendu synchrone,
+  // pas de friction nuqs) + sync vers l'URL via le setter nuqs (param `w`)
+  // pour survivre aux F5 et back/forward.
+  const [, setWizardUrlParam] = useQueryState(
+    "w",
+    parseAsJson<BookingSelection>((v) => v as BookingSelection)
+  );
+
+  const [bookingSelection, setBookingSelection] = useState<BookingSelection>(() => {
+    // Hydratation initiale depuis l'URL (window.location au premier render)
+    if (typeof window !== "undefined") {
+      try {
+        const raw = new URLSearchParams(window.location.search).get("w");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === "object") {
+            return { ...DEFAULT_BOOKING_SELECTION, ...parsed } as BookingSelection;
+          }
+        }
+      } catch {
+        /* JSON corrompu : on retombe sur le défaut */
+      }
+    }
+    return DEFAULT_BOOKING_SELECTION;
+  });
+
+  // Sync state → URL (debounce léger via nuqs)
+  // Évite d'écrire l'URL si tout est encore au défaut (URL propre au mount).
+  useEffect(() => {
+    const isEmpty =
+      !bookingSelection.selectedServiceId &&
+      !bookingSelection.selectedVariantId &&
+      !bookingSelection.startDate &&
+      bookingSelection.selectedOptionIds.length === 0 &&
+      bookingSelection.selectedSlotIds.length === 0 &&
+      bookingSelection.selectedSessions.length === 0 &&
+      bookingSelection.selectedAnimalIds.length === 0;
+    setWizardUrlParam(isEmpty ? null : bookingSelection);
+  }, [bookingSelection, setWizardUrlParam]);
+
+  const resetBookingSelection = useCallback(() => {
+    setBookingSelection(DEFAULT_BOOKING_SELECTION);
+    setWizardUrlParam(null);
+  }, [setWizardUrlParam]);
 
   // Flag pour savoir si on a déjà initialisé depuis l'URL
   const [hasInitializedFromUrl, setHasInitializedFromUrl] = useState(false);
 
   // ─── State du wizard intégré : étape Finalisation ───
   // Inclut auth invité, notes, acceptations CGV, etc.
-  const [finalizeData, setFinalizeData] = useState<{
+  // Note : on EXCLUT volontairement `password`/`confirmPassword` du storage
+  //   (cf. wrapper plus bas) pour ne pas écrire de secret en sessionStorage.
+  type FinalizeData = {
     guestData?: {
       firstName: string;
       lastName: string;
@@ -136,7 +182,8 @@ export default function AnnouncerProfilePage() {
     isSubmitting?: boolean;
     submitError?: string | null;
     fieldErrors?: Record<string, string>;
-  }>({
+  };
+  const DEFAULT_FINALIZE: FinalizeData = {
     guestData: {
       firstName: "",
       lastName: "",
@@ -152,7 +199,12 @@ export default function AnnouncerProfilePage() {
     isSubmitting: false,
     submitError: null,
     fieldErrors: {},
-  });
+  };
+  const [finalizeData, setFinalizeData, resetFinalizeData] =
+    useSessionStorageState<FinalizeData>(
+      `booking:finalize:${announcerSlug}`,
+      DEFAULT_FINALIZE
+    );
 
   // Effet pour initialiser le state depuis les paramètres URL (après retour de /reservation)
   useEffect(() => {
@@ -252,6 +304,12 @@ export default function AnnouncerProfilePage() {
     return `${year}-${month}-${day}`;
   };
 
+  // Nombre de semaines à afficher pour la vue "sélection rapide" multi-séances.
+  // Pilotée par MultiSessionCalendar via onWeeksToShowChange ; sert à élargir
+  // la fenêtre de la query availability pour que "Voir 4 semaines de plus"
+  // ramène réellement plus de créneaux.
+  const [multiSessionWeeks, setMultiSessionWeeks] = useState(4);
+
   // Memoize date range calculation to avoid recreating on every render
   const { calendarStartDateStr, calendarEndDateStr } = useMemo(() => {
     const getMonday = (date: Date): Date => {
@@ -265,10 +323,10 @@ export default function AnnouncerProfilePage() {
     const startOfMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
     const endOfMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0);
 
-    // For MultiSessionCalendar: get Monday of current week + 4 weeks
+    // For MultiSessionCalendar: get Monday of current week + N weeks
     const multiSessionStart = getMonday(calendarMonth);
     const multiSessionEnd = new Date(multiSessionStart);
-    multiSessionEnd.setDate(multiSessionStart.getDate() + 27); // 4 weeks = 28 days
+    multiSessionEnd.setDate(multiSessionStart.getDate() + multiSessionWeeks * 7 - 1);
 
     // Use the broader range to cover both calendar types
     const calendarStartDate = startOfMonth < multiSessionStart ? startOfMonth : multiSessionStart;
@@ -278,7 +336,7 @@ export default function AnnouncerProfilePage() {
       calendarStartDateStr: formatDateLocal(calendarStartDate),
       calendarEndDateStr: formatDateLocal(calendarEndDate),
     };
-  }, [calendarMonth]);
+  }, [calendarMonth, multiSessionWeeks]);
 
   // Get selected service for calendar query
   const selectedServiceForCalendar = announcerData?.id && bookingSelection.selectedServiceId
@@ -293,6 +351,15 @@ export default function AnnouncerProfilePage() {
     );
     return service?.categorySlug || null;
   }, [announcerData, bookingSelection.selectedServiceId]);
+
+  // Configuration globale délais d'acceptation (utilisée pour aligner
+  // les checks UI avec les checks backend dans createPendingBooking).
+  const acceptanceDeadlineConfig = useQuery(
+    api.planning.acceptanceDeadline.getAcceptanceDeadlineConfigPublic,
+    {}
+  );
+  const minimumBookingAdvanceHours =
+    acceptanceDeadlineConfig?.minimumBookingAdvanceHours ?? 24;
 
   const availabilityCalendar = useQuery(
     api.public.search.getAnnouncerAvailabilityCalendar,
@@ -348,6 +415,37 @@ export default function AnnouncerProfilePage() {
     }
     return [];
   });
+
+  // Créneaux occupés par les animaux sélectionnés (autres missions / pendings)
+  // Permet de bloquer côté UI les séances qui chevaucheraient une autre réservation.
+  const animalBookedSlotsData = useQuery(
+    api.public.booking.getAnimalBookedSlots,
+    token && selectedAnimalIds.length > 0
+      ? { token, animalIds: selectedAnimalIds as Id<"animals">[] }
+      : "skip"
+  );
+
+  // ─── Nettoyage des pendings abandonnés au mount ───
+  // Quand le client revient sur la page, on supprime ses anciens pendings
+  // non finalisés chez cet annonceur. Évite de bloquer ses propres créneaux
+  // après une réservation interrompue (paiement abandonné, fermeture onglet).
+  // ⚠️ Ne s'exécute qu'UNE SEULE FOIS par session de page (ref guard).
+  const cleanupMyPendingsMutation = useMutation(
+    api.public.booking.cleanupMyPendingsForAnnouncer
+  );
+  const hasCleanedPendingsRef = useRef(false);
+  useEffect(() => {
+    if (hasCleanedPendingsRef.current) return;
+    if (!token || !announcerData?.id) return;
+    hasCleanedPendingsRef.current = true;
+    cleanupMyPendingsMutation({
+      token,
+      announcerId: announcerData.id as Id<"users">,
+    }).catch((e) => {
+      // Non bloquant : un échec ici ne casse pas le wizard
+      console.warn("[cleanupMyPendings] échec :", e);
+    });
+  }, [token, announcerData?.id, cleanupMyPendingsMutation]);
 
   // État pour la vérification de l'animal (invités - chien ou chat)
   const [guestAnimalData, setGuestAnimalData] = useState<GuestAnimalData | null>(null);
@@ -736,8 +834,25 @@ export default function AnnouncerProfilePage() {
   }, []);
 
   // Handler pour les séances individuelles multi-sessions
+  // ⚠️ On synchronise startDate/endDate sur la 1ère/dernière séance pour
+  //    éviter "Veuillez sélectionner une date" lors de la finalisation.
   const handleSessionsChange = useCallback((sessions: SelectedSession[]) => {
-    setBookingSelection((prev) => ({ ...prev, selectedSessions: sessions }));
+    setBookingSelection((prev) => {
+      if (sessions.length === 0) {
+        return { ...prev, selectedSessions: sessions };
+      }
+      const sorted = [...sessions].sort((a, b) => a.date.localeCompare(b.date));
+      const first = sorted[0];
+      const last = sorted[sorted.length - 1];
+      return {
+        ...prev,
+        selectedSessions: sessions,
+        startDate: first.date,
+        endDate: last.date,
+        startTime: first.startTime,
+        endTime: last.endTime,
+      };
+    });
   }, []);
 
   // Handler pour la sélection/déselection d'animal (utilisateur connecté - sélection multiple)
@@ -1018,6 +1133,7 @@ export default function AnnouncerProfilePage() {
   const createPendingBookingMutation = useMutation(api.public.booking.createPendingBooking);
   const finalizeBookingMutation = useMutation(api.public.booking.finalizeBooking);
   const finalizeBookingAsGuestMutation = useMutation(api.public.booking.finalizeBookingAsGuest);
+  const verifyGuestAddressAction = useAction(api.api.addressVerification.verifyGuestAddress);
 
   // Handler de finalisation directe depuis le wizard (étape Finaliser)
   const handleFinalizeWizard = useCallback(async () => {
@@ -1075,6 +1191,32 @@ export default function AnnouncerProfilePage() {
         throw new Error("Veuillez sélectionner une date");
       }
 
+      // ── 2.5. Vérifier l'adresse guest côté serveur (anti-falsification GPS) ──
+      // Si client_home + adresse texte fournie, on récupère un token de
+      // vérification dont les coords font foi côté backend.
+      let verifiedAddressToken: string | undefined;
+      if (
+        bookingSelection.serviceLocation === "client_home" &&
+        bookingSelection.guestAddress?.address
+      ) {
+        try {
+          const verif = await verifyGuestAddressAction({
+            address: bookingSelection.guestAddress.address,
+          });
+          if (verif.success && verif.token) {
+            verifiedAddressToken = verif.token;
+          } else if (verif.error) {
+            throw new Error(verif.error);
+          }
+        } catch (e) {
+          throw new Error(
+            e instanceof Error
+              ? `Impossible de vérifier l'adresse : ${e.message}`
+              : "Impossible de vérifier l'adresse"
+          );
+        }
+      }
+
       // ── 3. Créer la réservation pending ──
       const pendingResult = await createPendingBookingMutation({
         announcerId: announcerData.id as Id<"users">,
@@ -1105,6 +1247,7 @@ export default function AnnouncerProfilePage() {
           city: bookingSelection.guestAddress.city || undefined,
           postalCode: bookingSelection.guestAddress.postalCode || undefined,
           coordinates: bookingSelection.guestAddress.coordinates || undefined,
+          verificationToken: verifiedAddressToken,
         } : undefined,
         guestAnimalPreFill: guestAnimalData ? {
           type: guestAnimalData.animalType,
@@ -1152,7 +1295,15 @@ export default function AnnouncerProfilePage() {
         });
 
         if (result.success) {
-          router.push(`/dashboard?tab=missions&success=booking`);
+          // Mission créée : on vide la progression du wizard
+          resetBookingSelection();
+          resetFinalizeData();
+          // Redirection vers la page de confirmation dédiée (timeline du processus)
+          if (result.missionId) {
+            router.push(`/reservation/confirmation/${result.missionId}`);
+          } else {
+            router.push(`/dashboard?tab=missions&success=booking`);
+          }
         }
       } else {
         // Invité — créer le compte + finaliser
@@ -1183,6 +1334,9 @@ export default function AnnouncerProfilePage() {
 
         if (result.success && result.token) {
           await storeAuthToken(result.token);
+          // Mission créée : on vide la progression du wizard
+          resetBookingSelection();
+          resetFinalizeData();
           if (result.requiresEmailVerification) {
             router.push(`/reservation/confirmation-email?email=${encodeURIComponent(guest!.email.trim().toLowerCase())}`);
           } else {
@@ -1192,12 +1346,15 @@ export default function AnnouncerProfilePage() {
       }
     } catch (err: unknown) {
       let errorMessage = "Erreur lors de la réservation";
-      if (err instanceof Error) {
-        errorMessage = err.message;
-      } else if (typeof err === "object" && err !== null && "data" in err) {
+      // ⚠️ Priorité : ConvexError.data > Error.message
+      // (sinon `Server Error` générique masque le vrai motif renvoyé par le backend)
+      if (typeof err === "object" && err !== null && "data" in err) {
         const convexErr = err as { data?: string | { message?: string } };
         if (typeof convexErr.data === "string") errorMessage = convexErr.data;
         else if (convexErr.data?.message) errorMessage = convexErr.data.message;
+      }
+      if (errorMessage === "Erreur lors de la réservation" && err instanceof Error) {
+        errorMessage = err.message;
       }
       const fieldErrors: Record<string, string> = {};
       if (errorMessage.toLowerCase().includes("email") || errorMessage.toLowerCase().includes("compte existe")) {
@@ -1341,6 +1498,9 @@ export default function AnnouncerProfilePage() {
                 // Props séances individuelles multi-sessions
                 selectedSessions={bookingSelection.selectedSessions}
                 onSessionsChange={handleSessionsChange}
+                animalBookedSlots={animalBookedSlotsData}
+                onWeeksToShowChange={setMultiSessionWeeks}
+                minimumBookingAdvanceHours={minimumBookingAdvanceHours}
                 // Props sélection d'animal (multiple)
                 userAnimals={userAnimals}
                 selectedAnimalIds={selectedAnimalIds}

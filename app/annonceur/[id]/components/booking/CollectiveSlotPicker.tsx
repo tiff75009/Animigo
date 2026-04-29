@@ -39,29 +39,33 @@ interface CollectiveSlotPickerProps {
   onSlotsSelected: (slotIds: string[]) => void;
   selectedSlotIds?: string[];
   className?: string;
+  // Créneaux occupés par les animaux du client (autres missions/pendings)
+  // Bloque la sélection d'un slot collectif qui chevaucherait l'un d'eux.
+  animalBookedSlots?: Array<{
+    date: string;
+    startTime?: string;
+    endTime?: string;
+    animalName?: string;
+  }>;
+  // Délai min à l'avance (en heures) — config admin globale, écrase le défaut
+  minimumBookingAdvanceHours?: number;
 }
 
 // Délai minimum de réservation (en heures)
 const MIN_BOOKING_LEAD_TIME_HOURS = 2;
 
-// Vérifier si un créneau est réservable (pas passé + délai minimum 2h)
-function isSlotBookable(dateStr: string, startTime: string): boolean {
+// Vérifier si un créneau est réservable (pas passé + délai minimum en heures)
+function isSlotBookable(
+  dateStr: string,
+  startTime: string,
+  leadTimeHours: number = MIN_BOOKING_LEAD_TIME_HOURS
+): boolean {
   const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-
-  // Date passée = non réservable
-  if (dateStr < todayStr) return false;
-
-  // Date future = réservable
-  if (dateStr > todayStr) return true;
-
-  // Date = aujourd'hui : vérifier l'heure avec délai minimum
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const [hours, minutes] = startTime.split(":").map(Number);
-  const slotMinutes = hours * 60 + minutes;
-  const minBookableMinutes = currentMinutes + (MIN_BOOKING_LEAD_TIME_HOURS * 60);
-
-  return slotMinutes >= minBookableMinutes;
+  const minBookableMs = now.getTime() + leadTimeHours * 60 * 60 * 1000;
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const [h, m] = startTime.split(":").map(Number);
+  const slotMs = new Date(year, month - 1, day, h, m, 0, 0).getTime();
+  return slotMs >= minBookableMs;
 }
 
 // Formater la date complète
@@ -177,7 +181,38 @@ export default memo(function CollectiveSlotPicker({
   onSlotsSelected,
   selectedSlotIds = [],
   className,
+  animalBookedSlots = [],
+  minimumBookingAdvanceHours,
 }: CollectiveSlotPickerProps) {
+  // Délai min à l'avance — fallback 2h si pas de config (rétro-compat)
+  const minLeadHours = minimumBookingAdvanceHours ?? MIN_BOOKING_LEAD_TIME_HOURS;
+  // Helper : nom de l'animal en conflit pour un slot collectif (ou null)
+  // ⚠️ On ne signale QUE si le START du slot tombe DANS la mission animal.
+  //    Les chevauchements adjacents par buffer sont gérés ailleurs.
+  const getAnimalConflictForCollectiveSlot = (slot: {
+    date: string;
+    startTime: string;
+    endTime: string;
+  }): string | null => {
+    const conflictsForDay = animalBookedSlots.filter((s) => s.date === slot.date);
+    if (conflictsForDay.length === 0) return null;
+
+    const toMin = (t: string) => {
+      const [h, m] = t.split(":").map(Number);
+      return h * 60 + m;
+    };
+    const slotStart = toMin(slot.startTime);
+
+    for (const s of conflictsForDay) {
+      if (!s.startTime || !s.endTime) return s.animalName ?? "votre animal";
+      const blockedStart = toMin(s.startTime);
+      const blockedEnd = toMin(s.endTime);
+      if (slotStart >= blockedStart && slotStart <= blockedEnd) {
+        return s.animalName ?? "votre animal";
+      }
+    }
+    return null;
+  };
   const [currentDate, setCurrentDate] = useState(new Date());
   const [localSelectedIds, setLocalSelectedIds] = useState<string[]>(selectedSlotIds);
   const [selectedDay, setSelectedDay] = useState<string | null>(null); // Pour la vue horaire
@@ -201,7 +236,7 @@ export default memo(function CollectiveSlotPicker({
     const map = new Map<string, CollectiveSlot[]>();
     for (const slot of availableSlots) {
       // Filtrer les créneaux passés ou trop proches (moins de 2h)
-      if (!isSlotBookable(slot.date, slot.startTime)) continue;
+      if (!isSlotBookable(slot.date, slot.startTime, minLeadHours)) continue;
 
       const existing = map.get(slot.date) || [];
       existing.push(slot as CollectiveSlot);
@@ -498,25 +533,43 @@ export default memo(function CollectiveSlotPicker({
             {daySlots.map((slot) => {
               const isSelected = localSelectedIds.includes(slot._id);
               const reachedLimit = localSelectedIds.length >= numberOfSessions;
+              const animalConflictName = isSelected
+                ? null
+                : getAnimalConflictForCollectiveSlot(slot);
               const canSelect =
                 isSelected ||
                 (!reachedLimit &&
+                  animalConflictName === null &&
                   (checkInterval(selectedDates, slot.date, sessionInterval) ||
                     localSelectedIds.length === 0));
+              const tooltip = animalConflictName
+                ? `${animalConflictName} a déjà une réservation à cette date`
+                : undefined;
 
               return (
                 <button
                   key={slot._id}
                   onClick={() => canSelect && handleSlotSelect(slot._id)}
                   disabled={!canSelect}
+                  title={tooltip}
                   className="w-full p-3 text-left transition-all hover:bg-[#fafafa]"
                   style={{
                     borderRadius: 12,
                     border: `1px solid ${
-                      isSelected ? "#1f3a33" : !canSelect ? "#f1ede3" : "#ece9e1"
+                      isSelected
+                        ? "#1f3a33"
+                        : animalConflictName
+                          ? "#f1cdcd"
+                          : !canSelect
+                            ? "#f1ede3"
+                            : "#ece9e1"
                     }`,
-                    background: isSelected ? "#f5f9f6" : "#fff",
-                    opacity: !canSelect && !isSelected ? 0.5 : 1,
+                    background: isSelected
+                      ? "#f5f9f6"
+                      : animalConflictName
+                        ? "#fdf3f3"
+                        : "#fff",
+                    opacity: !canSelect && !isSelected ? (animalConflictName ? 0.7 : 0.5) : 1,
                     cursor: !canSelect ? "not-allowed" : "pointer",
                   }}
                 >
@@ -539,6 +592,19 @@ export default memo(function CollectiveSlotPicker({
                             {slot.availableSpots} place{slot.availableSpots > 1 ? "s" : ""} disponible{slot.availableSpots > 1 ? "s" : ""}
                           </span>
                         </div>
+                        {animalConflictName && (
+                          <div
+                            className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded-full text-[9.5px] font-semibold uppercase tracking-[0.04em]"
+                            style={{
+                              background: "#fff",
+                              border: "1px solid #f1cdcd",
+                              color: "#c45656",
+                            }}
+                          >
+                            <AlertCircle className="w-2.5 h-2.5" />
+                            {animalConflictName} occupé
+                          </div>
+                        )}
                       </div>
                     </div>
                     {isSelected && (

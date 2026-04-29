@@ -14,6 +14,11 @@ import {
   isBookingAdvanceValid,
 } from "../planning/acceptanceDeadline";
 import { checkRateLimit } from "../lib/rateLimit";
+import {
+  checkBreedCategory,
+  isDogAccepted,
+  getSizeFromWeight,
+} from "../../data/categorized-dog-breeds";
 
 // Générer toutes les dates entre deux dates (YYYY-MM-DD)
 // Utilise une approche sans conversion UTC pour éviter les décalages de fuseau horaire
@@ -87,6 +92,9 @@ export const createPendingBooking = mutation({
       v.literal("client_home")
     )),
     // Adresse invité (pour les utilisateurs non connectés)
+    // ⚠️ `coordinates` envoyées par le client sont IGNORÉES si
+    //    `verificationToken` est présent (anti-falsification GPS).
+    //    Voir convex/api/addressVerification.ts.
     guestAddress: v.optional(v.object({
       address: v.string(),
       city: v.optional(v.string()),
@@ -95,6 +103,7 @@ export const createPendingBooking = mutation({
         lat: v.number(),
         lng: v.number(),
       })),
+      verificationToken: v.optional(v.string()),
     })),
     // Données pré-remplies de l'animal invité
     guestAnimalPreFill: v.optional(v.object({
@@ -138,6 +147,27 @@ export const createPendingBooking = mutation({
       throw new ConvexError("Service non trouvé");
     }
 
+    // ─── Validations ownership (anti-confusion) ───
+    // Empêche un client malveillant de combiner serviceId/variantId/announcerId
+    // arbitrairement. Ces 3 doivent être cohérents.
+    if (service.userId !== args.announcerId) {
+      throw new ConvexError("Ce service n'appartient pas à cet annonceur");
+    }
+    if (!variant) {
+      throw new ConvexError("Formule non trouvée");
+    }
+    if (variant.serviceId !== args.serviceId) {
+      throw new ConvexError("Cette formule n'appartient pas à ce service");
+    }
+
+    // ─── Validations actif/modéré ───
+    if (service.isActive === false) {
+      throw new ConvexError("Ce service n'est plus disponible");
+    }
+    if (variant.isActive === false) {
+      throw new ConvexError("Cette formule n'est plus disponible");
+    }
+
     // Récupérer la catégorie pour vérifier le mode de blocage basé sur la durée
     const category = await ctx.db
       .query("serviceCategories")
@@ -145,7 +175,7 @@ export const createPendingBooking = mutation({
       .first();
 
     // Si la catégorie a le blocage basé sur la durée activé, vérifier que la variante a une durée
-    if (category?.enableDurationBasedBlocking && !variant?.duration) {
+    if (category?.enableDurationBasedBlocking && !variant.duration) {
       throw new ConvexError("Cette prestation nécessite une formule avec une durée définie");
     }
 
@@ -162,10 +192,94 @@ export const createPendingBooking = mutation({
     const isCollectiveBooking = args.collectiveSlotIds && args.collectiveSlotIds.length > 0;
     const isMultiSessionBooking = args.sessions && args.sessions.length > 0;
 
-    if (!isCollectiveBooking && !isMultiSessionBooking) {
-      // Vérifier la disponibilité de l'annonceur AVANT de créer la réservation
-      // NOUVEAU: Logique "par défaut indisponible" + vérification par type de catégorie
+    // ─── Cohérence animalCount ↔ selectedAnimalIds ─────────────────────
+    // Si l'utilisateur a sélectionné des animaux, ce nombre fait foi
+    // (anti-divergence prix vs capacité réservée).
+    let safeAnimalCount: number | undefined = args.animalCount;
+    let safeEffectiveAnimalCount: number | undefined = args.effectiveAnimalCount;
+    if (args.selectedAnimalIds && args.selectedAnimalIds.length > 0) {
+      const realCount = args.selectedAnimalIds.length;
+      const uniqueIds = new Set(args.selectedAnimalIds.map(String));
+      if (uniqueIds.size !== realCount) {
+        throw new ConvexError(
+          "Vous avez sélectionné le même animal plusieurs fois"
+        );
+      }
+      safeAnimalCount = realCount;
+      safeEffectiveAnimalCount = realCount;
+    }
 
+    // ─── Validation disponibilité + conflits ─────────────────────────────
+    // Couvre 3 cas : collectif, multi-sessions, mono-séance (par plage).
+    // ⚠️ Cette validation est AUSSI dans finalizeBooking (filet de sécurité
+    //    contre les changements survenus pendant le checkout). Mais on la
+    //    fait ici pour éviter qu'un client paie avant qu'on lui dise non.
+    if (isCollectiveBooking) {
+      // Cas collectif : valider chaque créneau (existence, ownership,
+      // statut, capacité incluant les pendingBookings concurrents).
+      const requestedAnimals = Math.max(
+        1,
+        safeAnimalCount ?? safeEffectiveAnimalCount ?? 1
+      );
+
+      // Précharger les pendingBookings actifs (1 query) pour comptabiliser
+      // les places déjà réservées par d'autres clients en cours de paiement.
+      const nowMs = Date.now();
+      const allPending = await ctx.db.query("pendingBookings").collect();
+      const activePending = allPending.filter(
+        (pb) => (pb.expiresAt || 0) > nowMs && pb.status !== "completed"
+      );
+
+      for (const slotId of args.collectiveSlotIds!) {
+        const slot = await ctx.db.get(slotId);
+        if (!slot) {
+          throw new ConvexError("Un créneau collectif sélectionné est introuvable");
+        }
+        if (slot.userId !== args.announcerId) {
+          throw new ConvexError(
+            "Un créneau collectif sélectionné n'appartient pas à cet annonceur"
+          );
+        }
+        if (String(slot.variantId) !== String(args.variantId)) {
+          throw new ConvexError(
+            "Un créneau collectif sélectionné n'appartient pas à cette formule"
+          );
+        }
+        if (!slot.isActive) {
+          throw new ConvexError(
+            `Le créneau du ${slot.date} ${slot.startTime} n'est plus actif`
+          );
+        }
+        if (slot.isCancelled) {
+          throw new ConvexError(
+            `Le créneau du ${slot.date} ${slot.startTime} a été annulé`
+          );
+        }
+
+        // Capacité = bookedAnimals (missions confirmées) + animaux dans
+        // d'autres pendingBookings actifs ciblant ce slot.
+        const reservedInPending = activePending.reduce((sum, pb) => {
+          if (pb.collectiveSlotIds?.some((id) => String(id) === String(slotId))) {
+            return sum + (pb.animalCount ?? pb.effectiveAnimalCount ?? 1);
+          }
+          return sum;
+        }, 0);
+
+        if (
+          slot.bookedAnimals + reservedInPending + requestedAnimals >
+          slot.maxAnimals
+        ) {
+          const remaining = Math.max(
+            0,
+            slot.maxAnimals - slot.bookedAnimals - reservedInPending
+          );
+          throw new ConvexError(
+            `Le créneau du ${slot.date} ${slot.startTime} n'a plus assez de places (${remaining} restante(s) sur ${slot.maxAnimals})`
+          );
+        }
+      }
+    } else {
+      // Cas standard ou multi-sessions : vérifier dispo + conflits.
       // 1. Récupérer le typeId de la catégorie du service
       let typeId = category?.typeId;
       if (!typeId && category?.parentCategoryId) {
@@ -189,25 +303,42 @@ export const createPendingBooking = mutation({
         relevantAvailabilities.map((a) => [a.date, a])
       );
 
-      const requestedDates = getDatesBetween(args.startDate, args.endDate);
+      // Multi-sessions : vérifier chaque date de session.
+      // Mode standard : vérifier toute la plage startDate..endDate.
+      const requestedDates = isMultiSessionBooking
+        ? args.sessions!.map((s) => s.date)
+        : getDatesBetween(args.startDate, args.endDate);
 
       for (const date of requestedDates) {
         const avail = availabilityMap.get(date);
 
-        // Pas d'entrée OU status "unavailable" = indisponible (nouveau comportement par défaut)
+        // Pas d'entrée OU status "unavailable" = indisponible (par défaut)
         if (!avail || avail.status === "unavailable") {
           throw new ConvexError(`L'annonceur n'est pas disponible le ${date} pour ce type de service`);
         }
 
         // Si "partial", vérifier les timeSlots
-        if (avail.status === "partial" && args.startTime && endTime) {
-          const isInSlot = avail.timeSlots?.some(
-            (ts) => args.startTime! >= ts.startTime && endTime! <= ts.endTime
-          );
-          if (!isInSlot) {
-            throw new ConvexError(
-              `L'annonceur n'est pas disponible sur ce créneau horaire le ${date}`
+        if (avail.status === "partial") {
+          // Multi-sessions : utiliser les horaires de la session ce jour-là
+          let startTimeToCheck = args.startTime;
+          let endTimeToCheck = endTime;
+          if (isMultiSessionBooking) {
+            const sessionForDate = args.sessions!.find((s) => s.date === date);
+            if (sessionForDate) {
+              startTimeToCheck = sessionForDate.startTime;
+              endTimeToCheck = sessionForDate.endTime;
+            }
+          }
+
+          if (startTimeToCheck && endTimeToCheck) {
+            const isInSlot = avail.timeSlots?.some(
+              (ts) => startTimeToCheck! >= ts.startTime && endTimeToCheck! <= ts.endTime
             );
+            if (!isInSlot) {
+              throw new ConvexError(
+                `L'annonceur n'est pas disponible sur ce créneau horaire le ${date}`
+              );
+            }
           }
         }
       }
@@ -221,26 +352,157 @@ export const createPendingBooking = mutation({
       const bufferBefore = announcerProfile?.bufferBefore ?? 0;
       const bufferAfter = announcerProfile?.bufferAfter ?? 0;
 
-      const newMissionSlot = {
-        startDate: args.startDate,
-        endDate: args.endDate,
-        startTime: args.startTime,
-        endTime,
-      };
+      if (isMultiSessionBooking) {
+        // Multi-sessions : vérifier les conflits par session
+        for (const session of args.sessions!) {
+          const sessionSlot = {
+            startDate: session.date,
+            endDate: session.date,
+            startTime: session.startTime,
+            endTime: session.endTime,
+          };
 
-      const conflictCheck = await checkBookingConflict(
-        ctx.db,
-        args.announcerId,
-        service.category,
-        newMissionSlot,
-        bufferBefore,
-        bufferAfter
-      );
+          const conflictCheck = await checkBookingConflict(
+            ctx.db,
+            args.announcerId,
+            service.category,
+            sessionSlot,
+            bufferBefore,
+            bufferAfter
+          );
 
-      if (conflictCheck.hasConflict) {
-        throw new ConvexError(conflictCheck.conflictMessage || "L'annonceur n'est pas disponible sur ce créneau");
+          if (conflictCheck.hasConflict) {
+            throw new ConvexError(
+              conflictCheck.conflictMessage ||
+                `L'annonceur n'est pas disponible le ${session.date}`
+            );
+          }
+        }
+      } else {
+        // Mono-séance : vérifier la plage globale
+        const newMissionSlot = {
+          startDate: args.startDate,
+          endDate: args.endDate,
+          startTime: args.startTime,
+          endTime,
+        };
+
+        const conflictCheck = await checkBookingConflict(
+          ctx.db,
+          args.announcerId,
+          service.category,
+          newMissionSlot,
+          bufferBefore,
+          bufferAfter
+        );
+
+        if (conflictCheck.hasConflict) {
+          throw new ConvexError(
+            conflictCheck.conflictMessage ||
+              "L'annonceur n'est pas disponible sur ce créneau"
+          );
+        }
       }
     }
+
+    // ─── Validation : délai minimum à l'avance ───
+    // (Evite de créer un pendingBooking qui sera rejeté à finalize)
+    const advanceDeadlineCfg = await ctx.runQuery(
+      internal.planning.acceptanceDeadline.getAcceptanceDeadlineConfig,
+      {}
+    );
+    if (!isBookingAdvanceValid(args.startDate, args.startTime, advanceDeadlineCfg)) {
+      throw new ConvexError(
+        `Les réservations doivent être effectuées au minimum ${advanceDeadlineCfg.minimumBookingAdvanceHours}h à l'avance`
+      );
+    }
+
+    // ─── Validation : ownership + compatibilité animaux ↔ formule ───
+    // Couvre tous les modes (standard, multi-sessions, collectif). On utilise
+    // `isDogAccepted` (data/categorized-dog-breeds.ts) qui valide
+    // taille + catégorie chien (cat1/cat2 selon la législation FR).
+    const SIZE_MAP: Record<string, "small" | "medium" | "large"> = {
+      "petit": "small",
+      "moyen": "medium",
+      "grand": "large",
+      "très grand": "large",
+      "tres grand": "large",
+    };
+
+    if (userId && args.selectedAnimalIds && args.selectedAnimalIds.length > 0) {
+      const acceptedSizes = (variant.acceptedDogSizes ?? [
+        "small",
+        "medium",
+        "large",
+      ]) as Array<"small" | "medium" | "large">;
+      const categoryAcceptance = (variant.dogCategoryAcceptance ?? "none") as
+        | "none"
+        | "cat1"
+        | "cat2"
+        | "both";
+
+      for (const aid of args.selectedAnimalIds) {
+        const a = await ctx.db.get(aid as Id<"animals">);
+        if (!a) throw new ConvexError("Un animal sélectionné est introuvable");
+        if (a.userId !== userId) throw new ConvexError("Cet animal ne vous appartient pas");
+        if (a.isActive === false) {
+          throw new ConvexError(`L'animal ${a.name} est désactivé`);
+        }
+
+        // Type d'animal accepté par la formule
+        if (variant.animalTypes && variant.animalTypes.length > 0) {
+          if (!variant.animalTypes.includes(a.type)) {
+            throw new ConvexError(
+              `Cette formule n'accepte pas les ${a.type} (${a.name})`
+            );
+          }
+        }
+
+        // Validations spécifiques chien (taille + catégorie 1/2)
+        if (a.type === "chien") {
+          // Taille : poids prioritaire, sinon size texte
+          let dogSize: "small" | "medium" | "large" = "medium";
+          if (typeof a.weight === "number" && a.weight > 0) {
+            dogSize = getSizeFromWeight(a.weight);
+          } else if (a.size) {
+            const mapped = SIZE_MAP[a.size.toLowerCase()];
+            if (mapped) dogSize = mapped;
+          }
+
+          // Catégorie : déterminée depuis la race (slug ou nom)
+          let dogCategory: "none" | "cat1" | "cat2" = "none";
+          if (a.breed) {
+            const breedSlug = a.breed
+              .toLowerCase()
+              .normalize("NFD")
+              .replace(/[̀-ͯ]/g, "")
+              .replace(/\s+/g, "-");
+            const cat = checkBreedCategory(breedSlug, a.breed);
+            if (cat.isCategorized) {
+              // En l'absence d'info LOF, on tombe sur le pire cas : cat1
+              dogCategory =
+                cat.category === "unknown"
+                  ? "cat1"
+                  : (cat.category as "cat1" | "cat2");
+            }
+          }
+
+          const verdict = isDogAccepted(
+            dogSize,
+            dogCategory,
+            acceptedSizes,
+            categoryAcceptance
+          );
+          if (!verdict.accepted) {
+            throw new ConvexError(
+              `${a.name} : ${verdict.reason || "incompatible avec cette formule"}`
+            );
+          }
+        }
+      }
+    }
+
+    // (cohérence animalCount déjà calculée plus haut via safeAnimalCount)
 
     // Vérifier les doublons d'animaux si l'utilisateur est connecté et a sélectionné des animaux
     if (userId && args.selectedAnimalIds && args.selectedAnimalIds.length > 0) {
@@ -268,37 +530,137 @@ export const createPendingBooking = mutation({
     }
 
     // ─── Vérification zone d'intervention annonceur ───
-    // Si le client choisit "client_home" (à domicile chez lui), vérifier que
-    // l'annonceur peut s'y déplacer (distance <= rayon d'intervention).
-    // On se base sur les coordonnées fournies (guestAddress).
-    // Si pas de coords client (rare) ou pas de radius annonceur défini → on ne
-    // bloque pas (fail-open : la modération admin reste un filet).
-    if (args.serviceLocation === "client_home") {
-      const clientCoords = args.guestAddress?.coordinates;
-      if (clientCoords) {
-        const announcerProfile = await ctx.db
-          .query("profiles")
-          .withIndex("by_user", (q) => q.eq("userId", args.announcerId))
+    // Si le client choisit "client_home", vérifier que l'annonceur peut
+    // s'y déplacer (distance <= rayon d'intervention).
+    //
+    // ⚠️ Pour éviter qu'un client falsifie ses coordonnées GPS, on
+    //    n'accepte que les coordonnées résolues côté serveur via le
+    //    flux verifyGuestAddress (token éphémère).
+    //    Les coords envoyées directement dans `guestAddress.coordinates`
+    //    sans token sont ignorées pour le check distance.
+    let verifiedClientCoords: { lat: number; lng: number } | null = null;
+
+    if (args.serviceLocation === "client_home" && args.guestAddress) {
+      const token = args.guestAddress.verificationToken;
+      if (token) {
+        const verification = await ctx.db
+          .query("addressVerifications")
+          .withIndex("by_token", (q) => q.eq("token", token))
           .first();
-        if (
-          announcerProfile?.coordinates &&
-          announcerProfile.radius !== undefined &&
-          announcerProfile.radius > 0
-        ) {
-          const distanceKm = calculateDistance(
-            clientCoords.lat,
-            clientCoords.lng,
-            announcerProfile.coordinates.lat,
-            announcerProfile.coordinates.lng
+
+        if (!verification) {
+          throw new ConvexError(
+            "Token de vérification d'adresse introuvable. Veuillez ressaisir votre adresse."
           );
-          if (distanceKm > announcerProfile.radius) {
-            throw new ConvexError(
-              `Cette adresse est en dehors de la zone d'intervention du pet-sitter (${distanceKm.toFixed(1)} km, max ${announcerProfile.radius} km). Choisissez une autre adresse ou sélectionnez "Chez le pet-sitter".`
-            );
-          }
+        }
+        if (verification.expiresAt < Date.now()) {
+          throw new ConvexError(
+            "Token de vérification d'adresse expiré. Veuillez ressaisir votre adresse."
+          );
+        }
+        if (verification.consumedAt) {
+          throw new ConvexError(
+            "Token de vérification d'adresse déjà utilisé. Veuillez ressaisir votre adresse."
+          );
+        }
+
+        verifiedClientCoords = { lat: verification.lat, lng: verification.lng };
+
+        // Marquer le token comme consommé (anti-replay)
+        await ctx.db.patch(verification._id, { consumedAt: Date.now() });
+      }
+    }
+
+    if (args.serviceLocation === "client_home" && verifiedClientCoords) {
+      const announcerProfile = await ctx.db
+        .query("profiles")
+        .withIndex("by_user", (q) => q.eq("userId", args.announcerId))
+        .first();
+      if (
+        announcerProfile?.coordinates &&
+        announcerProfile.radius !== undefined &&
+        announcerProfile.radius > 0
+      ) {
+        const distanceKm = calculateDistance(
+          verifiedClientCoords.lat,
+          verifiedClientCoords.lng,
+          announcerProfile.coordinates.lat,
+          announcerProfile.coordinates.lng
+        );
+        if (distanceKm > announcerProfile.radius) {
+          throw new ConvexError(
+            `Cette adresse est en dehors de la zone d'intervention du pet-sitter (${distanceKm.toFixed(1)} km, max ${announcerProfile.radius} km). Choisissez une autre adresse ou sélectionnez "Chez le pet-sitter".`
+          );
         }
       }
     }
+
+    // ─── RECALCUL AUTORITAIRE DU PRIX (anti-manipulation client) ───
+    // Le client envoie `calculatedAmount` mais on ne lui fait PAS confiance.
+    // On recalcule depuis variant.price + duration + priceUnit/pricingMode +
+    // options + nuits + animalCount.
+    function getSessionPriceLocal(v: {
+      price: number;
+      priceUnit?: string | null;
+      duration?: number | null;
+      pricingMode?: "per_session" | "per_hour" | null;
+    }): number {
+      const dur = v.duration ?? 60;
+      if (v.pricingMode === "per_session") return v.price;
+      if (v.pricingMode === "per_hour") return Math.round((v.price * dur) / 60);
+      const unit = v.priceUnit ?? "hour";
+      switch (unit) {
+        case "hour": return Math.round((v.price * dur) / 60);
+        case "half_day": return Math.round((v.price * dur) / 240);
+        case "day": return Math.round((v.price * dur) / 480);
+        case "week": return Math.round((v.price * dur) / (60 * 24 * 7));
+        case "month": return Math.round((v.price * dur) / (60 * 24 * 30));
+        case "flat":
+        default: return v.price;
+      }
+    }
+
+    // Options (somme des prix actifs sélectionnés)
+    let optionsSum = 0;
+    if (args.optionIds && args.optionIds.length > 0) {
+      for (const oid of args.optionIds) {
+        const o = await ctx.db.get(oid as Id<"serviceOptions">);
+        if (o && o.isActive !== false) optionsSum += o.price;
+      }
+    }
+
+    const sessionPrice = getSessionPriceLocal(variant);
+    const animalsForPrice = Math.max(
+      1,
+      safeEffectiveAnimalCount ?? safeAnimalCount ?? 1
+    );
+    let recomputedAmount: number;
+
+    if (isCollectiveBooking) {
+      const slots = args.collectiveSlotIds!.length;
+      recomputedAmount = sessionPrice * slots * animalsForPrice + optionsSum;
+    } else if (variant.sessionType !== "collective" && (variant.numberOfSessions ?? 1) > 1) {
+      const nSessions = variant.numberOfSessions ?? 1;
+      recomputedAmount = sessionPrice * nSessions * animalsForPrice + optionsSum;
+    } else {
+      // Mono-séance / garde
+      recomputedAmount = sessionPrice * animalsForPrice + optionsSum;
+    }
+    // Garde de nuit (overnightAmount calculé par variant.pricing.nightlyPrice × nights)
+    if (args.includeOvernightStay && args.overnightAmount && args.overnightAmount > 0) {
+      recomputedAmount += args.overnightAmount;
+    }
+
+    // Tolérance 2c pour les arrondis (inversion flat / per_hour notamment)
+    const clientAmount = args.calculatedAmount;
+    const drift = Math.abs(clientAmount - recomputedAmount);
+    if (drift > 200) {
+      console.warn(
+        `[createPendingBooking] Prix client (${clientAmount}c) ≠ prix recalculé (${recomputedAmount}c), drift=${drift}c. Override avec valeur backend.`
+      );
+    }
+    // On utilise TOUJOURS la valeur recalculée (jamais celle du client)
+    const safeCalculatedAmount = recomputedAmount;
 
     const now = Date.now();
     // Expiration dans 24h
@@ -313,14 +675,14 @@ export const createPendingBooking = mutation({
       endDate: args.endDate,
       startTime: args.startTime,
       endTime,
-      calculatedAmount: args.calculatedAmount,
+      calculatedAmount: safeCalculatedAmount,
       // Créneaux collectifs
       collectiveSlotIds: args.collectiveSlotIds,
-      animalCount: args.animalCount,
+      animalCount: safeAnimalCount,
       selectedAnimalType: args.selectedAnimalType,
       // Animaux sélectionnés
       selectedAnimalIds: args.selectedAnimalIds,
-      effectiveAnimalCount: args.effectiveAnimalCount,
+      effectiveAnimalCount: safeEffectiveAnimalCount,
       // Séances multi-sessions
       sessions: args.sessions,
       // Garde de nuit
@@ -330,11 +692,14 @@ export const createPendingBooking = mutation({
       // Lieu de prestation
       serviceLocation: args.serviceLocation,
       // Adresse invité
+      // ⚠️ On stocke les coords vérifiées côté serveur (verifiedClientCoords)
+      //    en priorité ; on retombe sur les coords client uniquement si pas
+      //    de vérification (rétro-compat / clients connectés sans guest flow).
       guestAddress: args.guestAddress ? {
         address: args.guestAddress.address,
         city: args.guestAddress.city,
         postalCode: args.guestAddress.postalCode,
-        coordinates: args.guestAddress.coordinates,
+        coordinates: verifiedClientCoords ?? args.guestAddress.coordinates,
       } : undefined,
       // Données pré-remplies de l'animal invité
       guestAnimalPreFill: args.guestAnimalPreFill,
@@ -660,6 +1025,8 @@ export const finalizeBooking = mutation({
     console.log("[finalizeBooking] All animals resolved:", allAnimals.length);
 
     // Vérifier que les animaux ne sont pas déjà réservés sur le même créneau
+    // ⚠️ On exclut le pendingBooking en cours de finalisation pour ne pas
+    //    se considérer en conflit avec soi-même.
     const animalConflict = await checkAnimalBookingConflict(
       ctx.db,
       session.userId,
@@ -672,6 +1039,7 @@ export const finalizeBooking = mutation({
       },
       pendingBooking.sessions,
       pendingBooking.collectiveSlotIds,
+      args.bookingId,
     );
 
     if (animalConflict.hasConflict) {
@@ -991,8 +1359,22 @@ export const finalizeBooking = mutation({
       }
       serviceAmount = sessionPrice * nSessions * Math.max(1, animals) + optionsSum;
     } else {
-      // Uni-séance / garde : on garde le calcul existant côté client
-      serviceAmount = args.updatedAmount ?? pendingBooking.calculatedAmount;
+      // Uni-séance / garde : recalcul autoritaire backend (anti-manipulation)
+      // L'`args.updatedAmount` du frontend est ignoré (sauf pour reflect changes
+      // d'options qui sont déjà rejouées via updatedOptionIds → optionsSum recalculé).
+      const animals = pendingBooking.effectiveAnimalCount ?? pendingBooking.animalCount ?? 1;
+      const sessionPrice = getSessionPrice(variant);
+      const optionsForRecalc = (args.updatedOptionIds ?? pendingBooking.optionIds ?? []) as Id<"serviceOptions">[];
+      let optionsSum = 0;
+      for (const oid of optionsForRecalc) {
+        const o = await ctx.db.get(oid);
+        if (o && o.isActive !== false) optionsSum += o.price;
+      }
+      serviceAmount = sessionPrice * Math.max(1, animals) + optionsSum;
+      // Garde de nuit éventuelle
+      if (pendingBooking.includeOvernightStay && pendingBooking.overnightAmount && pendingBooking.overnightAmount > 0) {
+        serviceAmount += pendingBooking.overnightAmount;
+      }
     }
 
     // Récupérer l'annonceur pour déterminer le type de commission
@@ -1070,6 +1452,26 @@ export const finalizeBooking = mutation({
       .first();
     const commissionVatRate = commissionVatConfig ? parseFloat(commissionVatConfig.value) : 20;
     const vatOnCommission = Math.round(platformFee * commissionVatRate / (100 + commissionVatRate));
+
+    // ─── RE-CHECK CAPACITÉ COLLECTIVE (anti race condition) ───
+    // Le check est aussi fait à createPendingBooking, mais entre les deux d'autres
+    // clients peuvent avoir réservé. On re-vérifie ici juste avant l'insert pour
+    // éviter overbooking. Si capacité dépassée → throw, le pending reste pour retry.
+    if (isCollectiveFormule && pendingBooking.collectiveSlotIds && pendingBooking.collectiveSlotIds.length > 0) {
+      const requestedAnimals = pendingBooking.animalCount || 1;
+      for (const slotId of pendingBooking.collectiveSlotIds) {
+        const slot = await ctx.db.get(slotId);
+        if (!slot) {
+          throw new ConvexError("Un créneau collectif est introuvable. Veuillez recommencer.");
+        }
+        const remaining = slot.maxAnimals - slot.bookedAnimals;
+        if (requestedAnimals > remaining) {
+          throw new ConvexError(
+            `Le créneau collectif du ${slot.date} ${slot.startTime}-${slot.endTime} n'a plus que ${remaining} place(s) disponible(s) (vous demandez ${requestedAnimals}).`
+          );
+        }
+      }
+    }
 
     // Créer la mission
     const missionId = await ctx.db.insert("missions", {
@@ -1589,6 +1991,199 @@ function generateToken(): string {
   }
   return token;
 }
+
+/**
+ * Retourne les créneaux occupés par les animaux du client (missions actives
+ * + pendingBookings non finalisés). Utilisé côté UI pour empêcher la
+ * sélection d'une séance qui chevaucherait une autre mission de l'animal.
+ */
+export const getAnimalBookedSlots = query({
+  args: {
+    token: v.string(),
+    animalIds: v.array(v.id("animals")),
+  },
+  handler: async (ctx, args) => {
+    if (args.animalIds.length === 0) return [];
+
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+    if (!session || session.expiresAt < Date.now()) return [];
+
+    const animalIdSet = new Set(args.animalIds.map(String));
+
+    // Cache des noms d'animaux (1 lookup par ID rencontré)
+    const animalNameCache = new Map<string, string>();
+    async function resolveAnimalName(id: string): Promise<string> {
+      if (animalNameCache.has(id)) return animalNameCache.get(id)!;
+      const a = await ctx.db.get(id as Id<"animals">);
+      const name = a?.name ?? "votre animal";
+      animalNameCache.set(id, name);
+      return name;
+    }
+
+    type ConflictSlot = {
+      date: string;
+      startTime?: string;
+      endTime?: string;
+      animalName?: string;
+    };
+    const slots: ConflictSlot[] = [];
+
+    // Missions actives du client
+    const missions = await ctx.db
+      .query("missions")
+      .withIndex("by_client", (q) => q.eq("clientId", session.userId))
+      .filter((q) =>
+        q.and(
+          q.neq(q.field("status"), "cancelled"),
+          q.neq(q.field("status"), "refused"),
+          q.neq(q.field("status"), "completed")
+        )
+      )
+      .collect();
+
+    for (const m of missions) {
+      const mAnimalIds: string[] = m.animalIds
+        ? m.animalIds.map(String)
+        : m.animalId
+          ? [String(m.animalId)]
+          : [];
+      const conflictingId = mAnimalIds.find((id) => animalIdSet.has(id));
+      if (!conflictingId) continue;
+      const animalName = await resolveAnimalName(conflictingId);
+
+      if (m.sessions && m.sessions.length > 0) {
+        for (const s of m.sessions) {
+          slots.push({ date: s.date, startTime: s.startTime, endTime: s.endTime, animalName });
+        }
+      } else if (m.collectiveSlotIds && m.collectiveSlotIds.length > 0) {
+        for (const slotId of m.collectiveSlotIds) {
+          const slot = await ctx.db.get(slotId);
+          if (slot) {
+            slots.push({
+              date: slot.date,
+              startTime: slot.startTime,
+              endTime: slot.endTime,
+              animalName,
+            });
+          }
+        }
+      } else {
+        // Mission sur plage de dates (avec ou sans heures)
+        const start = new Date(m.startDate);
+        const end = new Date(m.endDate);
+        const cursor = new Date(start);
+        while (cursor <= end) {
+          slots.push({
+            date: cursor.toISOString().split("T")[0],
+            startTime: m.startTime,
+            endTime: m.endTime,
+            animalName,
+          });
+          cursor.setDate(cursor.getDate() + 1);
+        }
+      }
+    }
+
+    // PendingBookings non finalisés
+    const now = Date.now();
+    const pending = await ctx.db
+      .query("pendingBookings")
+      .filter((q) => q.eq(q.field("userId"), session.userId))
+      .collect();
+    const activePending = pending.filter(
+      (pb) => (pb.expiresAt || 0) > now && pb.status !== "completed"
+    );
+
+    for (const pb of activePending) {
+      const pbAnimalIds: string[] = (pb.selectedAnimalIds || []).map(String);
+      const conflictingId = pbAnimalIds.find((id) => animalIdSet.has(id));
+      if (!conflictingId) continue;
+      const animalName = await resolveAnimalName(conflictingId);
+
+      if (pb.sessions && pb.sessions.length > 0) {
+        for (const s of pb.sessions) {
+          slots.push({ date: s.date, startTime: s.startTime, endTime: s.endTime, animalName });
+        }
+      } else if (pb.collectiveSlotIds && pb.collectiveSlotIds.length > 0) {
+        for (const slotId of pb.collectiveSlotIds) {
+          const slot = await ctx.db.get(slotId);
+          if (slot) {
+            slots.push({
+              date: slot.date,
+              startTime: slot.startTime,
+              endTime: slot.endTime,
+              animalName,
+            });
+          }
+        }
+      } else {
+        const start = new Date(pb.startDate);
+        const end = new Date(pb.endDate);
+        const cursor = new Date(start);
+        while (cursor <= end) {
+          slots.push({
+            date: cursor.toISOString().split("T")[0],
+            startTime: pb.startTime,
+            endTime: pb.endTime,
+            animalName,
+          });
+          cursor.setDate(cursor.getDate() + 1);
+        }
+      }
+    }
+
+    return slots;
+  },
+});
+
+/**
+ * Nettoie les pendingBookings non finalisés du client courant chez un
+ * annonceur précis. Appelé à l'ouverture du wizard pour éviter qu'un
+ * pending abandonné ne bloque les créneaux de la nouvelle tentative.
+ *
+ * Sécurité :
+ * - Ne touche QUE aux pendings appartenant au client (session.userId)
+ * - Ne supprime PAS les pendings déjà finalisés (status === "completed")
+ * - Scopé à un announcerId pour ne pas effacer les pendings chez un
+ *   autre annonceur (utile si le client jongle entre plusieurs onglets)
+ */
+export const cleanupMyPendingsForAnnouncer = mutation({
+  args: {
+    token: v.string(),
+    announcerId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+    if (!session || session.expiresAt < Date.now()) {
+      return { success: false, deleted: 0 };
+    }
+
+    const pendings = await ctx.db
+      .query("pendingBookings")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("userId"), session.userId),
+          q.eq(q.field("announcerId"), args.announcerId)
+        )
+      )
+      .collect();
+
+    let deleted = 0;
+    for (const pb of pendings) {
+      // Préserve les pendings déjà transformés en mission (completed)
+      if (pb.status === "completed") continue;
+      await ctx.db.delete(pb._id);
+      deleted++;
+    }
+    return { success: true, deleted };
+  },
+});
 
 // Nettoyer les réservations expirées (à exécuter périodiquement)
 export const cleanupExpiredBookings = mutation({

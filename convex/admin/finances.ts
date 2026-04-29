@@ -302,10 +302,12 @@ export const getFinanceDashboard = query({
 
     const topAnnouncers = await Promise.all(
       topAnnouncerIds.map(async ([id, data]) => {
-        const user = await ctx.db.get(id as any);
+        const user = (await ctx.db.get(id as any)) as
+          | { firstName?: string; lastName?: string; email?: string }
+          | null;
         return {
           userId: id,
-          name: user ? `${user.firstName} ${user.lastName}` : "Inconnu",
+          name: user ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || "Inconnu" : "Inconnu",
           email: user?.email || "",
           earnings: data.earnings,
           missions: data.missions,

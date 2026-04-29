@@ -1018,6 +1018,21 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_status", ["status"]),
 
+  // Vérifications d'adresses géocodées côté serveur
+  // Empêche un client de falsifier les coordonnées GPS d'une adresse
+  // pour bypasser le check de zone d'intervention dans createPendingBooking.
+  addressVerifications: defineTable({
+    token: v.string(),                  // UUID retourné au client (à passer au booking)
+    address: v.string(),                // Adresse normalisée par Google
+    lat: v.number(),                    // Coords résolues côté serveur (autoritatif)
+    lng: v.number(),
+    expiresAt: v.number(),              // 30 min de TTL
+    consumedAt: v.optional(v.number()), // Timestamp de consommation (anti-replay)
+    createdAt: v.number(),
+  })
+    .index("by_token", ["token"])
+    .index("by_expires", ["expiresAt"]),
+
   // Préférences utilisateur
   userPreferences: defineTable({
     userId: v.id("users"),

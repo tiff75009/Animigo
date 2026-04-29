@@ -40,6 +40,19 @@ interface MultiSessionCalendarProps {
   acceptReservationsTo?: string;
   onMonthChange: (date: Date) => void;
   className?: string;
+  // Créneaux occupés par les animaux du client (autres missions/pendings)
+  // Bloque la sélection d'une séance qui chevaucherait l'un de ces créneaux.
+  animalBookedSlots?: Array<{
+    date: string;
+    startTime?: string;
+    endTime?: string;
+    animalName?: string;
+  }>;
+  // Notifie le parent quand l'utilisateur demande à étendre la fenêtre
+  // ("Voir 4 semaines de plus") — permet d'élargir la query backend.
+  onWeeksToShowChange?: (weeks: number) => void;
+  // Délai min à l'avance (en heures) — config admin globale, écrase le défaut
+  minimumBookingAdvanceHours?: number;
 }
 
 // Délai minimum de réservation (en heures) - 24h avant le début
@@ -57,23 +70,18 @@ function minutesToTime(minutes: number): string {
   return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
 }
 
-// Vérifier si un créneau est réservable (pas passé + délai minimum)
-function isSlotBookable(dateStr: string, startTime: string): boolean {
+// Vérifier si un créneau est réservable (pas passé + délai minimum en heures)
+function isSlotBookable(
+  dateStr: string,
+  startTime: string,
+  leadTimeHours: number = MIN_BOOKING_LEAD_TIME_HOURS
+): boolean {
   const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-
-  // Date passée = non réservable
-  if (dateStr < todayStr) return false;
-
-  // Date future = réservable
-  if (dateStr > todayStr) return true;
-
-  // Date = aujourd'hui : vérifier l'heure avec délai minimum
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const slotMinutes = parseTimeToMinutes(startTime);
-  const minBookableMinutes = currentMinutes + (MIN_BOOKING_LEAD_TIME_HOURS * 60);
-
-  return slotMinutes >= minBookableMinutes;
+  const minBookableMs = now.getTime() + leadTimeHours * 60 * 60 * 1000;
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const [h, m] = startTime.split(":").map(Number);
+  const slotMs = new Date(year, month - 1, day, h, m, 0, 0).getTime();
+  return slotMs >= minBookableMs;
 }
 
 function generateTimeSlots(startTime: string, endTime: string, intervalMinutes: number = 30): string[] {
@@ -89,10 +97,15 @@ function generateTimeSlots(startTime: string, endTime: string, intervalMinutes: 
   return slots;
 }
 
+// Parser local pour éviter l'interprétation UTC de "YYYY-MM-DD"
+const parseLocalDate = (dateStr: string): Date => {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d);
+};
+
 // Formater la date complète
 const formatDateFull = (dateStr: string): string => {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("fr-FR", {
+  return parseLocalDate(dateStr).toLocaleDateString("fr-FR", {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -101,8 +114,7 @@ const formatDateFull = (dateStr: string): string => {
 
 // Formater la date courte
 const formatDateShort = (dateStr: string): string => {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("fr-FR", {
+  return parseLocalDate(dateStr).toLocaleDateString("fr-FR", {
     weekday: "short",
     day: "numeric",
     month: "short",
@@ -111,15 +123,17 @@ const formatDateShort = (dateStr: string): string => {
 
 // Obtenir le jour de la semaine (0 = dimanche, 1 = lundi, etc.)
 const getDayOfWeek = (dateStr: string): number => {
-  return new Date(dateStr).getDay();
+  return parseLocalDate(dateStr).getDay();
 };
 
 // Obtenir le nom du jour de la semaine
 const getDayName = (dateStr: string): string => {
-  return new Date(dateStr).toLocaleDateString("fr-FR", { weekday: "long" });
+  return parseLocalDate(dateStr).toLocaleDateString("fr-FR", { weekday: "long" });
 };
 
-// Vérifier l'intervalle entre les dates
+// Vérifier l'intervalle entre les dates (en jours calendaires)
+// On normalise chaque date à minuit local pour éviter qu'un changement
+// d'heure ou d'horaire fasse passer un écart "1 jour" à 0,96 (et casse le check).
 const checkInterval = (
   selectedDates: string[],
   newDate: string,
@@ -127,13 +141,16 @@ const checkInterval = (
 ): boolean => {
   if (selectedDates.length === 0) return true;
 
-  const newDateObj = new Date(newDate);
+  const toMidnight = (s: string) => {
+    const [y, m, d] = s.split("-").map(Number);
+    return new Date(y, m - 1, d).getTime();
+  };
+
+  const newMs = toMidnight(newDate);
 
   for (const date of selectedDates) {
-    const dateObj = new Date(date);
-    const diffDays = Math.abs(
-      (newDateObj.getTime() - dateObj.getTime()) / (1000 * 60 * 60 * 24)
-    );
+    const otherMs = toMidnight(date);
+    const diffDays = Math.round(Math.abs(newMs - otherMs) / (1000 * 60 * 60 * 24));
 
     if (diffDays < minInterval) {
       return false;
@@ -165,6 +182,16 @@ const getMonday = (date: Date): Date => {
   return new Date(d.setDate(diff));
 };
 
+// Format YYYY-MM-DD à partir d'une Date locale (pas de conversion UTC).
+// Évite le décalage classique de toISOString() en GMT positif (la date
+// locale "1 mai 00:00" devient "30 avril 22:00" en UTC → mauvais jour stocké).
+const formatLocalDateStr = (d: Date): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
 // Obtenir les jours de la semaine
 const getWeekDays = (monday: Date): { date: Date; dateStr: string }[] => {
   const days = [];
@@ -173,7 +200,7 @@ const getWeekDays = (monday: Date): { date: Date; dateStr: string }[] => {
     date.setDate(monday.getDate() + i);
     days.push({
       date,
-      dateStr: date.toISOString().split("T")[0],
+      dateStr: formatLocalDateStr(date),
     });
   }
   return days;
@@ -193,7 +220,12 @@ export default memo(function MultiSessionCalendar({
   acceptReservationsTo = "20:00",
   onMonthChange,
   className,
+  animalBookedSlots = [],
+  onWeeksToShowChange,
+  minimumBookingAdvanceHours,
 }: MultiSessionCalendarProps) {
+  // Délai min à l'avance — fallback 24h si pas fourni par le parent
+  const minLeadHours = minimumBookingAdvanceHours ?? MIN_BOOKING_LEAD_TIME_HOURS;
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [showAutoFillSuggestion, setShowAutoFillSuggestion] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -205,7 +237,7 @@ export default memo(function MultiSessionCalendar({
   const [filterDayOfWeek, setFilterDayOfWeek] = useState<number | null>(null); // 0=dim … 6=sam
   const [weeksToShow, setWeeksToShow] = useState(4);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = formatLocalDateStr(new Date());
 
   // Dates des séances sélectionnées
   const selectedDates = useMemo(() => {
@@ -248,8 +280,8 @@ export default memo(function MultiSessionCalendar({
 
   // Vérifier si un créneau horaire est disponible
   const isTimeSlotAvailable = (dateStr: string, startTime: string): boolean => {
-    // Vérifier d'abord si le créneau est réservable (pas passé + délai minimum 24h)
-    if (!isSlotBookable(dateStr, startTime)) {
+    // Vérifier d'abord si le créneau est réservable (pas passé + délai min config)
+    if (!isSlotBookable(dateStr, startTime, minLeadHours)) {
       return false;
     }
 
@@ -294,7 +326,57 @@ export default memo(function MultiSessionCalendar({
       return newSlotStartWithBuffer < bookedEnd && newSlotEndWithBuffer > bookedStart;
     });
 
-    return !hasConflictWithBooked;
+    if (hasConflictWithBooked) return false;
+
+    // Vérifier les conflits avec les créneaux où l'animal du client est déjà
+    // pris (autres missions/pendings du client pour le(s) même(s) animal/aux).
+    if (getAnimalConflictForSlot(dateStr, startTime) !== null) return false;
+
+    return true;
+  };
+
+  // Retourne le nom de l'animal en conflit pour un créneau donné, ou null.
+  // Utilisé à la fois pour le check de disponibilité et pour le tooltip UI.
+  // Retourne {name, conflictTime} si conflit animal sur ce créneau exact, sinon null.
+  // ⚠️ On ne signale QUE les créneaux dont le START tombe DANS la mission
+  //    existante. Les chevauchements adjacents (slot qui finit pendant la
+  //    mission) sont déjà couverts par les buffers annonceur côté backend.
+  const getAnimalConflictDetails = (
+    dateStr: string,
+    startTime: string
+  ): { name: string; conflictTime: string | null } | null => {
+    const animalConflictsForDay = animalBookedSlots.filter((s) => s.date === dateStr);
+    if (animalConflictsForDay.length === 0) return null;
+
+    const startMinutes = parseTimeToMinutes(startTime);
+
+    for (const s of animalConflictsForDay) {
+      // Pas d'horaires → bloque toute la journée
+      if (!s.startTime || !s.endTime) {
+        return { name: s.animalName ?? "votre animal", conflictTime: null };
+      }
+      const blockedStart = parseTimeToMinutes(s.startTime);
+      const blockedEnd = parseTimeToMinutes(s.endTime);
+      // Inclusif des deux côtés : ex mission 12h-13h, step 30 →
+      // 12h00, 12h30, 13h00 tous rouges (3 jalons couvrant 1h).
+      if (startMinutes >= blockedStart && startMinutes <= blockedEnd) {
+        return {
+          name: s.animalName ?? "votre animal",
+          conflictTime: `${s.startTime} – ${s.endTime}`,
+        };
+      }
+    }
+    return null;
+  };
+
+  // Wrapper rétro-compatible (juste le nom, ou null) — utilisé par les
+  // anciens appelants (isTimeSlotAvailable, génération d'availableSlots).
+  const getAnimalConflictForSlot = (
+    dateStr: string,
+    startTime: string
+  ): string | null => {
+    const d = getAnimalConflictDetails(dateStr, startTime);
+    return d ? d.name : null;
   };
 
   // Vérifier si un jour a des disponibilités
@@ -371,7 +453,7 @@ export default memo(function MultiSessionCalendar({
       if (!hasConflict) {
         // Vérifier aussi si c'est réservable (pas dans le passé)
         const time = minutesToTime(startMinutes);
-        if (isSlotBookable(dateStr, time)) {
+        if (isSlotBookable(dateStr, time, minLeadHours)) {
           return true;
         }
       }
@@ -456,6 +538,8 @@ export default memo(function MultiSessionCalendar({
     startTime: string;
     endTime: string;
     label: string; // ex. "lun. 27 avril · 09:00 → 11:00"
+    blockedByAnimal: string | null; // nom de l'animal en conflit (sinon null)
+    blockedConflictTime: string | null; // ex. "09:00 – 10:00" (horaire de la mission existante)
   };
 
   const availableSlots = useMemo<AvailableSlot[]>(() => {
@@ -469,27 +553,45 @@ export default memo(function MultiSessionCalendar({
     for (let d = 0; d < weeksToShow * 7; d++) {
       const cursor = new Date(fromDate);
       cursor.setDate(fromDate.getDate() + d);
-      const dateStr = cursor.toISOString().split("T")[0];
+      const dateStr = formatLocalDateStr(cursor);
       if (dateStr < today) continue;
       if (!isDayAvailable(dateStr)) continue;
 
-      // Tester chaque créneau possible avec un step de 30 min
+      // Step 30min : permet d'afficher les missions existantes qui ne
+      // sont pas alignées sur la durée de la formule (ex. mission à 15h30
+      // pour une formule 60min). Les chevauchements sont signalés via
+      // tooltip explicatif (avec l'horaire exact de la mission en conflit).
       const dayStart = parseTimeToMinutes(acceptReservationsFrom);
       const dayEnd = parseTimeToMinutes(acceptReservationsTo);
       for (let m = dayStart; m + variantDuration <= dayEnd; m += 30) {
         const time = minutesToTime(m);
-        if (!isTimeSlotAvailable(dateStr, time)) continue;
+        // Conflit animal → on AFFICHE quand même le slot mais grisé+tooltip
+        const conflict = getAnimalConflictDetails(dateStr, time);
+        const blockedByAnimal = conflict ? conflict.name : null;
+        const blockedConflictTime = conflict ? conflict.conflictTime : null;
+        if (blockedByAnimal === null && !isTimeSlotAvailable(dateStr, time)) continue;
         slots.push({
           date: dateStr,
           dayOfWeek: cursor.getDay(),
           startTime: time,
           endTime: minutesToTime(m + variantDuration),
           label: `${cursor.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} · ${time} → ${minutesToTime(m + variantDuration)}`,
+          blockedByAnimal,
+          blockedConflictTime,
         });
       }
     }
     return slots;
-  }, [availabilityCalendar, calendarMonth, weeksToShow, today, variantDuration, acceptReservationsFrom, acceptReservationsTo]);
+  }, [
+    availabilityCalendar,
+    calendarMonth,
+    weeksToShow,
+    today,
+    variantDuration,
+    acceptReservationsFrom,
+    acceptReservationsTo,
+    animalBookedSlots,
+  ]);
 
   // Filtrage par jour de la semaine
   const filteredSlots = useMemo(() => {
@@ -504,6 +606,61 @@ export default memo(function MultiSessionCalendar({
     );
   };
 
+  // Vérifie si un créneau viole l'intervalle minimum vs séances déjà sélectionnées
+  // Comparaison en jours calendaires (minuit-à-minuit) pour éviter les fractions.
+  const isSlotIntervalViolated = (slot: AvailableSlot): boolean => {
+    if (sessionInterval <= 0) return false;
+    if (selectedSessions.length === 0) return false;
+    const toMidnight = (s: string) => {
+      const [y, m, d] = s.split("-").map(Number);
+      return new Date(y, m - 1, d).getTime();
+    };
+    const slotMs = toMidnight(slot.date);
+    return selectedSessions.some((s) => {
+      if (s.date === slot.date) return false; // même jour OK (autre créneau)
+      const diffDays = Math.round(
+        Math.abs(slotMs - toMidnight(s.date)) / (1000 * 60 * 60 * 24)
+      );
+      return diffDays < sessionInterval;
+    });
+  };
+
+  // Prochaines dates compatibles (≥ intervalle après la dernière séance sélectionnée)
+  // Calcul en jours calendaires (minuit-à-minuit) pour éviter les fractions.
+  const nextCompatibleDates = useMemo<string[]>(() => {
+    if (selectedSessions.length === 0 || sessionInterval <= 0) return [];
+    const toMidnight = (s: string) => {
+      const [y, m, d] = s.split("-").map(Number);
+      return new Date(y, m - 1, d).getTime();
+    };
+    const lastDate = [...selectedSessions]
+      .map((s) => s.date)
+      .sort()
+      .pop()!;
+    const lastMs = toMidnight(lastDate);
+    const candidates: string[] = [];
+    const seen = new Set<string>();
+    for (const slot of availableSlots) {
+      if (seen.has(slot.date)) continue;
+      const slotMs = toMidnight(slot.date);
+      const diff = Math.round((slotMs - lastMs) / (1000 * 60 * 60 * 24));
+      if (diff < sessionInterval) continue;
+      // Check intervalle vs TOUTES les séances déjà sélectionnées
+      const ok = selectedSessions.every((s) => {
+        if (s.date === slot.date) return true;
+        const d = Math.round(
+          Math.abs(slotMs - toMidnight(s.date)) / (1000 * 60 * 60 * 24)
+        );
+        return d >= sessionInterval;
+      });
+      if (!ok) continue;
+      candidates.push(slot.date);
+      seen.add(slot.date);
+      if (candidates.length >= 4) break;
+    }
+    return candidates;
+  }, [selectedSessions, sessionInterval, availableSlots]);
+
   // Toggle un créneau (ajoute ou retire)
   const toggleSlot = (slot: AvailableSlot) => {
     if (isSlotSelected(slot)) {
@@ -517,14 +674,19 @@ export default memo(function MultiSessionCalendar({
     }
     // Vérifier qu'on peut encore ajouter
     if (selectedSessions.length >= numberOfSessions) return;
-    // Vérifier l'intervalle minimum
+    // Vérifier l'intervalle minimum (en jours calendaires, comme checkInterval)
     if (sessionInterval > 0) {
+      const toMidnight = (s: string) => {
+        const [y, m, d] = s.split("-").map(Number);
+        return new Date(y, m - 1, d).getTime();
+      };
+      const slotMs = toMidnight(slot.date);
       const tooClose = selectedSessions.some((s) => {
-        const diffDays = Math.abs(
-          (new Date(slot.date).getTime() - new Date(s.date).getTime()) /
-            (1000 * 60 * 60 * 24)
+        if (s.date === slot.date) return false; // même jour OK
+        const diffDays = Math.round(
+          Math.abs(slotMs - toMidnight(s.date)) / (1000 * 60 * 60 * 24)
         );
-        return diffDays < sessionInterval && diffDays !== 0;
+        return diffDays < sessionInterval;
       });
       if (tooClose) {
         alert(
@@ -542,10 +704,12 @@ export default memo(function MultiSessionCalendar({
   // Sélection rapide : "Hebdo lundi 9h pendant N semaines"
   const quickSelectRecurring = (slot: AvailableSlot) => {
     const newSessions: SelectedSession[] = [];
-    let cursor = new Date(slot.date);
+    // Parser slot.date en local (évite UTC qui décale d'un jour)
+    const [sy, sm, sd] = slot.date.split("-").map(Number);
+    let cursor = new Date(sy, sm - 1, sd);
     let safety = 0;
     while (newSessions.length < numberOfSessions && safety < 200) {
-      const dateStr = cursor.toISOString().split("T")[0];
+      const dateStr = formatLocalDateStr(cursor);
       if (
         dateStr >= today &&
         isDayAvailable(dateStr) &&
@@ -911,17 +1075,30 @@ export default memo(function MultiSessionCalendar({
                 const availabilityStatus = getDayAvailabilityStatus(dateStr);
                 const hasFreeSlots = hasAvailableSlots(dateStr);
 
+                // Intervalle violé = jour disponible mais trop proche d'une séance déjà sélectionnée
+                const intervalViolated =
+                  !hasSelected &&
+                  selectedSessions.length > 0 &&
+                  sessionInterval > 0 &&
+                  !checkInterval(selectedDates, dateStr, sessionInterval);
+
                 const getIndicatorColor = (): string | null => {
                   if (isPast) return null;
                   if (hasSelected) return null;
                   if (availabilityStatus === "unavailable" || !hasFreeSlots) return "#c45656";
+                  if (intervalViolated) return "#cdc9c0";
                   if (availabilityStatus === "partial") return "#c9a14a";
                   if (!canSelectDay) return "#cdc9c0";
                   return "#2f4a3f";
                 };
 
                 const indicatorColor = getIndicatorColor();
-                const isClickable = dayAvailable && !isPast && hasFreeSlots;
+                // Désactivé si non dispo OU si intervalle violé (sauf jour déjà sélectionné).
+                const isClickable =
+                  dayAvailable &&
+                  !isPast &&
+                  hasFreeSlots &&
+                  (hasSelected || !intervalViolated);
 
                 return (
                   <div key={dateStr} className="relative aspect-square">
@@ -1008,14 +1185,16 @@ export default memo(function MultiSessionCalendar({
 
   // ─── Vue Liste : sélection rapide (1 clic = 1 séance) ───
   const renderQuickListView = () => {
-    // Group slots par semaine (clé = lundi de la semaine en YYYY-MM-DD)
+    // Group slots par semaine (clé = lundi de la semaine en YYYY-MM-DD).
+    // Parsing local pour éviter le décalage UTC.
     const slotsByWeek = new Map<string, AvailableSlot[]>();
     filteredSlots.forEach((slot) => {
-      const d = new Date(slot.date);
-      const day = d.getDay();
+      const [y, m, day] = slot.date.split("-").map(Number);
+      const d = new Date(y, m - 1, day);
+      const dow = d.getDay();
       const monday = new Date(d);
-      monday.setDate(d.getDate() - ((day + 6) % 7));
-      const weekKey = monday.toISOString().split("T")[0];
+      monday.setDate(d.getDate() - ((dow + 6) % 7));
+      const weekKey = formatLocalDateStr(monday);
       if (!slotsByWeek.has(weekKey)) slotsByWeek.set(weekKey, []);
       slotsByWeek.get(weekKey)!.push(slot);
     });
@@ -1056,6 +1235,50 @@ export default memo(function MultiSessionCalendar({
             </span>
           )}
         </div>
+
+        {/* Bannière "prochaines dates compatibles" — affichée après la 1ère sélection */}
+        {nextCompatibleDates.length > 0 && !isComplete && (
+          <div
+            className="p-3 flex items-start gap-2.5"
+            style={{ borderRadius: 10, background: "#fcfaf4", border: "1px solid #f1ede3" }}
+          >
+            <Sparkles
+              className="w-3.5 h-3.5 mt-0.5 flex-shrink-0"
+              style={{ color: "#1f3a33" }}
+            />
+            <div className="min-w-0">
+              <p
+                className="text-[11px] font-medium uppercase tracking-[0.1em] mb-1.5"
+                style={{ color: "#9c9484" }}
+              >
+                Prochaines dates compatibles
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {nextCompatibleDates.map((d) => {
+                  const date = new Date(d);
+                  const label = date.toLocaleDateString("fr-FR", {
+                    weekday: "short",
+                    day: "numeric",
+                    month: "short",
+                  });
+                  return (
+                    <span
+                      key={d}
+                      className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium capitalize"
+                      style={{
+                        background: "#fff",
+                        border: "1px solid #cfdbd3",
+                        color: "#1f3a33",
+                      }}
+                    >
+                      {label}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Filtre par jour de la semaine */}
         <div className="flex items-center gap-1 overflow-x-auto pb-1">
@@ -1121,23 +1344,47 @@ export default memo(function MultiSessionCalendar({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                     {weekSlots.map((slot) => {
                       const selected = isSlotSelected(slot);
-                      const disabled = !selected && selectedSessions.length >= numberOfSessions;
+                      const intervalViolated = !selected && isSlotIntervalViolated(slot);
+                      const blockedByAnimal = slot.blockedByAnimal;
+                      const disabled =
+                        !selected &&
+                        (selectedSessions.length >= numberOfSessions ||
+                          intervalViolated ||
+                          blockedByAnimal !== null);
+                      const tooltipText = blockedByAnimal
+                        ? slot.blockedConflictTime
+                          ? `${blockedByAnimal} a déjà une réservation de ${slot.blockedConflictTime} ce jour-là`
+                          : `${blockedByAnimal} a déjà une réservation à cette date`
+                        : intervalViolated
+                          ? `Trop proche d'une séance déjà sélectionnée (intervalle min ${sessionInterval}j)`
+                          : undefined;
                       return (
                         <div key={`${slot.date}-${slot.startTime}`} className="flex items-center gap-1">
                           <button
                             type="button"
                             onClick={() => toggleSlot(slot)}
                             disabled={disabled}
+                            title={tooltipText}
                             className={cn(
                               "flex-1 flex items-center justify-between gap-2 px-3 py-2 text-left transition-colors",
                               !disabled && "hover:bg-[#f7f5ef]"
                             )}
                             style={{
                               borderRadius: 10,
-                              background: selected ? "#1f3a33" : "#fff",
-                              border: `1px solid ${selected ? "#1f3a33" : "#dfdcd4"}`,
+                              background: selected
+                                ? "#1f3a33"
+                                : blockedByAnimal
+                                  ? "#fdf3f3"
+                                  : "#fff",
+                              border: `1px solid ${
+                                selected
+                                  ? "#1f3a33"
+                                  : blockedByAnimal
+                                    ? "#f1cdcd"
+                                    : "#dfdcd4"
+                              }`,
                               color: selected ? "#f7f5ef" : "#1f1f1d",
-                              opacity: disabled ? 0.4 : 1,
+                              opacity: disabled ? (blockedByAnimal ? 0.7 : 0.4) : 1,
                               cursor: disabled ? "not-allowed" : "pointer",
                             }}
                           >
@@ -1154,6 +1401,19 @@ export default memo(function MultiSessionCalendar({
                               <span className="text-[12px] font-medium capitalize truncate">
                                 {slot.label}
                               </span>
+                              {blockedByAnimal && (
+                                <span
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9.5px] font-semibold uppercase tracking-[0.04em] flex-shrink-0"
+                                  style={{
+                                    background: "#fff",
+                                    border: "1px solid #f1cdcd",
+                                    color: "#c45656",
+                                  }}
+                                >
+                                  <AlertCircle className="w-2.5 h-2.5" />
+                                  {blockedByAnimal} occupé
+                                </span>
+                              )}
                             </span>
                           </button>
                           {/* Bouton "même heure pendant N semaines" — visible si rien encore sélectionné */}
@@ -1176,11 +1436,15 @@ export default memo(function MultiSessionCalendar({
               );
             })}
 
-            {/* Charger plus de semaines */}
+            {/* Charger plus de semaines (élargit aussi la query backend via le parent) */}
             {weeksToShow < 12 && (
               <button
                 type="button"
-                onClick={() => setWeeksToShow((n) => n + 4)}
+                onClick={() => {
+                  const next = weeksToShow + 4;
+                  setWeeksToShow(next);
+                  onWeeksToShowChange?.(next);
+                }}
                 className="w-full py-2 rounded-full text-[12px] font-medium transition-colors hover:bg-[#fafafa]"
                 style={{ background: "#fff", border: "1px solid #dfdcd4", color: "#1f3a33" }}
               >

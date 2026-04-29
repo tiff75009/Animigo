@@ -456,9 +456,20 @@ export default function ReservationPage({
   };
 
   const extractErrorMessage = (err: unknown): string => {
-    if (err && typeof err === "object") {
-      if ("data" in err && typeof err.data === "string") return err.data;
-      if ("message" in err && typeof err.message === "string") return err.message;
+    // ⚠️ Priorité : ConvexError.data > Error.message
+    // Convex throw une Error avec message="Server Error" + data=<vrai message du ConvexError>.
+    // Si on regarde message en premier, on rate le motif backend.
+    if (err && typeof err === "object" && "data" in err) {
+      const data = (err as { data?: unknown }).data;
+      if (typeof data === "string") return data;
+      if (data && typeof data === "object" && "message" in data) {
+        const msg = (data as { message?: unknown }).message;
+        if (typeof msg === "string") return msg;
+      }
+    }
+    if (err && typeof err === "object" && "message" in err) {
+      const msg = (err as { message?: unknown }).message;
+      if (typeof msg === "string" && msg !== "Server Error" && msg !== "Convex error") return msg;
     }
     return "Une erreur est survenue. Veuillez réessayer.";
   };

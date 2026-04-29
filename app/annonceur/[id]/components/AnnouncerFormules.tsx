@@ -124,6 +124,16 @@ interface AnnouncerFormulesProps {
   // Séances individuelles multi-sessions
   selectedSessions?: SelectedSession[];
   onSessionsChange?: (sessions: SelectedSession[]) => void;
+  // Conflits animal (autres missions/pendings du client pour les animaux sélectionnés)
+  animalBookedSlots?: Array<{
+    date: string;
+    startTime?: string;
+    endTime?: string;
+    animalName?: string;
+  }>;
+  onWeeksToShowChange?: (weeks: number) => void;
+  // Délai minimum à l'avance (en heures) — config admin globale
+  minimumBookingAdvanceHours?: number;
   // Sélection de l'animal (utilisateur connecté - sélection multiple)
   userAnimals?: Array<{
     id: string;
@@ -239,6 +249,9 @@ export default function AnnouncerFormules({
   onAnimalCountChange,
   selectedSessions = [],
   onSessionsChange,
+  animalBookedSlots,
+  onWeeksToShowChange,
+  minimumBookingAdvanceHours,
   userAnimals = [],
   selectedAnimalIds = [],
   onAnimalToggle,
@@ -533,6 +546,9 @@ export default function AnnouncerFormules({
       case "animals":
         return hasAnimalsSelected;
       case "dates":
+        // Connecté : on impose au moins 1 animal (sinon on ne peut pas
+        // détecter les conflits animal sur les créneaux affichés)
+        if (isLoggedIn && userAnimals.length > 0 && !hasAnimalsSelected) return false;
         // Le client doit sélectionner EXACTEMENT le nombre de séances défini
         // par l'annonceur — ni plus, ni moins.
         if (isCollectiveFormule) return selectedSlotsCount === collectiveNumberOfSessions;
@@ -897,6 +913,12 @@ export default function AnnouncerFormules({
                     isLastStep={currentStepIndex === availableDesktopSteps.length - 1}
                     slideVariants={slideVariants}
                     slideDirection={slideDirection}
+                    animalBookedSlots={animalBookedSlots}
+                    onWeeksToShowChange={onWeeksToShowChange}
+                    minimumBookingAdvanceHours={minimumBookingAdvanceHours}
+                    needsAnimalSelection={
+                      isLoggedIn && userAnimals.length > 0 && !hasAnimalsSelected
+                    }
                   />
                 )}
 

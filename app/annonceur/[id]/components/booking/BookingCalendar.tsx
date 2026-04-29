@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, ArrowRight, Calendar, Clock, Moon, Sun, Users, ChevronRight, Check, Pencil, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Calendar, Clock, Moon, Sun, Users, ChevronRight, Check, Pencil, X, AlertCircle } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import type { CalendarEntry } from "./types";
 import { formatDateDisplay } from "./pricing";
@@ -51,6 +51,14 @@ interface BookingCalendarProps {
   onEndTimeSelect: (time: string) => void;
   onOvernightChange: (include: boolean) => void;
   onMonthChange: (date: Date) => void;
+  // Créneaux occupés par les animaux du client (autres missions/pendings)
+  // Bloque la sélection d'une date/créneau qui chevaucherait l'un d'eux.
+  animalBookedSlots?: Array<{
+    date: string;
+    startTime?: string;
+    endTime?: string;
+    animalName?: string;
+  }>;
 }
 
 // Délai minimum de réservation par défaut (en heures)
@@ -171,6 +179,7 @@ export default memo(function BookingCalendar({
   onEndTimeSelect,
   onOvernightChange,
   onMonthChange,
+  animalBookedSlots = [],
 }: BookingCalendarProps) {
   // State for mobile time pickers
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
@@ -413,9 +422,20 @@ export default memo(function BookingCalendar({
         hoveredDate === dateStr &&
         dateStr > selectedDate;
 
+      // Conflit animal en mode garde : on bloque le jour s'il est totalement
+      // pris par une autre mission de l'animal du client.
+      const animalConflictName = !isPast ? getAnimalConflictForDate(dateStr) : null;
+      const isFullyBlockedByAnimal = !isPast && isDateFullyBlockedByAnimal(dateStr);
       const isDisabled =
         status === "past" ||
+        isFullyBlockedByAnimal ||
         (status === "unavailable" && (!hasCapacityInfo || remainingCapacity === 0));
+
+      const rangeAnimalTooltip = isFullyBlockedByAnimal
+        ? `${animalConflictName} a déjà une réservation à cette date`
+        : animalConflictName
+          ? `${animalConflictName} a déjà une réservation à cette date (créneaux partiellement bloqués)`
+          : undefined;
 
       // Couleur indicateur palette sobre
       const getCapacityDotColor = (): string | null => {
@@ -470,24 +490,33 @@ export default memo(function BookingCalendar({
           <button
             disabled={isDisabled}
             onClick={() => handleDateClick(dateStr)}
+            title={rangeAnimalTooltip}
             className={cn(
               "group relative w-full h-full flex flex-col items-center justify-center rounded-full transition-all",
               !isDisabled && !isHighlighted && !isRangeVisible && !isHoveredEnd && "hover:bg-[#1f1f1d] hover:text-white",
               !isDisabled && isRangeVisible && "hover:bg-[rgba(31,31,29,0.20)]"
             )}
             style={{
-              background: isHighlighted || isHoveredEnd ? ENDPOINT_BG : "transparent",
+              background: isHighlighted || isHoveredEnd
+                ? ENDPOINT_BG
+                : isFullyBlockedByAnimal
+                  ? "#fdf3f3"
+                  : "transparent",
               color: isHighlighted || isHoveredEnd
                 ? "#fff"
                 : status === "past"
                   ? "#cdc9c0"
-                  : (status === "unavailable" && !hasCapacityInfo) ||
-                      (hasCapacityInfo && remainingCapacity === 0)
-                    ? "#cdc9c0"
-                    : "#1f1f1d",
+                  : isFullyBlockedByAnimal
+                    ? "#c45656"
+                    : (status === "unavailable" && !hasCapacityInfo) ||
+                        (hasCapacityInfo && remainingCapacity === 0)
+                      ? "#cdc9c0"
+                      : "#1f1f1d",
               cursor: isDisabled ? "not-allowed" : "pointer",
               textDecoration:
-                status === "unavailable" && !hasCapacityInfo && !isHighlighted
+                (isFullyBlockedByAnimal ||
+                  (status === "unavailable" && !hasCapacityInfo)) &&
+                !isHighlighted
                   ? "line-through"
                   : "none",
             }}
@@ -537,6 +566,101 @@ export default memo(function BookingCalendar({
   const bookedSlots = selectedDateAvailability?.bookedSlots || [];
   const availableTimeSlots = selectedDateAvailability?.timeSlots;
 
+  // Retourne {name, conflictTime} si conflit animal sur ce créneau, sinon null.
+  // ⚠️ On ne signale QUE les créneaux dont le START tombe DANS la mission
+  //    existante. Les chevauchements adjacents (slot qui finit pendant la
+  //    mission) sont déjà couverts par les buffers de préparation/sortie de
+  //    l'annonceur (qui grisent ces slots automatiquement). Inutile de
+  //    re-signaler un conflit "animal" sur ces slots → on évite la confusion
+  //    "30 min de décalage".
+  const getAnimalConflictDetailsForTime = (
+    dateStr: string,
+    startTime: string,
+    _duration: number
+  ): { name: string; conflictTime: string | null } | null => {
+    const conflictsForDay = animalBookedSlots.filter((s) => s.date === dateStr);
+    if (conflictsForDay.length === 0) return null;
+
+    const startMinutes = parseTimeToMinutes(startTime);
+
+    for (const s of conflictsForDay) {
+      if (!s.startTime || !s.endTime) {
+        return { name: s.animalName ?? "votre animal", conflictTime: null };
+      }
+      const blockedStart = parseTimeToMinutes(s.startTime);
+      const blockedEnd = parseTimeToMinutes(s.endTime);
+      // Le START du slot doit tomber dans [missionStart, missionEnd] (inclusif)
+      // → on englobe aussi le point final pour que l'utilisateur voie
+      //   visuellement TOUS les jalons couverts par la mission.
+      //   Ex: mission 12h-13h, step 30min → 12h00, 12h30, 13h00 tous rouges.
+      if (startMinutes >= blockedStart && startMinutes <= blockedEnd) {
+        return {
+          name: s.animalName ?? "votre animal",
+          conflictTime: `${s.startTime} – ${s.endTime}`,
+        };
+      }
+    }
+    return null;
+  };
+
+  // Wrapper rétro-compat (juste le nom) — utilisé pour le check booléen
+  const getAnimalConflictForTime = (
+    dateStr: string,
+    startTime: string,
+    duration: number
+  ): string | null => {
+    const d = getAnimalConflictDetailsForTime(dateStr, startTime, duration);
+    return d ? d.name : null;
+  };
+
+  // Retourne le nom de l'animal qui occupe la totalité d'un jour, ou null.
+  // Utilisé pour griser le bouton de date dans le calendrier.
+  const getAnimalConflictForDate = (dateStr: string): string | null => {
+    const conflictsForDay = animalBookedSlots.filter((s) => s.date === dateStr);
+    if (conflictsForDay.length === 0) return null;
+    // Si au moins un slot bloque toute la journée (pas d'horaires) → conflit total
+    const fullDayBlock = conflictsForDay.find((s) => !s.startTime || !s.endTime);
+    if (fullDayBlock) return fullDayBlock.animalName ?? "votre animal";
+    // Sinon, conflit partiel : on signale aussi le 1er pour l'info-bulle
+    return conflictsForDay[0].animalName ?? "votre animal";
+  };
+
+  // Vérifie si TOUS les créneaux possibles d'un jour sont en conflit avec
+  // un autre booking de l'animal (pour griser totalement la date).
+  const isDateFullyBlockedByAnimal = (dateStr: string): boolean => {
+    const conflictsForDay = animalBookedSlots.filter((s) => s.date === dateStr);
+    if (conflictsForDay.length === 0) return false;
+    // Si un seul conflit n'a pas d'horaires → bloque toute la journée
+    if (conflictsForDay.some((s) => !s.startTime || !s.endTime)) return true;
+    // Sinon : check si la fenêtre acceptReservationsFrom..acceptReservationsTo
+    // est entièrement couverte par l'union des conflits
+    const dayStart = parseTimeToMinutes(acceptReservationsFrom);
+    const dayEnd = parseTimeToMinutes(acceptReservationsTo);
+    // On teste tous les créneaux possibles : si aucun n'est libre → fully blocked
+    for (let m = dayStart; m + variantDuration <= dayEnd; m += 30) {
+      const time = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+      if (getAnimalConflictForTime(dateStr, time, variantDuration) === null) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  // Retourne un texte de tooltip si un créneau est désactivé pour une
+  // raison spécifique (animal du client occupé sur ce créneau exact).
+  const getTimeSlotDisabledReason = (
+    time: string,
+    duration: number = variantDuration
+  ): string | undefined => {
+    if (!selectedDate) return undefined;
+    const conflict = getAnimalConflictDetailsForTime(selectedDate, time, duration);
+    if (!conflict) return undefined;
+    if (!conflict.conflictTime) {
+      return `${conflict.name} a déjà une réservation toute la journée`;
+    }
+    return `${conflict.name} a déjà une réservation de ${conflict.conflictTime} ce jour-là`;
+  };
+
   // Check if a time slot is available
   const isTimeSlotAvailable = (startTime: string, duration: number = variantDuration) => {
     // Vérifier d'abord si le créneau est réservable (pas passé + délai minimum)
@@ -568,8 +692,17 @@ export default memo(function BookingCalendar({
       const bookedEnd = parseTimeToMinutes(booked.endTime);
       return effectiveStartMinutes < bookedEnd && effectiveEndMinutes > bookedStart;
     });
+    if (hasConflict) return false;
 
-    return !hasConflict;
+    // Conflit avec un autre booking de l'animal du client
+    if (
+      selectedDate &&
+      getAnimalConflictForTime(selectedDate, startTime, duration) !== null
+    ) {
+      return false;
+    }
+
+    return true;
   };
 
   // ============================================
@@ -633,39 +766,59 @@ export default memo(function BookingCalendar({
       const isTooSoonEnhanced = !isPast && rawStatus !== "unavailable" && !isDateBookable(dateStr, acceptReservationsTo, minimumBookingAdvanceHours);
       const status = isTooSoonEnhanced ? "past" as const : rawStatus;
       const isSelected = selectedDate === dateStr;
-      const isDisabled = status === "past" || status === "unavailable";
+      // Conflits animal
+      const animalConflictName = !isPast ? getAnimalConflictForDate(dateStr) : null;
+      const isFullyBlockedByAnimal = !isPast && isDateFullyBlockedByAnimal(dateStr);
+      const isDisabled =
+        status === "past" || status === "unavailable" || isFullyBlockedByAnimal;
 
       // Couleur de l'indicateur (palette sobre alignée cards)
       const getIndicatorColor = (): string | null => {
         if (isPast) return null;
         if (isSelected) return null;
         if (status === "unavailable") return "#c45656";
+        if (isFullyBlockedByAnimal) return "#c45656";
         if (status === "partial") return "#c9a14a";
+        if (animalConflictName) return "#c9a14a"; // partiellement bloqué par animal
         return "#2f4a3f";
       };
       const indicatorColor = getIndicatorColor();
+
+      const dateTooltip = isFullyBlockedByAnimal
+        ? `${animalConflictName} a déjà une réservation à cette date`
+        : animalConflictName
+          ? `${animalConflictName} a déjà une réservation à cette date (créneaux partiellement bloqués)`
+          : undefined;
 
       elements.push(
         <button
           key={dateStr}
           disabled={isDisabled}
           onClick={() => handleDateClick(dateStr)}
+          title={dateTooltip}
           className={cn(
             "group relative aspect-square flex flex-col items-center justify-center rounded-full transition-all",
             !isDisabled && !isSelected && "hover:bg-[#1f1f1d] hover:text-white",
             !isDisabled && "cursor-pointer"
           )}
           style={{
-            background: isSelected ? "#1f1f1d" : "transparent",
+            background: isSelected
+              ? "#1f1f1d"
+              : isFullyBlockedByAnimal
+                ? "#fdf3f3"
+                : "transparent",
             color: isSelected
               ? "#fff"
               : isPast
                 ? "#cdc9c0"
-                : status === "unavailable"
-                  ? "#cdc9c0"
+                : status === "unavailable" || isFullyBlockedByAnimal
+                  ? "#c45656"
                   : "#1f1f1d",
             cursor: isDisabled ? "not-allowed" : "pointer",
-            textDecoration: status === "unavailable" && !isPast && !isSelected ? "line-through" : "none",
+            textDecoration:
+              (status === "unavailable" || isFullyBlockedByAnimal) && !isPast && !isSelected
+                ? "line-through"
+                : "none",
           }}
         >
           {isToday && !isSelected && (
@@ -921,6 +1074,7 @@ export default memo(function BookingCalendar({
                     isAvailable={isTimeSlotAvailable}
                     selectedTime={selectedTime}
                     onSelect={handleTimeSelect}
+                    getDisabledReason={getTimeSlotDisabledReason}
                   />
                 </div>
               </div>
@@ -968,6 +1122,7 @@ export default memo(function BookingCalendar({
                       isAvailable={isTimeSlotAvailable}
                       selectedTime={selectedTime}
                       onSelect={handleTimeSelect}
+                      getDisabledReason={getTimeSlotDisabledReason}
                     />
                   </div>
                 </div>
@@ -1312,6 +1467,7 @@ export default memo(function BookingCalendar({
                 isAvailable={isTimeSlotAvailable}
                 selectedTime={selectedTime}
                 onSelect={handleRangeStartTimeSelect}
+                getDisabledReason={getTimeSlotDisabledReason}
               />
             </div>
 
@@ -1335,6 +1491,7 @@ export default memo(function BookingCalendar({
                 isAvailable={isTimeSlotAvailable}
                 selectedTime={selectedEndTime}
                 onSelect={handleRangeEndTimeSelect}
+                getDisabledReason={getTimeSlotDisabledReason}
               />
             </div>
           </div>
@@ -1565,11 +1722,15 @@ function TimeGrid({
   isAvailable,
   selectedTime,
   onSelect,
+  getDisabledReason,
 }: {
   times: string[];
   isAvailable: (time: string) => boolean;
   selectedTime: string | null;
   onSelect: (time: string) => void;
+  // Retourne le motif (texte court) si le créneau est désactivé pour
+  // une raison spécifique (ex: animal occupé). Sinon undefined.
+  getDisabledReason?: (time: string) => string | undefined;
 }) {
   // Sectionner par tranche horaire
   const sections: Array<{ label: string; times: string[] }> = [
@@ -1604,15 +1765,19 @@ function TimeGrid({
               <div className="flex-1 h-px" style={{ background: "#f1ede3" }} />
             </div>
             <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
-              {section.times.map((time) => (
-                <TimeSlotButton
-                  key={time}
-                  time={time}
-                  isAvailable={isAvailable(time)}
-                  isSelected={selectedTime === time}
-                  onSelect={() => onSelect(time)}
-                />
-              ))}
+              {section.times.map((time) => {
+                const reason = getDisabledReason?.(time);
+                return (
+                  <TimeSlotButton
+                    key={time}
+                    time={time}
+                    isAvailable={isAvailable(time)}
+                    isSelected={selectedTime === time}
+                    onSelect={() => onSelect(time)}
+                    disabledReason={reason}
+                  />
+                );
+              })}
             </div>
           </div>
         );
@@ -1626,35 +1791,128 @@ function TimeSlotButton({
   isAvailable,
   isSelected,
   onSelect,
+  disabledReason,
 }: {
   time: string;
   isAvailable: boolean;
   isSelected: boolean;
   onSelect: () => void;
+  disabledReason?: string;
 }) {
+  // Style "animal occupé" : on grise en rose pâle au lieu de gris neutre
+  // pour différencier visuellement du simple créneau indisponible.
+  const isAnimalBlocked = !isAvailable && Boolean(disabledReason);
+  const [showTooltip, setShowTooltip] = useState(false);
+
   return (
-    <button
-      type="button"
-      disabled={!isAvailable}
-      onClick={onSelect}
-      className={cn(
-        "py-2.5 text-[13px] rounded-full transition-all",
-        isAvailable && !isSelected && "hover:border-[#1f1f1d] hover:bg-[#fafafa]"
-      )}
-      style={{
-        border: `1px solid ${
-          isSelected ? "#1f1f1d" : !isAvailable ? "#f1ede3" : "#dfdcd4"
-        }`,
-        background: isSelected ? "#1f1f1d" : "#fff",
-        color: isSelected ? "#fff" : !isAvailable ? "#cdc9c0" : "#1f1f1d",
-        fontWeight: isSelected ? 600 : 500,
-        cursor: !isAvailable ? "not-allowed" : "pointer",
-        textDecoration: !isAvailable ? "line-through" : "none",
-        opacity: !isAvailable ? 0.5 : 1,
-      }}
+    <div
+      className="relative"
+      onMouseEnter={() => disabledReason && setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+      onFocus={() => disabledReason && setShowTooltip(true)}
+      onBlur={() => setShowTooltip(false)}
     >
-      {time}
-    </button>
+      <button
+        type="button"
+        disabled={!isAvailable}
+        onClick={onSelect}
+        aria-label={disabledReason ? `${time} — ${disabledReason}` : time}
+        className={cn(
+          "w-full py-2.5 text-[13px] rounded-full transition-all relative",
+          isAvailable && !isSelected && "hover:border-[#1f1f1d] hover:bg-[#fafafa]"
+        )}
+        style={{
+          border: `1px solid ${
+            isSelected
+              ? "#1f1f1d"
+              : isAnimalBlocked
+                ? "#f1cdcd"
+                : !isAvailable
+                  ? "#f1ede3"
+                  : "#dfdcd4"
+          }`,
+          background: isSelected
+            ? "#1f1f1d"
+            : isAnimalBlocked
+              ? "#fdf3f3"
+              : "#fff",
+          color: isSelected
+            ? "#fff"
+            : isAnimalBlocked
+              ? "#c45656"
+              : !isAvailable
+                ? "#cdc9c0"
+                : "#1f1f1d",
+          fontWeight: isSelected ? 600 : 500,
+          cursor: !isAvailable ? (isAnimalBlocked ? "help" : "not-allowed") : "pointer",
+          textDecoration: !isAvailable ? "line-through" : "none",
+          opacity: !isAvailable ? (isAnimalBlocked ? 0.85 : 0.5) : 1,
+        }}
+      >
+        {time}
+        {/* Pastille animal en haut à droite pour signaler le motif sans dépendre du hover */}
+        {isAnimalBlocked && (
+          <span
+            className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full inline-flex items-center justify-center pointer-events-none"
+            style={{
+              background: "#c45656",
+              boxShadow: "0 0 0 2px #fff",
+            }}
+            aria-hidden="true"
+          >
+            <AlertCircle className="w-2 h-2" style={{ color: "#fff" }} strokeWidth={2.5} />
+          </span>
+        )}
+      </button>
+
+      {/* Tooltip stylisé */}
+      <AnimatePresence>
+        {showTooltip && disabledReason && (
+          <motion.div
+            initial={{ opacity: 0, y: 4, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 4, scale: 0.96 }}
+            transition={{ duration: 0.12, ease: "easeOut" }}
+            role="tooltip"
+            className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-50 pointer-events-none"
+            style={{ maxWidth: 220, width: "max-content" }}
+          >
+            <div
+              className="flex items-start gap-2 px-3 py-2"
+              style={{
+                borderRadius: 10,
+                background: "#1f1f1d",
+                color: "#fff",
+                boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+              }}
+            >
+              <AlertCircle
+                className="w-3.5 h-3.5 flex-shrink-0 mt-0.5"
+                style={{ color: "#fca5a5" }}
+              />
+              <span
+                className="text-[11.5px] leading-[1.4] font-medium"
+                style={{ letterSpacing: "-0.005em" }}
+              >
+                {disabledReason}
+              </span>
+            </div>
+            {/* Flèche */}
+            <div
+              className="absolute left-1/2 -translate-x-1/2"
+              style={{
+                top: "100%",
+                width: 0,
+                height: 0,
+                borderLeft: "5px solid transparent",
+                borderRight: "5px solid transparent",
+                borderTop: "5px solid #1f1f1d",
+              }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 

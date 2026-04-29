@@ -3,7 +3,7 @@
 import { useState, useMemo, use, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import Image from "next/image";
@@ -646,6 +646,7 @@ export default function ReserverPage({
 
   // Mutation
   const createPendingBooking = useMutation(api.public.booking.createPendingBooking);
+  const verifyGuestAddressAction = useAction(api.api.addressVerification.verifyGuestAddress);
 
   // Déterminer le type de formule (collective, multi-session, uni-séance)
   // Une formule est collective si sessionType === "collective" OU si des slotIds sont présents dans l'URL
@@ -1026,6 +1027,22 @@ export default function ReserverPage({
       };
       console.log("Creating booking with params:", bookingParams);
 
+      // Vérifier l'adresse guest côté serveur (anti-falsification GPS)
+      let verifiedAddressToken: string | undefined;
+      if (
+        bookingData.serviceLocation === "client_home" &&
+        bookingData.guestAddress?.address
+      ) {
+        const verif = await verifyGuestAddressAction({
+          address: bookingData.guestAddress.address,
+        });
+        if (verif.success && verif.token) {
+          verifiedAddressToken = verif.token;
+        } else if (verif.error) {
+          throw new Error(verif.error);
+        }
+      }
+
       const result = await createPendingBooking({
         announcerId: announcerId as Id<"users">,
         serviceId: selectedService.id as Id<"services">,
@@ -1059,6 +1076,7 @@ export default function ReserverPage({
           city: bookingData.guestAddress.city || undefined,
           postalCode: bookingData.guestAddress.postalCode || undefined,
           coordinates: bookingData.guestAddress.coordinates || undefined,
+          verificationToken: verifiedAddressToken,
         } : undefined,
         // Données pré-remplies de l'animal invité
         guestAnimalPreFill: preGuestAnimalType ? {

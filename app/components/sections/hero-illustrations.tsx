@@ -142,78 +142,69 @@ export function BulldogProfile({ size = 110 }: { size?: number }) {
 export function IllusDogHug({ isHovered }: Props) {
   const state = isHovered ? "hover" : "rest";
 
+  // Animations inspirées du brief user :
+  // - Tête : scale 1.1 au survol
+  // - Pattes avant : translateY -5 (lève les pattes)
+  // - Queue : rotation joyeuse en boucle
+  // - Yeux : clignent au survol (bonus Animigo)
+  // - Bouche : sourit plus large au survol (bonus Animigo)
+  const headVariants: Variants = {
+    rest: { scale: 1 },
+    hover: { scale: 1.1, transition: { duration: 0.4, ease: smooth } },
+  };
+  const frontPawsVariants: Variants = {
+    rest: { y: 0 },
+    hover: {
+      y: [-5, 0, -5, 0],
+      transition: { duration: 1.2, ease: smooth, repeat: Infinity },
+    },
+  };
   const tailVariants: Variants = {
     rest: { rotate: 0 },
     hover: {
-      rotate: [-15, 18, -12, 18, -15],
-      transition: { duration: 0.75, ease: smooth, repeat: Infinity },
-    },
-  };
-  const heartVariants: Variants = {
-    rest: { opacity: 0, scale: 0, y: 20, x: 0 },
-    hover: {
-      opacity: [0, 1, 1, 0],
-      scale: [0.2, 1.2, 1, 0.7],
-      y: [20, -10, -40, -70],
-      x: [0, -4, 4, -8],
-      transition: { duration: 3, ease: expressive, repeat: Infinity },
-    },
-  };
-  const handVariants: Variants = {
-    rest: { x: 100, opacity: 0, rotate: 10 },
-    hover: {
-      x: [100, 0, -4, 0],
-      opacity: [0, 1, 1, 1],
-      rotate: [10, -4, 6, -4],
-      transition: { duration: 2.6, ease: expressive, repeat: Infinity },
+      rotate: [-12, 22, -12, 22, -12],
+      transition: { duration: 0.8, ease: smooth, repeat: Infinity },
     },
   };
   const eyeVariants: Variants = {
     rest: { scaleY: 1 },
     hover: {
-      scaleY: [1, 1, 0.05, 1, 1, 1, 0.05, 1],
-      transition: { duration: 4.2, repeat: Infinity, ease: smooth, times: [0, 0.35, 0.4, 0.45, 0.7, 0.85, 0.9, 1] },
+      scaleY: [1, 1, 0.1, 1, 1, 0.1, 1],
+      transition: { duration: 3.5, repeat: Infinity, ease: smooth, times: [0, 0.35, 0.4, 0.45, 0.7, 0.75, 1] },
     },
   };
-  const bodyVariants: Variants = {
-    rest: { scale: 1 },
-    hover: { scale: [1, 1.025, 1], transition: loopTransition(2.4) },
+  const mouthVariants: Variants = {
+    rest: { d: "M -10 5 Q 0 12 10 5" },
+    hover: { d: "M -12 4 Q 0 18 12 4", transition: { duration: 0.4, ease: smooth } },
+  };
+  const heartVariants: Variants = {
+    rest: { opacity: 0, scale: 0, y: 0 },
+    hover: {
+      opacity: [0, 1, 1, 0],
+      scale: [0.3, 1.2, 1, 0.7],
+      y: [0, -20, -45, -75],
+      transition: { duration: 2.8, ease: expressive, repeat: Infinity },
+    },
   };
   const sunVariants: Variants = {
-    rest: { rotate: 0, scale: 1 },
-    hover: { rotate: 360, scale: [1, 1.08, 1], transition: { rotate: { duration: 20, ease: "linear", repeat: Infinity }, scale: loopTransition(3) } },
+    rest: { rotate: 0 },
+    hover: { rotate: 360, transition: { duration: 22, ease: "linear", repeat: Infinity } },
   };
 
   return (
     <div
       className="absolute inset-0"
-      style={{ background: "radial-gradient(circle at 75% 25%, #FFE8CE 0%, #FFC090 50%, #FF9060 100%)" }}
+      style={{ background: "radial-gradient(circle at 75% 25%, #FFF4D6 0%, #FFE0A0 50%, #FFC97A 100%)" }}
     >
       <svg viewBox="0 0 400 220" preserveAspectRatio="xMidYMid slice" className="w-full h-full">
-        <defs>
-          {/* Bulldog anglais — pelage fauve clair avec taches */}
-          <linearGradient id="dh-coat" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#F5D2A0" />
-            <stop offset="100%" stopColor="#C88A50" />
-          </linearGradient>
-          <linearGradient id="dh-ear" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#A66A2F" />
-            <stop offset="100%" stopColor="#6B3E18" />
-          </linearGradient>
-          <linearGradient id="dh-belly" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#FFFDEB" />
-            <stop offset="100%" stopColor="#F5E4C8" />
-          </linearGradient>
-        </defs>
+        {/* Sol pastel */}
+        <path d="M 0 180 Q 200 168 400 180 L 400 220 L 0 220 Z" fill="#F5B860" opacity="0.4" />
 
-        {/* Sol */}
-        <path d="M 0 180 Q 200 170 400 180 L 400 220 L 0 220 Z" fill="#C87040" opacity="0.35" />
-
-        {/* Soleil qui tourne doucement */}
+        {/* Soleil décoratif en haut à droite */}
         <motion.g animate={state} variants={sunVariants} style={{ originX: "340px", originY: "40px" }}>
-          <circle cx="340" cy="40" r="24" fill="#FFEEB8" opacity="0.9" />
-          <circle cx="340" cy="40" r="14" fill="#FFF8E0" />
-          <g stroke="#FFC340" strokeWidth="2" strokeLinecap="round">
+          <circle cx="340" cy="40" r="22" fill="#FFEEB8" opacity="0.85" />
+          <circle cx="340" cy="40" r="13" fill="#FFF8E0" />
+          <g stroke="#F5B860" strokeWidth="2" strokeLinecap="round">
             <line x1="340" y1="8" x2="340" y2="16" />
             <line x1="340" y1="64" x2="340" y2="72" />
             <line x1="308" y1="40" x2="316" y2="40" />
@@ -223,74 +214,83 @@ export function IllusDogHug({ isHovered }: Props) {
           </g>
         </motion.g>
 
-        {/* Chien assis */}
-        <motion.g animate={state} variants={bodyVariants} style={{ originX: "190px", originY: "160px" }}>
-          <g transform="translate(110, 60)">
-          {/* Queue : tracée depuis (0,0), positionnée par le g extérieur.
-              La rotation se fait toujours autour de la base (0,0). */}
-          <g transform="translate(135, 85)">
-            <motion.g animate={state} variants={tailVariants}>
-              <path
-                d="M 0 0 Q 20 -15 25 -43"
-                stroke="url(#dh-coat)"
-                strokeWidth="13"
-                strokeLinecap="round"
-                fill="none"
-              />
-            </motion.g>
-          </g>
+        {/* Chien stylisé jaune (#fccf55) — centré dans la card */}
+        {/* Centre du chien : (200, 110) */}
 
-          {/* Corps */}
-          <ellipse cx="80" cy="95" rx="58" ry="35" fill="url(#dh-coat)" />
-          <ellipse cx="75" cy="105" rx="40" ry="22" fill="#FFE8C8" opacity="0.8" />
-          {/* Pattes */}
-          <rect x="38" y="108" width="14" height="38" rx="6" fill="url(#dh-coat)" />
-          <rect x="62" y="108" width="14" height="38" rx="6" fill="url(#dh-coat)" />
-          <rect x="88" y="108" width="14" height="38" rx="6" fill="url(#dh-coat)" />
-          <rect x="112" y="108" width="14" height="38" rx="6" fill="url(#dh-coat)" />
+        {/* Queue (sort du corps à droite, anime depuis sa base) */}
+        <g transform="translate(244, 100)">
+          <motion.g animate={state} variants={tailVariants} style={{ originX: 0, originY: 0 }}>
+            <path
+              d="M 0 0 Q 22 -8 36 -22"
+              stroke="#fccf55"
+              strokeWidth="9"
+              strokeLinecap="round"
+              fill="none"
+            />
+          </motion.g>
+        </g>
 
-          {/* Tête */}
-          <circle cx="55" cy="55" r="32" fill="url(#dh-coat)" />
-          {/* Oreilles */}
-          <ellipse cx="30" cy="40" rx="10" ry="20" fill="url(#dh-ear)" transform="rotate(-18 30 40)" />
-          <ellipse cx="80" cy="40" rx="10" ry="20" fill="url(#dh-ear)" transform="rotate(18 80 40)" />
-          {/* Museau */}
-          <ellipse cx="55" cy="66" rx="15" ry="11" fill="#FFE8C8" />
-          <ellipse cx="55" cy="60" rx="5" ry="3.5" fill="#2A1810" />
-          <path d="M 48 72 Q 55 78 62 72" stroke="#2A1810" strokeWidth="2" fill="none" strokeLinecap="round" />
-          <ellipse cx="58" cy="76" rx="3" ry="4" fill="#FF5D85" />
+        {/* Corps (rectangle arrondi central) */}
+        <rect x="160" y="100" width="80" height="60" rx="14" ry="14" fill="#fccf55" />
+        {/* Ventre crème */}
+        <ellipse cx="200" cy="138" rx="28" ry="14" fill="#FFF1C8" opacity="0.7" />
 
-          {/* Yeux (cligne au hover) */}
-          <motion.g animate={state} variants={eyeVariants} style={{ originX: "50%", originY: "50%" }}>
-            <ellipse cx="44" cy="50" rx="4" ry="5" fill="#FFFFFF" />
-            <ellipse cx="68" cy="50" rx="4" ry="5" fill="#FFFFFF" />
-            <circle cx="44" cy="51" r="3" fill="#1B1108" />
-            <circle cx="68" cy="51" r="3" fill="#1B1108" />
-            <circle cx="45" cy="49" r="1" fill="#FFFFFF" />
-            <circle cx="69" cy="49" r="1" fill="#FFFFFF" />
+        {/* Pattes arrière (statiques) */}
+        <rect x="166" y="148" width="12" height="28" rx="5" ry="5" fill="#fccf55" />
+        <rect x="222" y="148" width="12" height="28" rx="5" ry="5" fill="#fccf55" />
+
+        {/* Pattes avant (animées : lèvent au hover) */}
+        <motion.g animate={state} variants={frontPawsVariants}>
+          <rect x="178" y="148" width="12" height="28" rx="5" ry="5" fill="#fccf55" />
+          <rect x="210" y="148" width="12" height="28" rx="5" ry="5" fill="#fccf55" />
+        </motion.g>
+
+        {/* Tête (animée : scale 1.1 au hover, origine au centre du visage) */}
+        <motion.g animate={state} variants={headVariants} style={{ originX: "200px", originY: "75px" }}>
+          {/* Oreilles tombantes */}
+          <ellipse cx="174" cy="60" rx="10" ry="18" fill="#E8B040" transform="rotate(-22 174 60)" />
+          <ellipse cx="226" cy="60" rx="10" ry="18" fill="#E8B040" transform="rotate(22 226 60)" />
+
+          {/* Visage (cercle principal) */}
+          <circle cx="200" cy="75" r="32" fill="#fccf55" />
+
+          {/* Joues roses */}
+          <circle cx="178" cy="84" r="4.5" fill="#FF9CB0" opacity="0.55" />
+          <circle cx="222" cy="84" r="4.5" fill="#FF9CB0" opacity="0.55" />
+
+          {/* Yeux (clignent au hover) */}
+          <motion.g animate={state} variants={eyeVariants} style={{ originX: "200px", originY: "70px" }}>
+            <circle cx="190" cy="70" r="4.5" fill="#1B1108" />
+            <circle cx="210" cy="70" r="4.5" fill="#1B1108" />
+            {/* Reflets */}
+            <circle cx="191.5" cy="68.5" r="1.3" fill="#FFFFFF" />
+            <circle cx="211.5" cy="68.5" r="1.3" fill="#FFFFFF" />
           </motion.g>
 
-          {/* Joues */}
-          <circle cx="30" cy="62" r="4" fill="#FF9CB0" opacity="0.55" />
-          <circle cx="80" cy="62" r="4" fill="#FF9CB0" opacity="0.55" />
+          {/* Museau */}
+          <ellipse cx="200" cy="86" rx="9" ry="6" fill="#FFE8C8" />
+          {/* Truffe */}
+          <ellipse cx="200" cy="83" rx="3.5" ry="2.5" fill="#1B1108" />
 
-          {/* Collier */}
-          <path d="M 32 76 Q 55 82 78 76" stroke="#FF5D85" strokeWidth="4" fill="none" strokeLinecap="round" />
-          <circle cx="55" cy="82" r="3" fill="#FFE066" />
-          </g>
+          {/* Bouche (sourit plus large au hover) */}
+          <motion.path
+            animate={state}
+            variants={mouthVariants}
+            transform="translate(200 90)"
+            stroke="#1B1108"
+            strokeWidth="2"
+            fill="none"
+            strokeLinecap="round"
+          />
+
+          {/* Petit collier rose */}
+          <path d="M 178 105 Q 200 110 222 105" stroke="#FF5D85" strokeWidth="3" fill="none" strokeLinecap="round" />
+          <circle cx="200" cy="109" r="2.5" fill="#FFE066" />
         </motion.g>
 
-        {/* Main qui caresse (arrive du hover) */}
-        <motion.g animate={state} variants={handVariants}>
-          <g transform="translate(200, 85)">
-            <path d="M 0 12 Q 8 0 22 2 Q 35 5 38 18 L 32 32 Q 12 32 0 28 Z" fill="#FFD9B5" />
-            <path d="M -5 20 Q -6 34 12 36 Q 32 38 38 30" fill="#4ECDC4" />
-          </g>
-        </motion.g>
-
-        {/* Cœur qui monte */}
+        {/* Cœur qui monte (apparaît au hover) */}
         <motion.g animate={state} variants={heartVariants}>
-          <g transform="translate(180, 60)">
+          <g transform="translate(248, 60)">
             <path d="M 10 18 Q 0 6 10 2 Q 16 -1 18 7 Q 20 -1 26 2 Q 36 6 26 18 L 18 26 Z" fill="#FF4F74" />
           </g>
         </motion.g>

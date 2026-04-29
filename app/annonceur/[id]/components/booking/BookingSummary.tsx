@@ -27,6 +27,13 @@ import { cn } from "@/app/lib/utils";
 import type { ServiceData, FormuleData, OptionData } from "../types";
 import type { BookingSelection, PriceBreakdown, ClientAddress } from "./types";
 import { formatPrice, formatDateDisplay } from "./pricing";
+
+// Parser une dateStr "YYYY-MM-DD" en Date locale (évite l'interprétation
+// UTC de `new Date("YYYY-MM-DD")` qui décale d'1 jour en GMT positif).
+const parseLocalDate = (dateStr: string): Date => {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d);
+};
 import { getCollectiveOrMultiSessionTotal, getVariantSessionPrice } from "@/app/lib/pricing";
 import CancellationPolicyModal from "./CancellationPolicyModal";
 
@@ -327,7 +334,7 @@ export default function BookingSummary({
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-medium text-gray-900 capitalize">
-                      {new Date(session.date).toLocaleDateString("fr-FR", {
+                      {parseLocalDate(session.date).toLocaleDateString("fr-FR", {
                         weekday: "short",
                         day: "numeric",
                         month: "short",
@@ -592,7 +599,7 @@ export default function BookingSummary({
                     {index + 1}
                   </span>
                   <span className="text-gray-700 capitalize">
-                    {new Date(session.date).toLocaleDateString("fr-FR", {
+                    {parseLocalDate(session.date).toLocaleDateString("fr-FR", {
                       weekday: "short",
                       day: "numeric",
                       month: "short",

@@ -401,6 +401,9 @@ export async function checkAnimalBookingConflict(
   newSlot: MissionTimeSlot,
   sessions?: Array<{ date: string; startTime: string; endTime: string }>,
   collectiveSlotIds?: Id<"collectiveSlots">[],
+  // Optionnel : pendingBookingId à EXCLURE du check (utilisé par finalizeBooking
+  // pour ne pas se considérer en conflit avec soi-même).
+  excludePendingBookingId?: Id<"pendingBookings">,
 ): Promise<{
   hasConflict: boolean;
   conflictMessage?: string;
@@ -510,6 +513,73 @@ export async function checkAnimalBookingConflict(
           return {
             hasConflict: true,
             conflictMessage: `${animalName} est déjà réservé(e) sur ce créneau (${existingS.startDate}${existingS.startTime ? ` ${existingS.startTime}` : ""}). Veuillez choisir un autre créneau ou un autre animal.`,
+          };
+        }
+      }
+    }
+  }
+
+  // ── Vérifier aussi les pendingBookings non encore finalisés ──
+  // Bloque le scénario "double-onglet" : 2 réservations parallèles pour le même
+  // animal/créneau. Sinon les 2 pendingBookings passent et les 2 finalisations
+  // arrivent en concurrence.
+  const now = Date.now();
+  const pendingBookings = await db
+    .query("pendingBookings")
+    .filter((q: any) => q.eq(q.field("userId"), clientId))
+    .collect();
+  const activePending = pendingBookings.filter(
+    (pb: any) =>
+      (pb.expiresAt || 0) > now &&
+      pb.status !== "completed" &&
+      (!excludePendingBookingId || pb._id !== excludePendingBookingId)
+  );
+
+  for (const pb of activePending) {
+    const pbAnimalIds: string[] = (pb.selectedAnimalIds || []).map(String);
+    const conflictingAnimalId = animalIds.find((id) => pbAnimalIds.includes(String(id)));
+    if (!conflictingAnimalId) continue;
+
+    const conflictAnimal = await db.get(conflictingAnimalId);
+    const animalName = conflictAnimal?.name ?? "votre animal";
+
+    const pbSlots: MissionTimeSlot[] = [];
+    if (pb.sessions && pb.sessions.length > 0) {
+      for (const s of pb.sessions) {
+        pbSlots.push({ startDate: s.date, endDate: s.date, startTime: s.startTime, endTime: s.endTime });
+      }
+    } else if (pb.collectiveSlotIds && pb.collectiveSlotIds.length > 0) {
+      for (const slotId of pb.collectiveSlotIds) {
+        const slot = await db.get(slotId);
+        if (slot) pbSlots.push({ startDate: slot.date, endDate: slot.date, startTime: slot.startTime, endTime: slot.endTime });
+      }
+    } else {
+      pbSlots.push({
+        startDate: pb.startDate,
+        endDate: pb.endDate,
+        startTime: pb.startTime,
+        endTime: pb.endTime,
+      });
+    }
+
+    const newSlots: MissionTimeSlot[] = [];
+    if (sessions && sessions.length > 0) {
+      for (const s of sessions) newSlots.push({ startDate: s.date, endDate: s.date, startTime: s.startTime, endTime: s.endTime });
+    } else if (collectiveSlotIds && collectiveSlotIds.length > 0) {
+      for (const slotId of collectiveSlotIds) {
+        const slot = await db.get(slotId);
+        if (slot) newSlots.push({ startDate: slot.date, endDate: slot.date, startTime: slot.startTime, endTime: slot.endTime });
+      }
+    } else {
+      newSlots.push(newSlot);
+    }
+
+    for (const pbS of pbSlots) {
+      for (const newS of newSlots) {
+        if (missionsOverlap(pbS, newS)) {
+          return {
+            hasConflict: true,
+            conflictMessage: `${animalName} a déjà une réservation en cours sur ce créneau (${pbS.startDate}${pbS.startTime ? ` ${pbS.startTime}` : ""}). Finalisez ou annulez la réservation en attente avant d'en créer une nouvelle.`,
           };
         }
       }

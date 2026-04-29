@@ -1600,6 +1600,8 @@ export const getClientMissionById = query({
       autoConfirmedAt: mission.autoConfirmedAt,
       readyForPayout: mission.readyForPayout,
       payoutScheduledFor: mission.payoutScheduledFor,
+      // Délai d'acceptation par l'annonceur (timestamp ms)
+      acceptanceDeadline: mission.acceptanceDeadline,
     };
   },
 });
