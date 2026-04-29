@@ -13,13 +13,26 @@ import { cn } from "@/app/lib/utils";
 interface RefundCardProps {
   mission: any;
   formatPrice: (cents: number) => string;
+  // Statut de la dispute associée à la mission (si existante).
+  // Permet d'afficher le remboursement même si la mission est restée
+  // en "completed" mais qu'une dispute a été résolue en faveur du client.
+  disputeStatus?: string;
 }
 
-export function RefundCard({ mission, formatPrice }: RefundCardProps) {
+export function RefundCard({ mission, formatPrice, disputeStatus }: RefundCardProps) {
+  // Affiche la card si :
+  // - mission annulée ou refusée → tous les cas refund classique
+  // - OU dispute résolue en faveur du client → le client doit voir son refund
+  // - OU paymentStatus === "refunded" peu importe le mission.status
+  const hasRefundData =
+    mission.paymentStatus === "refunded" ||
+    (mission.refundAmount != null && mission.refundAmount > 0);
+  const isDisputeResolvedForClient = disputeStatus === "resolved_client";
+
   const showRefund =
-    (mission.status === "cancelled" || mission.status === "refused") &&
-    (mission.paymentStatus === "refunded" ||
-      (mission.refundAmount != null && mission.refundAmount > 0) ||
+    hasRefundData ||
+    isDisputeResolvedForClient ||
+    ((mission.status === "cancelled" || mission.status === "refused") &&
       mission.paymentStatus === "paid");
 
   if (!showRefund) return null;

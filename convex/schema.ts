@@ -2118,6 +2118,13 @@ export default defineSchema({
     blocksPayment: v.boolean(),
     isActive: v.boolean(),
     sortOrder: v.number(),
+    // Templates personnalisés (admin)
+    // - clientHelperMessage : aide affichée au client quand il choisit ce motif
+    //   (lui dit ce qu'on attend : photos, factures, témoins, etc.)
+    // - resolutionTemplate : pré-rempli dans la card "Action / Résolution" admin
+    //   pour gagner du temps lors de la rédaction du message de résolution
+    clientHelperMessage: v.optional(v.string()),
+    resolutionTemplate: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -2132,6 +2139,18 @@ export default defineSchema({
     reasonId: v.id("disputeReasons"),
     reasonLabel: v.string(),
     description: v.string(),
+    // Pièces jointes (photos animal blessé, factures véto, captures...)
+    // Stockées sur Cloudinary (URL directe).
+    attachments: v.optional(
+      v.array(
+        v.object({
+          url: v.string(), // URL Cloudinary
+          type: v.string(), // mime type (image/jpeg, application/pdf, etc.)
+          name: v.optional(v.string()), // nom de fichier original
+          size: v.optional(v.number()), // taille en bytes
+        })
+      )
+    ),
     // Statut
     status: v.union(
       v.literal("open"),
@@ -2142,6 +2161,25 @@ export default defineSchema({
     ),
     // Blocage paiement
     paymentBlocked: v.boolean(),
+    // Snapshot du statut paiement annonceur AU MOMENT de l'ouverture.
+    // Si "paid", la dispute est ouverte APRÈS payout — admin doit
+    // potentiellement faire un reversal manuel chez Stripe. Affiché en
+    // alerte rouge sur la card admin.
+    payoutAlreadyDoneAtCreation: v.optional(v.boolean()),
+
+    // Réponse de l'annonceur (sa version des faits)
+    announcerResponse: v.optional(v.string()),
+    announcerRespondedAt: v.optional(v.number()),
+    announcerResponseAttachments: v.optional(
+      v.array(
+        v.object({
+          url: v.string(),
+          type: v.string(),
+          name: v.optional(v.string()),
+          size: v.optional(v.number()),
+        })
+      )
+    ),
     // Résolution
     assignedAdminId: v.optional(v.id("users")),
     adminNotes: v.optional(v.string()),

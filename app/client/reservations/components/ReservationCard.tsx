@@ -17,6 +17,7 @@ import {
   Star,
   AlertTriangle,
   Ban,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { PaymentCountdown } from "./PaymentCountdown";
@@ -25,8 +26,11 @@ import { PaymentCountdown } from "./PaymentCountdown";
 
 export interface EnrichedReservation {
   id: string;
+  announcerId?: string;
   serviceName: string;
+  serviceCategory?: string;
   announcerName: string;
+  createdAt?: number;
   startDate: string;
   endDate: string;
   startTime?: string;
@@ -52,6 +56,16 @@ export interface EnrichedReservation {
   acceptanceDeadline?: number;
   hasReview?: boolean;
   hasDispute?: boolean;
+  // Détails dispute (depuis getClientMissions enrichie)
+  disputeStatus?:
+    | "open"
+    | "investigating"
+    | "resolved_client"
+    | "resolved_announcer"
+    | "closed";
+  disputeReasonLabel?: string;
+  disputeResolvedAt?: number;
+  disputePaymentBlocked?: boolean;
   clientConfirmedAt?: number;
   autoConfirmedAt?: number;
 }
@@ -260,17 +274,22 @@ function ListCard({ reservation: r, index, isContacting, onContact }: Reservatio
           )}
 
           {/* Bannière validation fin de mission */}
-          {r.status === "completed" && !r.clientConfirmedAt && !r.autoConfirmedAt && (
-            <div className="px-5 py-2.5 bg-gradient-to-r from-orange-500 to-amber-400 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-white">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                <span className="text-[13px] font-semibold">Validez la fin de la garde</span>
+          {/* ⚠️ Masquée si une dispute existe (en cours ou résolue) :
+                 la résolution admin remplace la validation manuelle. */}
+          {r.status === "completed" &&
+            !r.clientConfirmedAt &&
+            !r.autoConfirmedAt &&
+            !r.hasDispute && (
+              <div className="px-5 py-2.5 bg-gradient-to-r from-orange-500 to-amber-400 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-white">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  <span className="text-[13px] font-semibold">Validez la fin de la garde</span>
+                </div>
+                <span className="bg-white/20 backdrop-blur-sm px-2.5 py-0.5 rounded-full text-white text-[11px] font-medium">
+                  Action requise
+                </span>
               </div>
-              <span className="bg-white/20 backdrop-blur-sm px-2.5 py-0.5 rounded-full text-white text-[11px] font-medium">
-                Action requise
-              </span>
-            </div>
-          )}
+            )}
 
           <div className="p-5">
             {/* ── Header ── */}
@@ -349,23 +368,36 @@ function ListCard({ reservation: r, index, isContacting, onContact }: Reservatio
                   Confirmée
                 </span>
               )}
-              {r.status === "completed" && !r.clientConfirmedAt && !r.autoConfirmedAt && (
-                <span className="inline-flex items-center gap-1 h-[26px] px-2.5 rounded-full text-[11px] font-semibold bg-orange-50 text-orange-600">
-                  <Clock className="w-3 h-3" />
-                  À confirmer
-                </span>
-              )}
+              {r.status === "completed" &&
+                !r.clientConfirmedAt &&
+                !r.autoConfirmedAt &&
+                !r.hasDispute && (
+                  <span className="inline-flex items-center gap-1 h-[26px] px-2.5 rounded-full text-[11px] font-semibold bg-orange-50 text-orange-600">
+                    <Clock className="w-3 h-3" />
+                    À confirmer
+                  </span>
+                )}
               {r.hasReview && (
                 <span className="inline-flex items-center gap-1 h-[26px] px-2.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-600">
                   <Star className="w-3 h-3" />
                   Avis laissé
                 </span>
               )}
+              {/* Avis à laisser : mission terminée + confirmée + sans avis */}
+              {r.status === "completed" &&
+                !r.hasReview &&
+                (r.clientConfirmedAt || r.autoConfirmedAt) &&
+                !r.hasDispute && (
+                  <span className="inline-flex items-center gap-1 h-[26px] px-2.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-600">
+                    <Star className="w-3 h-3" />
+                    Avis à laisser
+                  </span>
+                )}
               {r.hasDispute && (
-                <span className="inline-flex items-center gap-1 h-[26px] px-2.5 rounded-full text-[11px] font-semibold bg-red-50 text-red-600">
-                  <AlertTriangle className="w-3 h-3" />
-                  Réclamation
-                </span>
+                <DisputeBadge
+                  status={r.disputeStatus}
+                  paymentBlocked={r.disputePaymentBlocked}
+                />
               )}
               {isCancelled && (r.refundAmount == null || r.refundAmount === 0) && r.paymentStatus === "paid" && (
                 <span className="inline-flex items-center gap-1 h-[26px] px-2.5 rounded-full text-[11px] font-medium bg-gray-50 text-gray-400">
@@ -406,6 +438,11 @@ function ListCard({ reservation: r, index, isContacting, onContact }: Reservatio
               </p>
             )}
 
+            {/* ── Bandeau dispute (info détaillée : motif + sommes) ── */}
+            {r.hasDispute && (
+              <DisputeInfoStrip reservation={r} variant="client" />
+            )}
+
             {/* ── Actions ── */}
             <div className="mt-4 pt-3.5 border-t border-gray-100 flex items-center gap-2">
               {isPendingPayment ? (
@@ -424,6 +461,25 @@ function ListCard({ reservation: r, index, isContacting, onContact }: Reservatio
                     {isContacting === r.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
                     Contacter
                   </button>
+                  {/* Bouton "Réserver à nouveau" sur missions terminées sans dispute en cours */}
+                  {/* ⚠️ <button> et pas <Link> car la card entière est déjà
+                       wrappée dans <Link> — pas d'<a> imbriqué dans <a>. */}
+                  {r.status === "completed" &&
+                    !r.hasDispute &&
+                    r.announcerId && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          window.location.href = `/annonceur/${r.announcerId}`;
+                        }}
+                        className="inline-flex items-center gap-2 h-10 px-4 rounded-xl text-sm font-semibold bg-primary/10 text-primary hover:bg-primary hover:text-white transition-colors"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Réserver à nouveau
+                      </button>
+                    )}
                   <div className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl text-sm font-medium text-gray-400 group-hover:text-foreground transition-colors">
                     Voir détails
                     <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-60 group-hover:translate-x-0.5 transition-all" />
@@ -480,17 +536,21 @@ function GridCard({ reservation: r, index, isContacting, onContact }: Reservatio
           )}
 
           {/* Bannière validation fin de mission */}
-          {r.status === "completed" && !r.clientConfirmedAt && !r.autoConfirmedAt && (
-            <div className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-400 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 text-white">
-                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                <span className="text-[12px] font-semibold">Validez la fin de la garde</span>
+          {/* ⚠️ Masquée si dispute (en cours ou résolue). */}
+          {r.status === "completed" &&
+            !r.clientConfirmedAt &&
+            !r.autoConfirmedAt &&
+            !r.hasDispute && (
+              <div className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-400 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-white">
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="text-[12px] font-semibold">Validez la fin de la garde</span>
+                </div>
+                <span className="bg-white/20 px-2 py-0.5 rounded-full text-white text-[10px] font-medium">
+                  Action requise
+                </span>
               </div>
-              <span className="bg-white/20 px-2 py-0.5 rounded-full text-white text-[10px] font-medium">
-                Action requise
-              </span>
-            </div>
-          )}
+            )}
 
           <div className="p-4 flex-1 flex flex-col">
             {/* Header : emoji + prix */}
@@ -622,6 +682,199 @@ function GridCard({ reservation: r, index, isContacting, onContact }: Reservatio
         </div>
       </Link>
     </motion.div>
+  );
+}
+
+// =============================================================================
+// DISPUTE BADGE
+// =============================================================================
+
+function DisputeBadge({
+  status,
+  paymentBlocked,
+}: {
+  status?: string;
+  paymentBlocked?: boolean;
+}) {
+  // Fallback si pas de statut (mission.hasDispute=true mais lookup raté)
+  const config = {
+    open: {
+      label: "Réclamation ouverte",
+      bg: "bg-red-50",
+      text: "text-red-600",
+      Icon: AlertTriangle,
+    },
+    investigating: {
+      label: "Réclamation en cours",
+      bg: "bg-amber-50",
+      text: "text-amber-600",
+      Icon: AlertTriangle,
+    },
+    resolved_client: {
+      label: "Résolue en votre faveur",
+      bg: "bg-emerald-50",
+      text: "text-emerald-600",
+      Icon: Star,
+    },
+    resolved_announcer: {
+      label: "Résolue (en faveur du pet-sitter)",
+      bg: "bg-slate-50",
+      text: "text-slate-500",
+      Icon: AlertTriangle,
+    },
+    closed: {
+      label: "Réclamation clôturée",
+      bg: "bg-slate-50",
+      text: "text-slate-500",
+      Icon: AlertTriangle,
+    },
+  }[status ?? "open"] ?? {
+    label: "Réclamation",
+    bg: "bg-red-50",
+    text: "text-red-600",
+    Icon: AlertTriangle,
+  };
+
+  const Icon = config.Icon;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 h-[26px] px-2.5 rounded-full text-[11px] font-semibold ${config.bg} ${config.text}`}
+    >
+      <Icon className="w-3 h-3" />
+      {config.label}
+      {paymentBlocked &&
+        status !== "resolved_announcer" &&
+        status !== "closed" && (
+          <span className="opacity-70">• Paiement suspendu</span>
+        )}
+    </span>
+  );
+}
+
+// =============================================================================
+// DISPUTE INFO STRIP — détails dispute (motif, statut, sommes) sur card
+// =============================================================================
+
+const formatEuros = (cents: number) =>
+  `${(cents / 100).toFixed(2).replace(".", ",")} €`;
+
+function DisputeInfoStrip({
+  reservation,
+  variant,
+}: {
+  reservation: EnrichedReservation;
+  variant: "client" | "announcer";
+}) {
+  const r = reservation;
+  const isResolvedClient = r.disputeStatus === "resolved_client";
+  const isResolvedAnnouncer = r.disputeStatus === "resolved_announcer";
+  const isClosed = r.disputeStatus === "closed";
+  const isInProgress =
+    r.disputeStatus === "open" || r.disputeStatus === "investigating";
+  const paymentSuspended =
+    !!r.disputePaymentBlocked && !isResolvedAnnouncer && !isClosed;
+
+  // Couleur du strip selon résolution
+  const tone = isResolvedClient
+    ? {
+        bg: "bg-emerald-50",
+        border: "border-emerald-200",
+        title: "text-emerald-800",
+        body: "text-emerald-700",
+      }
+    : isResolvedAnnouncer
+      ? {
+          bg: "bg-slate-50",
+          border: "border-slate-200",
+          title: "text-slate-800",
+          body: "text-slate-600",
+        }
+      : isInProgress
+        ? {
+            bg: "bg-amber-50",
+            border: "border-amber-200",
+            title: "text-amber-800",
+            body: "text-amber-700",
+          }
+        : {
+            bg: "bg-slate-50",
+            border: "border-slate-200",
+            title: "text-slate-700",
+            body: "text-slate-500",
+          };
+
+  // Texte principal selon angle (client / annonceur)
+  const headline = (() => {
+    if (isResolvedClient) {
+      return variant === "client"
+        ? "Réclamation résolue en votre faveur"
+        : "Réclamation résolue en faveur du client";
+    }
+    if (isResolvedAnnouncer) {
+      return variant === "client"
+        ? "Réclamation non retenue"
+        : "Réclamation résolue en votre faveur";
+    }
+    if (isClosed) return "Réclamation clôturée";
+    return "Réclamation en cours de traitement";
+  })();
+
+  return (
+    <div
+      className={`mt-3 p-3 rounded-xl border ${tone.bg} ${tone.border} flex items-start gap-3`}
+    >
+      <AlertTriangle className={`w-4 h-4 mt-0.5 flex-shrink-0 ${tone.title}`} />
+      <div className="flex-1 min-w-0 text-[12.5px] leading-[1.5]">
+        <p className={`font-semibold ${tone.title}`}>{headline}</p>
+
+        {/* Motif (si dispo) */}
+        {r.disputeReasonLabel && (
+          <p className={`${tone.body} mt-0.5`}>
+            <span className="opacity-70">Motif :</span> {r.disputeReasonLabel}
+          </p>
+        )}
+
+        {/* Sommes en jeu */}
+        <div className={`mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] ${tone.body}`}>
+          {/* Montant total mission */}
+          <span>
+            <span className="opacity-70">Montant mission :</span>{" "}
+            <strong className={tone.title}>{formatEuros(r.amount)}</strong>
+          </span>
+
+          {/* Montant remboursé (résolution client) */}
+          {isResolvedClient && (r.refundAmount ?? 0) > 0 && (
+            <span>
+              <span className="opacity-70">
+                {variant === "client" ? "Remboursé :" : "Remboursé au client :"}
+              </span>{" "}
+              <strong className="text-emerald-700">
+                {formatEuros(r.refundAmount!)}
+              </strong>
+            </span>
+          )}
+
+          {/* Versement suspendu (en cours) */}
+          {paymentSuspended && (
+            <span className="inline-flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+              <span className="text-red-700 font-semibold">
+                {variant === "announcer"
+                  ? "Votre versement suspendu"
+                  : "Versement annonceur suspendu"}
+              </span>
+            </span>
+          )}
+
+          {/* Versement débloqué après résolution_announcer */}
+          {isResolvedAnnouncer && variant === "announcer" && (
+            <span className="text-slate-700 font-medium">
+              Versement débloqué
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -179,19 +179,28 @@ export default function ReservationDetailPage() {
         calculateSessionDuration={calculateSessionDuration}
       />
 
-      <RefundCard mission={mission} formatPrice={formatPrice} />
+      <RefundCard
+        mission={mission}
+        formatPrice={formatPrice}
+        disputeStatus={dispute?.status}
+      />
 
       {/* Bandeau confirmation : en attente, confirmé manuellement, ou auto-confirmé */}
-      {mission.status === "completed" && (mission.clientConfirmedAt || mission.autoConfirmedAt || needsConfirmation) && (
-        <ConfirmationBanner
-          isConfirming={isConfirming}
-          canDispute={!!canDispute}
-          onConfirmEnd={handleConfirmEnd}
-          onOpenDispute={() => setShowDisputeModal(true)}
-          autoConfirmedAt={mission.autoConfirmedAt}
-          clientConfirmedAt={mission.clientConfirmedAt}
-        />
-      )}
+      {/* ⚠️ Si une dispute existe (en cours ou résolue), la résolution admin
+           remplace la validation manuelle — on cache ce bandeau pour éviter
+           le doublon "À valider" + "Réclamation résolue". */}
+      {mission.status === "completed" &&
+        !dispute &&
+        (mission.clientConfirmedAt || mission.autoConfirmedAt || needsConfirmation) && (
+          <ConfirmationBanner
+            isConfirming={isConfirming}
+            canDispute={!!canDispute}
+            onConfirmEnd={handleConfirmEnd}
+            onOpenDispute={() => setShowDisputeModal(true)}
+            autoConfirmedAt={mission.autoConfirmedAt}
+            clientConfirmedAt={mission.clientConfirmedAt}
+          />
+        )}
 
       {!needsConfirmation && (
         <ReviewBanner
@@ -203,7 +212,11 @@ export default function ReservationDetailPage() {
         />
       )}
 
-      <DisputeBanner dispute={dispute} />
+      <DisputeBanner
+        dispute={dispute}
+        mission={mission}
+        formatPrice={formatPrice}
+      />
 
       <ServiceAnimalCard mission={mission} />
 

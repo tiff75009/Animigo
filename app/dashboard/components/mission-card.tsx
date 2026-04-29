@@ -112,6 +112,20 @@ export interface ConvexMission {
   vatRate?: number;
   isSapApplied?: boolean;
   isVatSubject?: boolean;
+  // ─── Dispute info ───
+  hasDispute?: boolean;
+  disputeStatus?:
+    | "open"
+    | "investigating"
+    | "resolved_client"
+    | "resolved_announcer"
+    | "closed";
+  disputeReasonLabel?: string;
+  disputePaymentBlocked?: boolean;
+  disputeResolvedAt?: number;
+  disputePayoutAlreadyDone?: boolean;
+  disputeAnnouncerResponded?: boolean;
+  refundAmount?: number;
 }
 
 interface MissionCardProps {
@@ -430,6 +444,14 @@ export function MissionCard({
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
       >
+        {/* Bandeau dispute en haut de la card.
+            ⚠️ On déclenche sur disputeStatus (résolu via lookup direct dans
+            la BDD) plutôt que sur le flag hasDispute, pour couvrir les
+            missions historiques où le flag n'est pas correctement set. */}
+        {(mission.hasDispute || mission.disputeStatus) && (
+          <DisputeStripAnnouncer mission={mission} />
+        )}
+
         {/* Bandeau décompte (esprit "alerte" au-dessus du contenu) */}
         {mission.acceptanceDeadline && mission.status === "pending_acceptance" && showActions && (
           <div
@@ -1508,6 +1530,128 @@ export function MissionSplitView({
         </div>
       </div>
     </motion.div>
+  );
+}
+
+// ─── Bandeau dispute côté annonceur ───────────────────────────────────
+// Visible en haut de la card mission quand `hasDispute=true`. Indique :
+//  - statut de la dispute (en cours / résolue / clôturée)
+//  - motif
+//  - état du paiement (suspendu / débloqué / déjà parti)
+//  - lien direct vers `/dashboard/reclamations`
+function DisputeStripAnnouncer({ mission }: { mission: ConvexMission }) {
+  const isResolvedClient = mission.disputeStatus === "resolved_client";
+  const isResolvedAnnouncer = mission.disputeStatus === "resolved_announcer";
+  const isClosed = mission.disputeStatus === "closed";
+  const isInProgress =
+    mission.disputeStatus === "open" || mission.disputeStatus === "investigating";
+  const paymentSuspended =
+    !!mission.disputePaymentBlocked && !isResolvedAnnouncer && !isClosed;
+  // Action requise : dispute en cours ET annonceur n'a pas encore répondu
+  const needsResponse = isInProgress && !mission.disputeAnnouncerResponded;
+
+  // Tone : rouge si paiement bloqué actif, vert si résolu annonceur, ambre sinon
+  const tone = paymentSuspended
+    ? { bg: "#fef2f2", border: "#fecaca", title: "#991b1b", body: "#7f1d1d" }
+    : isResolvedAnnouncer
+      ? { bg: "#ecfdf5", border: "#a7f3d0", title: "#065f46", body: "#047857" }
+      : isResolvedClient
+        ? { bg: "#fff7ed", border: "#fed7aa", title: "#9a3412", body: "#c2410c" }
+        : isClosed
+          ? { bg: "#f8fafc", border: "#e2e8f0", title: "#334155", body: "#475569" }
+          : { bg: "#fffbeb", border: "#fde68a", title: "#92400e", body: "#b45309" };
+
+  const headline = paymentSuspended
+    ? "Réclamation en cours · Versement suspendu"
+    : isResolvedClient
+      ? "Réclamation résolue en faveur du client"
+      : isResolvedAnnouncer
+        ? "Réclamation résolue en votre faveur · Versement débloqué"
+        : isClosed
+          ? "Réclamation clôturée"
+          : "Réclamation ouverte par le client";
+
+  const refundAmount = mission.refundAmount ?? 0;
+
+  return (
+    <div
+      className="px-3.5 py-2.5 flex items-start gap-2.5"
+      style={{ background: tone.bg, borderBottom: `1px solid ${tone.border}` }}
+    >
+      <AlertTriangle
+        className="w-4 h-4 mt-0.5 flex-shrink-0"
+        style={{ color: tone.title }}
+      />
+      <div className="flex-1 min-w-0 text-[12px] leading-[1.45]">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <p className="font-semibold" style={{ color: tone.title }}>
+            {headline}
+          </p>
+          {needsResponse ? (
+            <a
+              href="/dashboard/reclamations"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wide transition-all hover:scale-105 animate-pulse"
+              style={{
+                background: "#dc2626",
+                color: "#fff",
+                boxShadow: "0 2px 8px rgba(220,38,38,0.35)",
+              }}
+            >
+              <AlertTriangle className="w-3 h-3" />
+              Action requise — Donner ma version
+            </a>
+          ) : (
+            <a
+              href="/dashboard/reclamations"
+              onClick={(e) => e.stopPropagation()}
+              className="text-[11px] underline hover:no-underline"
+              style={{ color: tone.body }}
+            >
+              Voir le détail →
+            </a>
+          )}
+        </div>
+
+        {mission.disputeReasonLabel && (
+          <p className="mt-0.5" style={{ color: tone.body }}>
+            <span className="opacity-70">Motif :</span>{" "}
+            {mission.disputeReasonLabel}
+          </p>
+        )}
+
+        <div
+          className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]"
+          style={{ color: tone.body }}
+        >
+          <span>
+            <span className="opacity-70">Mission :</span>{" "}
+            <strong style={{ color: tone.title }}>
+              {((mission.amount ?? 0) / 100).toFixed(2).replace(".", ",")} €
+            </strong>
+          </span>
+          {isResolvedClient && refundAmount > 0 && (
+            <span>
+              <span className="opacity-70">Remboursé au client :</span>{" "}
+              <strong style={{ color: tone.title }}>
+                {(refundAmount / 100).toFixed(2).replace(".", ",")} €
+              </strong>
+            </span>
+          )}
+          {mission.disputePayoutAlreadyDone && (
+            <span className="font-medium" style={{ color: "#c2410c" }}>
+              · Versement déjà parti avant l&apos;ouverture
+            </span>
+          )}
+          {paymentSuspended && (
+            <span className="inline-flex items-center gap-1 font-medium">
+              <Lock className="w-3 h-3" />
+              <span>Vos {((mission.amount ?? 0) / 100).toFixed(2).replace(".", ",")} € sont gelés</span>
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

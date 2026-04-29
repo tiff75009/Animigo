@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAdminAuth } from "@/app/hooks/useAdminAuth";
@@ -48,6 +48,11 @@ interface EnrichedDispute {
   description: string;
   status: DisputeStatus;
   paymentBlocked: boolean;
+  payoutAlreadyDoneAtCreation?: boolean;
+  attachments?: Array<{ url: string; type: string; name?: string; size?: number }>;
+  announcerResponse?: string;
+  announcerRespondedAt?: number;
+  announcerResponseAttachments?: Array<{ url: string; type: string; name?: string; size?: number }>;
   assignedAdminId?: Id<"users">;
   adminNotes?: string;
   resolution?: string;
@@ -119,6 +124,11 @@ export default function AdminReclamationsPage() {
   const [suspendAnnouncer, setSuspendAnnouncer] = useState(false);
   const [suspendReason, setSuspendReason] = useState("");
   const [closeMission, setCloseMission] = useState(false);
+  const [refundClient, setRefundClient] = useState(false);
+  const [refundAmountEuros, setRefundAmountEuros] = useState("");
+  // Filtre additionnel : par état du paiement
+  type PaymentFilter = "all" | "blocked" | "not_blocked" | "payout_done";
+  const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
 
   // Queries
   const disputes = useQuery(
@@ -135,6 +145,89 @@ export default function AdminReclamationsPage() {
   const updateStatus = useMutation(api.admin.disputes.updateDisputeStatus);
   const resolveWithActions = useMutation(api.admin.disputes.resolveDisputeWithActions);
   const addNote = useMutation(api.admin.disputes.addAdminNote);
+
+  /**
+   * Remplace dynamiquement les balises connues d'un template de résolution
+   * par les vraies valeurs de la réclamation/mission.
+   *
+   * Balises supportées (insensibles aux espaces, accolades simples) :
+   *   {service}        → nom du service
+   *   {date}           → date de début de mission (format long FR)
+   *   {date_courte}    → date courte (jj/mm/aaaa)
+   *   {montant}        → montant total mission (en €, ex "45,00")
+   *   {client_name}    → prénom + initiale nom du client
+   *   {client_prenom}  → prénom seul du client
+   *   {announcer_name} → prénom + initiale nom de l'annonceur
+   *   {motif}          → libellé du motif de réclamation
+   *
+   * Les balises avec choix multiples ("{a / b / c}") sont laissées
+   * intactes — c'est à l'admin de choisir / supprimer.
+   */
+  const interpolateResolutionTemplate = useCallback(
+    (tpl: string, detail: NonNullable<typeof selectedDetail>): string => {
+      const m = detail.mission;
+      const c = detail.client;
+      const a = detail.announcer;
+
+      const formatLongDate = (dateStr?: string) => {
+        if (!dateStr) return "—";
+        const [y, mo, d] = dateStr.split("-").map(Number);
+        if (!y || !mo || !d) return dateStr;
+        return new Date(y, mo - 1, d).toLocaleDateString("fr-FR", {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        });
+      };
+      const formatShortDate = (dateStr?: string) => {
+        if (!dateStr) return "—";
+        const [y, mo, d] = dateStr.split("-").map(Number);
+        if (!y || !mo || !d) return dateStr;
+        return `${String(d).padStart(2, "0")}/${String(mo).padStart(2, "0")}/${y}`;
+      };
+      const euros = (cents?: number) =>
+        ((cents ?? 0) / 100).toFixed(2).replace(".", ",");
+
+      const replacements: Record<string, string> = {
+        service: m?.serviceName ?? "votre prestation",
+        date: formatLongDate(m?.startDate),
+        date_courte: formatShortDate(m?.startDate),
+        montant: euros(m?.amount),
+        client_name: c
+          ? `${c.firstName ?? ""} ${c.lastName ? c.lastName.charAt(0) + "." : ""}`.trim()
+          : "le client",
+        client_prenom: c?.firstName ?? "le client",
+        announcer_name: a
+          ? `${a.firstName ?? ""} ${a.lastName ? a.lastName.charAt(0) + "." : ""}`.trim()
+          : "le prestataire",
+        motif: detail.reasonLabel ?? "—",
+      };
+
+      // Regex matche {clé} avec espaces optionnels et SANS slash interne
+      // (pour ne pas toucher aux balises de choix "{a / b}")
+      return tpl.replace(/\{\s*([a-z_]+)\s*\}/g, (match, key: string) => {
+        const value = replacements[key.toLowerCase()];
+        return value !== undefined ? value : match;
+      });
+    },
+    []
+  );
+
+  // Pré-remplissage de la résolution depuis le template du motif sélectionné.
+  // ⚠️ On ne pré-remplit qu'une seule fois par dispute (évite d'écraser ce
+  //    que l'admin tape). Quand on change de dispute, on autorise un nouveau remplissage.
+  const lastPrefilledDisputeIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedDetail) return;
+    const did = String(selectedDetail._id);
+    if (lastPrefilledDisputeIdRef.current === did) return;
+    lastPrefilledDisputeIdRef.current = did;
+    const tpl = selectedDetail.reason?.resolutionTemplate;
+    if (tpl && resolution.trim() === "") {
+      setResolution(interpolateResolutionTemplate(tpl, selectedDetail));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDetail?._id, selectedDetail?.reason?.resolutionTemplate]);
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleDateString("fr-FR", {
@@ -162,7 +255,11 @@ export default function AdminReclamationsPage() {
     if (!token) return;
     setIsProcessing(true);
     try {
-      if (suspendAnnouncer || closeMission) {
+      const wantsRefund = newStatus === "resolved_client" && refundClient;
+      const refundAmountCents = wantsRefund && refundAmountEuros.trim()
+        ? Math.round(parseFloat(refundAmountEuros.replace(",", ".")) * 100)
+        : undefined;
+      if (suspendAnnouncer || closeMission || wantsRefund) {
         await resolveWithActions({
           token,
           disputeId,
@@ -172,6 +269,8 @@ export default function AdminReclamationsPage() {
           suspendAnnouncer: suspendAnnouncer || undefined,
           suspendReason: suspendReason || undefined,
           closeMission: closeMission || undefined,
+          refundClient: wantsRefund || undefined,
+          refundAmount: refundAmountCents,
         });
       } else {
         await updateStatus({
@@ -187,6 +286,8 @@ export default function AdminReclamationsPage() {
       setSuspendAnnouncer(false);
       setSuspendReason("");
       setCloseMission(false);
+      setRefundClient(false);
+      setRefundAmountEuros("");
     } catch (error) {
       console.error("Erreur:", error);
     } finally {
@@ -212,14 +313,35 @@ export default function AdminReclamationsPage() {
   };
 
   // Stats
-  const disputeList = disputes as EnrichedDispute[] | undefined;
-  const stats = disputeList
+  const allDisputes = disputes as EnrichedDispute[] | undefined;
+  // Application du filtre paiement (côté client puisque la query backend ne le supporte pas)
+  const disputeList = (allDisputes ?? []).filter((d) => {
+    switch (paymentFilter) {
+      case "blocked":
+        return (
+          d.paymentBlocked &&
+          d.status !== "resolved_announcer" &&
+          d.status !== "closed"
+        );
+      case "not_blocked":
+        return !d.paymentBlocked;
+      case "payout_done":
+        return d.payoutAlreadyDoneAtCreation === true;
+      case "all":
+      default:
+        return true;
+    }
+  }) as EnrichedDispute[];
+  const stats = allDisputes
     ? {
-        total: disputeList.length,
-        open: disputeList.filter((d) => d.status === "open").length,
-        investigating: disputeList.filter((d) => d.status === "investigating").length,
-        resolved: disputeList.filter((d) => d.status === "resolved_client" || d.status === "resolved_announcer").length,
-        paymentBlocked: disputeList.filter((d) => d.paymentBlocked && d.status !== "resolved_announcer" && d.status !== "closed").length,
+        total: allDisputes.length,
+        open: allDisputes.filter((d) => d.status === "open").length,
+        investigating: allDisputes.filter((d) => d.status === "investigating").length,
+        resolved: allDisputes.filter((d) => d.status === "resolved_client" || d.status === "resolved_announcer").length,
+        paymentBlocked: allDisputes.filter((d) => d.paymentBlocked && d.status !== "resolved_announcer" && d.status !== "closed").length,
+        announcerResponded: allDisputes.filter(
+          (d) => d.announcerResponse && d.status === "investigating"
+        ).length,
       }
     : null;
 
@@ -265,11 +387,71 @@ export default function AdminReclamationsPage() {
                 </div>
               )}
 
+              {/* ⚠️ Payout déjà parti AVANT ouverture de la dispute → reversal manuel */}
+              {selectedDetail.payoutAlreadyDoneAtCreation && (
+                <div className="flex items-start gap-3 p-3 bg-orange-500/10 border border-orange-500/40 rounded-xl mb-4">
+                  <AlertTriangle className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-orange-300">
+                      Versement annonceur déjà effectué avant la réclamation
+                    </p>
+                    <p className="text-xs text-orange-300/80 mt-0.5">
+                      Cette réclamation a été ouverte APRÈS le versement
+                      annonceur. En cas de remboursement client, un reversal
+                      manuel devra être initié sur le tableau de bord Stripe
+                      (ou le solde plateforme avancera pour absorber le
+                      remboursement).
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Description client */}
               <div className="bg-slate-800/50 rounded-xl p-4">
                 <p className="text-sm font-medium text-slate-300 mb-2">Description du client</p>
                 <p className="text-slate-200 whitespace-pre-wrap">{selectedDetail.description}</p>
+
+                {/* Pièces jointes client */}
+                {selectedDetail.attachments && selectedDetail.attachments.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-slate-700/50">
+                    <p className="text-xs font-medium text-slate-400 mb-2">
+                      Pièces jointes ({selectedDetail.attachments.length})
+                    </p>
+                    <AttachmentList attachments={selectedDetail.attachments} />
+                  </div>
+                )}
               </div>
+
+              {/* Réponse de l'annonceur */}
+              {selectedDetail.announcerResponse && (
+                <div className="bg-amber-500/5 rounded-xl p-4 border border-amber-500/20 mt-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-amber-300">
+                      Réponse de l&apos;annonceur
+                    </p>
+                    {selectedDetail.announcerRespondedAt && (
+                      <span className="text-xs text-slate-500">
+                        {formatDate(selectedDetail.announcerRespondedAt)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-slate-200 whitespace-pre-wrap text-sm">
+                    {selectedDetail.announcerResponse}
+                  </p>
+                  {selectedDetail.announcerResponseAttachments &&
+                    selectedDetail.announcerResponseAttachments.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-amber-500/15">
+                        <p className="text-xs font-medium text-slate-400 mb-2">
+                          Pièces jointes annonceur (
+                          {selectedDetail.announcerResponseAttachments.length})
+                        </p>
+                        <AttachmentList
+                          attachments={selectedDetail.announcerResponseAttachments}
+                        />
+                      </div>
+                    )}
+                </div>
+              )}
 
               {/* Dates */}
               <div className="flex gap-4 mt-4 text-sm text-slate-500">
@@ -565,6 +747,111 @@ export default function AdminReclamationsPage() {
                       </span>
                     </div>
                   </label>
+
+                  {/* Remboursement client (n'apparaît que si pas déjà remboursé) */}
+                  {selectedDetail.mission?.paymentStatus !== "refunded" && (
+                    <>
+                      <label className="flex items-start gap-3 cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={refundClient}
+                          onChange={(e) => setRefundClient(e.target.checked)}
+                          className="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-700 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                        />
+                        <div>
+                          <span className="text-sm text-white flex items-center gap-1.5 group-hover:text-emerald-400 transition-colors">
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            Rembourser le client
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            Déclenche un refund Stripe + met à jour la mission
+                            (uniquement si statut « Résolu en faveur du client »)
+                          </span>
+                        </div>
+                      </label>
+
+                      {refundClient && (() => {
+                        // Calcul du remboursement maxi : prix service uniquement
+                        // (commission plateforme + frais Stripe sont conservés)
+                        const total = selectedDetail.mission?.amount ?? 0;
+                        const platformFee = selectedDetail.mission?.platformFee ?? 0;
+                        const stripeFee = selectedDetail.mission?.stripeFee ?? 0;
+                        const maxRefundable = Math.max(0, total - platformFee - stripeFee);
+                        const totalEuros = (total / 100).toFixed(2).replace(".", ",");
+                        const platformEuros = (platformFee / 100).toFixed(2).replace(".", ",");
+                        const stripeEuros = (stripeFee / 100).toFixed(2).replace(".", ",");
+                        const maxEuros = (maxRefundable / 100).toFixed(2).replace(".", ",");
+                        return (
+                          <div className="ml-7 space-y-2">
+                            {/* Breakdown : commission/frais retenus */}
+                            <div className="p-2.5 rounded-lg bg-slate-800/40 border border-slate-700/50 text-[11px] space-y-0.5">
+                              <p className="font-semibold text-slate-300 mb-1">
+                                Décomposition du paiement
+                              </p>
+                              <div className="flex justify-between text-slate-400">
+                                <span>Total payé par le client</span>
+                                <span className="text-slate-200">{totalEuros} €</span>
+                              </div>
+                              <div className="flex justify-between text-slate-500">
+                                <span>− Commission plateforme (retenue)</span>
+                                <span>− {platformEuros} €</span>
+                              </div>
+                              <div className="flex justify-between text-slate-500">
+                                <span>− Frais Stripe (retenus)</span>
+                                <span>− {stripeEuros} €</span>
+                              </div>
+                              <div className="flex justify-between pt-1 mt-1 border-t border-slate-700/50">
+                                <span className="font-semibold text-emerald-300">
+                                  Max remboursable au client
+                                </span>
+                                <span className="font-bold text-emerald-300">
+                                  {maxEuros} €
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                max={maxRefundable / 100}
+                                value={refundAmountEuros}
+                                onChange={(e) => setRefundAmountEuros(e.target.value)}
+                                placeholder={`Max : ${maxEuros}`}
+                                className="flex-1 px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                              />
+                              <span className="text-sm text-slate-400">€</span>
+                              <button
+                                type="button"
+                                onClick={() => setRefundAmountEuros(maxEuros)}
+                                className="text-xs text-emerald-400 hover:text-emerald-300 underline whitespace-nowrap"
+                              >
+                                Max
+                              </button>
+                            </div>
+                            <p className="text-[11px] text-slate-500">
+                              Laisser vide pour rembourser la totalité du service
+                              ({maxEuros} €) automatiquement. Les frais Stripe et
+                              la commission ne sont jamais remboursés.
+                            </p>
+                          </div>
+                        );
+                      })()}
+                    </>
+                  )}
+
+                  {selectedDetail.mission?.paymentStatus === "refunded" && (
+                    <div className="px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-xs text-emerald-300 flex items-center gap-2">
+                      <ShieldCheck className="w-3.5 h-3.5 flex-shrink-0" />
+                      Mission déjà remboursée
+                      {selectedDetail.mission?.refundAmount && (
+                        <span className="ml-auto font-semibold">
+                          {(selectedDetail.mission.refundAmount / 100).toFixed(2)}€
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -640,6 +927,35 @@ export default function AdminReclamationsPage() {
         </Link>
       </div>
 
+      {/* Alerte top : nouvelles réponses annonceur à examiner */}
+      {stats && stats.announcerResponded > 0 && (
+        <div
+          className="mb-4 p-4 rounded-xl border-2 border-blue-500/50 bg-blue-500/10 flex items-start gap-3"
+        >
+          <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+            <span className="text-2xl">💬</span>
+          </div>
+          <div className="flex-1">
+            <p className="font-semibold text-blue-300">
+              {stats.announcerResponded} réponse
+              {stats.announcerResponded > 1 ? "s" : ""} d&apos;annonceur
+              {stats.announcerResponded > 1 ? "s" : ""} à examiner
+            </p>
+            <p className="text-sm text-blue-200/80 mt-0.5">
+              {stats.announcerResponded > 1
+                ? "Les annonceurs ont apporté leur version des faits sur ces réclamations. Examinez les deux côtés pour trancher."
+                : "L'annonceur a apporté sa version des faits sur cette réclamation. Examinez les deux côtés pour trancher."}
+            </p>
+          </div>
+          <button
+            onClick={() => setStatusFilter("investigating")}
+            className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors flex-shrink-0"
+          >
+            Voir
+          </button>
+        </div>
+      )}
+
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
@@ -679,8 +995,8 @@ export default function AdminReclamationsPage() {
         </div>
       )}
 
-      {/* Filter tabs */}
-      <div className="flex gap-2 mb-6">
+      {/* Filter tabs (statut) */}
+      <div className="flex gap-2 mb-3 flex-wrap">
         {([
           { value: "all", label: "Toutes" },
           { value: "open", label: "Ouvertes" },
@@ -698,6 +1014,36 @@ export default function AdminReclamationsPage() {
                 : "bg-slate-800 text-slate-400 hover:bg-slate-700"
             }`}
           >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Filter tabs (paiement) — second niveau */}
+      <div className="flex gap-2 mb-6 flex-wrap items-center">
+        <span className="text-xs text-slate-500 uppercase tracking-wide font-medium">
+          Paiement :
+        </span>
+        {([
+          { value: "all", label: "Tous", icon: null },
+          { value: "blocked", label: "Bloqués", icon: <Lock className="w-3 h-3" /> },
+          { value: "not_blocked", label: "Non bloquants", icon: <Unlock className="w-3 h-3" /> },
+          { value: "payout_done", label: "Payout déjà parti", icon: <AlertTriangle className="w-3 h-3" /> },
+        ] as { value: PaymentFilter; label: string; icon: React.ReactNode }[]).map((tab) => (
+          <button
+            key={tab.value}
+            onClick={() => setPaymentFilter(tab.value)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium text-xs transition-colors ${
+              paymentFilter === tab.value
+                ? tab.value === "payout_done"
+                  ? "bg-orange-600 text-white"
+                  : tab.value === "blocked"
+                    ? "bg-red-600 text-white"
+                    : "bg-blue-600 text-white"
+                : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+            }`}
+          >
+            {tab.icon}
             {tab.label}
           </button>
         ))}
@@ -730,8 +1076,30 @@ export default function AdminReclamationsPage() {
                   onClick={() => setSelectedDisputeId(dispute._id)}
                 >
                   <td className="px-4 py-4">
-                    <p className="text-white font-medium text-sm">{dispute.reasonLabel}</p>
-                    <p className="text-slate-500 text-xs line-clamp-1">{dispute.description}</p>
+                    <div className="flex items-start gap-2">
+                      {/* Pastille d'alerte si l'annonceur vient de répondre */}
+                      {dispute.announcerResponse &&
+                        dispute.status === "investigating" && (
+                          <div
+                            className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 flex-shrink-0 animate-pulse"
+                            title="Nouvelle réponse de l'annonceur"
+                          />
+                        )}
+                      <div className="min-w-0">
+                        <p className="text-white font-medium text-sm">
+                          {dispute.reasonLabel}
+                        </p>
+                        <p className="text-slate-500 text-xs line-clamp-1">
+                          {dispute.description}
+                        </p>
+                        {dispute.announcerResponse &&
+                          dispute.status === "investigating" && (
+                            <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                              💬 Réponse annonceur — à examiner
+                            </span>
+                          )}
+                      </div>
+                    </div>
                   </td>
                   <td className="px-4 py-4">
                     <p className="text-white text-sm">{dispute.clientName}</p>
@@ -755,14 +1123,32 @@ export default function AdminReclamationsPage() {
                     <StatusBadge status={dispute.status} />
                   </td>
                   <td className="px-4 py-4">
-                    {dispute.paymentBlocked ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-500/20 text-red-400 text-xs rounded-full">
-                        <Lock className="w-3 h-3" />
-                        Bloqué
-                      </span>
-                    ) : (
-                      <span className="text-slate-500 text-xs">—</span>
-                    )}
+                    <div className="flex flex-col gap-1 items-start">
+                      {dispute.paymentBlocked &&
+                      dispute.status !== "resolved_announcer" &&
+                      dispute.status !== "closed" ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-500/20 text-red-400 text-xs rounded-full">
+                          <Lock className="w-3 h-3" />
+                          Bloqué
+                        </span>
+                      ) : !dispute.paymentBlocked ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-slate-500/20 text-slate-400 text-xs rounded-full">
+                          <Unlock className="w-3 h-3" />
+                          Non bloquant
+                        </span>
+                      ) : (
+                        <span className="text-slate-500 text-xs">—</span>
+                      )}
+                      {dispute.payoutAlreadyDoneAtCreation && (
+                        <span
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-orange-500/20 text-orange-400 text-[10px] rounded-full"
+                          title="Versement annonceur déjà parti — reversal Stripe manuel requis"
+                        >
+                          <AlertTriangle className="w-3 h-3" />
+                          Payout parti
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-4">
                     <span className="text-slate-400 text-sm">
@@ -796,6 +1182,54 @@ export default function AdminReclamationsPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Composant : liste de pièces jointes (vignettes pour images, lien sinon)
+// ────────────────────────────────────────────────────────────────────
+function AttachmentList({
+  attachments,
+}: {
+  attachments: Array<{ url: string; type: string; name?: string; size?: number }>;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {attachments.map((att, i) => {
+        const isImage = att.type.startsWith("image/");
+        const niceName = att.name ?? `Pièce jointe ${i + 1}`;
+        const sizeKb = att.size ? Math.round(att.size / 1024) : null;
+        return (
+          <a
+            key={`${att.url}-${i}`}
+            href={att.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group relative flex items-center gap-2 px-2.5 py-1.5 bg-slate-900/60 border border-slate-700 hover:border-blue-500/50 rounded-lg transition-colors"
+            title={niceName}
+          >
+            {isImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={att.url}
+                alt={niceName}
+                className="w-10 h-10 rounded object-cover"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded bg-slate-700/50 flex items-center justify-center text-[10px] text-slate-400 uppercase font-bold">
+                {att.type.split("/").pop()?.slice(0, 4) ?? "FILE"}
+              </div>
+            )}
+            <div className="text-left min-w-0 max-w-[160px]">
+              <p className="text-xs text-slate-200 truncate">{niceName}</p>
+              {sizeKb && (
+                <p className="text-[10px] text-slate-500">{sizeKb} Ko</p>
+              )}
+            </div>
+          </a>
+        );
+      })}
     </div>
   );
 }

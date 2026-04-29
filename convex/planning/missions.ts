@@ -343,8 +343,46 @@ export const getMissionsByStatus = query({
       });
     }
 
+    // 5bis. Précharger les disputes pour TOUTES les missions de la liste.
+    // ⚠️ On ne se fie plus au flag `hasDispute` (qui peut être non-set
+    //    sur d'anciennes missions historiques) : on lookup directement.
+    const disputeMap = new Map<
+      string,
+      {
+        status: string;
+        reasonLabel: string;
+        paymentBlocked: boolean;
+        resolvedAt?: number;
+        payoutAlreadyDoneAtCreation?: boolean;
+        announcerResponded: boolean;
+      }
+    >();
+    if (missions.length > 0) {
+      const disputes = await Promise.all(
+        missions.map((m) =>
+          ctx.db
+            .query("disputes")
+            .withIndex("by_mission", (q: any) => q.eq("missionId", m._id))
+            .first()
+        )
+      );
+      disputes.forEach((d, i) => {
+        if (d) {
+          disputeMap.set(String(missions[i]._id), {
+            status: d.status,
+            reasonLabel: d.reasonLabel,
+            paymentBlocked: d.paymentBlocked,
+            resolvedAt: d.resolvedAt,
+            payoutAlreadyDoneAtCreation: d.payoutAlreadyDoneAtCreation,
+            announcerResponded: !!d.announcerResponse,
+          });
+        }
+      });
+    }
+
     // 6. Enrichir les missions avec les données calculées
     const enrichedMissions = missions.map(m => {
+      const disputeInfo = disputeMap.get(String(m._id)) ?? null;
       // Dates des créneaux collectifs depuis le cache
       let collectiveSlotDates: string[] | undefined;
       if (m.sessionType === "collective" && m.collectiveSlotIds?.length) {
@@ -411,6 +449,17 @@ export const getMissionsByStatus = query({
         vatRate: m.vatRate,
         isSapApplied: m.isSapApplied,
         isVatSubject: announcerIsVatSubject,
+        // ─── Dispute info (pour bandeau card annonceur) ───
+        // ⚠️ On force hasDispute à true si on a trouvé une dispute en BDD,
+        //    même si le flag mission.hasDispute n'a pas été set (data historique).
+        hasDispute: m.hasDispute || disputeInfo !== null,
+        disputeStatus: disputeInfo?.status,
+        disputeReasonLabel: disputeInfo?.reasonLabel,
+        disputePaymentBlocked: disputeInfo?.paymentBlocked,
+        disputeResolvedAt: disputeInfo?.resolvedAt,
+        disputePayoutAlreadyDone: disputeInfo?.payoutAlreadyDoneAtCreation,
+        disputeAnnouncerResponded: disputeInfo?.announcerResponded ?? false,
+        refundAmount: m.refundAmount,
       };
     });
 
@@ -1399,6 +1448,28 @@ export const getClientMissions = query({
           }
         }
 
+        // Enrichir avec les infos de dispute si présente (pour affichage UI)
+        let disputeInfo: {
+          status: string;
+          reasonLabel?: string;
+          resolvedAt?: number;
+          paymentBlocked?: boolean;
+        } | null = null;
+        if (m.hasDispute) {
+          const dispute = await ctx.db
+            .query("disputes")
+            .withIndex("by_mission", (q: any) => q.eq("missionId", m._id))
+            .first();
+          if (dispute) {
+            disputeInfo = {
+              status: dispute.status,
+              reasonLabel: dispute.reasonLabel,
+              resolvedAt: dispute.resolvedAt,
+              paymentBlocked: dispute.paymentBlocked,
+            };
+          }
+        }
+
         return {
           id: m._id,
           announcerId: m.announcerId,
@@ -1441,6 +1512,11 @@ export const getClientMissions = query({
           acceptanceDeadline: m.acceptanceDeadline,
           hasReview: m.hasReview,
           hasDispute: m.hasDispute,
+          // Détails dispute (statut + libellé motif + dates)
+          disputeStatus: disputeInfo?.status,
+          disputeReasonLabel: disputeInfo?.reasonLabel,
+          disputeResolvedAt: disputeInfo?.resolvedAt,
+          disputePaymentBlocked: disputeInfo?.paymentBlocked,
           // Confirmation fin de service
           clientConfirmedAt: m.clientConfirmedAt,
           autoConfirmedAt: m.autoConfirmedAt,
@@ -1976,8 +2052,45 @@ export const getAnnouncerMissionsWithStats = query({
       });
     }
 
+    // 5bis. Précharger les disputes pour TOUTES les missions (pas seulement
+    // celles avec hasDispute=true → fallback pour data historique).
+    const disputeMap = new Map<
+      string,
+      {
+        status: string;
+        reasonLabel: string;
+        paymentBlocked: boolean;
+        resolvedAt?: number;
+        payoutAlreadyDoneAtCreation?: boolean;
+        announcerResponded: boolean;
+      }
+    >();
+    if (filteredMissions.length > 0) {
+      const disputes = await Promise.all(
+        filteredMissions.map((m) =>
+          ctx.db
+            .query("disputes")
+            .withIndex("by_mission", (q: any) => q.eq("missionId", m._id))
+            .first()
+        )
+      );
+      disputes.forEach((d, i) => {
+        if (d) {
+          disputeMap.set(String(filteredMissions[i]._id), {
+            status: d.status,
+            reasonLabel: d.reasonLabel,
+            paymentBlocked: d.paymentBlocked,
+            resolvedAt: d.resolvedAt,
+            payoutAlreadyDoneAtCreation: d.payoutAlreadyDoneAtCreation,
+            announcerResponded: !!d.announcerResponse,
+          });
+        }
+      });
+    }
+
     // 6. Enrichir les missions
     const enrichedMissions = filteredMissions.map(m => {
+      const disputeInfo = disputeMap.get(String(m._id)) ?? null;
       let collectiveSlotDates: string[] | undefined;
       if (m.sessionType === "collective" && m.collectiveSlotIds?.length) {
         collectiveSlotDates = (m.collectiveSlotIds as string[])
@@ -2034,6 +2147,17 @@ export const getAnnouncerMissionsWithStats = query({
         vatRate: m.vatRate,
         isSapApplied: m.isSapApplied,
         isVatSubject: announcerIsVatSubject,
+        // ─── Dispute info (pour affichage card) ──────────────────
+        hasDispute: m.hasDispute || disputeInfo !== null,
+        disputeStatus: disputeInfo?.status,
+        disputeReasonLabel: disputeInfo?.reasonLabel,
+        disputePaymentBlocked: disputeInfo?.paymentBlocked,
+        disputeResolvedAt: disputeInfo?.resolvedAt,
+        disputePayoutAlreadyDone: disputeInfo?.payoutAlreadyDoneAtCreation,
+        disputeAnnouncerResponded: disputeInfo?.announcerResponded ?? false,
+        refundAmount: m.refundAmount,
+        announcerEarningsAfterRefund:
+          (m.refundAmount ?? 0) > 0 ? m.announcerEarnings : undefined,
       };
     });
 

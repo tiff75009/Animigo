@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAdminAuth } from "@/app/hooks/useAdminAuth";
@@ -21,6 +21,8 @@ import {
   Download,
   ArrowUp,
   ArrowDown,
+  MessageSquareText,
+  ChevronDown,
 } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 import Link from "next/link";
@@ -35,6 +37,8 @@ interface DisputeReason {
   sortOrder: number;
   createdAt: number;
   updatedAt: number;
+  clientHelperMessage?: string;
+  resolutionTemplate?: string;
 }
 
 export default function AdminMotifsPage() {
@@ -48,7 +52,15 @@ export default function AdminMotifsPage() {
   const [newSlug, setNewSlug] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newBlocksPayment, setNewBlocksPayment] = useState(false);
+  const [newClientHelper, setNewClientHelper] = useState("");
+  const [newResolutionTpl, setNewResolutionTpl] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // ─── Édition des templates (helper client + résolution) par accordéon ───
+  const [templatesOpenId, setTemplatesOpenId] = useState<Id<"disputeReasons"> | null>(null);
+  const [tplHelper, setTplHelper] = useState("");
+  const [tplResolution, setTplResolution] = useState("");
+  const [isSavingTpl, setIsSavingTpl] = useState(false);
 
   // Queries
   const reasons = useQuery(
@@ -61,6 +73,10 @@ export default function AdminMotifsPage() {
   const updateReason = useMutation(api.admin.disputeReasons.update);
   const reorderReasons = useMutation(api.admin.disputeReasons.reorder);
   const seedDefaults = useMutation(api.admin.disputeReasons.seedDefaults);
+  const seedTemplates = useMutation(api.admin.disputeReasons.seedTemplatesIntoExisting);
+  const applyBlocksPaymentChange = useMutation(
+    api.admin.disputeReasons.applyBlocksPaymentChangeToActiveDisputes
+  );
 
   const startEdit = (reason: DisputeReason) => {
     setEditingId(reason._id);
@@ -106,8 +122,28 @@ export default function AdminMotifsPage() {
 
   const handleToggleBlocksPayment = async (id: Id<"disputeReasons">, blocksPayment: boolean) => {
     if (!token) return;
+    const newValue = !blocksPayment;
     try {
-      await updateReason({ token, id, blocksPayment: !blocksPayment });
+      const r = await updateReason({ token, id, blocksPayment: newValue });
+      const activeCount = r?.activeDisputesUsingReason ?? 0;
+      if (activeCount > 0) {
+        const verb = newValue ? "bloquées" : "débloquées";
+        const propagate = window.confirm(
+          `Ce motif est utilisé par ${activeCount} réclamation${activeCount > 1 ? "s" : ""} active${activeCount > 1 ? "s" : ""}.\n\n` +
+            `Voulez-vous propager le changement ? Les réclamations en cours seront ${verb} en conséquence.\n\n` +
+            `(Annuler = seul le motif est mis à jour, les réclamations en cours gardent leur état actuel)`
+        );
+        if (propagate) {
+          const result = await applyBlocksPaymentChange({
+            token,
+            reasonId: id,
+            newBlocksPayment: newValue,
+          });
+          window.alert(
+            `${result.updated} réclamation${result.updated > 1 ? "s" : ""} mise${result.updated > 1 ? "s" : ""} à jour.`
+          );
+        }
+      }
     } catch (error) {
       console.error("Erreur:", error);
     }
@@ -123,12 +159,16 @@ export default function AdminMotifsPage() {
         slug: newSlug.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""),
         description: newDescription.trim() || undefined,
         blocksPayment: newBlocksPayment,
+        clientHelperMessage: newClientHelper.trim() || undefined,
+        resolutionTemplate: newResolutionTpl.trim() || undefined,
       });
       setIsCreating(false);
       setNewLabel("");
       setNewSlug("");
       setNewDescription("");
       setNewBlocksPayment(false);
+      setNewClientHelper("");
+      setNewResolutionTpl("");
     } catch (error) {
       console.error("Erreur:", error);
     } finally {
@@ -170,6 +210,54 @@ export default function AdminMotifsPage() {
     }
   };
 
+  const handleSeedTemplates = async () => {
+    if (!token) return;
+    if (
+      !window.confirm(
+        "Pré-remplir les templates manquants pour tous les motifs ?\n(N'écrase pas les templates déjà saisis)"
+      )
+    ) {
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const r = await seedTemplates({ token });
+      window.alert(r.message);
+    } catch (error) {
+      console.error("Erreur:", error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const openTemplates = (reason: DisputeReason) => {
+    if (templatesOpenId === reason._id) {
+      setTemplatesOpenId(null);
+      return;
+    }
+    setTemplatesOpenId(reason._id);
+    setTplHelper(reason.clientHelperMessage ?? "");
+    setTplResolution(reason.resolutionTemplate ?? "");
+  };
+
+  const handleSaveTemplates = async () => {
+    if (!token || !templatesOpenId) return;
+    setIsSavingTpl(true);
+    try {
+      await updateReason({
+        token,
+        id: templatesOpenId,
+        clientHelperMessage: tplHelper.trim() || undefined,
+        resolutionTemplate: tplResolution.trim() || undefined,
+      });
+      setTemplatesOpenId(null);
+    } catch (error) {
+      console.error("Erreur sauvegarde templates:", error);
+    } finally {
+      setIsSavingTpl(false);
+    }
+  };
+
   const generateSlug = (label: string) => {
     return label
       .toLowerCase()
@@ -204,6 +292,15 @@ export default function AdminMotifsPage() {
           >
             <Download className="w-4 h-4" />
             Initialiser par défaut
+          </button>
+          <button
+            onClick={handleSeedTemplates}
+            disabled={isProcessing}
+            title="Remplit les champs templates manquants pour tous les motifs existants"
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 text-blue-300 rounded-lg hover:bg-slate-700 transition-colors border border-blue-500/30 disabled:opacity-50"
+          >
+            <MessageSquareText className="w-4 h-4" />
+            Pré-remplir templates
           </button>
           <button
             onClick={() => setIsCreating(true)}
@@ -269,6 +366,36 @@ export default function AdminMotifsPage() {
                   placeholder="Description optionnelle..."
                   className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                 />
+              </div>
+
+              {/* Templates (optionnels) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label htmlFor="new-helper" className="block text-sm text-slate-400 mb-1">
+                    Aide affichée au client (optionnel)
+                  </label>
+                  <textarea
+                    id="new-helper"
+                    value={newClientHelper}
+                    onChange={(e) => setNewClientHelper(e.target.value)}
+                    rows={3}
+                    placeholder="Ex: Joindre photos + facture vétérinaire si applicable"
+                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-y"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="new-resolution" className="block text-sm text-slate-400 mb-1">
+                    Modèle de résolution admin (optionnel)
+                  </label>
+                  <textarea
+                    id="new-resolution"
+                    value={newResolutionTpl}
+                    onChange={(e) => setNewResolutionTpl(e.target.value)}
+                    rows={3}
+                    placeholder="Pré-rempli dans la card Action / Résolution"
+                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-y"
+                  />
+                </div>
               </div>
               <div className="flex items-center justify-between">
                 <label className="flex items-center gap-3 cursor-pointer">
@@ -342,8 +469,8 @@ export default function AdminMotifsPage() {
             </thead>
             <tbody>
               {reasons?.map((reason: DisputeReason, index: number) => (
+                <Fragment key={reason._id}>
                 <motion.tr
-                  key={reason._id}
                   className="border-b border-slate-800/50 hover:bg-slate-800/30"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -471,7 +598,22 @@ export default function AdminMotifsPage() {
                         </button>
                       </td>
                       <td className="px-4 py-4">
-                        <div className="flex justify-end">
+                        <div className="flex justify-end gap-1.5">
+                          <button
+                            onClick={() => openTemplates(reason)}
+                            title={
+                              reason.clientHelperMessage || reason.resolutionTemplate
+                                ? "Templates configurés"
+                                : "Configurer les templates"
+                            }
+                            className={`p-1.5 transition-colors ${
+                              reason.clientHelperMessage || reason.resolutionTemplate
+                                ? "text-blue-400 hover:text-blue-300"
+                                : "text-slate-400 hover:text-white"
+                            }`}
+                          >
+                            <MessageSquareText className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={() => startEdit(reason)}
                             className="p-1.5 text-slate-400 hover:text-white transition-colors"
@@ -483,6 +625,167 @@ export default function AdminMotifsPage() {
                     </>
                   )}
                 </motion.tr>
+                {/* Ligne dépliable : édition des templates pour ce motif */}
+                <AnimatePresence initial={false}>
+                  {templatesOpenId === reason._id && (
+                    <motion.tr
+                      key={`${reason._id}-tpl`}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="border-b border-slate-800/50 bg-slate-800/20"
+                    >
+                      <td colSpan={7} className="px-6 py-5">
+                        <div className="space-y-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+                                <MessageSquareText className="w-4 h-4 text-blue-400" />
+                                Templates du motif « {reason.label} »
+                              </h4>
+                              <p className="text-xs text-slate-400 mt-0.5">
+                                Personnalisez les messages préremplis selon ce motif.
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => setTemplatesOpenId(null)}
+                              className="text-slate-400 hover:text-white p-1"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label
+                                htmlFor={`tpl-helper-${reason._id}`}
+                                className="block text-xs font-medium text-slate-300 mb-1.5"
+                              >
+                                Aide affichée au client
+                                <span className="text-slate-500 font-normal ml-1">
+                                  (lors de l&apos;ouverture de la réclamation)
+                                </span>
+                              </label>
+                              <textarea
+                                id={`tpl-helper-${reason._id}`}
+                                value={tplHelper}
+                                onChange={(e) => setTplHelper(e.target.value)}
+                                rows={5}
+                                placeholder={`Ex: Pour ce motif, merci de joindre :\n• Photos de l'incident\n• Facture vétérinaire si applicable\n• Détails précis (date, heure, lieu)`}
+                                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm placeholder-slate-600 focus:outline-none focus:border-blue-500 resize-y"
+                              />
+                              <p className="text-[10.5px] text-slate-500 mt-1">
+                                S&apos;affiche dans une bulle d&apos;info quand le
+                                client choisit ce motif.
+                              </p>
+                            </div>
+
+                            <div>
+                              <label
+                                htmlFor={`tpl-resolution-${reason._id}`}
+                                className="block text-xs font-medium text-slate-300 mb-1.5"
+                              >
+                                Modèle de résolution
+                                <span className="text-slate-500 font-normal ml-1">
+                                  (pré-rempli côté admin)
+                                </span>
+                              </label>
+                              <textarea
+                                id={`tpl-resolution-${reason._id}`}
+                                value={tplResolution}
+                                onChange={(e) => setTplResolution(e.target.value)}
+                                rows={5}
+                                placeholder={`Ex: Bonjour {client_prenom},\n\nNous avons examiné votre réclamation concernant "{service}" du {date}. Suite à notre enquête, nous vous accordons un remboursement de {montant}€…`}
+                                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm placeholder-slate-600 focus:outline-none focus:border-blue-500 resize-y"
+                              />
+                              <p className="text-[10.5px] text-slate-500 mt-1">
+                                Pré-rempli dans la card Action / Résolution de
+                                l&apos;admin pour ce motif. Les balises ci-dessous
+                                seront remplacées automatiquement.
+                              </p>
+
+                              {/* Liste des balises dynamiques disponibles */}
+                              <div className="mt-2 p-2.5 rounded-lg bg-slate-900 border border-slate-700/50">
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">
+                                  Balises dynamiques
+                                </p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {[
+                                    { tag: "{service}", desc: "Nom du service" },
+                                    { tag: "{date}", desc: "Date longue (1 mai 2026)" },
+                                    { tag: "{date_courte}", desc: "Date courte (01/05/2026)" },
+                                    { tag: "{montant}", desc: "Montant en € (45,00)" },
+                                    { tag: "{client_prenom}", desc: "Prénom client" },
+                                    { tag: "{client_name}", desc: "Prénom + initiale" },
+                                    { tag: "{announcer_name}", desc: "Nom annonceur" },
+                                    { tag: "{motif}", desc: "Libellé du motif" },
+                                  ].map((b) => (
+                                    <button
+                                      key={b.tag}
+                                      type="button"
+                                      onClick={() => {
+                                        // Insérer la balise au curseur
+                                        const ta = document.getElementById(
+                                          `tpl-resolution-${reason._id}`
+                                        ) as HTMLTextAreaElement | null;
+                                        if (!ta) return;
+                                        const start = ta.selectionStart;
+                                        const end = ta.selectionEnd;
+                                        const next =
+                                          tplResolution.slice(0, start) +
+                                          b.tag +
+                                          tplResolution.slice(end);
+                                        setTplResolution(next);
+                                        setTimeout(() => {
+                                          ta.focus();
+                                          ta.setSelectionRange(
+                                            start + b.tag.length,
+                                            start + b.tag.length
+                                          );
+                                        }, 0);
+                                      }}
+                                      title={b.desc}
+                                      className="font-mono text-[10.5px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/25 hover:bg-blue-500/25 transition-colors"
+                                    >
+                                      {b.tag}
+                                    </button>
+                                  ))}
+                                </div>
+                                <p className="text-[10px] text-slate-500 mt-1.5">
+                                  Cliquez sur une balise pour l&apos;insérer.
+                                  Les balises de choix (ex: <code>{`{a / b / c}`}</code>)
+                                  ne sont pas remplacées — l&apos;admin doit les éditer.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-end gap-3 pt-1">
+                            <button
+                              onClick={() => setTemplatesOpenId(null)}
+                              className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors"
+                            >
+                              Annuler
+                            </button>
+                            <button
+                              onClick={handleSaveTemplates}
+                              disabled={isSavingTpl}
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                            >
+                              {isSavingTpl ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Check className="w-4 h-4" />
+                              )}
+                              Enregistrer les templates
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                    </motion.tr>
+                  )}
+                </AnimatePresence>
+                </Fragment>
               ))}
             </tbody>
           </table>

@@ -296,6 +296,12 @@ function FloatingSidebarContent() {
   );
   const pendingMissionsCount = dashboardStats?.pendingAcceptance ?? 0;
 
+  // Compteur de réclamations actives (badge sidebar)
+  const activeDisputesCount = useQuery(
+    api.planning.disputes.countMyActiveDisputes,
+    token ? { sessionToken: token, role: "announcer" } : "skip"
+  ) as number | undefined;
+
   // Récupérer les conversations pour connaître le unreadCount de la conversation active
   const conversations = useQuery(
     api.messaging.queries.listConversations,
@@ -368,6 +374,12 @@ function FloatingSidebarContent() {
   const activityNavItems: NavItem[] = [
     { href: "/dashboard", icon: <LayoutDashboard className="w-5 h-5" />, label: "Tableau de bord" },
     { href: "/dashboard/missions", icon: <ClipboardList className="w-5 h-5" />, label: "Missions", badge: pendingMissionsCount },
+    {
+      href: "/dashboard/reclamations",
+      icon: <AlertCircle className="w-5 h-5" />,
+      label: "Réclamations",
+      badge: activeDisputesCount && activeDisputesCount > 0 ? activeDisputesCount : undefined,
+    },
     { href: "/dashboard/planning", icon: <Calendar className="w-5 h-5" />, label: "Planning" },
     { href: "/dashboard/messagerie", icon: <MessageSquare className="w-5 h-5" />, label: "Messages", badge: unreadCount },
   ];

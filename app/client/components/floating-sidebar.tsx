@@ -18,6 +18,7 @@ import {
   Bell,
   Heart,
   FileText,
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { useAuth } from "@/app/hooks/useAuth";
@@ -168,6 +169,12 @@ export default function FloatingSidebar() {
     : 0;
   const unreadCount = Math.max(0, (unreadMessagesCount ?? 0) - activeConvUnread);
 
+  // Compteur de réclamations actives (badge sidebar)
+  const activeDisputesCount = useQuery(
+    api.planning.disputes.countMyActiveDisputes,
+    token ? { sessionToken: token, role: "client" } : "skip"
+  ) as number | undefined;
+
   // Photo de profil
   const profile = useQuery(
     api.client.profile.getClientProfile,
@@ -227,6 +234,12 @@ export default function FloatingSidebar() {
     { href: "/client/profil", icon: <User className="w-5 h-5" />, label: "Mon profil" },
     { href: "/client/mes-animaux", icon: <PawPrint className="w-5 h-5" />, label: "Mes animaux" },
     { href: "/client/reservations", icon: <Calendar className="w-5 h-5" />, label: "Réservations" },
+    {
+      href: "/client/reclamations",
+      icon: <AlertCircle className="w-5 h-5" />,
+      label: "Mes réclamations",
+      badge: activeDisputesCount && activeDisputesCount > 0 ? activeDisputesCount : undefined,
+    },
     { href: "/client/factures", icon: <FileText className="w-5 h-5" />, label: "Mes factures" },
     { href: "/client/favoris", icon: <Heart className="w-5 h-5" />, label: "Favoris" },
     { href: "/client/parametres", icon: <Settings className="w-5 h-5" />, label: "Paramètres" },
